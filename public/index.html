@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Salon Ops Dashboard</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        background: #0f1419;
+        color: #e7e9ea;
+      }
+      body {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 1.5rem;
+      }
+      a {
+        color: #8ab4f8;
+      }
+      .card {
+        background: #1a1f26;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+      }
+      label {
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #8b98a5;
+      }
+      input {
+        width: 100%;
+        padding: 0.5rem 0.6rem;
+        border-radius: 8px;
+        border: 1px solid #38444d;
+        background: #0f1419;
+        color: inherit;
+        box-sizing: border-box;
+      }
+      button {
+        margin-top: 0.75rem;
+        padding: 0.55rem 1rem;
+        border-radius: 999px;
+        border: none;
+        background: #1d9bf0;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #38444d;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.45rem 0.35rem;
+        border-bottom: 1px solid #38444d;
+      }
+      .banner {
+        font-size: 0.75rem;
+        color: #ffba1a;
+        margin-bottom: 0.75rem;
+      }
+      pre {
+        overflow: auto;
+        font-size: 0.75rem;
+        background: #0f1419;
+        padding: 0.75rem;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="banner" id="envBanner"></div>
+    <div id="login" class="card">
+      <h1>Salon ops</h1>
+      <p>Staff login — JWT stored in sessionStorage.</p>
+      <label>Email</label>
+      <input type="email" id="email" autocomplete="username" value="owner@demo-salon.local" />
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="current-password" value="demo123" />
+      <button type="button" id="btnLogin">Sign in</button>
+      <pre id="loginErr"></pre>
+    </div>
+
+    <div class="card" id="plannedPublic">
+      <h2>Planned APIs (weekly scaffold)</h2>
+      <p style="color: #8b98a5; font-size: 0.85rem">
+        Stub routes for week-by-week delivery. Catalog is public; real dashboards stay behind login.
+      </p>
+      <button type="button" class="secondary" id="btnPlanned">Full catalog</button>
+      <button type="button" class="secondary" id="btnWeek1">Week 1 todo list (JSON)</button>
+      <pre id="plannedOut" style="max-height: 280px">Load catalog or Week 1 checklist.</pre>
+    </div>
+
+    <div id="app" style="display: none">
+      <div class="card">
+        <p>
+          Signed in as <strong id="who"></strong>
+          <button type="button" class="secondary" id="btnLogout">Sign out</button>
+        </p>
+      </div>
+      <div class="card">
+        <h2>Today</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Service</th>
+              <th>Staff</th>
+              <th>Customer</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="todayBody"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Reports (30d)</h2>
+        <pre id="reports"></pre>
+      </div>
+      <div class="card">
+        <h2>Tickets</h2>
+        <pre id="tickets"></pre>
+      </div>
+    </div>
+
+    <script>
+      const api = (path, opts = {}) => {
+        const token = sessionStorage.getItem('token');
+        return fetch(path, {
+          ...opts,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(opts.headers || {}),
+            ...(token ? { Authorization: 'Bearer ' + token } : {}),
+          },
+        });
+      };
+
+      document.getElementById('envBanner').textContent =
+        location.hostname === 'localhost' ? 'Local development — configure Twilio & Stripe for full flows.' : '';
+
+      async function refresh() {
+        const token = sessionStorage.getItem('token');
+        if (!token) return;
+
+        const me = await api('/api/me').then((r) => r.json());
+        if (!me.user) {
+          sessionStorage.removeItem('token');
+          location.reload();
+          return;
+        }
+        document.getElementById('who').textContent = me.user.email + ' (' + me.user.role + ')';
+
+        const today = await api('/api/appointments/today').then((r) => r.json());
+        const tb = document.getElementById('todayBody');
+        tb.innerHTML = '';
+        for (const a of today.appointments || []) {
+          const tr = document.createElement('tr');
+          const when = new Date(a.start).toLocaleString();
+          tr.innerHTML =
+            '<td>' +
+            when +
+            '</td><td>' +
+            a.service.name +
+            '</td><td>' +
+            a.staff.name +
+            '</td><td>' +
+            a.customer.waId +
+            '</td><td><button data-id="' +
+            a.id +
+            '">Complete + stamp</button></td>';
+          tb.appendChild(tr);
+        }
+        tb.querySelectorAll('button[data-id]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const id = btn.getAttribute('data-id');
+            const res = await api('/api/appointments/' + id + '/complete', { method: 'POST' });
+            if (res.ok) refresh();
+            else alert('Failed');
+          });
+        });
+
+        const rep = await api('/api/reports/summary').then((r) => r.json());
+        document.getElementById('reports').textContent = JSON.stringify(rep, null, 2);
+
+        const tix = await api('/api/tickets').then((r) => r.json());
+        document.getElementById('tickets').textContent = JSON.stringify(tix.tickets?.slice(0, 5), null, 2);
+      }
+
+      document.getElementById('btnLogin').addEventListener('click', async () => {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        document.getElementById('loginErr').textContent = '';
+        if (!res.ok) {
+          document.getElementById('loginErr').textContent = JSON.stringify(data, null, 2);
+          return;
+        }
+        sessionStorage.setItem('token', data.token);
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        refresh();
+      });
+
+      document.getElementById('btnLogout').addEventListener('click', () => {
+        sessionStorage.removeItem('token');
+        location.reload();
+      });
+
+      document.getElementById('btnPlanned').addEventListener('click', async () => {
+        const res = await fetch('/api/planned/catalog');
+        const data = await res.json();
+        document.getElementById('plannedOut').textContent = JSON.stringify(data, null, 2);
+      });
+
+      document.getElementById('btnWeek1').addEventListener('click', async () => {
+        const res = await fetch('/api/planned/checklists/week-1');
+        const data = await res.json();
+        document.getElementById('plannedOut').textContent = JSON.stringify(data, null, 2);
+      });
+
+      if (sessionStorage.getItem('token')) {
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        refresh();
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,376 @@
+// Salon WhatsApp OS — single deploy can host one salon (tenant-ready fields)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppointmentStatus {
+  HELD
+  CONFIRMED
+  CONFIRMED_PAID
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum StaffRole {
+  OWNER
+  MANAGER
+  STYLIST
+}
+
+enum TicketStatus {
+  OPEN
+  WAITING_CUSTOMER
+  RESOLVED
+}
+
+enum ConversationStep {
+  GREETING
+  MENU
+  PICK_SERVICE
+  PICK_STAFF
+  PICK_DATE
+  PICK_SLOT
+  CONFIRM_BOOKING
+  MANAGE_BOOKING
+  COMPLAINT
+  FAQ
+  LOYALTY
+  IDLE
+}
+
+model Salon {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  timezone       String   @default("America/New_York")
+  addressLine    String?
+  parkingNotes   String?
+  accessibility  String?
+  phoneDisplay   String?
+  /** IANA — hours interpreted in this zone */
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  customers      Customer[]
+  services       Service[]
+  staff          Staff[]
+  appointments   Appointment[]
+  businessHours  BusinessHour[]
+  conversations  Conversation[]
+  payments       Payment[]
+  invoices       Invoice[]
+  loyaltyProgram LoyaltyProgram?
+  tickets        Ticket[]
+  faqItems       FaqItem[]
+  staffUsers     StaffUser[]
+  analyticsEvents AnalyticsEvent[]
+}
+
+model Customer {
+  id              String    @id @default(cuid())
+  salonId         String
+  salon           Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  waId            String    /** E.164 without whatsapp: prefix storage normalized */
+  displayName     String?
+  locale          String    @default("en")
+  loyaltyStampsCached Int?  /** optional cache; source of truth is LoyaltyLedger */
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  conversations   Conversation[]
+  messages        Message[]
+  appointments    Appointment[]
+  loyaltyLedgers  LoyaltyLedger[]
+  tickets         Ticket[]
+  payments        Payment[]
+
+  @@unique([salonId, waId])
+  @@index([salonId])
+}
+
+model Conversation {
+  id          String            @id @default(cuid())
+  salonId     String
+  salon       Salon             @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  step        ConversationStep  @default(GREETING)
+  /** JSON blob: selectedServiceId, slotIso, staffId, pendingAppointmentId, undo stack */
+  context     Json              @default("{}")
+  updatedAt   DateTime          @updatedAt
+  createdAt   DateTime          @default(now())
+
+  messages    Message[]
+
+  @@unique([salonId, customerId])
+  @@index([customerId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  direction      String       /** in | out */
+  body           String       @db.Text
+  providerSid    String?      @unique /** Twilio MessageSid — idempotency */
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  salonId     String
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  durationMin Int
+  bufferMin   Int      @default(0)
+  priceCents  Int
+  category    String?
+  depositCents Int?    /** null = no deposit required */
+  fullPay     Boolean  @default(false)
+  qualifiesLoyalty Boolean @default(true)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+
+  staffLinks  StaffService[]
+  appointments Appointment[]
+
+  @@index([salonId])
+}
+
+model Staff {
+  id        String   @id @default(cuid())
+  salonId   String
+  salon     Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name      String
+  active    Boolean  @default(true)
+  breakMin  Int      @default(0) /** padding between appointments */
+
+  services  StaffService[]
+  appointments Appointment[]
+  timeOff   TimeOff[]
+  staffUsers StaffUser[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([salonId])
+}
+
+model StaffService {
+  staffId   String
+  serviceId String
+  staff     Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, serviceId])
+}
+
+model BusinessHour {
+  id        String @id @default(cuid())
+  salonId   String
+  salon     Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  dayOfWeek Int    /** 0 = Sunday .. 6 = Saturday */
+  openMin   Int    /** minutes from midnight */
+  closeMin  Int
+
+  @@unique([salonId, dayOfWeek])
+}
+
+model TimeOff {
+  id      String   @id @default(cuid())
+  staffId String
+  staff   Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  start   DateTime
+  end     DateTime
+  reason  String?
+}
+
+model Appointment {
+  id          String             @id @default(cuid())
+  salonId     String
+  salon       Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId   String
+  service     Service            @relation(fields: [serviceId], references: [id])
+  staffId     String
+  staff       Staff              @relation(fields: [staffId], references: [id])
+  start       DateTime
+  end         DateTime
+  status      AppointmentStatus  @default(HELD)
+  notes       String?
+  depositInvoiceId String?
+  loyaltyRedeemed Boolean        @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  payments    Payment[]
+  invoices    Invoice[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([salonId, start])
+  @@index([staffId, start])
+}
+
+model Invoice {
+  id             String   @id @default(cuid())
+  salonId        String
+  salon          Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  appointmentId  String?
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  customerId     String
+  currency       String   @default("usd")
+  subtotalCents  Int
+  taxCents       Int      @default(0)
+  totalCents     Int
+  createdAt      DateTime @default(now())
+
+  payments       Payment[]
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  salonId        String
+  salon          Salon         @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  appointmentId  String?
+  appointment    Appointment?  @relation(fields: [appointmentId], references: [id])
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  invoiceId      String?
+  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
+  status         PaymentStatus @default(PENDING)
+  amountCents    Int
+  currency       String        @default("usd")
+  stripeSessionId   String?
+  stripePaymentIntentId String?
+  stripeRefundId String?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([salonId, createdAt])
+  @@index([stripePaymentIntentId])
+}
+
+model LoyaltyProgram {
+  id              String @id @default(cuid())
+  salonId         String @unique
+  salon           Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  stampsPerReward Int    @default(10)
+  rewardKind      String @default("FREE_SERVICE_TIER") /** free qualifying service */
+  createdAt       DateTime @default(now())
+
+  ledger LoyaltyLedger[]
+}
+
+model LoyaltyLedger {
+  id          String   @id @default(cuid())
+  programId   String
+  program     LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  delta       Int      /** +earn -redeem */
+  reason      String
+  appointmentId String?
+  createdAt   DateTime @default(now())
+  createdByStaffUserId String?
+
+  @@index([customerId, createdAt])
+}
+
+model Ticket {
+  id          String       @id @default(cuid())
+  salonId     String
+  salon       Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status      TicketStatus @default(OPEN)
+  subject     String?
+  assigneeStaffUserId String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  messages    TicketMessage[]
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  direction String   /** in | out | internal */
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model FaqItem {
+  id        String @id @default(cuid())
+  salonId   String
+  salon     Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String @db.Text
+  keywords  String[] @default([])
+  sortOrder Int    @default(0)
+}
+
+model StaffUser {
+  id           String    @id @default(cuid())
+  salonId      String
+  salon        Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  email        String    @unique
+  passwordHash String
+  name         String
+  role         StaffRole @default(STYLIST)
+  staffId      String?
+  staff        Staff?    @relation(fields: [staffId], references: [id])
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+
+  auditLogs    AuditLog[]
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       StaffUser? @relation(fields: [actorUserId], references: [id])
+  action      String
+  entity      String
+  entityId    String?
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AnalyticsEvent {
+  id            String   @id @default(cuid())
+  salonId       String
+  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId    String?
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  staffId       String?
+  staff         Staff?   @relation(fields: [staffId], references: [id])
+  type          String   /** booking_started, booking_complete, csat, ... */
+  payload       Json?
+  createdAt     DateTime @default(now())
+
+  @@index([salonId, type, createdAt])
+}

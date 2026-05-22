@@ -1,0 +1,28 @@
+import { z } from 'zod';
+
+/** Loaded via `import 'dotenv/config'` in entrypoints (keeps tests able to set env first). */
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.coerce.number().default(3000),
+  PUBLIC_BASE_URL: z.string().url().default('http://localhost:3000'),
+  DATABASE_URL: z.string().min(1),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_WHATSAPP_FROM: z.string().optional(),
+  TWILIO_WEBHOOK_BASE_URL: z.string().url().default('http://localhost:3000'),
+  INTERNAL_API_KEY: z.string().min(8),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  SESSION_SECRET: z.string().min(16),
+  DEFAULT_SALON_SLUG: z.string().default('demo-salon'),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+export const env: Env = envSchema.parse(process.env);
+
+export function isTwilioConfigured(): boolean {
+  return Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_WHATSAPP_FROM);
+}

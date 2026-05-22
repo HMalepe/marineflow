@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: salon
+          POSTGRES_PASSWORD: salon
+          POSTGRES_DB: salon_whatsapp_test
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://salon:salon@localhost:5432/salon_whatsapp_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      SESSION_SECRET: ci-session-secret-minimum-16
+      INTERNAL_API_KEY: ci-internal-key-123456789012345
+      PUBLIC_BASE_URL: http://localhost:3000
+      TWILIO_WEBHOOK_BASE_URL: http://localhost:3000
+      TWILIO_AUTH_TOKEN: test-token
+      DEFAULT_SALON_SLUG: demo-salon
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Migrate
+        run: npx prisma migrate deploy
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Test
+        run: npm test
