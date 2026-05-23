@@ -1,6 +1,6 @@
 # MarineFlow
 
-**Local folder:** `C:\Users\134203\Desktop\salon-whatsapp-os` — separate from **VOUCH** and independent of any other repo.
+**Local folder:** `C:\Users\134203\Desktop\marineflow` — separate from **VOUCH** and independent of any other repo.
 
 **MarineFlow** is a WhatsApp-first booking and operations bot for hair salons, barbershops, and parlors: **Twilio WhatsApp**, **Postgres**, **Redis**, staff **dashboard**, **payments** (Stripe), **loyalty** (stamp cards), **support tickets**, and **analytics**.
 
