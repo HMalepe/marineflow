@@ -1,8 +1,6 @@
 # Salon WhatsApp OS (WhatsApp Chat Bot)
 
-**Local folder:** `C:\Users\134203\Desktop\whatsapp-chat-bot` — separate from **VOUCH** and independent of any other repo.
-
-You can rename this folder to `whatsapp chat bot` if you prefer spaces (tools like npm still work with quoted paths).
+**Local folder:** `C:\Users\134203\Desktop\salon-whatsapp-os` — separate from **VOUCH** and independent of any other repo.
 
 WhatsApp-first booking and operations for hair salons, barbershops, and parlors: **Twilio WhatsApp**, **Postgres**, **Redis**, staff **dashboard**, **payments** (Stripe), **loyalty** (stamp cards), **support tickets**, and **analytics**.
 
