@@ -11,14 +11,14 @@ async function main() {
     where: { slug },
     create: {
       slug,
-      name: 'Demo Salon',
+      name: 'MarineFlow',
       timezone: 'America/New_York',
       addressLine: '123 Main Street',
       parkingNotes: 'Lot behind building.',
       accessibility: 'Step-free entrance.',
       phoneDisplay: '+1 (555) 010-0199',
     },
-    update: {},
+    update: { name: 'MarineFlow' },
   });
 
   const hourRows = [

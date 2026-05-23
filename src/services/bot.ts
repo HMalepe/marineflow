@@ -75,15 +75,15 @@ async function reply(
   }
 }
 
-function mainMenu(_salon: Salon): string {
+function mainMenu(salon: Salon): string {
   return [
-    'Welcome! Reply with a number:',
+    `Welcome to ${salon.name}! Reply with a number:`,
     '1 — Book an appointment',
     '2 — My bookings',
     '3 — My rewards / loyalty',
     '4 — FAQs',
     '5 — File a complaint',
-    '6 — Salon hours & address',
+    '6 — Hours & address',
     '0 — Talk to a human (we will reply soon)',
   ].join('\n');
 }
@@ -340,7 +340,7 @@ async function handleMenu(
       salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : '',
       salon.accessibility ? `Accessibility: ${salon.accessibility}` : '',
     ].filter(Boolean);
-    await reply(conv, ['Salon info:', ...lines].join('\n'));
+    await reply(conv, [`${salon.name}:`, ...lines].join('\n'));
     return;
   }
 

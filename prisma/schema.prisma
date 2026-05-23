@@ -1,4 +1,4 @@
-// Salon WhatsApp OS — single deploy can host one salon (tenant-ready fields)
+// MarineFlow — single deploy can host one salon (tenant-ready fields)
 
 generator client {
   provider = "prisma-client-js"

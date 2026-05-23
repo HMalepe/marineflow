@@ -1,8 +1,8 @@
-# Salon WhatsApp OS (WhatsApp Chat Bot)
+# MarineFlow
 
 **Local folder:** `C:\Users\134203\Desktop\salon-whatsapp-os` — separate from **VOUCH** and independent of any other repo.
 
-WhatsApp-first booking and operations for hair salons, barbershops, and parlors: **Twilio WhatsApp**, **Postgres**, **Redis**, staff **dashboard**, **payments** (Stripe), **loyalty** (stamp cards), **support tickets**, and **analytics**.
+**MarineFlow** is a WhatsApp-first booking and operations bot for hair salons, barbershops, and parlors: **Twilio WhatsApp**, **Postgres**, **Redis**, staff **dashboard**, **payments** (Stripe), **loyalty** (stamp cards), **support tickets**, and **analytics**.
 
 **PCI:** Card data is handled by Stripe; this app stores Stripe IDs and metadata only—never full card numbers.
 
