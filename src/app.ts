@@ -2,6 +2,9 @@ import Fastify from 'fastify';
 import formbody from '@fastify/formbody';
 import jwt from '@fastify/jwt';
 import fastifyStatic from '@fastify/static';
+import rateLimit from '@fastify/rate-limit';
+import helmet from '@fastify/helmet';
+import cors from '@fastify/cors';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -34,8 +37,27 @@ export async function buildApp() {
   });
 
   await app.register(formbody);
-  await app.register(jwt, {
-    secret: env.SESSION_SECRET,
+  await app.register(jwt, { secret: env.SESSION_SECRET });
+
+  // Security headers
+  await app.register(helmet, {
+    contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false,
+  });
+
+  // CORS
+  const allowedOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',')
+    : ['http://localhost:3001'];
+  await app.register(cors, {
+    origin: allowedOrigins,
+    credentials: true,
+  });
+
+  // Rate limiting
+  await app.register(rateLimit, {
+    max: 100,
+    timeWindow: '1 minute',
+    allowList: ['127.0.0.1'],
   });
 
   const publicRoot = path.join(__dirname, '..', 'public');

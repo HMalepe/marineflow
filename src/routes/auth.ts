@@ -3,7 +3,9 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/login', async (request, reply) => {
+  app.post('/login', {
+    config: { rateLimit: { max: 10, timeWindow: '5 minutes' } },
+  }, async (request, reply) => {
     const body = request.body as { email?: string; password?: string };
     const email = body.email?.trim().toLowerCase();
     const password = body.password ?? '';
