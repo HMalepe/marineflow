@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import formbody from '@fastify/formbody';
 import jwt from '@fastify/jwt';
@@ -27,14 +28,21 @@ import { agencyApiRoutes } from './routes/agencyApi.js';
 import { sseRoutes } from './routes/sse.js';
 import { internalRoutes } from './routes/internal.js';
 import { plannedRoutes } from './routes/planned.js';
+import { initSentry, captureException } from './lib/sentry.js';
+import { registerRequestId } from './lib/requestId.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function buildApp() {
+  await initSentry();
+
   const app = Fastify({
     loggerInstance: logger,
     trustProxy: true,
+    genReqId: () => crypto.randomUUID(),
   });
+
+  registerRequestId(app);
 
   await app.register(formbody);
   await app.register(jwt, { secret: env.SESSION_SECRET });
@@ -232,6 +240,7 @@ export async function buildApp() {
 
   app.setErrorHandler((err: unknown, _request, reply) => {
     logger.error(err);
+    captureException(err);
     const status =
       err && typeof err === 'object' && 'statusCode' in err && typeof err.statusCode === 'number'
         ? err.statusCode

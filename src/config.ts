@@ -36,6 +36,7 @@ const envSchema = z.object({
   EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
   CORS_ORIGINS: z.string().optional(),
+  SENTRY_DSN: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().default('marineflow-uploads'),
   S3_REGION: z.string().default('auto'),
