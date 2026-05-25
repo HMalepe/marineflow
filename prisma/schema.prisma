@@ -103,15 +103,18 @@ enum TicketStatus {
 enum ConversationStep {
   GREETING
   MENU
+  PICK_BRANCH
   PICK_SERVICE
   PICK_STAFF
   PICK_DATE
   PICK_SLOT
   CONFIRM_BOOKING
   MANAGE_BOOKING
+  RESCHEDULE
   COMPLAINT
   FAQ
   LOYALTY
+  CSAT
   IDLE
   HANDOFF
   CLOSED
@@ -179,9 +182,9 @@ model Salon {
   subscription   SalonSubscription?
   uploadedFiles  UploadedFile[]
   consentRecords ConsentRecord[]
+  analyticsEvents AnalyticsEvent[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
-  analyticsEvents AnalyticsEvent[]
 }
 
 model Branch {

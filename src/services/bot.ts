@@ -27,8 +27,12 @@ import { createDepositCheckoutSession } from './payments.js';
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
   selectedStaffId?: string;
+  selectedBranchId?: string;
+  branchOptions?: string[];
   localDateStr?: string;
   pendingAppointmentId?: string;
+  rescheduleAppointmentId?: string;
+  csatAppointmentId?: string;
 };
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
@@ -267,8 +271,14 @@ async function routeConversation(
     case ConversationStep.CONFIRM_BOOKING:
       await handleConfirm(conv, t);
       break;
+    case ConversationStep.PICK_BRANCH:
+      await handlePickBranch(conv, t);
+      break;
     case ConversationStep.MANAGE_BOOKING:
       await handleManageBooking(conv, t);
+      break;
+    case ConversationStep.RESCHEDULE:
+      await handleReschedule(conv, t);
       break;
     case ConversationStep.COMPLAINT:
       await handleComplaint(conv, t);
@@ -278,6 +288,9 @@ async function routeConversation(
       break;
     case ConversationStep.LOYALTY:
       await handleLoyalty(conv, t);
+      break;
+    case ConversationStep.CSAT:
+      await handleCsat(conv, t);
       break;
     default:
       await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -293,6 +306,24 @@ async function handleMenu(
   const choice = text.trim();
 
   if (choice === '1') {
+    // Check for multi-branch — if salon has >1 branch, ask which branch first
+    const branches = await getTenantDb().branch.findMany({
+      where: { salonId: salon.id, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+
+    if (branches.length > 1) {
+      const lines = branches.map((b, i) => `${i + 1}. ${b.name}${b.city ? ` (${b.city})` : ''}`);
+      await saveCtx(conv.id, { branchOptions: branches.map((b) => b.id) }, ConversationStep.PICK_BRANCH);
+      await reply(conv, ['Which location?', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+      return;
+    }
+
+    // Single branch or no branches — go straight to services
+    if (branches.length === 1) {
+      await saveCtx(conv.id, { selectedBranchId: branches[0].id });
+    }
+
     const services = await getTenantDb().service.findMany({
       where: { salonId: salon.id, active: true },
       orderBy: { sortOrder: 'asc' },
@@ -852,6 +883,114 @@ async function handleLoyalty(
   conv: Conversation & { customer: Customer; salon: Salon },
   _text: string,
 ) {
+  await saveCtx(conv.id, {}, ConversationStep.MENU);
+  await reply(conv, mainMenu(conv.salon));
+}
+
+// ─── Branch Selection ──────────────────────────────────────────────────
+async function handlePickBranch(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  if (text.toUpperCase() === 'BACK') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  const c = ctx(conv);
+  const branchOptions = (c.branchOptions ?? []) as string[];
+  const idx = parseInt(text, 10) - 1;
+
+  if (isNaN(idx) || idx < 0 || idx >= branchOptions.length) {
+    await reply(conv, `Please reply with a number (1-${branchOptions.length}) or BACK.`);
+    return;
+  }
+
+  const branchId = branchOptions[idx];
+  await saveCtx(conv.id, { selectedBranchId: branchId }, ConversationStep.PICK_SERVICE);
+
+  const services = await getTenantDb().service.findMany({
+    where: { salonId: conv.salon.id, active: true },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
+  await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+}
+
+// ─── Reschedule ────────────────────────────────────────────────────────
+async function handleReschedule(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const c = ctx(conv);
+  const appointmentId = c.rescheduleAppointmentId as string | undefined;
+
+  if (text.toUpperCase() === 'CANCEL' || text.toUpperCase() === 'BACK') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  if (!appointmentId) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, 'Something went wrong. Let me take you back to the menu.');
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  // Cancel the old appointment and redirect to booking flow
+  await getTenantDb().appointment.update({
+    where: { id: appointmentId },
+    data: { status: 'RESCHEDULED' },
+  });
+
+  await reply(conv, "Got it! Your old booking is cancelled. Let's pick a new time.");
+  await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
+
+  const services = await getTenantDb().service.findMany({
+    where: { salonId: conv.salon.id, active: true },
+    orderBy: { sortOrder: 'asc' },
+  });
+  const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
+  await reply(conv, ['Pick a service:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+}
+
+// ─── CSAT Survey ───────────────────────────────────────────────────────
+async function handleCsat(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const rating = parseInt(text.trim(), 10);
+
+  if (isNaN(rating) || rating < 1 || rating > 5) {
+    await reply(conv, 'Please reply with a number from 1 (poor) to 5 (excellent).');
+    return;
+  }
+
+  const c = ctx(conv);
+  const appointmentId = c.csatAppointmentId as string | undefined;
+
+  // Record the CSAT event
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salon.id,
+      customerId: conv.customerId,
+      appointmentId: appointmentId ?? null,
+      type: 'csat',
+      payload: { rating, timestamp: new Date().toISOString() },
+    },
+  });
+
+  const messages: Record<number, string> = {
+    1: 'We\'re sorry to hear that. We\'ll work to improve. Thank you for the feedback.',
+    2: 'Thank you for letting us know. We\'ll do better next time.',
+    3: 'Thanks for the feedback! We appreciate it.',
+    4: 'Great to hear! Thank you for your feedback.',
+    5: 'Wonderful! So glad you had a great experience! 🌟',
+  };
+
+  await reply(conv, messages[rating] ?? 'Thank you!');
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await reply(conv, mainMenu(conv.salon));
 }
