@@ -33,6 +33,11 @@ function getSubscriber(): Redis {
 export async function publishEvent(event: SalonEvent): Promise<void> {
   const channel = `${CHANNEL_PREFIX}${event.salonId}`;
   await getPublisher().publish(channel, JSON.stringify(event));
+
+  // Fan out to outbound webhook subscriptions (fire-and-forget)
+  import('../services/webhookDelivery.js')
+    .then(({ fanOutWebhooks }) => fanOutWebhooks(event))
+    .catch((err) => logger.warn({ err }, 'webhook_fanout_error'));
 }
 
 export type EventHandler = (event: SalonEvent) => void;

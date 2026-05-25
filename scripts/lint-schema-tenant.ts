@@ -26,6 +26,7 @@ const CHILD_MODELS = new Set([
   'StaffService',
   'Message',
   'TimeOff',
+  'WebhookDelivery',
 ]);
 
 const schemaPath = resolve(import.meta.dirname ?? '.', '../prisma/schema.prisma');

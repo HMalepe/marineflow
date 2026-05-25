@@ -19,6 +19,7 @@ import {
   deleteUpload,
 } from '../services/uploads.js';
 import { exportCustomerData, eraseCustomerData } from '../services/compliance.js';
+import { generateWebhookSecret } from '../services/webhookDelivery.js';
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
@@ -999,6 +1000,83 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
     },
   );
+
+  // ─── Webhook Subscriptions ───────────────────────────────────────────
+  app.get('/webhooks', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const subs = await db.webhookSubscription.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { deliveries: true } } },
+      });
+      return { webhooks: subs };
+    });
+  });
+
+  app.post(
+    '/webhooks',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { url, events, description } = request.body as {
+          url: string;
+          events: string[];
+          description?: string;
+        };
+
+        if (!url || !events?.length) {
+          reply.code(400);
+          return { error: 'url and events required' };
+        }
+
+        try {
+          new URL(url);
+        } catch {
+          reply.code(400);
+          return { error: 'invalid_url' };
+        }
+
+        const db = getTenantDb();
+        const sub = await db.webhookSubscription.create({
+          data: {
+            salonId: user.salonId,
+            url,
+            events,
+            secret: generateWebhookSecret(),
+            description,
+          },
+        });
+
+        return { webhook: sub };
+      });
+    },
+  );
+
+  app.delete(
+    '/webhooks/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async () => {
+        const { id } = request.params as { id: string };
+        const db = getTenantDb();
+        await db.webhookSubscription.delete({ where: { id } }).catch(() => null);
+        return { ok: true };
+      });
+    },
+  );
+
+  app.get('/webhooks/:id/deliveries', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const { id } = request.params as { id: string };
+      const db = getTenantDb();
+      const deliveries = await db.webhookDelivery.findMany({
+        where: { subscriptionId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      });
+      return { deliveries };
+    });
+  });
 }
 
 function csvEscape(s: string): string {
