@@ -50,6 +50,11 @@ enum MessageChannel {
   WEB
 }
 
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
 enum MessageStatus {
   QUEUED
   SENT
@@ -77,6 +82,8 @@ enum ConversationStep {
   FAQ
   LOYALTY
   IDLE
+  HANDOFF
+  CLOSED
 }
 
 model Salon {
@@ -119,6 +126,7 @@ model Salon {
 
   customers      Customer[]
   webhookEvents  WebhookEvent[]
+  serviceCategories ServiceCategory[]
   services       Service[]
   staff          Staff[]
   appointments   Appointment[]
@@ -158,60 +166,86 @@ model Customer {
 }
 
 model Conversation {
-  id          String            @id @default(cuid())
-  salonId     String
-  salon       Salon             @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  step        ConversationStep  @default(GREETING)
-  /** JSON blob: selectedServiceId, slotIso, staffId, pendingAppointmentId, undo stack */
-  context     Json              @default("{}")
-  updatedAt   DateTime          @updatedAt
-  createdAt   DateTime          @default(now())
+  id              String            @id @default(cuid())
+  salonId         String
+  salon           Salon             @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  step            ConversationStep  @default(GREETING)
+  context         Json              @default("{}")
+  lastMessageAt   DateTime?
+  endedAt         DateTime?
+  handoffReason   String?
+  messageCount    Int               @default(0)
+  updatedAt       DateTime          @updatedAt
+  createdAt       DateTime          @default(now())
 
   messages    Message[]
 
   @@unique([salonId, customerId])
   @@index([customerId])
+  @@index([salonId, lastMessageAt])
 }
 
 model Message {
-  id             String         @id @default(cuid())
+  id             String           @id @default(cuid())
   conversationId String
-  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   customerId     String
-  customer       Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  direction      String         /** in | out */
-  body           String         @db.Text
-  channel        MessageChannel @default(WHATSAPP)
-  status         MessageStatus  @default(SENT)
-  providerSid    String?        @unique
-  idempotencyKey String?        @unique
-  createdAt      DateTime       @default(now())
+  customer       Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  direction      MessageDirection @default(INBOUND)
+  body           String           @db.Text
+  channel        MessageChannel   @default(WHATSAPP)
+  status         MessageStatus    @default(SENT)
+  providerSid    String?          @unique
+  idempotencyKey String?          @unique
+  metadata       Json?
+  createdAt      DateTime         @default(now())
 
   @@index([conversationId])
+  @@index([customerId, createdAt])
+}
+
+model ServiceCategory {
+  id        String   @id @default(cuid())
+  salonId   String
+  salon     Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  services  Service[]
+
+  @@unique([salonId, slug])
+  @@index([salonId])
 }
 
 model Service {
-  id          String   @id @default(cuid())
-  salonId     String
-  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  durationMin Int
-  bufferMin   Int      @default(0)
-  priceCents  Int
-  category    String?
-  depositCents Int?    /** null = no deposit required */
-  fullPay     Boolean  @default(false)
-  qualifiesLoyalty Boolean @default(true)
-  active      Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  id              String           @id @default(cuid())
+  salonId         String
+  salon           Salon            @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name            String
+  aliases         String[]         @default([])
+  description     String?          @db.Text
+  durationMin     Int
+  bufferMin       Int              @default(0)
+  priceCents      Int
+  categoryId      String?
+  category        ServiceCategory? @relation(fields: [categoryId], references: [id])
+  depositCents    Int?
+  depositPercent  Int?
+  fullPay         Boolean          @default(false)
+  qualifiesLoyalty Boolean         @default(true)
+  active          Boolean          @default(true)
+  sortOrder       Int              @default(0)
+  deletedAt       DateTime?
 
-  staffLinks  StaffService[]
+  staffLinks   StaffService[]
   appointments Appointment[]
 
   @@index([salonId])
+  @@index([categoryId])
 }
 
 model Staff {

@@ -53,6 +53,18 @@ async function main() {
     });
   }
 
+  const cutCategory = await prisma.serviceCategory.upsert({
+    where: { salonId_slug: { salonId: salon.id, slug: 'cut' } },
+    update: {},
+    create: { salonId: salon.id, name: 'Cuts', slug: 'cut', sortOrder: 1 },
+  });
+
+  const colorCategory = await prisma.serviceCategory.upsert({
+    where: { salonId_slug: { salonId: salon.id, slug: 'color' } },
+    update: {},
+    create: { salonId: salon.id, name: 'Color', slug: 'color', sortOrder: 2 },
+  });
+
   let cut = await prisma.service.findFirst({
     where: { salonId: salon.id, name: 'Haircut' },
   });
@@ -64,7 +76,7 @@ async function main() {
         durationMin: 45,
         bufferMin: 15,
         priceCents: 4500,
-        category: 'cut',
+        categoryId: cutCategory.id,
         depositCents: 1000,
         qualifiesLoyalty: true,
         sortOrder: 1,
@@ -83,7 +95,7 @@ async function main() {
         durationMin: 90,
         bufferMin: 30,
         priceCents: 12000,
-        category: 'color',
+        categoryId: colorCategory.id,
         depositCents: 2500,
         qualifiesLoyalty: true,
         sortOrder: 2,

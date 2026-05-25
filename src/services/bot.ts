@@ -1,5 +1,6 @@
 import {
   ConversationStep,
+  MessageDirection,
   type Conversation,
   type Customer,
   type Salon,
@@ -69,10 +70,14 @@ async function reply(
       data: {
         conversationId: conv.id,
         customerId: conv.customerId,
-        direction: 'out',
+        direction: MessageDirection.OUTBOUND,
         body: text,
         providerSid: sid,
       },
+    });
+    await getTenantDb().conversation.update({
+      where: { id: conv.id },
+      data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
     });
   } else {
     logger.debug({ to: conv.customer.waId }, 'twilio_not_configured_skip_outbound_persist');
@@ -172,10 +177,15 @@ async function processInboundWhatsApp(
     data: {
       conversationId: conv.id,
       customerId: customer.id,
-      direction: 'in',
+      direction: MessageDirection.INBOUND,
       body: text,
       providerSid: messageSid,
     },
+  });
+
+  await getTenantDb().conversation.update({
+    where: { id: conv.id },
+    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
   });
 
   await getTenantDb().analyticsEvent.create({
@@ -207,7 +217,7 @@ async function processInboundWhatsApp(
         subject: 'Human handoff requested',
         messages: {
           create: {
-            direction: 'in',
+            direction: MessageDirection.INBOUND,
             body: `Customer requested human support.\nLast message: ${text}`,
           },
         },
@@ -718,7 +728,7 @@ async function handleComplaint(
       customerId: conv.customerId,
       status: 'OPEN',
       subject: 'Complaint',
-      messages: { create: { direction: 'in', body: text } },
+      messages: { create: { direction: MessageDirection.INBOUND, body: text } },
     },
   });
   await reply(conv, 'Thanks — we logged your complaint and will respond shortly.');
