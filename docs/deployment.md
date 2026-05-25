@@ -104,9 +104,33 @@
 - Add custom domain in each platform's dashboard
 - Recommended: `api.yourdomain.co.za` for Railway, `app.yourdomain.co.za` for Vercel
 
-## 9. Post-Deploy Checklist
+## 9. Connection Pooling (PgBouncer)
 
-- [ ] Run `prisma migrate deploy` against production DB
+Railway Postgres includes PgBouncer by default. For other providers:
+
+1. Use the **pooled connection string** (port 6543) for the API service
+2. Use the **direct connection string** (port 5432) for migrations only
+3. Recommended pool mode: **transaction** (compatible with Prisma)
+4. Set `connection_limit` in Prisma to match pool size (default: 20)
+
+```env
+# .env production
+DATABASE_URL="postgresql://user:pass@host:6543/db?pgbouncer=true"
+DIRECT_DATABASE_URL="postgresql://user:pass@host:5432/db"
+```
+
+In `schema.prisma`, add:
+```prisma
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+```
+
+## 10. Post-Deploy Checklist
+
+- [ ] Run `prisma migrate deploy` against production DB (use DIRECT_DATABASE_URL)
 - [ ] Verify RLS policies: `SELECT * FROM pg_policies;`
 - [ ] Create first admin user via seed or direct SQL
 - [ ] Send a test WhatsApp message
@@ -114,3 +138,4 @@
 - [ ] Verify Inngest functions appear in cloud dashboard
 - [ ] Check materialized view refresh is running (every 15min)
 - [ ] Monitor error rates in Railway logs
+- [ ] Verify Redis cache hit rates via `redis-cli INFO stats`
