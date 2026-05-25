@@ -174,6 +174,7 @@ model Salon {
   knowledgeDocs  KnowledgeDocument[]
   knowledgeChunks KnowledgeChunk[]
   branches       Branch[]
+  subscription   SalonSubscription?
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
   analyticsEvents AnalyticsEvent[]
@@ -706,6 +707,56 @@ model AnalyticsEvent {
   createdAt     DateTime @default(now())
 
   @@index([salonId, type, createdAt])
+}
+
+// ─── Subscription Billing ─────────────────────────────────────────────
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  PAUSED
+  TRIAL
+}
+
+model SubscriptionPlan {
+  id             String   @id @default(cuid())
+  name           String   /// e.g. "Starter", "Pro", "Enterprise"
+  tier           String   @unique /// starter | pro | enterprise
+  priceMonthly   Int      /// cents (ZAR)
+  priceAnnual    Int      /// cents (ZAR)
+  maxStaff       Int      @default(3)
+  maxBranches    Int      @default(1)
+  maxServices    Int      @default(10)
+  features       String[] @default([])
+  aiEnabled      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscriptions  SalonSubscription[]
+}
+
+model SalonSubscription {
+  id                    String             @id @default(cuid())
+  salonId               String             @unique
+  salon                 Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  planId                String
+  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status                SubscriptionStatus @default(TRIAL)
+  billingProvider       String             @default("payfast") /// payfast | ozow
+  payfastSubscriptionId String?            @unique
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelAtPeriodEnd     Boolean            @default(false)
+  cancelledAt           DateTime?
+  trialEndsAt           DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([salonId])
+  @@index([status])
 }
 
 /// Inbound webhook dedup + audit (spec: webhook_events)

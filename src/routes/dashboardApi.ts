@@ -5,6 +5,13 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { earnStampForCompletedVisit } from '../services/loyalty.js';
 import { refundPaymentStaff } from '../services/payments.js';
 import { fuzzySearchCustomers } from '../services/customerSearch.js';
+import {
+  getPlans,
+  getSalonSubscription,
+  createPayfastSubscription,
+  cancelSubscription,
+  checkQuota,
+} from '../services/subscription.js';
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
@@ -801,6 +808,81 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
 
       return customers;
+    });
+  });
+
+  // ─── Subscription & Billing ──────────────────────────────────────────
+  app.get('/subscription/plans', async () => {
+    return { plans: await getPlans() };
+  });
+
+  app.get('/subscription', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const sub = await getSalonSubscription(user.salonId);
+      return { subscription: sub };
+    });
+  });
+
+  app.post('/subscription/checkout', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { planTier, billingCycle } = request.body as {
+        planTier: string;
+        billingCycle: 'monthly' | 'annual';
+      };
+
+      if (!planTier || !['monthly', 'annual'].includes(billingCycle)) {
+        reply.code(400);
+        return { error: 'invalid_input' };
+      }
+
+      const result = await createPayfastSubscription({
+        salonId: user.salonId,
+        planTier,
+        billingCycle,
+        returnUrl: `${request.headers.origin ?? ''}/settings?billing=success`,
+        cancelUrl: `${request.headers.origin ?? ''}/settings?billing=cancelled`,
+        notifyUrl: `${process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000'}/webhooks/payfast/subscription`,
+      });
+
+      return result;
+    });
+  });
+
+  app.post(
+    '/subscription/cancel',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const result = await cancelSubscription(user.salonId);
+        if (!result.ok) {
+          reply.code(400);
+          return { error: result.error };
+        }
+        return { ok: true };
+      });
+    },
+  );
+
+  app.get('/subscription/quota/:resource', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const { resource } = request.params as { resource: string };
+      const salon = await db.salon.findUniqueOrThrow({ where: { id: user.salonId } });
+
+      let currentCount = 0;
+      if (resource === 'staff') {
+        currentCount = await db.staff.count({ where: { deletedAt: null } });
+      } else if (resource === 'branches') {
+        currentCount = await db.branch.count();
+      } else if (resource === 'services') {
+        currentCount = await db.service.count({ where: { deletedAt: null } });
+      } else {
+        reply.code(400);
+        return { error: 'invalid_resource' };
+      }
+
+      const result = checkQuota(salon.tier, resource as 'staff' | 'branches' | 'services', currentCount);
+      return { resource, currentCount, ...result };
     });
   });
 }
