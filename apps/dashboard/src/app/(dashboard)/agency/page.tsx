@@ -1,6 +1,7 @@
 import { getToken } from '@/lib/auth';
-import { apiFetch } from '@/lib/api';
 import { AgencyDashboard } from './agency-dashboard';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 interface AgencyMetrics {
   totalSalons: number;
@@ -19,6 +20,16 @@ interface AgencySalon {
   _count: { staff: number; customers: number; appointments: number };
 }
 
+async function agencyFetch<T>(path: string, token: string | null): Promise<T | null> {
+  if (!token) return null;
+  const res = await fetch(`${API_URL}/agency${path}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    cache: 'no-store',
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<T>;
+}
+
 export default async function AgencyPage() {
   const token = await getToken();
 
@@ -27,8 +38,8 @@ export default async function AgencyPage() {
 
   try {
     const [metricsRes, salonsRes] = await Promise.all([
-      apiFetch<AgencyMetrics>('/metrics', {}, token).catch(() => null),
-      apiFetch<{ salons: AgencySalon[] }>('/salons', {}, token).catch(() => ({ salons: [] })),
+      agencyFetch<AgencyMetrics>('/metrics', token),
+      agencyFetch<{ salons: AgencySalon[] }>('/salons', token),
     ]);
     metrics = metricsRes;
     salons = salonsRes?.salons ?? [];

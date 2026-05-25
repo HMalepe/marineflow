@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
@@ -42,6 +43,21 @@ export default async function SettingsPage() {
           ) : (
             <p className="text-sm text-destructive">Failed to load profile.</p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Integrations</CardTitle>
+          <CardDescription>Connect external services</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link
+            href="/settings/webhooks"
+            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          >
+            Manage Webhooks &rarr;
+          </Link>
         </CardContent>
       </Card>
     </div>

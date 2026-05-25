@@ -1,6 +1,7 @@
 import { getToken } from '@/lib/auth';
-import { apiFetch } from '@/lib/api';
 import { AdminSalonList } from './admin-salon-list';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 interface PlatformStats {
   totalSalons: number;
@@ -22,6 +23,16 @@ interface AlertsData {
   overQuota: (Alert & { tier: string; _count: { staff: number } })[];
 }
 
+async function adminFetch<T>(path: string, token: string | null): Promise<T | null> {
+  if (!token) return null;
+  const res = await fetch(`${API_URL}/admin${path}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    cache: 'no-store',
+  });
+  if (!res.ok) return null;
+  return res.json() as Promise<T>;
+}
+
 export default async function AdminPage() {
   const token = await getToken();
 
@@ -30,8 +41,8 @@ export default async function AdminPage() {
 
   try {
     [stats, alerts] = await Promise.all([
-      apiFetch<PlatformStats>('/stats', {}, token).catch(() => null),
-      apiFetch<AlertsData>('/alerts', {}, token).catch(() => null),
+      adminFetch<PlatformStats>('/stats', token),
+      adminFetch<AlertsData>('/alerts', token),
     ]);
   } catch {
     // Admin API may not be accessible for non-admin users

@@ -11,6 +11,9 @@ export default async function DashboardLayout({
   const user = await getUser();
   if (!user) redirect('/login');
 
+  const isOwner = user.role === 'OWNER';
+  const isAdmin = user.role === 'SUPER_ADMIN';
+
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
@@ -18,6 +21,7 @@ export default async function DashboardLayout({
         <div className="p-6 border-b">
           <h1 className="text-xl font-bold">MarineFlow</h1>
           <p className="text-xs text-muted-foreground mt-1">{user.name}</p>
+          <p className="text-xs text-muted-foreground capitalize">{user.role.toLowerCase().replace('_', ' ')}</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">
           <NavLink href="/">Overview</NavLink>
@@ -26,10 +30,10 @@ export default async function DashboardLayout({
           <NavLink href="/analytics">Analytics</NavLink>
           <NavLink href="/staff">Staff</NavLink>
           <NavLink href="/branches">Branches</NavLink>
-          <NavLink href="/billing">Billing</NavLink>
-          <NavLink href="/agency">Agency</NavLink>
-          <NavLink href="/admin">Admin</NavLink>
-          <NavLink href="/settings">Settings</NavLink>
+          {isOwner && <NavLink href="/billing">Billing</NavLink>}
+          {isOwner && <NavLink href="/settings">Settings</NavLink>}
+          {isAdmin && <NavLink href="/agency">Agency</NavLink>}
+          {isAdmin && <NavLink href="/admin">Admin</NavLink>}
         </nav>
         <div className="p-4 border-t">
           <LogoutButton />

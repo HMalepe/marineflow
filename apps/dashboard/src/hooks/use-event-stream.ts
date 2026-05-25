@@ -19,7 +19,8 @@ export function useEventStream({ token, onEvent }: EventStreamOptions) {
   const connect = useCallback(() => {
     if (!token) return;
 
-    const proxyUrl = `/api/events/stream?token=${encodeURIComponent(token)}`;
+    // Use cookie-based auth via the proxy route (cookie sent automatically)
+    const proxyUrl = `/api/events/stream`;
     const es = new EventSource(proxyUrl);
 
     es.onopen = () => setConnected(true);

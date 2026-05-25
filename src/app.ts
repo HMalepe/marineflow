@@ -20,7 +20,7 @@ import { recordWebhookEvent } from './lib/webhooks.js';
 import { resolveTenantForInbound } from './lib/tenant.js';
 import { handleStripeWebhook } from './services/payments.js';
 import { serve } from 'inngest/fastify';
-import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder } from './lib/inngest/index.js';
+import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
 import { adminApiRoutes } from './routes/adminApi.js';
@@ -247,7 +247,7 @@ export async function buildApp() {
     url: '/api/inngest',
     handler: serve({
       client: inngest,
-      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder],
+      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns],
     }),
   });
 
