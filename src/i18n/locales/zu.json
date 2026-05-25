@@ -1,0 +1,35 @@
+{
+  "bot": {
+    "greeting": "Sawubona {{name}}! 👋 Siyakwamukela ku-{{salonName}}.",
+    "menu": "Ngingakusiza ngani?\n\n1. 📅 Bhalisa isikhathi\n2. 📋 Izibhaliselo zami\n3. 💳 Amaphuzu okwethembeka\n4. ❓ Imibuzo\n5. 📝 Bika inkinga",
+    "pick_service": "Khetha inombolo yesevisi:",
+    "pick_staff": "Khetha isitayela sakho:",
+    "pick_date": "Yiluphi usuku olukufanelayo?",
+    "pick_slot": "Izikhathi ezitholakalayo nge-{{date}}:",
+    "pick_branch": "Yiphi igatsha?",
+    "confirm_booking": "Qinisekisa isibhaliselo sakho:\n\n📅 {{date}}\n💇 {{service}}\n👩 {{staff}}\n💰 {{price}}\n\nPhendula YEBO ukuqinisekisa noma CHA ukukhansela.",
+    "booking_confirmed": "Kubhaliswe! Sizokubona nge-{{date}}. 🎉",
+    "no_services": "Azikho izinsizakalo ezisethwe okwamanje. Sicela uxhumane nesalong.",
+    "no_upcoming": "Azikho izibhaliselo ezizayo ezitholakele.",
+    "back": "Phendula EMUVA ukuze ubuyele kumenyu.",
+    "invalid_choice": "Sicela uphendule ngenombolo efanelekile noma EMUVA.",
+    "too_many_messages": "Imilayezo eminingi kakhulu — sicela ulinde umzuzu bese uzama futhi.",
+    "inactive": "Le bhizinisi ayisamukeli izibhaliselo okwamanje. Sicela uzame futhi kamuva.",
+    "reschedule_confirm": "Kulungile! Isibhaliselo sakho esidala sikhansulwe. Ake sikhethe isikhathi esisha.",
+    "csat_ask": "Bekunjani isipiliyoni sakho? Linganisa 1-5:\n1 ⭐ Kubi\n2 ⭐⭐ Ngaphansi kwejwayelekile\n3 ⭐⭐⭐ Okujwayelekile\n4 ⭐⭐⭐⭐ Kuhle\n5 ⭐⭐⭐⭐⭐ Kuhle kakhulu",
+    "csat_thanks_1": "Siyaxolisa ukuzwa lokho. Sizosebenza ukuthuthukisa. Siyabonga ngempendulo.",
+    "csat_thanks_2": "Siyabonga ngokusazisa. Sizokwenza kangcono esikhathini esizayo.",
+    "csat_thanks_3": "Siyabonga ngempendulo! Siyayazisa.",
+    "csat_thanks_4": "Kuhle ukuzwa! Siyabonga ngempendulo yakho.",
+    "csat_thanks_5": "Kuhle kakhulu! Sijabula kakhulu ukuthi ube nesipiliyoni esihle! 🌟"
+  },
+  "dashboard": {
+    "nav_home": "Ikhaya",
+    "nav_customers": "Amakhasimende",
+    "nav_analytics": "Ukuhlaziya",
+    "nav_billing": "Ukukhokha",
+    "nav_settings": "Izilungiselelo",
+    "nav_agency": "I-Ejensi",
+    "nav_admin": "Umlawuli"
+  }
+}

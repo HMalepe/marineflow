@@ -1,0 +1,35 @@
+{
+  "bot": {
+    "greeting": "Hallo {{name}}! 👋 Welkom by {{salonName}}.",
+    "menu": "Waarmee kan ek help?\n\n1. 📅 Bespreek 'n afspraak\n2. 📋 My besprekings\n3. 💳 Lojaaliteitspunte\n4. ❓ Vrae\n5. 📝 Rapporteer 'n probleem",
+    "pick_service": "Kies 'n diensnommer:",
+    "pick_staff": "Kies jou stilist:",
+    "pick_date": "Watter datum werk vir jou?",
+    "pick_slot": "Beskikbare tye op {{date}}:",
+    "pick_branch": "Watter tak?",
+    "confirm_booking": "Bevestig jou bespreking:\n\n📅 {{date}}\n💇 {{service}}\n👩 {{staff}}\n💰 {{price}}\n\nAntwoord JA om te bevestig of NEE om te kanselleer.",
+    "booking_confirmed": "Bespreek! Sien jou op {{date}}. 🎉",
+    "no_services": "Geen dienste opgestel nie. Kontak asseblief die salon.",
+    "no_upcoming": "Geen komende besprekings gevind nie.",
+    "back": "Antwoord TERUG vir spyskaart.",
+    "invalid_choice": "Antwoord asseblief met 'n geldige nommer of TERUG.",
+    "too_many_messages": "Te veel boodskappe — wag asseblief 'n minuut en probeer weer.",
+    "inactive": "Hierdie besigheid aanvaar nie nou besprekings nie. Probeer later weer.",
+    "reschedule_confirm": "Reg so! Jou ou bespreking is gekanselleer. Kom ons kies 'n nuwe tyd.",
+    "csat_ask": "Hoe was jou ervaring? Gradeer 1-5:\n1 ⭐ Swak\n2 ⭐⭐ Onder gemiddeld\n3 ⭐⭐⭐ Gemiddeld\n4 ⭐⭐⭐⭐ Goed\n5 ⭐⭐⭐⭐⭐ Uitstekend",
+    "csat_thanks_1": "Jammer om dit te hoor. Ons sal verbeter. Dankie vir die terugvoer.",
+    "csat_thanks_2": "Dankie dat jy ons laat weet het. Ons sal beter doen volgende keer.",
+    "csat_thanks_3": "Dankie vir die terugvoer! Ons waardeer dit.",
+    "csat_thanks_4": "Goed om te hoor! Dankie vir jou terugvoer.",
+    "csat_thanks_5": "Wonderlik! So bly jy het 'n goeie ervaring gehad! 🌟"
+  },
+  "dashboard": {
+    "nav_home": "Tuis",
+    "nav_customers": "Kliënte",
+    "nav_analytics": "Analise",
+    "nav_billing": "Fakturering",
+    "nav_settings": "Instellings",
+    "nav_agency": "Agentskap",
+    "nav_admin": "Admin"
+  }
+}

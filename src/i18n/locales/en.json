@@ -1,0 +1,35 @@
+{
+  "bot": {
+    "greeting": "Hi {{name}}! 👋 Welcome to {{salonName}}.",
+    "menu": "What can I help you with?\n\n1. 📅 Book an appointment\n2. 📋 My bookings\n3. 💳 Loyalty points\n4. ❓ FAQs\n5. 📝 Report an issue",
+    "pick_service": "Pick a service number:",
+    "pick_staff": "Choose your stylist:",
+    "pick_date": "Which date works for you?",
+    "pick_slot": "Available times on {{date}}:",
+    "pick_branch": "Which location?",
+    "confirm_booking": "Confirm your booking:\n\n📅 {{date}}\n💇 {{service}}\n👩 {{staff}}\n💰 {{price}}\n\nReply YES to confirm or NO to cancel.",
+    "booking_confirmed": "Booked! See you on {{date}}. 🎉",
+    "no_services": "No services configured yet. Please contact the salon.",
+    "no_upcoming": "No upcoming bookings found.",
+    "back": "Reply BACK for menu.",
+    "invalid_choice": "Please reply with a valid number or BACK.",
+    "too_many_messages": "Too many messages — please wait a minute and try again.",
+    "inactive": "This business is not accepting bookings right now. Please try again later.",
+    "reschedule_confirm": "Got it! Your old booking is cancelled. Let's pick a new time.",
+    "csat_ask": "How was your experience? Rate 1-5:\n1 ⭐ Poor\n2 ⭐⭐ Below average\n3 ⭐⭐⭐ Average\n4 ⭐⭐⭐⭐ Good\n5 ⭐⭐⭐⭐⭐ Excellent",
+    "csat_thanks_1": "We're sorry to hear that. We'll work to improve. Thank you for the feedback.",
+    "csat_thanks_2": "Thank you for letting us know. We'll do better next time.",
+    "csat_thanks_3": "Thanks for the feedback! We appreciate it.",
+    "csat_thanks_4": "Great to hear! Thank you for your feedback.",
+    "csat_thanks_5": "Wonderful! So glad you had a great experience! 🌟"
+  },
+  "dashboard": {
+    "nav_home": "Home",
+    "nav_customers": "Customers",
+    "nav_analytics": "Analytics",
+    "nav_billing": "Billing",
+    "nav_settings": "Settings",
+    "nav_agency": "Agency",
+    "nav_admin": "Admin"
+  }
+}
