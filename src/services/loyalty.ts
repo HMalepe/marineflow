@@ -4,7 +4,7 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import type { Service } from '@prisma/client';
 
 export async function ensureLoyaltyProgram(salonId: string) {
-  await getTenantDb().loyaltyProgram.upsert({
+  return getTenantDb().loyaltyProgram.upsert({
     where: { salonId },
     create: {
       salonId,
