@@ -4,14 +4,18 @@ import {
   type Customer,
   type Salon,
 } from '@prisma/client';
-import { prisma } from '../lib/prisma.js';
+import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
+import {
+  assertTenantActive,
+  resolveTenantForInbound,
+  type ResolvedTenant,
+} from '../lib/tenant.js';
 import { sendWhatsAppReply } from '../lib/twilio.js';
 import { normalizeWaId } from '../lib/phone.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { DateTime } from 'luxon';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
-import { env } from '../config.js';
 import {
   ensureLoyaltyProgram,
   getStampBalance,
@@ -40,9 +44,9 @@ function ctx(conv: Conversation): BotContext {
 }
 
 async function saveCtx(convId: string, patch: Partial<BotContext>, step?: ConversationStep) {
-  const conv = await prisma.conversation.findUniqueOrThrow({ where: { id: convId } });
+  const conv = await getTenantDb().conversation.findUniqueOrThrow({ where: { id: convId } });
   const next = { ...ctx(conv), ...patch };
-  await prisma.conversation.update({
+  await getTenantDb().conversation.update({
     where: { id: convId },
     data: {
       context: next as object,
@@ -61,7 +65,7 @@ async function reply(
     sid = await sendWhatsAppReply(conv.customer.waId, text);
   }
   if (sid) {
-    await prisma.message.create({
+    await getTenantDb().message.create({
       data: {
         conversationId: conv.id,
         customerId: conv.customerId,
@@ -92,12 +96,28 @@ export async function handleInboundWhatsApp(input: {
   from: string;
   body: string;
   messageSid: string;
+  twilioTo?: string;
+  metaPhoneNumberId?: string;
 }): Promise<void> {
   const waId = normalizeWaId(input.from);
   const text = (input.body ?? '').trim();
-  const salon = await prisma.salon.findFirst({ where: { slug: env.DEFAULT_SALON_SLUG } });
-  if (!salon) {
-    logger.error('no_default_salon');
+
+  const tenant = await resolveTenantForInbound({
+    twilioTo: input.twilioTo,
+    metaPhoneNumberId: input.metaPhoneNumberId,
+  });
+  if (!tenant) {
+    logger.error('tenant_not_resolved');
+    return;
+  }
+
+  try {
+    assertTenantActive(tenant);
+  } catch {
+    await sendWhatsAppReply(
+      waId,
+      'This business is not accepting bookings right now. Please try again later.',
+    );
     return;
   }
 
@@ -106,21 +126,33 @@ export async function handleInboundWhatsApp(input: {
     return;
   }
 
-  let customer = await prisma.customer.findUnique({
+  await withTenantContext(tenant.id, async () => {
+    await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
+  });
+}
+
+async function processInboundWhatsApp(
+  tenant: ResolvedTenant,
+  input: { waId: string; text: string; messageSid: string },
+): Promise<void> {
+  const { waId, text, messageSid } = input;
+  const salon = await getTenantDb().salon.findUniqueOrThrow({ where: { id: tenant.id } });
+
+  let customer = await getTenantDb().customer.findUnique({
     where: { salonId_waId: { salonId: salon.id, waId } },
   });
   if (!customer) {
-    customer = await prisma.customer.create({
+    customer = await getTenantDb().customer.create({
       data: { salonId: salon.id, waId },
     });
   }
 
-  let conv = await prisma.conversation.findUnique({
+  let conv = await getTenantDb().conversation.findUnique({
     where: { salonId_customerId: { salonId: salon.id, customerId: customer.id } },
     include: { customer: true, salon: true },
   });
   if (!conv) {
-    conv = await prisma.conversation.create({
+    conv = await getTenantDb().conversation.create({
       data: {
         salonId: salon.id,
         customerId: customer.id,
@@ -130,23 +162,23 @@ export async function handleInboundWhatsApp(input: {
       include: { customer: true, salon: true },
     });
   } else {
-    conv = await prisma.conversation.findUniqueOrThrow({
+    conv = await getTenantDb().conversation.findUniqueOrThrow({
       where: { id: conv.id },
       include: { customer: true, salon: true },
     });
   }
 
-  await prisma.message.create({
+  await getTenantDb().message.create({
     data: {
       conversationId: conv.id,
       customerId: customer.id,
       direction: 'in',
       body: text,
-      providerSid: input.messageSid,
+      providerSid: messageSid,
     },
   });
 
-  await prisma.analyticsEvent.create({
+  await getTenantDb().analyticsEvent.create({
     data: {
       salonId: salon.id,
       customerId: customer.id,
@@ -167,7 +199,7 @@ export async function handleInboundWhatsApp(input: {
     lower.includes('talk to') ||
     text === '0'
   ) {
-    await prisma.ticket.create({
+    await getTenantDb().ticket.create({
       data: {
         salonId: salon.id,
         customerId: customer.id,
@@ -246,7 +278,7 @@ async function handleMenu(
   const choice = text.trim();
 
   if (choice === '1') {
-    const services = await prisma.service.findMany({
+    const services = await getTenantDb().service.findMany({
       where: { salonId: salon.id, active: true },
       orderBy: { sortOrder: 'asc' },
     });
@@ -261,7 +293,7 @@ async function handleMenu(
   }
 
   if (choice === '2') {
-    const upcoming = await prisma.appointment.findMany({
+    const upcoming = await getTenantDb().appointment.findMany({
       where: {
         customerId: conv.customerId,
         salonId: salon.id,
@@ -311,7 +343,7 @@ async function handleMenu(
   }
 
   if (choice === '4') {
-    const faqs = await prisma.faqItem.findMany({
+    const faqs = await getTenantDb().faqItem.findMany({
       where: { salonId: salon.id },
       orderBy: { sortOrder: 'asc' },
       take: 10,
@@ -352,7 +384,7 @@ async function handlePickService(
   text: string,
 ) {
   const n = parseInt(text, 10);
-  const services = await prisma.service.findMany({
+  const services = await getTenantDb().service.findMany({
     where: { salonId: conv.salonId, active: true },
     orderBy: { sortOrder: 'asc' },
   });
@@ -390,7 +422,7 @@ async function handlePickStaff(
     await reply(conv, mainMenu(conv.salon));
     return;
   }
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staffList = await getStaffForService(conv.salonId, service.id);
   const n = parseInt(text, 10);
   const anyIdx = staffList.length + 1;
@@ -434,8 +466,8 @@ async function handlePickDate(
     await reply(conv, mainMenu(conv.salon));
     return;
   }
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
-  const staff = await prisma.staff.findUniqueOrThrow({ where: { id: staffId } });
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
 
   let localDateStr: string | undefined;
   const n = parseInt(text, 10);
@@ -482,8 +514,8 @@ async function handlePickSlot(
     await reply(conv, mainMenu(conv.salon));
     return;
   }
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
-  const staff = await prisma.staff.findUniqueOrThrow({ where: { id: staffId } });
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
   const slots = await getAvailableSlots({
     salonId: conv.salonId,
     service,
@@ -535,53 +567,51 @@ async function handleConfirm(
     return;
   }
 
-  const service = await prisma.service.findUniqueOrThrow({ where: { id: serviceId } });
-  const staff = await prisma.staff.findUniqueOrThrow({ where: { id: staffId } });
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
   const start = new Date(slotIso);
   const end = new Date(
     start.getTime() + (service.durationMin + service.bufferMin + staff.breakMin) * 60_000,
   );
 
-  const { appointment, redeem } = await prisma.$transaction(async (tx) => {
-    const redeemResult = await redeemForNextBookingTx(tx, {
+  const tx = getTenantDb();
+  const redeem = await redeemForNextBookingTx(tx, {
+    salonId: conv.salonId,
+    customerId: conv.customerId,
+    service,
+  });
+  const appointment = await tx.appointment.create({
+    data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
-      service,
-    });
-    const appt = await tx.appointment.create({
-      data: {
-        salonId: conv.salonId,
-        customerId: conv.customerId,
-        serviceId: service.id,
-        staffId: staff.id,
-        start,
-        end,
-        status: redeemResult.redeemed
-          ? 'CONFIRMED'
-          : service.depositCents || service.fullPay
-            ? 'HELD'
-            : 'CONFIRMED',
-        loyaltyRedeemed: redeemResult.redeemed,
-      },
-    });
-    await tx.auditLog.create({
-      data: {
-        action: 'appointment_create',
-        entity: 'Appointment',
-        entityId: appt.id,
-        payload: { source: 'whatsapp' },
-      },
-    });
-    await tx.analyticsEvent.create({
-      data: {
-        salonId: conv.salonId,
-        customerId: conv.customerId,
-        appointmentId: appt.id,
-        type: 'booking_complete',
-        payload: { serviceId: service.id },
-      },
-    });
-    return { appointment: appt, redeem: redeemResult };
+      serviceId: service.id,
+      staffId: staff.id,
+      start,
+      end,
+      status: redeem.redeemed
+        ? 'CONFIRMED'
+        : service.depositCents || service.fullPay
+          ? 'HELD'
+          : 'CONFIRMED',
+      loyaltyRedeemed: redeem.redeemed,
+    },
+  });
+  await tx.auditLog.create({
+    data: {
+      action: 'appointment_create',
+      entity: 'Appointment',
+      entityId: appointment.id,
+      payload: { source: 'whatsapp' },
+    },
+  });
+  await tx.analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: appointment.id,
+      type: 'booking_complete',
+      payload: { serviceId: service.id },
+    },
   });
 
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
@@ -654,7 +684,7 @@ async function handleManageBooking(
     return;
   }
   const id = ids[idx - 1]!;
-  const appt = await prisma.appointment.findFirst({
+  const appt = await getTenantDb().appointment.findFirst({
     where: { id, customerId: conv.customerId },
     include: { service: true, staff: true },
   });
@@ -662,11 +692,11 @@ async function handleManageBooking(
     await reply(conv, 'Booking not found.');
     return;
   }
-  await prisma.appointment.update({
+  await getTenantDb().appointment.update({
     where: { id: appt.id },
     data: { status: 'CANCELLED' },
   });
-  await prisma.analyticsEvent.create({
+  await getTenantDb().analyticsEvent.create({
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
@@ -682,7 +712,7 @@ async function handleComplaint(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  await prisma.ticket.create({
+  await getTenantDb().ticket.create({
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
@@ -700,7 +730,7 @@ async function handleFaq(
   text: string,
 ) {
   const n = parseInt(text, 10);
-  const faqs = await prisma.faqItem.findMany({
+  const faqs = await getTenantDb().faqItem.findMany({
     where: { salonId: conv.salonId },
     orderBy: { sortOrder: 'asc' },
     take: 10,

@@ -1,0 +1,131 @@
+import crypto from 'node:crypto';
+import { env } from '../../../config.js';
+import type {
+  MessagingProvider,
+  NormalisedInboundMessage,
+  SendOptions,
+  SentMessage,
+} from './types.js';
+
+const API_BASE = 'https://graph.facebook.com';
+
+function apiUrl(phoneNumberId: string): string {
+  return `${API_BASE}/${env.META_API_VERSION}/${phoneNumberId}/messages`;
+}
+
+export const whatsappCloudMessaging: MessagingProvider = {
+  async sendText(options: SendOptions): Promise<SentMessage> {
+    const { to, body, phoneNumberId } = options;
+    if (!phoneNumberId) throw new Error('phoneNumberId required for Meta Cloud API');
+    if (!env.META_ACCESS_TOKEN) throw new Error('META_ACCESS_TOKEN not configured');
+
+    const response = await fetch(apiUrl(phoneNumberId), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to.replace(/^\+/, ''),
+        type: 'text',
+        text: { preview_url: false, body },
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Meta Cloud API send failed (${response.status}): ${err}`);
+    }
+
+    const data = (await response.json()) as { messages?: { id: string }[] };
+    const wamid = data.messages?.[0]?.id ?? '';
+
+    return { providerMessageId: wamid, timestamp: new Date() };
+  },
+
+  async sendTemplate(options: SendOptions): Promise<SentMessage> {
+    const { to, templateName, templateLang, templateParams, phoneNumberId } = options;
+    if (!phoneNumberId) throw new Error('phoneNumberId required for Meta Cloud API');
+    if (!env.META_ACCESS_TOKEN) throw new Error('META_ACCESS_TOKEN not configured');
+    if (!templateName) throw new Error('templateName required for sendTemplate');
+
+    const components = templateParams?.length
+      ? [{ type: 'body', parameters: templateParams.map((p) => ({ type: 'text', text: p.value })) }]
+      : [];
+
+    const response = await fetch(apiUrl(phoneNumberId), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: to.replace(/^\+/, ''),
+        type: 'template',
+        template: {
+          name: templateName,
+          language: { code: templateLang ?? 'en' },
+          components,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Meta Cloud API template send failed (${response.status}): ${err}`);
+    }
+
+    const data = (await response.json()) as { messages?: { id: string }[] };
+    return { providerMessageId: data.messages?.[0]?.id ?? '', timestamp: new Date() };
+  },
+
+  verifyWebhook(payload: unknown, signature: string | undefined): boolean {
+    if (!env.META_APP_SECRET || !signature) return false;
+    const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    const expected = crypto
+      .createHmac('sha256', env.META_APP_SECRET)
+      .update(raw)
+      .digest('hex');
+    const provided = signature.replace(/^sha256=/, '');
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(provided));
+  },
+
+  parseInbound(payload: unknown): NormalisedInboundMessage | null {
+    const body = payload as {
+      entry?: {
+        changes?: {
+          value?: {
+            metadata?: { phone_number_id?: string };
+            messages?: {
+              id: string;
+              from: string;
+              timestamp: string;
+              text?: { body: string };
+            }[];
+          };
+        }[];
+      }[];
+    };
+
+    for (const entry of body.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        const value = change.value;
+        const phoneId = value?.metadata?.phone_number_id;
+        for (const msg of value?.messages ?? []) {
+          return {
+            externalId: msg.id,
+            fromPhoneE164: `+${msg.from}`,
+            toAddress: phoneId ?? '',
+            body: msg.text?.body ?? '',
+            receivedAt: new Date(Number(msg.timestamp) * 1000),
+            metaPhoneNumberId: phoneId,
+          };
+        }
+      }
+    }
+    return null;
+  },
+};

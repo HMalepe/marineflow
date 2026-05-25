@@ -17,6 +17,13 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   SESSION_SECRET: z.string().min(16),
   DEFAULT_SALON_SLUG: z.string().default('demo-salon'),
+  MESSAGING_PROVIDER: z.enum(['twilio', 'meta']).default('twilio'),
+  META_APP_SECRET: z.string().optional(),
+  META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  META_ACCESS_TOKEN: z.string().optional(),
+  META_API_VERSION: z.string().default('v21.0'),
+  INNGEST_EVENT_KEY: z.string().optional(),
+  INNGEST_SIGNING_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

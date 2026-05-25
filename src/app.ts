@@ -7,12 +7,16 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { env } from './config.js';
 import { logger } from './lib/logger.js';
-import { redisPing } from './lib/redis.js';
+import { redisPing, redis } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
-import { validateTwilioRequest } from './lib/twilioValidate.js';
+import { twilioMessaging } from './lib/integrations/messaging/twilio-impl.js';
+import { whatsappCloudMessaging } from './lib/integrations/messaging/whatsapp-cloud-impl.js';
 import { handleInboundWhatsApp } from './services/bot.js';
-import { redis } from './lib/redis.js';
+import { recordWebhookEvent } from './lib/webhooks.js';
+import { resolveTenantForInbound } from './lib/tenant.js';
 import { handleStripeWebhook } from './services/payments.js';
+import { serve } from 'inngest/fastify';
+import { inngest, sendOutboundMessage } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
 import { internalRoutes } from './routes/internal.js';
@@ -67,13 +71,13 @@ export async function buildApp() {
         ? request.headers['x-twilio-signature']
         : undefined;
 
-    const url = `${env.TWILIO_WEBHOOK_BASE_URL.replace(/\/$/, '')}/webhooks/twilio/whatsapp`;
-    if (!validateTwilioRequest(signature, url, params)) {
+    if (!twilioMessaging.verifyWebhook(params, signature)) {
       return reply.code(403).send({ error: 'invalid_signature' });
     }
 
     const messageSid = params['MessageSid'] ?? '';
     const from = params['From'] ?? '';
+    const to = params['To'] ?? '';
     const body = params['Body'] ?? '';
 
     if (messageSid) {
@@ -82,17 +86,79 @@ export async function buildApp() {
       if (first !== 'OK') {
         return reply.send('');
       }
+      const tenant = await resolveTenantForInbound({ twilioTo: to });
+      const recorded = await recordWebhookEvent({
+        provider: 'twilio',
+        providerEventId: messageSid,
+        payload: params,
+        verified: true,
+        salonId: tenant?.id,
+      });
+      if (recorded === 'duplicate') {
+        return reply.send('');
+      }
     }
 
     await handleInboundWhatsApp({
       from,
       body,
       messageSid,
+      twilioTo: to,
     });
 
     return reply.type('text/xml').send(
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
     );
+  });
+
+  app.get('/webhooks/whatsapp', async (request, reply) => {
+    const q = request.query as {
+      'hub.mode'?: string;
+      'hub.verify_token'?: string;
+      'hub.challenge'?: string;
+    };
+    if (
+      q['hub.mode'] === 'subscribe' &&
+      env.META_WEBHOOK_VERIFY_TOKEN &&
+      q['hub.verify_token'] === env.META_WEBHOOK_VERIFY_TOKEN
+    ) {
+      return reply.send(q['hub.challenge'] ?? '');
+    }
+    return reply.code(403).send({ error: 'forbidden' });
+  });
+
+  app.post('/webhooks/whatsapp', async (request, reply) => {
+    const raw = request.body as unknown;
+    const signature =
+      typeof request.headers['x-hub-signature-256'] === 'string'
+        ? request.headers['x-hub-signature-256']
+        : undefined;
+
+    const inbound = whatsappCloudMessaging.parseInbound(raw);
+    if (!inbound) {
+      return reply.send({ received: true });
+    }
+
+    const recorded = await recordWebhookEvent({
+      provider: 'meta',
+      providerEventId: inbound.externalId,
+      payload: raw,
+      verified: Boolean(signature),
+      salonId: undefined,
+    });
+    if (recorded === 'duplicate') {
+      return reply.send({ received: true });
+    }
+
+    await handleInboundWhatsApp({
+      from: inbound.fromPhoneE164,
+      body: inbound.body,
+      messageSid: inbound.externalId,
+      metaPhoneNumberId: inbound.metaPhoneNumberId,
+      twilioTo: inbound.toAddress,
+    });
+
+    return reply.send({ received: true });
   });
 
   await app.register(async function stripeRawBody(f) {
@@ -121,6 +187,16 @@ export async function buildApp() {
   await app.register(plannedRoutes, { prefix: '/api/planned' });
   await app.register(dashboardApiRoutes, { prefix: '/api' });
   await app.register(internalRoutes, { prefix: '/internal' });
+
+  app.route({
+    method: ['GET', 'POST', 'PUT'],
+    url: '/api/inngest',
+    handler: serve({
+      client: inngest,
+      functions: [sendOutboundMessage],
+    }),
+  });
+
 
   app.setErrorHandler((err: unknown, _request, reply) => {
     logger.error(err);

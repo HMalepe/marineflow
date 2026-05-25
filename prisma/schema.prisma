@@ -1,4 +1,4 @@
-// MarineFlow — single deploy can host one salon (tenant-ready fields)
+// MarineFlow — multi-tenant via Salon + Postgres RLS (salonId = spec tenant_id)
 
 generator client {
   provider = "prisma-client-js"
@@ -7,6 +7,16 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+/// Maps to Nexus spec `tenant_status`
+enum TenantStatus {
+  LEAD
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CHURNED
 }
 
 enum AppointmentStatus {
@@ -30,6 +40,22 @@ enum StaffRole {
   OWNER
   MANAGER
   STYLIST
+  RECEPTIONIST
+  VIEWER
+}
+
+enum MessageChannel {
+  WHATSAPP
+  SMS
+  WEB
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
 }
 
 enum TicketStatus {
@@ -54,23 +80,51 @@ enum ConversationStep {
 }
 
 model Salon {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
+  /// Display / trading name (spec: trading_name)
   name           String
-  slug           String   @unique
-  timezone       String   @default("America/New_York")
+  tradingName    String?
+  legalName      String?
+  slug           String       @unique
+  industryTemplate String     @default("salon")
+  status         TenantStatus @default(TRIAL)
+  statusChangedAt DateTime    @default(now())
+  trialEndsAt    DateTime?
+  tier           String       @default("starter")
+  timezone       String       @default("America/New_York")
+  defaultCurrency String      @default("usd")
+  locale         String       @default("en")
   addressLine    String?
   parkingNotes   String?
   accessibility  String?
   phoneDisplay   String?
+  botName        String       @default("Ava")
+  botVoiceBrief  String?      @db.Text
+  toneFormality  Int          @default(50)
+  toneWarmth     Int          @default(70)
+  tonePlayfulness Int         @default(40)
+  tonePace       Int          @default(30)
+  toneSalesEnergy Int         @default(30)
+  /// Meta WhatsApp Cloud API phone_number_id
+  whatsappPhoneId String?     @unique
+  whatsappWabaId  String?
+  /// Twilio sandbox/production From (e.g. whatsapp:+14155238886) for routing fallback
+  twilioWhatsAppFrom String?  @unique
+  onboardingCompletedAt DateTime?
+  metadata       Json         @default("{}")
+  deletedAt      DateTime?
   /** IANA — hours interpreted in this zone */
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   customers      Customer[]
+  webhookEvents  WebhookEvent[]
   services       Service[]
   staff          Staff[]
   appointments   Appointment[]
   businessHours  BusinessHour[]
+  workingHours   WorkingHour[]
+  availabilityExceptions AvailabilityException[]
   conversations  Conversation[]
   payments       Payment[]
   invoices       Invoice[]
@@ -122,15 +176,18 @@ model Conversation {
 }
 
 model Message {
-  id             String       @id @default(cuid())
+  id             String         @id @default(cuid())
   conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   customerId     String
-  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  direction      String       /** in | out */
-  body           String       @db.Text
-  providerSid    String?      @unique /** Twilio MessageSid — idempotency */
-  createdAt      DateTime     @default(now())
+  customer       Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  direction      String         /** in | out */
+  body           String         @db.Text
+  channel        MessageChannel @default(WHATSAPP)
+  status         MessageStatus  @default(SENT)
+  providerSid    String?        @unique
+  idempotencyKey String?        @unique
+  createdAt      DateTime       @default(now())
 
   @@index([conversationId])
 }
@@ -158,17 +215,26 @@ model Service {
 }
 
 model Staff {
-  id        String   @id @default(cuid())
-  salonId   String
-  salon     Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name      String
-  active    Boolean  @default(true)
-  breakMin  Int      @default(0) /** padding between appointments */
+  id            String   @id @default(cuid())
+  salonId       String
+  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name          String
+  displayName   String?
+  bio           String?  @db.Text
+  specialties   String[] @default([])
+  avatarUrl     String?
+  active        Boolean  @default(true)
+  isBookable    Boolean  @default(true)
+  breakMin      Int      @default(0)
+  sortOrder     Int      @default(0)
+  deletedAt     DateTime?
 
-  services  StaffService[]
-  appointments Appointment[]
-  timeOff   TimeOff[]
-  staffUsers StaffUser[]
+  services      StaffService[]
+  appointments  Appointment[]
+  timeOff       TimeOff[]
+  workingHours  WorkingHour[]
+  availabilityExceptions AvailabilityException[]
+  staffUsers    StaffUser[]
   analyticsEvents AnalyticsEvent[]
 
   @@index([salonId])
@@ -201,6 +267,40 @@ model TimeOff {
   start   DateTime
   end     DateTime
   reason  String?
+}
+
+/// Per-staff recurring weekly availability (spec: working_hours)
+model WorkingHour {
+  id            String   @id @default(cuid())
+  salonId       String
+  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  staffId       String
+  staff         Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  weekday       Int      /// 0=Sun .. 6=Sat
+  startTime     String   /// HH:MM (e.g. "09:00")
+  endTime       String   /// HH:MM (e.g. "18:00")
+  isBreak       Boolean  @default(false)
+  effectiveFrom DateTime @default(now())
+  effectiveUntil DateTime?
+
+  @@index([staffId, weekday])
+  @@index([salonId])
+}
+
+/// Overrides to recurring schedule (spec: availability_exceptions)
+model AvailabilityException {
+  id          String   @id @default(cuid())
+  salonId     String
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  staffId     String?
+  staff       Staff?   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  startsAt    DateTime
+  endsAt      DateTime
+  reason      String?
+  isAvailable Boolean  /// true = special-open, false = closed
+
+  @@index([salonId])
+  @@index([staffId])
 }
 
 model Appointment {
@@ -373,4 +473,20 @@ model AnalyticsEvent {
   createdAt     DateTime @default(now())
 
   @@index([salonId, type, createdAt])
+}
+
+/// Inbound webhook dedup + audit (spec: webhook_events)
+model WebhookEvent {
+  id           String   @id @default(cuid())
+  salonId      String?
+  salon        Salon?   @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  provider     String
+  providerEventId String
+  payload      Json
+  verified     Boolean  @default(false)
+  processedAt  DateTime?
+  createdAt    DateTime @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([salonId, createdAt])
 }

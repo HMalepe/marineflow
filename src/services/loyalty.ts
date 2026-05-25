@@ -1,9 +1,10 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { getTenantDb } from '../lib/db/tenantSession.js';
 import type { Service } from '@prisma/client';
 
 export async function ensureLoyaltyProgram(salonId: string) {
-  await prisma.loyaltyProgram.upsert({
+  await getTenantDb().loyaltyProgram.upsert({
     where: { salonId },
     create: {
       salonId,
@@ -16,10 +17,10 @@ export async function ensureLoyaltyProgram(salonId: string) {
 
 export async function getStampBalance(salonId: string, customerId: string) {
   await ensureLoyaltyProgram(salonId);
-  const program = await prisma.loyaltyProgram.findUniqueOrThrow({
+  const program = await getTenantDb().loyaltyProgram.findUniqueOrThrow({
     where: { salonId },
   });
-  const agg = await prisma.loyaltyLedger.aggregate({
+  const agg = await getTenantDb().loyaltyLedger.aggregate({
     where: { programId: program.id, customerId },
     _sum: { delta: true },
   });
@@ -91,27 +92,26 @@ export async function earnStampForCompletedVisit(input: {
 }) {
   if (!input.service.qualifiesLoyalty) return;
   await ensureLoyaltyProgram(input.salonId);
-  const program = await prisma.loyaltyProgram.findUniqueOrThrow({
+  const db = getTenantDb();
+  const program = await db.loyaltyProgram.findUniqueOrThrow({
     where: { salonId: input.salonId },
   });
 
-  await prisma.$transaction(async (tx) => {
-    await tx.loyaltyLedger.create({
-      data: {
-        programId: program.id,
-        customerId: input.customerId,
-        delta: 1,
-        reason: 'EARN_VISIT',
-        appointmentId: input.appointmentId,
-      },
-    });
-    const agg = await tx.loyaltyLedger.aggregate({
-      where: { programId: program.id, customerId: input.customerId },
-      _sum: { delta: true },
-    });
-    await tx.customer.update({
-      where: { id: input.customerId },
-      data: { loyaltyStampsCached: agg._sum.delta ?? 0 },
-    });
+  await db.loyaltyLedger.create({
+    data: {
+      programId: program.id,
+      customerId: input.customerId,
+      delta: 1,
+      reason: 'EARN_VISIT',
+      appointmentId: input.appointmentId,
+    },
+  });
+  const agg = await db.loyaltyLedger.aggregate({
+    where: { programId: program.id, customerId: input.customerId },
+    _sum: { delta: true },
+  });
+  await db.customer.update({
+    where: { id: input.customerId },
+    data: { loyaltyStampsCached: agg._sum.delta ?? 0 },
   });
 }

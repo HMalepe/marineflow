@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { prisma } from '../lib/prisma.js';
+import { getTenantDb } from '../lib/db/tenantSession.js';
 import type { Service, Staff, TimeOff, Appointment } from '@prisma/client';
 
 const SLOT_STEP_MIN = 15;
@@ -28,7 +28,7 @@ export async function getAvailableSlots(input: {
   staff: Staff;
   localDateStr: string;
 }): Promise<Slot[]> {
-  const salon = await prisma.salon.findUniqueOrThrow({
+  const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: input.salonId },
     include: { businessHours: true },
   });
@@ -57,14 +57,14 @@ export async function getAvailableSlots(input: {
   const closeUtc = close.toUTC();
 
   const [timeOffs, appts] = await Promise.all([
-    prisma.timeOff.findMany({
+    getTenantDb().timeOff.findMany({
       where: {
         staffId: input.staff.id,
         start: { lt: closeUtc.toJSDate() },
         end: { gt: openUtc.toJSDate() },
       },
     }),
-    prisma.appointment.findMany({
+    getTenantDb().appointment.findMany({
       where: {
         salonId: input.salonId,
         staffId: input.staff.id,
@@ -95,7 +95,7 @@ export async function getAvailableSlots(input: {
 
 /** Next N calendar dates (YYYY-MM-DD) in salon TZ that have at least one slot possible (has business hours row). */
 export async function suggestBookingDates(salonId: string, days = 14): Promise<string[]> {
-  const salon = await prisma.salon.findUniqueOrThrow({
+  const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: salonId },
     include: { businessHours: true },
   });
@@ -113,7 +113,7 @@ export async function suggestBookingDates(salonId: string, days = 14): Promise<s
 }
 
 export async function getStaffForService(salonId: string, serviceId: string): Promise<Staff[]> {
-  return prisma.staff.findMany({
+  return getTenantDb().staff.findMany({
     where: {
       salonId,
       active: true,
