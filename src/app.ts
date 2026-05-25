@@ -21,6 +21,7 @@ import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
 import { adminApiRoutes } from './routes/adminApi.js';
 import { agencyApiRoutes } from './routes/agencyApi.js';
+import { sseRoutes } from './routes/sse.js';
 import { internalRoutes } from './routes/internal.js';
 import { plannedRoutes } from './routes/planned.js';
 
@@ -194,6 +195,7 @@ export async function buildApp() {
   await app.register(dashboardApiRoutes, { prefix: '/api' });
   await app.register(adminApiRoutes, { prefix: '/admin' });
   await app.register(agencyApiRoutes, { prefix: '/agency' });
+  await app.register(sseRoutes, { prefix: '/api' });
   await app.register(internalRoutes, { prefix: '/internal' });
 
   app.route({
