@@ -60,7 +60,10 @@ export const payfastAdapter: PaymentProviderAdapter = {
     const dataForSig = { ...body };
     delete dataForSig['signature'];
     const expected = generateSignature(dataForSig, env.PAYFAST_PASSPHRASE);
-    const valid = expected === signatureReceived;
+    const expectedBuf = Buffer.from(expected);
+    const receivedBuf = Buffer.from(signatureReceived);
+    const valid = expectedBuf.length === receivedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, receivedBuf);
 
     const statusMap: Record<string, 'success' | 'failed' | 'pending' | 'cancelled'> = {
       COMPLETE: 'success',

@@ -2,14 +2,11 @@ import crypto from 'node:crypto';
 import { env } from '../../../config.js';
 import type { PaymentProviderAdapter, CreateCheckoutInput, CheckoutResult, WebhookVerifyResult } from './types.js';
 
-const OZOW_API_BASE_TEST = 'https://api.ozow.com';
-const OZOW_PAY_BASE_TEST = 'https://pay.ozow.com';
+const OZOW_PAY_TEST = 'https://pay.ozow.com';
+const OZOW_PAY_LIVE = 'https://pay.ozow.com';
 
-function getBaseUrls() {
-  return {
-    api: OZOW_API_BASE_TEST,
-    pay: env.OZOW_IS_TEST ? OZOW_PAY_BASE_TEST : 'https://pay.ozow.com',
-  };
+function getPayUrl(): string {
+  return env.OZOW_IS_TEST ? OZOW_PAY_TEST : OZOW_PAY_LIVE;
 }
 
 function generateHash(values: string[]): string {
@@ -56,22 +53,36 @@ export const ozowAdapter: PaymentProviderAdapter = {
       HashCheck: hashCheck,
     });
 
-    const { pay } = getBaseUrls();
-    const redirectUrl = `${pay}/?${params.toString()}`;
+    const redirectUrl = `${getPayUrl()}/?${params.toString()}`;
 
     return { redirectUrl, externalReference: input.reference };
   },
 
   verifyWebhook(payload: unknown, _headers: Record<string, string | undefined>): WebhookVerifyResult {
     const body = payload as Record<string, string>;
-    const hash = body['Hash'] ?? body['hash'];
+    const hashReceived = body['Hash'] ?? body['hash'];
     const transactionId = body['TransactionId'] ?? body['transactionId'];
     const reference = body['TransactionReference'] ?? body['transactionReference'];
     const statusRaw = (body['Status'] ?? body['status'] ?? '').toLowerCase();
+    const siteCode = body['SiteCode'] ?? body['siteCode'] ?? '';
+    const amount = body['Amount'] ?? body['amount'] ?? '';
+    const currencyCode = body['CurrencyCode'] ?? body['currencyCode'] ?? '';
 
-    if (!hash || !env.OZOW_PRIVATE_KEY) {
+    if (!hashReceived || !env.OZOW_PRIVATE_KEY) {
       return { valid: false };
     }
+
+    const hashValues = [
+      siteCode,
+      transactionId ?? '',
+      reference ?? '',
+      amount,
+      statusRaw,
+      currencyCode,
+      env.OZOW_PRIVATE_KEY,
+    ];
+    const expectedHash = generateHash(hashValues);
+    const valid = expectedHash === hashReceived.toLowerCase();
 
     const statusMap: Record<string, 'success' | 'failed' | 'pending' | 'cancelled'> = {
       complete: 'success',
@@ -82,7 +93,7 @@ export const ozowAdapter: PaymentProviderAdapter = {
     };
 
     return {
-      valid: true,
+      valid,
       transactionId,
       reference,
       status: statusMap[statusRaw] ?? 'pending',
