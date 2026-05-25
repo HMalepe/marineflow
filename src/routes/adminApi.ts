@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 
 /**
  * Platform admin routes — guarded by admin JWT (isAdmin: true in token).
@@ -199,6 +200,20 @@ export async function adminApiRoutes(app: FastifyInstance) {
     ]);
 
     return { pastDue, trialExpiring, overQuota };
+  });
+
+  // ─── Observability ───────────────────────────────────────────────────
+  app.get('/observability/metrics', async () => {
+    return getPlatformMetrics();
+  });
+
+  app.get('/observability/funnel', async (request) => {
+    const { salonId } = request.query as { salonId?: string };
+    return getConversationFunnel(salonId);
+  });
+
+  app.get('/observability/alerts', async () => {
+    return checkAlertThresholds();
   });
 }
 
