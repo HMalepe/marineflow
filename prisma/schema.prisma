@@ -183,6 +183,7 @@ model Salon {
   uploadedFiles  UploadedFile[]
   consentRecords ConsentRecord[]
   analyticsEvents AnalyticsEvent[]
+  waitlistEntries WaitlistEntry[]
   webhookSubscriptions WebhookSubscription[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
@@ -245,6 +246,7 @@ model Customer {
   appointments    Appointment[]
   loyaltyLedgers  LoyaltyLedger[]
   consentRecords  ConsentRecord[]
+  waitlistEntries WaitlistEntry[]
   tickets         Ticket[]
   payments        Payment[]
 
@@ -700,6 +702,27 @@ model AuditLog {
 
   @@index([salonId, createdAt])
   @@index([actorUserId])
+}
+
+// ─── Waitlist ─────────────────────────────────────────────────────────
+
+model WaitlistEntry {
+  id          String    @id @default(cuid())
+  salonId     String
+  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId   String
+  staffId     String?
+  branchId    String?
+  preferredDate String?
+  notified    Boolean   @default(false)
+  notifiedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([salonId, serviceId])
+  @@index([salonId, notified])
 }
 
 // ─── Outbound Webhooks ────────────────────────────────────────────────
