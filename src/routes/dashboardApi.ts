@@ -12,6 +12,12 @@ import {
   cancelSubscription,
   checkQuota,
 } from '../services/subscription.js';
+import {
+  generatePresignedUpload,
+  confirmUpload,
+  listUploads,
+  deleteUpload,
+} from '../services/uploads.js';
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
@@ -883,6 +889,80 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
       const result = checkQuota(salon.tier, resource as 'staff' | 'branches' | 'services', currentCount);
       return { resource, currentCount, ...result };
+    });
+  });
+
+  // ─── File Uploads ────────────────────────────────────────────────────
+  app.post('/uploads/presign', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { filename, mimeType, purpose } = request.body as {
+        filename: string;
+        mimeType: string;
+        purpose?: string;
+      };
+
+      if (!filename || !mimeType) {
+        reply.code(400);
+        return { error: 'filename and mimeType required' };
+      }
+
+      const result = await generatePresignedUpload(
+        user.salonId,
+        filename,
+        mimeType,
+        purpose ?? 'general',
+      );
+
+      return result;
+    });
+  });
+
+  app.post('/uploads/confirm', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { fileKey, filename, mimeType, sizeBytes, purpose } = request.body as {
+        fileKey: string;
+        filename: string;
+        mimeType: string;
+        sizeBytes: number;
+        purpose?: string;
+      };
+
+      if (!fileKey || !filename || !mimeType || !sizeBytes) {
+        reply.code(400);
+        return { error: 'missing_fields' };
+      }
+
+      const file = await confirmUpload(
+        user.salonId,
+        fileKey,
+        filename,
+        mimeType,
+        sizeBytes,
+        purpose ?? 'general',
+        user.sub,
+      );
+
+      return { file };
+    });
+  });
+
+  app.get('/uploads', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const { purpose } = request.query as { purpose?: string };
+      const files = await listUploads(purpose);
+      return { files };
+    });
+  });
+
+  app.delete('/uploads/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const { id } = request.params as { id: string };
+      const file = await deleteUpload(id);
+      if (!file) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { ok: true };
     });
   });
 }

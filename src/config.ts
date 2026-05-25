@@ -35,6 +35,12 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
+  S3_ENDPOINT: z.string().optional(),
+  S3_BUCKET: z.string().default('marineflow-uploads'),
+  S3_REGION: z.string().default('auto'),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_PUBLIC_URL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
