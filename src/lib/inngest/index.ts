@@ -1,2 +1,2 @@
 export { inngest } from './client.js';
-export { sendOutboundMessage } from './functions/index.js';
+export { sendOutboundMessage, appointmentReminder } from './functions/index.js';

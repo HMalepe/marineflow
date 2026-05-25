@@ -21,11 +21,23 @@ enum TenantStatus {
 
 enum AppointmentStatus {
   HELD
+  PENDING_PAYMENT
   CONFIRMED
   CONFIRMED_PAID
   COMPLETED
   CANCELLED
+  RESCHEDULED
   NO_SHOW
+}
+
+enum CancellationReason {
+  CUSTOMER_REQUEST
+  STAFF_UNAVAILABLE
+  NO_SHOW_AUTO
+  DUPLICATE
+  PAYMENT_FAILED
+  SALON_CLOSED
+  OTHER
 }
 
 enum PaymentStatus {
@@ -370,7 +382,7 @@ model Appointment {
   notes               String?
   depositInvoiceId    String?
   loyaltyRedeemed     Boolean            @default(false)
-  cancellationReason  String?
+  cancellationReason  CancellationReason?
   cancelledAt         DateTime?
   cancelledBy         String?            /// 'customer' | 'staff' | 'system'
   rescheduledFromId   String?            @unique

@@ -70,7 +70,7 @@ export async function getAvailableSlots(input: {
         staffId: input.staff.id,
         start: { lt: closeUtc.toJSDate() },
         end: { gt: openUtc.toJSDate() },
-        status: { notIn: ['CANCELLED'] },
+        status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
       },
     }),
   ]);
@@ -117,8 +117,34 @@ export async function getStaffForService(salonId: string, serviceId: string): Pr
     where: {
       salonId,
       active: true,
+      isBookable: true,
+      deletedAt: null,
       services: { some: { serviceId } },
     },
-    orderBy: { name: 'asc' },
+    orderBy: { sortOrder: 'asc' },
   });
+}
+
+/**
+ * Verify a slot is still available (no overlap) before final booking.
+ * Returns true if the slot is free for the given staff member.
+ */
+export async function validateSlotAvailable(input: {
+  salonId: string;
+  staffId: string;
+  start: Date;
+  end: Date;
+  excludeAppointmentId?: string;
+}): Promise<boolean> {
+  const conflict = await getTenantDb().appointment.findFirst({
+    where: {
+      salonId: input.salonId,
+      staffId: input.staffId,
+      id: input.excludeAppointmentId ? { not: input.excludeAppointmentId } : undefined,
+      start: { lt: input.end },
+      end: { gt: input.start },
+      status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
+    },
+  });
+  return conflict === null;
 }

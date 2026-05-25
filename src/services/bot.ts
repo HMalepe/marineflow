@@ -16,7 +16,7 @@ import { normalizeWaId } from '../lib/phone.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { DateTime } from 'luxon';
-import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
+import { getAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
 import {
   ensureLoyaltyProgram,
   getStampBalance,
@@ -589,12 +589,27 @@ async function handleConfirm(
     start.getTime() + (service.durationMin + service.bufferMin + staff.breakMin) * 60_000,
   );
 
+  const slotFree = await validateSlotAvailable({
+    salonId: conv.salonId,
+    staffId: staff.id,
+    start,
+    end,
+    excludeAppointmentId: (ctx(conv).managingAppointmentId as string | undefined),
+  });
+  if (!slotFree) {
+    await reply(conv, 'Sorry, that time slot was just taken. Please choose another slot (reply BACK to start over).');
+    await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
+    return;
+  }
+
   const tx = getTenantDb();
   const redeem = await redeemForNextBookingTx(tx, {
     salonId: conv.salonId,
     customerId: conv.customerId,
     service,
   });
+  const reschedulingId = c.managingAppointmentId as string | undefined;
+
   const appointment = await tx.appointment.create({
     data: {
       salonId: conv.salonId,
@@ -609,15 +624,30 @@ async function handleConfirm(
           ? 'HELD'
           : 'CONFIRMED',
       loyaltyRedeemed: redeem.redeemed,
+      rescheduledFromId: reschedulingId ?? undefined,
+      confirmedAt: !service.depositCents && !service.fullPay ? new Date() : undefined,
     },
   });
+
+  if (reschedulingId) {
+    await tx.appointment.update({
+      where: { id: reschedulingId },
+      data: {
+        status: 'RESCHEDULED',
+        cancellationReason: 'CUSTOMER_REQUEST',
+        cancelledAt: new Date(),
+        cancelledBy: 'customer',
+      },
+    });
+  }
+
   await tx.auditLog.create({
     data: {
       salonId: conv.salonId,
-      action: 'appointment_create',
+      action: reschedulingId ? 'appointment_reschedule' : 'appointment_create',
       entity: 'Appointment',
       entityId: appointment.id,
-      payload: { source: 'whatsapp' },
+      payload: { source: 'whatsapp', rescheduledFromId: reschedulingId ?? null },
     },
   });
   await tx.analyticsEvent.create({
@@ -682,46 +712,91 @@ async function handleManageBooking(
 ) {
   const c = ctx(conv);
   const ids = (c.manageList as string[] | undefined) ?? [];
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().trim();
+
   if (lower === 'back') {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await reply(conv, mainMenu(conv.salon));
     return;
   }
 
-  const m = /^cancel\s*(\d+)$/i.exec(text.trim());
-  if (!m) {
-    await reply(conv, 'Use: cancel 1 (number from your list), or BACK.');
+  const cancelMatch = /^cancel\s*(\d+)$/i.exec(text.trim());
+  const rescheduleMatch = /^reschedule\s*(\d+)$/i.exec(text.trim());
+
+  if (cancelMatch) {
+    const idx = parseInt(cancelMatch[1]!, 10);
+    if (!Number.isFinite(idx) || idx < 1 || idx > ids.length) {
+      await reply(conv, 'Invalid booking number.');
+      return;
+    }
+    const id = ids[idx - 1]!;
+    const appt = await getTenantDb().appointment.findFirst({
+      where: { id, customerId: conv.customerId },
+      include: { service: true, staff: true },
+    });
+    if (!appt) {
+      await reply(conv, 'Booking not found.');
+      return;
+    }
+    await getTenantDb().appointment.update({
+      where: { id: appt.id },
+      data: {
+        status: 'CANCELLED',
+        cancellationReason: 'CUSTOMER_REQUEST',
+        cancelledAt: new Date(),
+        cancelledBy: 'customer',
+      },
+    });
+    await getTenantDb().analyticsEvent.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: appt.id,
+        type: 'booking_cancel',
+        payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp' },
+      },
+    });
+    await reply(conv, `Cancelled ${appt.service.name} with ${appt.staff.name}.\n\n${mainMenu(conv.salon)}`);
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
     return;
   }
-  const idx = parseInt(m[1]!, 10);
-  if (!Number.isFinite(idx) || idx < 1 || idx > ids.length) {
-    await reply(conv, 'Invalid booking number.');
+
+  if (rescheduleMatch) {
+    const idx = parseInt(rescheduleMatch[1]!, 10);
+    if (!Number.isFinite(idx) || idx < 1 || idx > ids.length) {
+      await reply(conv, 'Invalid booking number.');
+      return;
+    }
+    const id = ids[idx - 1]!;
+    const appt = await getTenantDb().appointment.findFirst({
+      where: { id, customerId: conv.customerId, status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW', 'RESCHEDULED'] } },
+      include: { service: true, staff: true },
+    });
+    if (!appt) {
+      await reply(conv, 'Booking not found or cannot be rescheduled.');
+      return;
+    }
+
+    await saveCtx(
+      conv.id,
+      {
+        selectedServiceId: appt.serviceId,
+        selectedStaffId: appt.staffId,
+        managingAppointmentId: appt.id,
+      },
+      ConversationStep.PICK_DATE,
+    );
+
+    const dates = await suggestBookingDates(conv.salonId);
+    await reply(
+      conv,
+      `Rescheduling ${appt.service.name} with ${appt.staff.name}.\nPick a new date:\n` +
+        dates.map((d, i) => `${i + 1} — ${d}`).join('\n'),
+    );
     return;
   }
-  const id = ids[idx - 1]!;
-  const appt = await getTenantDb().appointment.findFirst({
-    where: { id, customerId: conv.customerId },
-    include: { service: true, staff: true },
-  });
-  if (!appt) {
-    await reply(conv, 'Booking not found.');
-    return;
-  }
-  await getTenantDb().appointment.update({
-    where: { id: appt.id },
-    data: { status: 'CANCELLED' },
-  });
-  await getTenantDb().analyticsEvent.create({
-    data: {
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      appointmentId: appt.id,
-      type: 'booking_cancel',
-    },
-  });
-  await reply(conv, `Cancelled ${appt.service.name}. Main menu:\n${mainMenu(conv.salon)}`);
-  await saveCtx(conv.id, {}, ConversationStep.MENU);
+
+  await reply(conv, 'Use: CANCEL 1 or RESCHEDULE 1 (number from your list), or BACK.');
 }
 
 async function handleComplaint(
