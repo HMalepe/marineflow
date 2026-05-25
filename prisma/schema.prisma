@@ -42,10 +42,29 @@ enum CancellationReason {
 
 enum PaymentStatus {
   PENDING
+  AUTHORISED
+  CAPTURED
   SUCCEEDED
   FAILED
   REFUNDED
   PARTIALLY_REFUNDED
+}
+
+enum PaymentMethod {
+  CARD
+  EFT
+  OZOW
+  PAYFAST
+  CASH
+  LOYALTY
+  OTHER
+}
+
+enum PaymentProvider {
+  STRIPE
+  OZOW
+  PAYFAST
+  MANUAL
 }
 
 enum StaffRole {
@@ -421,27 +440,45 @@ model Invoice {
 }
 
 model Payment {
-  id             String        @id @default(cuid())
-  salonId        String
-  salon          Salon         @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  appointmentId  String?
-  appointment    Appointment?  @relation(fields: [appointmentId], references: [id])
-  customerId     String
-  customer       Customer      @relation(fields: [customerId], references: [id])
-  invoiceId      String?
-  invoice        Invoice?      @relation(fields: [invoiceId], references: [id])
-  status         PaymentStatus @default(PENDING)
-  amountCents    Int
-  currency       String        @default("usd")
-  stripeSessionId   String?
+  id                    String          @id @default(cuid())
+  salonId               String
+  salon                 Salon           @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  appointmentId         String?
+  appointment           Appointment?    @relation(fields: [appointmentId], references: [id])
+  customerId            String
+  customer              Customer        @relation(fields: [customerId], references: [id])
+  invoiceId             String?
+  invoice               Invoice?        @relation(fields: [invoiceId], references: [id])
+  provider              PaymentProvider @default(STRIPE)
+  method                PaymentMethod?
+  status                PaymentStatus   @default(PENDING)
+  amountCents           Int
+  currency              String          @default("ZAR")
+  /// Stripe fields
+  stripeSessionId       String?
   stripePaymentIntentId String?
-  stripeRefundId String?
-  metadata       Json?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  stripeRefundId        String?
+  /// Ozow fields
+  ozowTransactionId     String?
+  ozowReference         String?
+  ozowSiteCode          String?
+  /// PayFast fields
+  payfastPaymentId      String?
+  payfastMerchantRef    String?
+  /// Common
+  externalReference     String?
+  failureReason         String?
+  refundedAmountCents   Int?
+  metadata              Json?
+  paidAt                DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   @@index([salonId, createdAt])
   @@index([stripePaymentIntentId])
+  @@index([ozowTransactionId])
+  @@index([payfastPaymentId])
+  @@index([provider, status])
 }
 
 model LoyaltyProgram {

@@ -1,0 +1,31 @@
+export interface CreateCheckoutInput {
+  salonId: string;
+  customerId: string;
+  amountCents: number;
+  currency: string;
+  reference: string;
+  returnUrl: string;
+  cancelUrl: string;
+  notifyUrl: string;
+  description?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface CheckoutResult {
+  redirectUrl: string;
+  externalReference: string;
+}
+
+export interface WebhookVerifyResult {
+  valid: boolean;
+  transactionId?: string;
+  reference?: string;
+  status?: 'success' | 'failed' | 'pending' | 'cancelled';
+  amountCents?: number;
+}
+
+export interface PaymentProviderAdapter {
+  readonly name: string;
+  createCheckout(input: CreateCheckoutInput): Promise<CheckoutResult>;
+  verifyWebhook(payload: unknown, headers: Record<string, string | undefined>): WebhookVerifyResult;
+}

@@ -332,6 +332,45 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get('/payments', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const q = request.query as {
+        provider?: string;
+        status?: string;
+        from?: string;
+        to?: string;
+        limit?: string;
+        offset?: string;
+      };
+      const take = Math.min(Number(q.limit) || 50, 200);
+      const skip = Number(q.offset) || 0;
+
+      const where: Record<string, unknown> = {};
+      if (q.provider) where.provider = q.provider;
+      if (q.status) where.status = q.status;
+      if (q.from || q.to) {
+        where.createdAt = {
+          ...(q.from ? { gte: new Date(q.from) } : {}),
+          ...(q.to ? { lte: new Date(q.to) } : {}),
+        };
+      }
+
+      const [payments, total] = await Promise.all([
+        db.payment.findMany({
+          where,
+          include: { customer: { select: { id: true, waId: true, displayName: true } } },
+          orderBy: { createdAt: 'desc' },
+          take,
+          skip,
+        }),
+        db.payment.count({ where }),
+      ]);
+
+      return { payments, total, take, skip };
+    });
+  });
+
   app.get('/audit', { preHandler: requireRole('OWNER') }, async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();

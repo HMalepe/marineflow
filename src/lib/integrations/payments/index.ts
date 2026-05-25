@@ -1,17 +1,33 @@
+import { env } from '../../../config.js';
+import type { PaymentProviderAdapter } from './types.js';
+import { ozowAdapter } from './ozow.js';
+import { payfastAdapter } from './payfast.js';
+
+export type { PaymentProviderAdapter, CreateCheckoutInput, CheckoutResult, WebhookVerifyResult } from './types.js';
+export { ozowAdapter } from './ozow.js';
+export { payfastAdapter } from './payfast.js';
+
+export type PaymentProviderName = 'stripe' | 'ozow' | 'payfast' | 'manual';
+
 /**
- * Payment provider abstraction — Week 6 (Ozow/PayFast); Stripe wired today via services/payments.ts.
+ * Returns the appropriate adapter for a given provider name.
+ * Stripe remains handled separately in services/payments.ts (direct SDK usage).
  */
-
-export type PaymentProviderName = 'stripe' | 'ozow' | 'payfast';
-
-export interface PaymentLink {
-  url: string;
-  reference: string;
+export function getPaymentAdapter(provider: PaymentProviderName): PaymentProviderAdapter {
+  switch (provider) {
+    case 'ozow':
+      return ozowAdapter;
+    case 'payfast':
+      return payfastAdapter;
+    default:
+      throw new Error(`No adapter for provider: ${provider}`);
+  }
 }
 
-export async function createDepositLink(
-  _provider: PaymentProviderName,
-  _input: { salonId: string; appointmentId: string; amountCents: number },
-): Promise<PaymentLink> {
-  throw new Error('payment_provider_abstraction_use_services_payments_for_stripe');
+export function isOzowConfigured(): boolean {
+  return Boolean(env.OZOW_SITE_CODE && env.OZOW_PRIVATE_KEY);
+}
+
+export function isPayfastConfigured(): boolean {
+  return Boolean(env.PAYFAST_MERCHANT_ID && env.PAYFAST_MERCHANT_KEY);
 }
