@@ -129,6 +129,8 @@ model Salon {
   statusChangedAt DateTime    @default(now())
   trialEndsAt    DateTime?
   tier           String       @default("starter")
+  agencyId       String?
+  agency         Agency?      @relation(fields: [agencyId], references: [id], onDelete: SetNull)
   timezone       String       @default("America/New_York")
   defaultCurrency String      @default("usd")
   locale         String       @default("en")
@@ -707,6 +709,46 @@ model AnalyticsEvent {
   createdAt     DateTime @default(now())
 
   @@index([salonId, type, createdAt])
+}
+
+// ─── Agency / Reseller ────────────────────────────────────────────────
+
+enum AgencyUserRole {
+  OWNER
+  MANAGER
+  VIEWER
+}
+
+model Agency {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  logoUrl      String?
+  primaryColor String?  @default("#6366f1")
+  domain       String?  @unique
+  contactEmail String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users        AgencyUser[]
+  salons       Salon[]
+}
+
+model AgencyUser {
+  id           String         @id @default(cuid())
+  agencyId     String
+  agency       Agency         @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         AgencyUserRole @default(VIEWER)
+  active       Boolean        @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([agencyId])
 }
 
 // ─── Platform Admin ───────────────────────────────────────────────────

@@ -8,6 +8,9 @@ declare module '@fastify/jwt' {
       role?: string;
       isAdmin?: boolean;
       isSuperAdmin?: boolean;
+      isAgency?: boolean;
+      agencyId?: string;
+      agencyRole?: string;
       impersonatedBy?: string;
     };
   }

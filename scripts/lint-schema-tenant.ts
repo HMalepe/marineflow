@@ -16,6 +16,8 @@ const PLATFORM_MODELS = new Set([
   'Salon',
   'SubscriptionPlan',
   'AdminUser',
+  'Agency',
+  'AgencyUser',
 ]);
 
 const CHILD_MODELS = new Set([
