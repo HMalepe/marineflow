@@ -32,10 +32,3 @@ export async function withTenantContext<T>(
   );
 }
 
-/** Dashboard helper: resolve salonId from JWT then run in tenant context. */
-export async function withUserTenant<T>(
-  salonId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  return withTenantContext(salonId, fn);
-}

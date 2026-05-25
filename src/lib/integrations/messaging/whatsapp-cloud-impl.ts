@@ -85,12 +85,12 @@ export const whatsappCloudMessaging: MessagingProvider = {
   verifyWebhook(payload: unknown, signature: string | undefined): boolean {
     if (!env.META_APP_SECRET || !signature) return false;
     const raw = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    const expected = crypto
-      .createHmac('sha256', env.META_APP_SECRET)
-      .update(raw)
-      .digest('hex');
-    const provided = signature.replace(/^sha256=/, '');
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(provided));
+    const expectedBuf = Buffer.from(
+      crypto.createHmac('sha256', env.META_APP_SECRET).update(raw).digest('hex'),
+    );
+    const providedBuf = Buffer.from(signature.replace(/^sha256=/, ''));
+    if (expectedBuf.length !== providedBuf.length) return false;
+    return crypto.timingSafeEqual(expectedBuf, providedBuf);
   },
 
   parseInbound(payload: unknown): NormalisedInboundMessage | null {
