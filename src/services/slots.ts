@@ -76,6 +76,7 @@ export async function getAvailableSlots(input: {
   ]);
 
   const slots: Slot[] = [];
+  const nowMs = Date.now();
   let cursor = openUtc;
   const closeJs = closeUtc.toJSDate();
   while (cursor.toMillis() <= DateTime.fromJSDate(closeJs).minus({ minutes: duration }).toMillis()) {
@@ -83,6 +84,7 @@ export async function getAvailableSlots(input: {
     const end = cursor.plus({ minutes: duration }).toJSDate();
     if (end > closeJs) break;
     if (
+      start.getTime() > nowMs &&
       !hasTimeOffConflict(input.staff.id, start, end, timeOffs) &&
       !hasAppointmentConflict(input.staff.id, start, end, appts)
     ) {

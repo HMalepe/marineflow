@@ -76,7 +76,10 @@ export async function handleStripeWebhook(rawBody: Buffer, signature: string | u
   if (!stripe || !env.STRIPE_WEBHOOK_SECRET) {
     throw new Error('stripe_not_configured');
   }
-  const event = stripe.webhooks.constructEvent(rawBody, signature!, env.STRIPE_WEBHOOK_SECRET);
+  if (!signature) {
+    throw new Error('missing_stripe_signature');
+  }
+  const event = stripe.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
 
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session;

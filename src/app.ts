@@ -3,7 +3,7 @@ import formbody from '@fastify/formbody';
 import jwt from '@fastify/jwt';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
-import fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { env } from './config.js';
 import { logger } from './lib/logger.js';
@@ -16,7 +16,7 @@ import { recordWebhookEvent } from './lib/webhooks.js';
 import { resolveTenantForInbound } from './lib/tenant.js';
 import { handleStripeWebhook } from './services/payments.js';
 import { serve } from 'inngest/fastify';
-import { inngest, sendOutboundMessage, appointmentReminder } from './lib/inngest/index.js';
+import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
 import { internalRoutes } from './routes/internal.js';
@@ -43,7 +43,7 @@ export async function buildApp() {
   });
 
   app.get('/', async (_req, reply) => {
-    const html = fs.readFileSync(path.join(publicRoot, 'index.html'), 'utf-8');
+    const html = await readFile(path.join(publicRoot, 'index.html'), 'utf-8');
     return reply.type('text/html').send(html);
   });
 
@@ -134,29 +134,33 @@ export async function buildApp() {
         ? request.headers['x-hub-signature-256']
         : undefined;
 
-    const inbound = whatsappCloudMessaging.parseInbound(raw);
-    if (!inbound) {
+    if (!signature || !whatsappCloudMessaging.verifyWebhook(raw, signature)) {
+      return reply.code(401).send({ error: 'invalid_signature' });
+    }
+
+    const messages = whatsappCloudMessaging.parseInboundBatch(raw);
+    if (messages.length === 0) {
       return reply.send({ received: true });
     }
 
-    const recorded = await recordWebhookEvent({
-      provider: 'meta',
-      providerEventId: inbound.externalId,
-      payload: raw,
-      verified: Boolean(signature),
-      salonId: undefined,
-    });
-    if (recorded === 'duplicate') {
-      return reply.send({ received: true });
-    }
+    for (const inbound of messages) {
+      const recorded = await recordWebhookEvent({
+        provider: 'meta',
+        providerEventId: inbound.externalId,
+        payload: raw,
+        verified: true,
+        salonId: undefined,
+      });
+      if (recorded === 'duplicate') continue;
 
-    await handleInboundWhatsApp({
-      from: inbound.fromPhoneE164,
-      body: inbound.body,
-      messageSid: inbound.externalId,
-      metaPhoneNumberId: inbound.metaPhoneNumberId,
-      twilioTo: inbound.toAddress,
-    });
+      await handleInboundWhatsApp({
+        from: inbound.fromPhoneE164,
+        body: inbound.body,
+        messageSid: inbound.externalId,
+        metaPhoneNumberId: inbound.metaPhoneNumberId,
+        twilioTo: inbound.toAddress,
+      });
+    }
 
     return reply.send({ received: true });
   });
@@ -193,7 +197,7 @@ export async function buildApp() {
     url: '/api/inngest',
     handler: serve({
       client: inngest,
-      functions: [sendOutboundMessage, appointmentReminder],
+      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder],
     }),
   });
 
@@ -204,10 +208,19 @@ export async function buildApp() {
       err && typeof err === 'object' && 'statusCode' in err && typeof err.statusCode === 'number'
         ? err.statusCode
         : 500;
-    const message = err instanceof Error ? err.message : 'Internal Server Error';
+    const safeMessages: Record<number, string> = {
+      400: 'Bad Request',
+      401: 'Unauthorized',
+      403: 'Forbidden',
+      404: 'Not Found',
+      409: 'Conflict',
+      422: 'Unprocessable Entity',
+      429: 'Too Many Requests',
+    };
+    const title = safeMessages[status] ?? 'Internal Server Error';
     return reply.code(status).send({
       type: 'about:blank',
-      title: message,
+      title,
       status,
     });
   });

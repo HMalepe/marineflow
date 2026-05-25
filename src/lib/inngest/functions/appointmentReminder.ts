@@ -2,6 +2,11 @@ import { inngest } from '../client.js';
 import { prisma } from '../../prisma.js';
 import { messaging } from '../../integrations/messaging/index.js';
 
+async function withJobTenant<T>(salonId: string, fn: () => Promise<T>): Promise<T> {
+  await prisma.$executeRawUnsafe(`SELECT set_config('app.current_tenant', $1, true)`, salonId);
+  return fn();
+}
+
 export const appointmentReminder = inngest.createFunction(
   {
     id: 'appointment-reminder',
@@ -9,16 +14,19 @@ export const appointmentReminder = inngest.createFunction(
     triggers: [{ event: 'appointment/reminder.send' }],
   },
   async ({ event, step }) => {
-    const { appointmentId, hoursBeforeLabel } = event.data as {
+    const { appointmentId, salonId, hoursBeforeLabel } = event.data as {
       appointmentId: string;
+      salonId: string;
       hoursBeforeLabel: string;
     };
 
     const appt = await step.run('load-appointment', async () => {
-      return prisma.appointment.findUnique({
-        where: { id: appointmentId },
-        include: { customer: true, service: true, staff: true, salon: true },
-      });
+      return withJobTenant(salonId, () =>
+        prisma.appointment.findUnique({
+          where: { id: appointmentId },
+          include: { customer: true, service: true, staff: true, salon: true },
+        }),
+      );
     });
 
     if (!appt || appt.status === 'CANCELLED' || appt.status === 'RESCHEDULED') {
@@ -56,10 +64,12 @@ export const appointmentReminder = inngest.createFunction(
     });
 
     await step.run('mark-reminder-sent', async () => {
-      await prisma.appointment.update({
-        where: { id: appointmentId },
-        data: { reminderSentAt: new Date() },
-      });
+      await withJobTenant(salonId, () =>
+        prisma.appointment.update({
+          where: { id: appointmentId },
+          data: { reminderSentAt: new Date() },
+        }),
+      );
     });
 
     return { sent: true, appointmentId, hoursBeforeLabel };

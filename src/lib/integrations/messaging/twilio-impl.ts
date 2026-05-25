@@ -26,18 +26,23 @@ export const twilioMessaging: MessagingProvider = {
   },
 
   parseInbound(payload: unknown): NormalisedInboundMessage | null {
+    const all = this.parseInboundBatch(payload);
+    return all.length > 0 ? all[0]! : null;
+  },
+
+  parseInboundBatch(payload: unknown): NormalisedInboundMessage[] {
     const params = payload as Record<string, string>;
     const from = params['From'] ?? '';
     const to = params['To'] ?? '';
     const body = params['Body'] ?? '';
     const sid = params['MessageSid'] ?? '';
-    if (!from || !sid) return null;
-    return {
+    if (!from || !sid) return [];
+    return [{
       externalId: sid,
       fromPhoneE164: normalizeWaId(from),
       toAddress: to,
       body,
       receivedAt: new Date(),
-    };
+    }];
   },
 };

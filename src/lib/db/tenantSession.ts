@@ -23,6 +23,9 @@ export async function withTenantContext<T>(
   salonId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
+  if (!salonId || salonId.trim().length === 0) {
+    throw new Error('withTenantContext requires a non-empty salonId');
+  }
   return prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT set_config('app.current_tenant', ${salonId}, true)`;

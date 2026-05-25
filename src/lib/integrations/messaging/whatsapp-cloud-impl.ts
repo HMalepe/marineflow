@@ -94,6 +94,11 @@ export const whatsappCloudMessaging: MessagingProvider = {
   },
 
   parseInbound(payload: unknown): NormalisedInboundMessage | null {
+    const all = this.parseInboundBatch(payload);
+    return all.length > 0 ? all[0]! : null;
+  },
+
+  parseInboundBatch(payload: unknown): NormalisedInboundMessage[] {
     const body = payload as {
       entry?: {
         changes?: {
@@ -110,22 +115,24 @@ export const whatsappCloudMessaging: MessagingProvider = {
       }[];
     };
 
+    const results: NormalisedInboundMessage[] = [];
     for (const entry of body.entry ?? []) {
       for (const change of entry.changes ?? []) {
         const value = change.value;
         const phoneId = value?.metadata?.phone_number_id;
         for (const msg of value?.messages ?? []) {
-          return {
+          const ts = Number(msg.timestamp);
+          results.push({
             externalId: msg.id,
-            fromPhoneE164: `+${msg.from}`,
+            fromPhoneE164: msg.from.startsWith('+') ? msg.from : `+${msg.from}`,
             toAddress: phoneId ?? '',
             body: msg.text?.body ?? '',
-            receivedAt: new Date(Number(msg.timestamp) * 1000),
+            receivedAt: isNaN(ts) ? new Date() : new Date(ts * 1000),
             metaPhoneNumberId: phoneId,
-          };
+          });
         }
       }
     }
-    return null;
+    return results;
   },
 };

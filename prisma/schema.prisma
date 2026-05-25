@@ -440,6 +440,9 @@ model Invoice {
   createdAt      DateTime @default(now())
 
   payments       Payment[]
+
+  @@index([salonId])
+  @@index([customerId])
 }
 
 model Payment {
@@ -523,6 +526,8 @@ model Ticket {
   updatedAt   DateTime     @updatedAt
 
   messages    TicketMessage[]
+
+  @@index([salonId])
 }
 
 model TicketMessage {
@@ -555,6 +560,9 @@ model FaqItem {
   updatedAt   DateTime  @updatedAt
 
   embeddings  FaqEmbedding[]
+
+  @@index([salonId])
+  @@index([salonId, status])
 }
 
 /// Vector embeddings for semantic FAQ search (pgvector)

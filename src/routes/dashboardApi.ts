@@ -46,8 +46,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string };
-      const from = q.from ? new Date(q.from) : new Date(Date.now() - 7 * 86400000);
-      const to = q.to ? new Date(q.to) : new Date(Date.now() + 30 * 86400000);
+      const fromParsed = q.from ? new Date(q.from) : null;
+      const toParsed = q.to ? new Date(q.to) : null;
+      const from = fromParsed && !isNaN(fromParsed.getTime()) ? fromParsed : new Date(Date.now() - 7 * 86400000);
+      const to = toParsed && !isNaN(toParsed.getTime()) ? toParsed : new Date(Date.now() + 30 * 86400000);
 
       const rows = await db.appointment.findMany({
         where: {
@@ -74,6 +76,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         if (!appt) {
           reply.code(404);
           return { error: 'not_found' };
+        }
+        if (appt.status === 'CANCELLED' || appt.status === 'COMPLETED' || appt.status === 'RESCHEDULED' || appt.status === 'NO_SHOW') {
+          reply.code(409);
+          return { error: 'invalid_status', message: `Cannot complete appointment with status ${appt.status}` };
         }
 
         await db.appointment.update({
@@ -170,10 +176,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(404);
           return { error: 'not_found' };
         }
+        const validStatuses = ['OPEN', 'WAITING_CUSTOMER', 'RESOLVED'] as const;
+        type ValidStatus = typeof validStatuses[number];
+        const statusInput = request.body.status;
+        if (statusInput && !validStatuses.includes(statusInput as ValidStatus)) {
+          reply.code(400);
+          return { error: 'invalid_status', valid: validStatuses };
+        }
         const updated = await db.ticket.update({
           where: { id: t.id },
           data: {
-            status: request.body.status as never,
+            status: statusInput as ValidStatus | undefined,
             assigneeStaffUserId: request.body.assigneeStaffUserId,
           },
         });
@@ -264,7 +277,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           r.status,
           csvEscape(r.service.name),
           csvEscape(r.staff.name),
-          r.customer.waId,
+          csvEscape(r.customer.waId),
         ].join(','),
       );
       const csv = header + lines.join('\n');
@@ -528,8 +541,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 }
 
 function csvEscape(s: string): string {
-  if (s.includes(',') || s.includes('"')) {
-    return `"${s.replace(/"/g, '""')}"`;
+  let safe = s;
+  if (/^[=+\-@\t\r]/.test(safe)) {
+    safe = `'${safe}`;
   }
-  return s;
+  if (safe.includes(',') || safe.includes('"') || safe.includes('\n')) {
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+  return safe;
 }

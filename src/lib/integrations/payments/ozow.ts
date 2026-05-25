@@ -2,11 +2,11 @@ import crypto from 'node:crypto';
 import { env } from '../../../config.js';
 import type { PaymentProviderAdapter, CreateCheckoutInput, CheckoutResult, WebhookVerifyResult } from './types.js';
 
-const OZOW_PAY_TEST = 'https://pay.ozow.com';
-const OZOW_PAY_LIVE = 'https://pay.ozow.com';
+// Ozow uses a single payment URL — test/live is differentiated by the IsTest parameter in the payload
+const OZOW_PAY_URL = 'https://pay.ozow.com';
 
 function getPayUrl(): string {
-  return env.OZOW_IS_TEST ? OZOW_PAY_TEST : OZOW_PAY_LIVE;
+  return OZOW_PAY_URL;
 }
 
 function generateHash(values: string[]): string {
@@ -82,7 +82,10 @@ export const ozowAdapter: PaymentProviderAdapter = {
       env.OZOW_PRIVATE_KEY,
     ];
     const expectedHash = generateHash(hashValues);
-    const valid = expectedHash === hashReceived.toLowerCase();
+    const expectedBuf = Buffer.from(expectedHash);
+    const receivedBuf = Buffer.from(hashReceived.toLowerCase());
+    const valid = expectedBuf.length === receivedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, receivedBuf);
 
     const statusMap: Record<string, 'success' | 'failed' | 'pending' | 'cancelled'> = {
       complete: 'success',

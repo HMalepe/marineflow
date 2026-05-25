@@ -37,4 +37,5 @@ export interface MessagingProvider {
   sendTemplate(options: SendOptions): Promise<SentMessage>;
   verifyWebhook(payload: unknown, signature: string | undefined): boolean;
   parseInbound(payload: unknown): NormalisedInboundMessage | null;
+  parseInboundBatch(payload: unknown): NormalisedInboundMessage[];
 }
