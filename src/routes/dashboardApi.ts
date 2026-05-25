@@ -656,6 +656,153 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
     },
   );
+
+  // ─── Analytics Overview ──────────────────────────────────────────────
+  app.get('/analytics/overview', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salonId = user.salonId;
+
+      const [dailyBookings, revenue, retention, staffPerformance] = await Promise.all([
+        db.$queryRawUnsafe<Array<{
+          booking_date: string;
+          total_bookings: number;
+          completed: number;
+          cancelled: number;
+          no_shows: number;
+        }>>(
+          `SELECT booking_date::text, total_bookings::int, completed::int, cancelled::int, no_shows::int
+           FROM mv_daily_bookings WHERE "salonId" = $1 ORDER BY booking_date DESC LIMIT 90`,
+          salonId,
+        ),
+        db.$queryRawUnsafe<Array<{
+          month: string;
+          total_revenue_cents: number;
+          unique_customers: number;
+          invoice_count: number;
+        }>>(
+          `SELECT month::text, total_revenue_cents::int, unique_customers::int, invoice_count::int
+           FROM mv_revenue_summary WHERE "salonId" = $1 ORDER BY month DESC LIMIT 12`,
+          salonId,
+        ),
+        db.$queryRawUnsafe<Array<{
+          month: string;
+          unique_customers: number;
+          returning_customers: number;
+        }>>(
+          `SELECT month::text, unique_customers::int, returning_customers::int
+           FROM mv_customer_retention WHERE "salonId" = $1 ORDER BY month DESC LIMIT 12`,
+          salonId,
+        ),
+        db.$queryRawUnsafe<Array<{
+          staffId: string;
+          staffName: string;
+          total_appointments: number;
+          completed: number;
+          no_shows: number;
+          revenue_cents: number;
+        }>>(
+          `SELECT sp."staffId", s.name as "staffName",
+                  sp.total_appointments::int, sp.completed::int, sp.no_shows::int, sp.revenue_cents::int
+           FROM mv_staff_performance sp
+           LEFT JOIN "Staff" s ON s.id = sp."staffId"
+           WHERE sp."salonId" = $1
+             AND sp.month = DATE_TRUNC('month', CURRENT_DATE)
+           ORDER BY sp.revenue_cents DESC`,
+          salonId,
+        ),
+      ]);
+
+      return {
+        dailyBookings: dailyBookings.reverse(),
+        revenue: revenue.reverse(),
+        retention: retention.reverse(),
+        staffPerformance,
+      };
+    });
+  });
+
+  // ─── Customer Detail ─────────────────────────────────────────────────
+  app.get('/customers/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const { id } = request.params as { id: string };
+
+      const customer = await db.customer.findUnique({ where: { id } });
+
+      if (!customer) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+
+      const [appointments, messages, loyaltySum] = await Promise.all([
+        db.appointment.findMany({
+          where: { customerId: id },
+          take: 20,
+          orderBy: { start: 'desc' },
+          include: { service: true, staff: true },
+        }),
+        db.message.findMany({
+          where: { conversation: { customerId: id } },
+          take: 30,
+          orderBy: { createdAt: 'desc' },
+        }),
+        db.loyaltyLedger.aggregate({
+          where: { customerId: id },
+          _sum: { delta: true },
+        }),
+      ]);
+
+      return {
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        displayName: customer.displayName,
+        email: customer.email,
+        waId: customer.waId,
+        createdAt: customer.createdAt,
+        loyaltyStamps: loyaltySum._sum.delta ?? 0,
+        appointments: appointments.map((a) => ({
+          id: a.id,
+          start: a.start,
+          status: a.status,
+          serviceName: a.service?.name ?? 'Unknown',
+          staffName: a.staff?.name ?? 'Unknown',
+        })),
+        messages: messages.reverse().map((m) => ({
+          id: m.id,
+          direction: m.direction,
+          body: m.body,
+          createdAt: m.createdAt,
+        })),
+      };
+    });
+  });
+
+  // ─── Customer List ───────────────────────────────────────────────────
+  app.get('/customers', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const q = request.query as { limit?: string };
+      const limit = Math.min(parseInt(q.limit ?? '50', 10) || 50, 200);
+
+      const customers = await db.customer.findMany({
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          displayName: true,
+          email: true,
+          waId: true,
+          createdAt: true,
+        },
+      });
+
+      return customers;
+    });
+  });
 }
 
 function csvEscape(s: string): string {
