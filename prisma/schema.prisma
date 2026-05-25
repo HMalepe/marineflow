@@ -178,6 +178,7 @@ model Salon {
   branches       Branch[]
   subscription   SalonSubscription?
   uploadedFiles  UploadedFile[]
+  consentRecords ConsentRecord[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
   analyticsEvents AnalyticsEvent[]
@@ -239,6 +240,7 @@ model Customer {
   messages        Message[]
   appointments    Appointment[]
   loyaltyLedgers  LoyaltyLedger[]
+  consentRecords  ConsentRecord[]
   tickets         Ticket[]
   payments        Payment[]
 
@@ -814,6 +816,27 @@ model SalonSubscription {
 
   @@index([salonId])
   @@index([status])
+}
+
+// ─── POPIA/GDPR Consent ───────────────────────────────────────────────
+
+model ConsentRecord {
+  id          String    @id @default(cuid())
+  salonId     String
+  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type        String    /// marketing | data_processing | communications
+  granted     Boolean
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+  source      String    @default("whatsapp") /// whatsapp | web | manual
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([salonId])
+  @@index([customerId])
+  @@index([salonId, customerId, type])
 }
 
 // ─── File Uploads ─────────────────────────────────────────────────────

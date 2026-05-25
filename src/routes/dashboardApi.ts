@@ -18,6 +18,7 @@ import {
   listUploads,
   deleteUpload,
 } from '../services/uploads.js';
+import { exportCustomerData, eraseCustomerData } from '../services/compliance.js';
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
@@ -965,6 +966,39 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { ok: true };
     });
   });
+
+  // ─── POPIA/GDPR Compliance ───────────────────────────────────────────
+  app.get(
+    '/customers/:id/export',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async () => {
+        const { id } = request.params as { id: string };
+        const data = await exportCustomerData(id);
+        if (!data) {
+          reply.code(404);
+          return { error: 'customer_not_found' };
+        }
+        return data;
+      });
+    },
+  );
+
+  app.delete(
+    '/customers/:id/erase',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async () => {
+        const { id } = request.params as { id: string };
+        const result = await eraseCustomerData(id);
+        if (!result) {
+          reply.code(404);
+          return { error: 'customer_not_found' };
+        }
+        return result;
+      });
+    },
+  );
 }
 
 function csvEscape(s: string): string {
