@@ -4,6 +4,7 @@ import { withUserTenant } from '../lib/db/withUserTenant.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { earnStampForCompletedVisit } from '../services/loyalty.js';
 import { refundPaymentStaff } from '../services/payments.js';
+import { fuzzySearchCustomers } from '../services/customerSearch.js';
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
@@ -446,6 +447,19 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       ]);
 
       return { customers, total, take, skip };
+    });
+  });
+
+  app.get('/customers/search', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const q = request.query as { q?: string; limit?: string; threshold?: string };
+      const query = q.q?.trim() ?? '';
+      if (!query) return { results: [] };
+      const results = await fuzzySearchCustomers(user.salonId, query, {
+        limit: Math.min(Number(q.limit) || 20, 50),
+        threshold: Number(q.threshold) || 0.3,
+      });
+      return { results };
     });
   });
 

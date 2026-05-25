@@ -20,7 +20,8 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "worker": "tsx src/worker.ts"
+    "worker": "tsx src/worker.ts",
+    "lint:schema": "tsx scripts/lint-schema-tenant.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
