@@ -14,6 +14,7 @@ import { resolve } from 'node:path';
 
 const PLATFORM_MODELS = new Set([
   'Salon',
+  'SubscriptionPlan',
 ]);
 
 const CHILD_MODELS = new Set([
