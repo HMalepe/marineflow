@@ -2,51 +2,122 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
+    branches: [master]
+
+env:
+  NODE_VERSION: '20'
 
 jobs:
-  build:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: TypeScript (Backend)
+        run: npx tsc --noEmit
+
+      - name: Schema Tenant Lint
+        run: npx tsx scripts/lint-schema-tenant.ts
+
+      - name: Prisma Validate
+        run: npx prisma validate
+
+  build-dashboard:
+    name: Build Dashboard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: apps/dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npx next build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+
+  test:
+    name: Unit Tests
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: salon
-          POSTGRES_PASSWORD: salon
-          POSTGRES_DB: salon_whatsapp_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: marineflow_test
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
-
-    env:
-      DATABASE_URL: postgresql://salon:salon@localhost:5432/salon_whatsapp_test?schema=public
-      REDIS_URL: redis://localhost:6379
-      SESSION_SECRET: ci-session-secret-minimum-16
-      INTERNAL_API_KEY: ci-internal-key-123456789012345
-      PUBLIC_BASE_URL: http://localhost:3000
-      TWILIO_WEBHOOK_BASE_URL: http://localhost:3000
-      TWILIO_AUTH_TOKEN: test-token
-      DEFAULT_SALON_SLUG: demo-salon
-
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
-      - name: Install
-        run: npm ci
-      - name: Generate Prisma client
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma Client
         run: npx prisma generate
-      - name: Migrate
+
+      - name: Run migrations
         run: npx prisma migrate deploy
-      - name: Lint
-        run: npm run lint
-      - name: Build
-        run: npm run build
-      - name: Test
-        run: npm test
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/marineflow_test
+
+      - name: Run tests
+        run: npx vitest run --reporter=verbose
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/marineflow_test
+          REDIS_URL: redis://localhost:6379
+          SESSION_SECRET: test-session-secret-1234567890
+          INTERNAL_API_KEY: test-internal-key-12345678
+          NODE_ENV: test
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t marineflow:ci .

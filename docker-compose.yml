@@ -1,22 +1,56 @@
+version: '3.9'
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: salon
-      POSTGRES_PASSWORD: salon
-      POSTGRES_DB: salon_whatsapp
+      POSTGRES_USER: marineflow
+      POSTGRES_PASSWORD: marineflow_dev
+      POSTGRES_DB: marineflow
     ports:
-      - "5432:5432"
+      - '5432:5432'
     volumes:
-      - salon_pg:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U marineflow']
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://marineflow:marineflow_dev@postgres:5432/marineflow
+      REDIS_URL: redis://redis:6379
+      SESSION_SECRET: dev-session-secret-change-me-in-prod
+      INTERNAL_API_KEY: dev-internal-key-12345678
+      DEFAULT_SALON_SLUG: demo-salon
     volumes:
-      - salon_redis:/data
+      - ./src:/app/src
+      - ./prisma:/app/prisma
 
 volumes:
-  salon_pg:
-  salon_redis:
+  pgdata:
