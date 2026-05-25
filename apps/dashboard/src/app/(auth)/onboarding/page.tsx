@@ -7,6 +7,13 @@ import { StepBranding } from './steps/step-branding';
 import { StepWhatsApp } from './steps/step-whatsapp';
 import { StepServices } from './steps/step-services';
 import { StepStaff } from './steps/step-staff';
+import { StepHours } from './steps/step-hours';
+import { StepPayments } from './steps/step-payments';
+import { StepFaqs } from './steps/step-faqs';
+import { StepBot } from './steps/step-bot';
+import { StepGoLive } from './steps/step-golive';
+import type { DayHours } from './steps/step-hours';
+import type { FaqEntry } from './steps/step-faqs';
 
 export interface WizardData {
   businessName: string;
@@ -18,6 +25,18 @@ export interface WizardData {
   whatsappVerified: boolean;
   services: ServiceEntry[];
   staff: StaffEntry[];
+  hours?: DayHours[];
+  paymentProvider?: string;
+  stripeKey?: string;
+  ozowSiteCode?: string;
+  ozowPrivateKey?: string;
+  payfastMerchantId?: string;
+  payfastMerchantKey?: string;
+  faqs?: FaqEntry[];
+  botName?: string;
+  toneFormality?: number;
+  toneWarmth?: number;
+  tonePlayfulness?: number;
 }
 
 export interface ServiceEntry {
@@ -103,10 +122,20 @@ export default function OnboardingPage() {
           {step === 5 && (
             <StepStaff data={data} updateData={updateData} onNext={next} onBack={back} />
           )}
-          {step > 5 && (
-            <div className="text-center py-8 text-muted-foreground">
-              Steps 6–10 coming in Week 12.
-            </div>
+          {step === 6 && (
+            <StepHours data={data} updateData={updateData} onNext={next} onBack={back} />
+          )}
+          {step === 7 && (
+            <StepPayments data={data} updateData={updateData} onNext={next} onBack={back} />
+          )}
+          {step === 8 && (
+            <StepFaqs data={data} updateData={updateData} onNext={next} onBack={back} />
+          )}
+          {step === 9 && (
+            <StepBot data={data} updateData={updateData} onNext={next} onBack={back} />
+          )}
+          {step === 10 && (
+            <StepGoLive data={data} onBack={back} />
           )}
         </div>
       </div>
