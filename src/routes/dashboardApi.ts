@@ -538,6 +538,124 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
     },
   );
+
+  // ── Branch CRUD ────────────────────────────────────────────
+
+  app.get('/branches', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const branches = await db.branch.findMany({
+        orderBy: { sortOrder: 'asc' },
+        include: { _count: { select: { staff: true, appointments: true } } },
+      });
+      return { branches };
+    });
+  });
+
+  app.post<{ Body: { name: string; address?: string; city?: string; province?: string; postalCode?: string; phone?: string; email?: string; timezone?: string; slug?: string } }>(
+    '/branches',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { name, address, city, province, postalCode, phone, email, timezone, slug } = request.body;
+        if (!name || name.trim().length === 0) {
+          reply.code(400);
+          return { error: 'name_required' };
+        }
+        const branch = await db.branch.create({
+          data: {
+            salonId: user.salonId,
+            name: name.trim(),
+            slug: slug?.trim() || name.trim().toLowerCase().replace(/\s+/g, '-'),
+            address, city, province, postalCode, phone, email, timezone,
+          },
+        });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'branch_create',
+            entity: 'Branch',
+            entityId: branch.id,
+          },
+        });
+        return { branch };
+      });
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: { name?: string; address?: string; city?: string; province?: string; postalCode?: string; phone?: string; email?: string; timezone?: string; isActive?: boolean; sortOrder?: number } }>(
+    '/branches/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.branch.findFirst({ where: { id: request.params.id } });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        const { name, address, city, province, postalCode, phone, email, timezone, isActive, sortOrder } = request.body;
+        const updated = await db.branch.update({
+          where: { id: existing.id },
+          data: {
+            ...(name !== undefined && { name }),
+            ...(address !== undefined && { address }),
+            ...(city !== undefined && { city }),
+            ...(province !== undefined && { province }),
+            ...(postalCode !== undefined && { postalCode }),
+            ...(phone !== undefined && { phone }),
+            ...(email !== undefined && { email }),
+            ...(timezone !== undefined && { timezone }),
+            ...(isActive !== undefined && { isActive }),
+            ...(sortOrder !== undefined && { sortOrder }),
+          },
+        });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'branch_update',
+            entity: 'Branch',
+            entityId: existing.id,
+          },
+        });
+        return { branch: updated };
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/branches/:id',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.branch.findFirst({ where: { id: request.params.id } });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        const staffCount = await db.staff.count({ where: { branchId: existing.id, deletedAt: null } });
+        if (staffCount > 0) {
+          reply.code(409);
+          return { error: 'branch_has_staff', message: 'Reassign staff before deleting branch' };
+        }
+        await db.branch.delete({ where: { id: existing.id } });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'branch_delete',
+            entity: 'Branch',
+            entityId: existing.id,
+          },
+        });
+        return { ok: true };
+      });
+    },
+  );
 }
 
 function csvEscape(s: string): string {

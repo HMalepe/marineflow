@@ -114,7 +114,11 @@ export async function suggestBookingDates(salonId: string, days = 14): Promise<s
   return out;
 }
 
-export async function getStaffForService(salonId: string, serviceId: string): Promise<Staff[]> {
+export async function getStaffForService(
+  salonId: string,
+  serviceId: string,
+  branchId?: string,
+): Promise<Staff[]> {
   return getTenantDb().staff.findMany({
     where: {
       salonId,
@@ -122,6 +126,7 @@ export async function getStaffForService(salonId: string, serviceId: string): Pr
       isBookable: true,
       deletedAt: null,
       services: { some: { serviceId } },
+      ...(branchId && { branchId }),
     },
     orderBy: { sortOrder: 'asc' },
   });

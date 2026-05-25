@@ -173,9 +173,39 @@ model Salon {
   faqEmbeddings  FaqEmbedding[]
   knowledgeDocs  KnowledgeDocument[]
   knowledgeChunks KnowledgeChunk[]
+  branches       Branch[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
   analyticsEvents AnalyticsEvent[]
+}
+
+model Branch {
+  id          String   @id @default(cuid())
+  salonId     String
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String?
+  address     String?
+  city        String?
+  province    String?
+  postalCode  String?
+  phone       String?
+  email       String?
+  timezone    String?
+  latitude    Float?
+  longitude   Float?
+  isActive    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  staff         Staff[]
+  appointments  Appointment[]
+  workingHours  WorkingHour[]
+
+  @@unique([salonId, slug])
+  @@index([salonId])
 }
 
 model Customer {
@@ -302,6 +332,8 @@ model Staff {
   id            String   @id @default(cuid())
   salonId       String
   salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
   name          String
   displayName   String?
   bio           String?  @db.Text
@@ -323,6 +355,7 @@ model Staff {
   preferredByCustomers Customer[]
 
   @@index([salonId])
+  @@index([branchId])
 }
 
 model StaffService {
@@ -361,6 +394,8 @@ model WorkingHour {
   salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
   staffId       String
   staff         Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  branchId      String?
+  branch        Branch?  @relation(fields: [branchId], references: [id])
   weekday       Int      /// 0=Sun .. 6=Sat
   startTime     String   /// HH:MM (e.g. "09:00")
   endTime       String   /// HH:MM (e.g. "18:00")
@@ -370,6 +405,7 @@ model WorkingHour {
 
   @@index([staffId, weekday])
   @@index([salonId])
+  @@index([branchId])
 }
 
 /// Overrides to recurring schedule (spec: availability_exceptions)
@@ -392,6 +428,8 @@ model Appointment {
   id                  String             @id @default(cuid())
   salonId             String
   salon               Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  branchId            String?
+  branch              Branch?            @relation(fields: [branchId], references: [id])
   customerId          String
   customer            Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
   serviceId           String
