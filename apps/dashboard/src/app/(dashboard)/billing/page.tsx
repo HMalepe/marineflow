@@ -28,10 +28,29 @@ interface Subscription {
 export default async function BillingPage() {
   const token = await getToken();
 
-  const [{ plans }, { subscription }] = await Promise.all([
-    apiFetch<{ plans: Plan[] }>('/subscription/plans', {}, token),
-    apiFetch<{ subscription: Subscription | null }>('/subscription', {}, token),
-  ]);
+  let plans: Plan[] = [];
+  let subscription: Subscription | null = null;
+
+  try {
+    const [plansRes, subRes] = await Promise.all([
+      apiFetch<{ plans: Plan[] }>('/subscription/plans', {}, token),
+      apiFetch<{ subscription: Subscription | null }>('/subscription', {}, token),
+    ]);
+    plans = plansRes.plans;
+    subscription = subRes.subscription;
+  } catch {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold">Billing & Subscription</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Manage your plan and payment method.
+          </p>
+        </div>
+        <p className="text-sm text-destructive">Failed to load billing information. Please try again.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

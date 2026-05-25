@@ -37,7 +37,17 @@ export default async function CustomerDetailPage({
   const token = await getToken();
   const { id } = await params;
 
-  const customer = await apiFetch<CustomerDetail>(`/customers/${id}`, {}, token);
+  let customer: CustomerDetail | null = null;
+  try {
+    customer = await apiFetch<CustomerDetail>(`/customers/${id}`, {}, token);
+  } catch {
+    return (
+      <div className="py-12 text-center">
+        <p className="text-destructive font-medium">Customer not found</p>
+        <p className="text-sm text-muted-foreground mt-1">The customer may have been deleted or you lack access.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
