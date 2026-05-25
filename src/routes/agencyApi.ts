@@ -126,6 +126,12 @@ export async function agencyApiRoutes(app: FastifyInstance) {
     if (!body.name || !body.slug || !body.ownerEmail || !body.ownerPassword) {
       return reply.code(400).send({ error: 'missing_fields' });
     }
+    if (body.ownerPassword.length < 8) {
+      return reply.code(400).send({ error: 'password_too_short' });
+    }
+    if (!/^[a-z0-9-]+$/.test(body.slug)) {
+      return reply.code(400).send({ error: 'invalid_slug_format' });
+    }
 
     const existing = await prisma.salon.findUnique({ where: { slug: body.slug } });
     if (existing) return reply.code(409).send({ error: 'slug_taken' });

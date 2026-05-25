@@ -41,7 +41,8 @@ export async function subscribeSalon(salonId: string, handler: EventHandler): Pr
   const channel = `${CHANNEL_PREFIX}${salonId}`;
   const sub = getSubscriber();
 
-  const listener = (_ch: string, message: string) => {
+  const listener = (ch: string, message: string) => {
+    if (ch !== channel) return;
     try {
       const event = JSON.parse(message) as SalonEvent;
       handler(event);
