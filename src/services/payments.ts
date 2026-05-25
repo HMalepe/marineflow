@@ -136,6 +136,7 @@ export async function refundPaymentStaff(input: {
     }),
     prisma.auditLog.create({
       data: {
+        salonId: payment.salonId,
         actorUserId: input.actorUserId,
         action: 'payment_refund',
         entity: 'Payment',

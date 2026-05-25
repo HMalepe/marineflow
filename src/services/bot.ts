@@ -148,7 +148,12 @@ async function processInboundWhatsApp(
   });
   if (!customer) {
     customer = await getTenantDb().customer.create({
-      data: { salonId: salon.id, waId },
+      data: { salonId: salon.id, waId, lastInteractionAt: new Date() },
+    });
+  } else {
+    customer = await getTenantDb().customer.update({
+      where: { id: customer.id },
+      data: { lastInteractionAt: new Date() },
     });
   }
 
@@ -608,6 +613,7 @@ async function handleConfirm(
   });
   await tx.auditLog.create({
     data: {
+      salonId: conv.salonId,
       action: 'appointment_create',
       entity: 'Appointment',
       entityId: appointment.id,

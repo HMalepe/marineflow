@@ -99,6 +99,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         await db.auditLog.create({
           data: {
+            salonId: user.salonId,
             actorUserId: user.sub,
             action: 'appointment_complete',
             entity: 'Appointment',
@@ -366,6 +367,111 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { hours };
     });
   });
+
+  app.get('/customers', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const q = request.query as {
+        search?: string;
+        tag?: string;
+        limit?: string;
+        offset?: string;
+      };
+      const take = Math.min(Number(q.limit) || 50, 200);
+      const skip = Number(q.offset) || 0;
+
+      const where: Record<string, unknown> = { deletedAt: null };
+      if (q.tag) {
+        where.tags = { has: q.tag };
+      }
+      if (q.search) {
+        const term = q.search.trim();
+        where.OR = [
+          { displayName: { contains: term, mode: 'insensitive' } },
+          { firstName: { contains: term, mode: 'insensitive' } },
+          { lastName: { contains: term, mode: 'insensitive' } },
+          { waId: { contains: term } },
+          { email: { contains: term, mode: 'insensitive' } },
+        ];
+      }
+
+      const [customers, total] = await Promise.all([
+        db.customer.findMany({
+          where,
+          orderBy: { lastInteractionAt: { sort: 'desc', nulls: 'last' } },
+          take,
+          skip,
+          include: { preferredStaff: { select: { id: true, name: true } } },
+        }),
+        db.customer.count({ where }),
+      ]);
+
+      return { customers, total, take, skip };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/customers/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const customer = await db.customer.findFirst({
+        where: { id: request.params.id, deletedAt: null },
+        include: {
+          preferredStaff: { select: { id: true, name: true } },
+          appointments: { orderBy: { start: 'desc' }, take: 10, include: { service: true, staff: true } },
+          loyaltyLedgers: { orderBy: { createdAt: 'desc' }, take: 20 },
+        },
+      });
+      if (!customer) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { customer };
+    });
+  });
+
+  app.patch<{ Params: { id: string }; Body: { tags?: string[]; notes?: string; marketingConsent?: boolean; preferredStaffId?: string | null } }>(
+    '/customers/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.customer.findFirst({
+          where: { id: request.params.id, deletedAt: null },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        const data: Record<string, unknown> = {};
+        if (request.body.tags !== undefined) data.tags = request.body.tags;
+        if (request.body.notes !== undefined) data.notes = request.body.notes;
+        if (request.body.preferredStaffId !== undefined) data.preferredStaffId = request.body.preferredStaffId;
+        if (request.body.marketingConsent !== undefined) {
+          data.marketingConsent = request.body.marketingConsent;
+          data.marketingConsentAt = request.body.marketingConsent ? new Date() : null;
+        }
+
+        const updated = await db.customer.update({
+          where: { id: existing.id },
+          data,
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'customer_update',
+            entity: 'Customer',
+            entityId: existing.id,
+            payload: data as unknown as Record<string, string | number | boolean | null>,
+          },
+        });
+
+        return { customer: updated };
+      });
+    },
+  );
 }
 
 function csvEscape(s: string): string {

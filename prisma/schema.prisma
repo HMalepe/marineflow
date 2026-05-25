@@ -140,19 +140,32 @@ model Salon {
   tickets        Ticket[]
   faqItems       FaqItem[]
   staffUsers     StaffUser[]
+  auditLogs      AuditLog[]
   analyticsEvents AnalyticsEvent[]
 }
 
 model Customer {
-  id              String    @id @default(cuid())
-  salonId         String
-  salon           Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  waId            String    /** E.164 without whatsapp: prefix storage normalized */
-  displayName     String?
-  locale          String    @default("en")
-  loyaltyStampsCached Int?  /** optional cache; source of truth is LoyaltyLedger */
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  salonId             String
+  salon               Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  waId                String    /// E.164 without whatsapp: prefix
+  displayName         String?
+  firstName           String?
+  lastName            String?
+  email               String?
+  locale              String    @default("en")
+  tags                String[]  @default([])
+  notes               String?   @db.Text
+  source              String    @default("whatsapp")  /// whatsapp | web | import | referral
+  marketingConsent    Boolean   @default(false)
+  marketingConsentAt  DateTime?
+  preferredStaffId    String?
+  preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id])
+  loyaltyStampsCached Int?
+  lastInteractionAt   DateTime?
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   conversations   Conversation[]
   messages        Message[]
@@ -163,6 +176,9 @@ model Customer {
 
   @@unique([salonId, waId])
   @@index([salonId])
+  @@index([salonId, tags])
+  @@index([salonId, email])
+  @@index([preferredStaffId])
 }
 
 model Conversation {
@@ -270,6 +286,7 @@ model Staff {
   availabilityExceptions AvailabilityException[]
   staffUsers    StaffUser[]
   analyticsEvents AnalyticsEvent[]
+  preferredByCustomers Customer[]
 
   @@index([salonId])
 }
@@ -338,23 +355,32 @@ model AvailabilityException {
 }
 
 model Appointment {
-  id          String             @id @default(cuid())
-  salonId     String
-  salon       Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  serviceId   String
-  service     Service            @relation(fields: [serviceId], references: [id])
-  staffId     String
-  staff       Staff              @relation(fields: [staffId], references: [id])
-  start       DateTime
-  end         DateTime
-  status      AppointmentStatus  @default(HELD)
-  notes       String?
-  depositInvoiceId String?
-  loyaltyRedeemed Boolean        @default(false)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                  String             @id @default(cuid())
+  salonId             String
+  salon               Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId          String
+  customer            Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId           String
+  service             Service            @relation(fields: [serviceId], references: [id])
+  staffId             String
+  staff               Staff              @relation(fields: [staffId], references: [id])
+  start               DateTime
+  end                 DateTime
+  status              AppointmentStatus  @default(HELD)
+  notes               String?
+  depositInvoiceId    String?
+  loyaltyRedeemed     Boolean            @default(false)
+  cancellationReason  String?
+  cancelledAt         DateTime?
+  cancelledBy         String?            /// 'customer' | 'staff' | 'system'
+  rescheduledFromId   String?            @unique
+  rescheduledFrom     Appointment?       @relation("RescheduleChain", fields: [rescheduledFromId], references: [id])
+  rescheduledTo       Appointment?       @relation("RescheduleChain")
+  noShowMarkedAt      DateTime?
+  confirmedAt         DateTime?
+  reminderSentAt      DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   payments    Payment[]
   invoices    Invoice[]
@@ -362,6 +388,8 @@ model Appointment {
 
   @@index([salonId, start])
   @@index([staffId, start])
+  @@index([customerId, start])
+  @@index([salonId, status])
 }
 
 model Invoice {
@@ -481,16 +509,21 @@ model StaffUser {
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
+  salonId     String
+  salon       Salon      @relation(fields: [salonId], references: [id], onDelete: Cascade)
   actorUserId String?
   actor       StaffUser? @relation(fields: [actorUserId], references: [id])
   action      String
   entity      String
   entityId    String?
   payload     Json?
-  createdAt   DateTime @default(now())
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime   @default(now())
 
-  @@index([createdAt])
+  @@index([salonId, createdAt])
+  @@index([actorUserId])
 }
 
 model AnalyticsEvent {
