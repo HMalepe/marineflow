@@ -36,3 +36,16 @@ SELECT count(*) AS messages_correct FROM "Message";
 SELECT set_config('app.current_tenant', 'nonexistent-id-xxxxxxxxx', true);
 SELECT count(*) AS messages_wrong FROM "Message";
 -- Expected: 0
+
+-- 5. Week 7 — Knowledge tables RLS
+SELECT set_config('app.current_tenant',
+  (SELECT id FROM "Salon" WHERE slug = 'demo-salon' LIMIT 1), true);
+SELECT count(*) AS kb_docs FROM "KnowledgeDocument";
+SELECT count(*) AS kb_chunks FROM "KnowledgeChunk";
+SELECT count(*) AS faq_embeddings FROM "FaqEmbedding";
+
+SELECT set_config('app.current_tenant', 'nonexistent-id-xxxxxxxxx', true);
+SELECT count(*) AS kb_docs_wrong FROM "KnowledgeDocument";
+SELECT count(*) AS kb_chunks_wrong FROM "KnowledgeChunk";
+SELECT count(*) AS faq_embed_wrong FROM "FaqEmbedding";
+-- Expected: all 0

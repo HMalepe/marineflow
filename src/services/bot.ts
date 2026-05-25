@@ -359,7 +359,7 @@ async function handleMenu(
 
   if (choice === '4') {
     const faqs = await getTenantDb().faqItem.findMany({
-      where: { salonId: salon.id },
+      where: { salonId: salon.id, status: 'APPROVED' },
       orderBy: { sortOrder: 'asc' },
       take: 10,
     });
@@ -369,7 +369,7 @@ async function handleMenu(
       return;
     }
     const lines = faqs.map((f, i) => `${i + 1}. ${f.question}`);
-    await reply(conv, ['FAQs — reply with a number:', ...lines, '', 'BACK for menu.'].join('\n'));
+    await reply(conv, ['FAQs — reply with a number, or ask a question:', ...lines, '', 'BACK for menu.'].join('\n'));
     return;
   }
 
@@ -822,16 +822,30 @@ async function handleFaq(
 ) {
   const n = parseInt(text, 10);
   const faqs = await getTenantDb().faqItem.findMany({
-    where: { salonId: conv.salonId },
+    where: { salonId: conv.salonId, status: 'APPROVED' },
     orderBy: { sortOrder: 'asc' },
     take: 10,
   });
-  if (!Number.isFinite(n) || n < 1 || n > faqs.length) {
-    await reply(conv, 'Pick a FAQ number or BACK.');
+
+  if (Number.isFinite(n) && n >= 1 && n <= faqs.length) {
+    const f = faqs[n - 1]!;
+    await reply(conv, `${f.question}\n\n${f.answer}`);
     return;
   }
-  const f = faqs[n - 1]!;
-  await reply(conv, `${f.question}\n\n${f.answer}`);
+
+  // Semantic search fallback for free-text questions
+  try {
+    const { semanticSearch } = await import('../lib/integrations/ai/index.js');
+    const results = await semanticSearch(conv.salonId, text, { limit: 1, threshold: 0.72 });
+    if (results.length > 0) {
+      await reply(conv, results[0]!.content);
+      return;
+    }
+  } catch {
+    // AI unavailable — fall through to default message
+  }
+
+  await reply(conv, "I couldn't find an answer. Pick a FAQ number, ask differently, or reply BACK.");
 }
 
 async function handleLoyalty(

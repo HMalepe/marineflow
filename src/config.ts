@@ -32,6 +32,9 @@ const envSchema = z.object({
   META_API_VERSION: z.string().default('v21.0'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
+  EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
 });
 
 export type Env = z.infer<typeof envSchema>;

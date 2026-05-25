@@ -170,6 +170,9 @@ model Salon {
   loyaltyProgram LoyaltyProgram?
   tickets        Ticket[]
   faqItems       FaqItem[]
+  faqEmbeddings  FaqEmbedding[]
+  knowledgeDocs  KnowledgeDocument[]
+  knowledgeChunks KnowledgeChunk[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
   analyticsEvents AnalyticsEvent[]
@@ -531,14 +534,82 @@ model TicketMessage {
   createdAt DateTime @default(now())
 }
 
+enum FaqStatus {
+  DRAFT
+  APPROVED
+  ARCHIVED
+}
+
 model FaqItem {
-  id        String @id @default(cuid())
+  id          String    @id @default(cuid())
+  salonId     String
+  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  question    String
+  answer      String    @db.Text
+  keywords    String[]  @default([])
+  status      FaqStatus @default(APPROVED)
+  sortOrder   Int       @default(0)
+  approvedAt  DateTime?
+  approvedBy  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  embeddings  FaqEmbedding[]
+}
+
+/// Vector embeddings for semantic FAQ search (pgvector)
+model FaqEmbedding {
+  id        String   @id @default(cuid())
+  faqItemId String
+  faqItem   FaqItem  @relation(fields: [faqItemId], references: [id], onDelete: Cascade)
   salonId   String
-  salon     Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  question  String
-  answer    String @db.Text
-  keywords  String[] @default([])
-  sortOrder Int    @default(0)
+  salon     Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  chunk     String   @db.Text
+  /// Stored as float[] in Prisma; actual pgvector column created via migration SQL
+  embedding Unsupported("vector(1536)")?
+  model     String   @default("text-embedding-3-small")
+  createdAt DateTime @default(now())
+
+  @@index([salonId])
+  @@index([faqItemId])
+}
+
+/// Knowledge base documents (uploaded files, scraped content)
+model KnowledgeDocument {
+  id            String   @id @default(cuid())
+  salonId       String
+  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  title         String
+  sourceUrl     String?
+  mimeType      String   @default("text/plain")
+  content       String   @db.Text
+  chunkCount    Int      @default(0)
+  embeddedAt    DateTime?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  chunks  KnowledgeChunk[]
+
+  @@index([salonId])
+}
+
+/// Individual chunks of a knowledge document with embeddings
+model KnowledgeChunk {
+  id         String              @id @default(cuid())
+  documentId String
+  document   KnowledgeDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  salonId    String
+  salon      Salon               @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  chunkIndex Int
+  content    String              @db.Text
+  tokenCount Int                 @default(0)
+  embedding  Unsupported("vector(1536)")?
+  model      String              @default("text-embedding-3-small")
+  createdAt  DateTime            @default(now())
+
+  @@index([salonId])
+  @@index([documentId, chunkIndex])
 }
 
 model StaffUser {

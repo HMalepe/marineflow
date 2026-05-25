@@ -1,7 +1,5 @@
-/**
- * Anthropic Claude — Week 4 (intent classifier + bounded Q&A).
- * @see docs/schema-migration-plan.md
- */
+export { generateEmbedding, generateEmbeddings } from './embeddings.js';
+export { semanticSearch, type SemanticSearchResult } from './search.js';
 
 export interface ClassifierResult {
   intent: string;
