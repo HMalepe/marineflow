@@ -30,6 +30,7 @@ import { internalRoutes } from './routes/internal.js';
 import { plannedRoutes } from './routes/planned.js';
 import { initSentry, captureException } from './lib/sentry.js';
 import { registerRequestId } from './lib/requestId.js';
+import { generateBookingTwiml } from './lib/integrations/messaging/voice.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +79,17 @@ export async function buildApp() {
   app.get('/', async (_req, reply) => {
     const html = await readFile(path.join(publicRoot, 'index.html'), 'utf-8');
     return reply.type('text/html').send(html);
+  });
+
+  app.get('/api/voice/booking-twiml', async (request, reply) => {
+    const q = request.query as { name?: string; service?: string; date?: string; staff?: string };
+    const twiml = generateBookingTwiml({
+      name: q.name ?? 'Customer',
+      service: q.service ?? 'your service',
+      date: q.date ?? 'your appointment date',
+      staff: q.staff ?? 'your stylist',
+    });
+    return reply.type('application/xml').send(twiml);
   });
 
   app.get('/healthz', async (_req, reply) => {
