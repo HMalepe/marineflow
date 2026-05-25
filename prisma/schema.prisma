@@ -709,6 +709,20 @@ model AnalyticsEvent {
   @@index([salonId, type, createdAt])
 }
 
+// ─── Platform Admin ───────────────────────────────────────────────────
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  isSuperAdmin Boolean  @default(false)
+  active       Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // ─── Subscription Billing ─────────────────────────────────────────────
 
 enum SubscriptionStatus {

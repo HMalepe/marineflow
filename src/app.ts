@@ -19,6 +19,7 @@ import { serve } from 'inngest/fastify';
 import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
+import { adminApiRoutes } from './routes/adminApi.js';
 import { internalRoutes } from './routes/internal.js';
 import { plannedRoutes } from './routes/planned.js';
 
@@ -190,6 +191,7 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(plannedRoutes, { prefix: '/api/planned' });
   await app.register(dashboardApiRoutes, { prefix: '/api' });
+  await app.register(adminApiRoutes, { prefix: '/admin' });
   await app.register(internalRoutes, { prefix: '/internal' });
 
   app.route({
