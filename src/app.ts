@@ -117,7 +117,14 @@ export async function buildApp() {
         ? request.headers['x-twilio-signature']
         : undefined;
 
+    // #region agent log
+    fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'app.ts:webhook-entry',message:'Twilio webhook received',data:{from:params['From'],to:params['To'],body:params['Body'],sid:params['MessageSid'],hasSig:!!signature},timestamp:Date.now(),hypothesisId:'ALL'})}).catch(()=>{});
+    // #endregion
+
     if (!twilioMessaging.verifyWebhook(params, signature)) {
+      // #region agent log
+      fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'app.ts:sig-fail',message:'Signature verification FAILED',data:{signature},timestamp:Date.now(),hypothesisId:'H0'})}).catch(()=>{});
+      // #endregion
       return reply.code(403).send({ error: 'invalid_signature' });
     }
 
@@ -127,10 +134,17 @@ export async function buildApp() {
     const body = params['Body'] ?? '';
 
     if (messageSid) {
-      const dedupeKey = `msg:${messageSid}`;
-      const first = await redis.set(dedupeKey, '1', 'EX', 86400, 'NX');
-      if (first !== 'OK') {
-        return reply.send('');
+      try {
+        const dedupeKey = `msg:${messageSid}`;
+        const first = await redis.set(dedupeKey, '1', 'EX', 86400, 'NX');
+        if (first !== 'OK') {
+          // #region agent log
+          fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'app.ts:dedupe-hit',message:'Redis dedupe blocked message',data:{dedupeKey,first},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+          // #endregion
+          return reply.send('');
+        }
+      } catch {
+        // Redis unavailable — skip deduplication, proceed with message
       }
       const tenant = await resolveTenantForInbound({ twilioTo: to });
       const recorded = await recordWebhookEvent({
@@ -141,16 +155,28 @@ export async function buildApp() {
         salonId: tenant?.id,
       });
       if (recorded === 'duplicate') {
+        // #region agent log
+        fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'app.ts:webhook-dupe',message:'recordWebhookEvent returned duplicate',data:{messageSid},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
         return reply.send('');
       }
     }
 
-    await handleInboundWhatsApp({
-      from,
-      body,
-      messageSid,
-      twilioTo: to,
-    });
+    try {
+      await handleInboundWhatsApp({
+        from,
+        body,
+        messageSid,
+        twilioTo: to,
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'app.ts:bot-success',message:'handleInboundWhatsApp completed OK',data:{from,body},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
+    } catch (botErr: unknown) {
+      // #region agent log
+      fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'app.ts:bot-error',message:'handleInboundWhatsApp THREW',data:{error:String(botErr),stack:(botErr as Error)?.stack?.slice(0,500)},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+      // #endregion
+    }
 
     return reply.type('text/xml').send(
       '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',

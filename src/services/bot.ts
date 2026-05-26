@@ -38,10 +38,14 @@ export type BotContext = Record<string, unknown> & {
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
 
 async function rateLimitOrReject(waId: string): Promise<boolean> {
-  const key = `${RATE_KEY_PREFIX}${waId}`;
-  const n = await redis.incr(key);
-  if (n === 1) await redis.pexpire(key, 60_000);
-  return n <= 30;
+  try {
+    const key = `${RATE_KEY_PREFIX}${waId}`;
+    const n = await redis.incr(key);
+    if (n === 1) await redis.pexpire(key, 60_000);
+    return n <= 30;
+  } catch {
+    return true; // Allow through if Redis is unavailable
+  }
 }
 
 function ctx(conv: Conversation): BotContext {
@@ -115,6 +119,9 @@ export async function handleInboundWhatsApp(input: {
     twilioTo: input.twilioTo,
     metaPhoneNumberId: input.metaPhoneNumberId,
   });
+  // #region agent log
+  fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'bot.ts:tenant-resolve',message:'Tenant resolution result',data:{tenantId:tenant?.id??null,tenantSlug:tenant?.slug??null,tenantStatus:tenant?.status??null,twilioTo:input.twilioTo},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+  // #endregion
   if (!tenant) {
     logger.error('tenant_not_resolved');
     return;
@@ -123,6 +130,9 @@ export async function handleInboundWhatsApp(input: {
   try {
     assertTenantActive(tenant);
   } catch {
+    // #region agent log
+    fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'bot.ts:tenant-inactive',message:'Tenant is INACTIVE',data:{status:tenant.status},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     await sendWhatsAppReply(
       waId,
       'This business is not accepting bookings right now. Please try again later.',
@@ -134,6 +144,10 @@ export async function handleInboundWhatsApp(input: {
     await sendWhatsAppReply(waId, 'Too many messages — please wait a minute and try again.');
     return;
   }
+
+  // #region agent log
+  fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'bot.ts:pre-process',message:'About to call processInboundWhatsApp',data:{tenantId:tenant.id,waId,text},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
 
   await withTenantContext(tenant.id, async () => {
     await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
