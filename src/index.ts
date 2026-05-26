@@ -3,17 +3,17 @@ import { execSync } from 'node:child_process';
 import { buildApp } from './app.js';
 import { env } from './config.js';
 
-// Apply any pending database migrations before starting the server
+// Sync database schema on startup
 try {
-  console.log('[STARTUP] Running prisma migrate deploy...');
-  const output = execSync('npx prisma migrate deploy', {
+  console.log('[STARTUP] Running prisma db push...');
+  const output = execSync('npx prisma db push --accept-data-loss', {
     encoding: 'utf-8',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-  console.log('[STARTUP] Migration result:', output);
+  console.log('[STARTUP] Schema sync OK:', output);
 } catch (e: unknown) {
   const err = e as { stderr?: string; stdout?: string; message?: string };
-  console.error('[STARTUP] Migration FAILED:', err.stderr || err.stdout || err.message);
+  console.error('[STARTUP] Schema sync FAILED:', err.stderr || err.stdout || err.message);
 }
 
 const app = await buildApp();
