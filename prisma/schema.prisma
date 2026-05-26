@@ -158,7 +158,7 @@ model Salon {
   deletedAt      DateTime?
   /** IANA — hours interpreted in this zone */
   createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  updatedAt      DateTime     @default(now()) @updatedAt
 
   customers      Customer[]
   webhookEvents  WebhookEvent[]
@@ -212,7 +212,7 @@ model Branch {
   isDefault   Boolean  @default(false)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   staff         Staff[]
   appointments  Appointment[]
@@ -243,7 +243,7 @@ model Customer {
   lastInteractionAt   DateTime?
   deletedAt           DateTime?
   createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   conversations   Conversation[]
   messages        Message[]
@@ -275,7 +275,7 @@ model Conversation {
   endedAt         DateTime?
   handoffReason   String?
   messageCount    Int               @default(0)
-  updatedAt       DateTime          @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
   createdAt       DateTime          @default(now())
 
   messages    Message[]
@@ -470,7 +470,7 @@ model Appointment {
   confirmedAt         DateTime?
   reminderSentAt      DateTime?
   createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   payments    Payment[]
   invoices    Invoice[]
@@ -534,7 +534,7 @@ model Payment {
   metadata              Json?
   paidAt                DateTime?
   createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([salonId, createdAt])
   @@index([stripePaymentIntentId])
@@ -579,7 +579,7 @@ model Ticket {
   subject     String?
   assigneeStaffUserId String?
   createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   messages    TicketMessage[]
 
@@ -613,7 +613,7 @@ model FaqItem {
   approvedAt  DateTime?
   approvedBy  String?
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   embeddings  FaqEmbedding[]
 
@@ -651,7 +651,7 @@ model KnowledgeDocument {
   embeddedAt    DateTime?
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   chunks  KnowledgeChunk[]
 
@@ -722,7 +722,7 @@ model PushToken {
   token       String
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@unique([customerId, token])
   @@index([salonId])
@@ -800,7 +800,7 @@ model Campaign {
   failed        Int            @default(0)
   createdBy     String?
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([salonId, status])
 }
@@ -838,7 +838,7 @@ model WebhookSubscription {
   active      Boolean  @default(true)
   description String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   deliveries  WebhookDelivery[]
 
@@ -896,7 +896,7 @@ model Agency {
   contactEmail String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   users        AgencyUser[]
   salons       Salon[]
@@ -913,7 +913,7 @@ model AgencyUser {
   active       Boolean        @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([agencyId])
 }
@@ -929,7 +929,7 @@ model AdminUser {
   active       Boolean  @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 }
 
 // ─── Subscription Billing ─────────────────────────────────────────────
@@ -956,7 +956,7 @@ model SubscriptionPlan {
   isActive       Boolean  @default(true)
   sortOrder      Int      @default(0)
   createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   subscriptions  SalonSubscription[]
 }
@@ -976,7 +976,7 @@ model SalonSubscription {
   cancelledAt           DateTime?
   trialEndsAt           DateTime?
   createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([salonId])
   @@index([status])
