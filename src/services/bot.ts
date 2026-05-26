@@ -119,20 +119,16 @@ export async function handleInboundWhatsApp(input: {
     twilioTo: input.twilioTo,
     metaPhoneNumberId: input.metaPhoneNumberId,
   });
-  // #region agent log
-  fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'bot.ts:tenant-resolve',message:'Tenant resolution result',data:{tenantId:tenant?.id??null,tenantSlug:tenant?.slug??null,tenantStatus:tenant?.status??null,twilioTo:input.twilioTo},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
+  logger.info({ tenantId: tenant?.id ?? null, tenantSlug: tenant?.slug ?? null, twilioTo: input.twilioTo }, 'bot_tenant_resolved');
   if (!tenant) {
-    logger.error('tenant_not_resolved');
+    logger.error({ twilioTo: input.twilioTo }, 'tenant_not_resolved');
     return;
   }
 
   try {
     assertTenantActive(tenant);
   } catch {
-    // #region agent log
-    fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'bot.ts:tenant-inactive',message:'Tenant is INACTIVE',data:{status:tenant.status},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
+    logger.warn({ tenantId: tenant.id, status: tenant.status }, 'bot_tenant_inactive');
     await sendWhatsAppReply(
       waId,
       'This business is not accepting bookings right now. Please try again later.',
@@ -145,9 +141,7 @@ export async function handleInboundWhatsApp(input: {
     return;
   }
 
-  // #region agent log
-  fetch('http://127.0.0.1:7303/ingest/8de01daf-7e06-48b5-8401-fa1f790b3596',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8e981d'},body:JSON.stringify({sessionId:'8e981d',location:'bot.ts:pre-process',message:'About to call processInboundWhatsApp',data:{tenantId:tenant.id,waId,text},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-  // #endregion
+  logger.info({ tenantId: tenant.id, waId, textLen: text.length }, 'bot_processing');
 
   await withTenantContext(tenant.id, async () => {
     await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
