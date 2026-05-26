@@ -498,15 +498,54 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: { id: request.params.id, deletedAt: null },
         include: {
           preferredStaff: { select: { id: true, name: true } },
-          appointments: { orderBy: { start: 'desc' }, take: 10, include: { service: true, staff: true } },
-          loyaltyLedgers: { orderBy: { createdAt: 'desc' }, take: 20 },
         },
       });
       if (!customer) {
         reply.code(404);
         return { error: 'not_found' };
       }
-      return { customer };
+
+      const [appointments, messages, loyaltySum] = await Promise.all([
+        db.appointment.findMany({
+          where: { customerId: customer.id },
+          take: 20,
+          orderBy: { start: 'desc' },
+          include: { service: true, staff: true },
+        }),
+        db.message.findMany({
+          where: { conversation: { customerId: customer.id } },
+          take: 30,
+          orderBy: { createdAt: 'desc' },
+        }),
+        db.loyaltyLedger.aggregate({
+          where: { customerId: customer.id },
+          _sum: { delta: true },
+        }),
+      ]);
+
+      return {
+        id: customer.id,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        displayName: customer.displayName,
+        email: customer.email,
+        waId: customer.waId,
+        createdAt: customer.createdAt,
+        loyaltyStamps: loyaltySum._sum.delta ?? 0,
+        appointments: appointments.map((a) => ({
+          id: a.id,
+          start: a.start,
+          status: a.status,
+          serviceName: a.service?.name ?? 'Unknown',
+          staffName: a.staff?.name ?? 'Unknown',
+        })),
+        messages: messages.reverse().map((m) => ({
+          id: m.id,
+          direction: m.direction,
+          body: m.body,
+          createdAt: m.createdAt,
+        })),
+      };
     });
   });
 
@@ -737,87 +776,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
-  // ─── Customer Detail ─────────────────────────────────────────────────
-  app.get('/customers/:id', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
-      const db = getTenantDb();
-      const { id } = request.params as { id: string };
-
-      const customer = await db.customer.findUnique({ where: { id } });
-
-      if (!customer) {
-        reply.code(404);
-        return { error: 'not_found' };
-      }
-
-      const [appointments, messages, loyaltySum] = await Promise.all([
-        db.appointment.findMany({
-          where: { customerId: id },
-          take: 20,
-          orderBy: { start: 'desc' },
-          include: { service: true, staff: true },
-        }),
-        db.message.findMany({
-          where: { conversation: { customerId: id } },
-          take: 30,
-          orderBy: { createdAt: 'desc' },
-        }),
-        db.loyaltyLedger.aggregate({
-          where: { customerId: id },
-          _sum: { delta: true },
-        }),
-      ]);
-
-      return {
-        id: customer.id,
-        firstName: customer.firstName,
-        lastName: customer.lastName,
-        displayName: customer.displayName,
-        email: customer.email,
-        waId: customer.waId,
-        createdAt: customer.createdAt,
-        loyaltyStamps: loyaltySum._sum.delta ?? 0,
-        appointments: appointments.map((a) => ({
-          id: a.id,
-          start: a.start,
-          status: a.status,
-          serviceName: a.service?.name ?? 'Unknown',
-          staffName: a.staff?.name ?? 'Unknown',
-        })),
-        messages: messages.reverse().map((m) => ({
-          id: m.id,
-          direction: m.direction,
-          body: m.body,
-          createdAt: m.createdAt,
-        })),
-      };
-    });
-  });
-
-  // ─── Customer List ───────────────────────────────────────────────────
-  app.get('/customers', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
-      const db = getTenantDb();
-      const q = request.query as { limit?: string };
-      const limit = Math.min(parseInt(q.limit ?? '50', 10) || 50, 200);
-
-      const customers = await db.customer.findMany({
-        take: limit,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          displayName: true,
-          email: true,
-          waId: true,
-          createdAt: true,
-        },
-      });
-
-      return customers;
-    });
-  });
 
   // ─── Subscription & Billing ──────────────────────────────────────────
   app.get('/subscription/plans', async () => {

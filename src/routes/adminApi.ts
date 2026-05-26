@@ -112,8 +112,21 @@ export async function adminApiRoutes(app: FastifyInstance) {
     const body = request.body as { status?: string; tier?: string };
     const data: Record<string, unknown> = {};
 
-    if (body.status) data.status = body.status;
-    if (body.tier) data.tier = body.tier;
+    const VALID_STATUSES = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
+    const VALID_TIERS = ['FREE', 'STARTER', 'GROWTH', 'SCALE', 'ENTERPRISE'];
+
+    if (body.status) {
+      if (!VALID_STATUSES.includes(body.status)) {
+        return reply.code(400).send({ error: 'invalid_status' });
+      }
+      data.status = body.status;
+    }
+    if (body.tier) {
+      if (!VALID_TIERS.includes(body.tier)) {
+        return reply.code(400).send({ error: 'invalid_tier' });
+      }
+      data.tier = body.tier;
+    }
 
     if (Object.keys(data).length === 0) {
       return reply.code(400).send({ error: 'nothing_to_update' });
@@ -219,7 +232,8 @@ export async function adminApiRoutes(app: FastifyInstance) {
 
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
   // Skip auth for the login endpoint
-  if (request.url.endsWith('/login') && request.method === 'POST') return;
+  const pathname = request.url.split('?')[0];
+  if (pathname.endsWith('/login') && request.method === 'POST') return;
 
   try {
     await request.jwtVerify();

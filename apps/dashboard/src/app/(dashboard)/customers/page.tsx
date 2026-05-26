@@ -23,14 +23,24 @@ export default async function CustomersPage({
 
   let customers: Customer[] = [];
 
-  if (query.length >= 2) {
-    customers = await apiFetch<Customer[]>(
-      `/customers/search?q=${encodeURIComponent(query)}`,
-      {},
-      token,
-    );
-  } else {
-    customers = await apiFetch<Customer[]>('/customers?limit=50', {}, token);
+  try {
+    if (query.length >= 2) {
+      const res = await apiFetch<{ results: Customer[] }>(
+        `/customers/search?q=${encodeURIComponent(query)}`,
+        {},
+        token,
+      );
+      customers = res.results ?? [];
+    } else {
+      const res = await apiFetch<{ customers: Customer[]; total: number }>(
+        '/customers?limit=50',
+        {},
+        token,
+      );
+      customers = res.customers;
+    }
+  } catch {
+    // API unavailable
   }
 
   return (

@@ -996,7 +996,7 @@ async function handleCsat(
 }
 
 function fmtMoney(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+  return `R${(cents / 100).toFixed(2)}`;
 }
 
 function fmtDt(d: Date, zone: string): string {

@@ -219,7 +219,8 @@ function getAgencyPayload(request: FastifyRequest) {
 }
 
 async function requireAgency(request: FastifyRequest, reply: FastifyReply) {
-  if (request.url.endsWith('/login') && request.method === 'POST') return;
+  const pathname = request.url.split('?')[0];
+  if (pathname.endsWith('/login') && request.method === 'POST') return;
 
   try {
     await request.jwtVerify();
