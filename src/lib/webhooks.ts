@@ -26,6 +26,8 @@ export async function recordWebhookEvent(input: {
         ? (e as { code: string }).code
         : '';
     if (code === 'P2002') return 'duplicate';
+    // P2021 = table does not exist (schema not yet applied) — skip dedup, treat as new
+    if (code === 'P2021') return 'new';
     throw e;
   }
 }

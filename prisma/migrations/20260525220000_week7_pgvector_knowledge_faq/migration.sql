@@ -1,8 +1,12 @@
 -- Week 7: pgvector, Knowledge Base, FAQ embeddings & approval workflow
 -- Prerequisites: PostgreSQL 15+ with pgvector extension available
 
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector extension (optional — semantic search only, not required for core bot)
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS vector;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'pgvector extension not available — embedding columns will be skipped';
+END $$;
 
 -- FAQ approval status enum
 CREATE TYPE "FaqStatus" AS ENUM ('DRAFT', 'APPROVED', 'ARCHIVED');
