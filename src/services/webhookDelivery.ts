@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import type { SalonEvent } from '../lib/eventBus.js';
@@ -10,13 +11,22 @@ const DELIVERY_TIMEOUT_MS = 10_000;
  * Called from the event bus publish path.
  */
 export async function fanOutWebhooks(event: SalonEvent): Promise<void> {
-  const subscriptions = await prisma.webhookSubscription.findMany({
-    where: {
-      salonId: event.salonId,
-      active: true,
-      events: { has: event.type },
-    },
-  });
+  let subscriptions;
+  try {
+    subscriptions = await prisma.webhookSubscription.findMany({
+      where: {
+        salonId: event.salonId,
+        active: true,
+        events: { has: event.type },
+      },
+    });
+  } catch (err) {
+    // P2021 = table does not exist — migration may not have applied yet; skip silently
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+      return;
+    }
+    throw err;
+  }
 
   if (subscriptions.length === 0) return;
 

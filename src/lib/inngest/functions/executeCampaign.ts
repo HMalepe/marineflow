@@ -1,6 +1,8 @@
 import { inngest } from '../client.js';
+import { Prisma } from '@prisma/client';
 import { withTenantContext } from '../../db/tenantSession.js';
 import { prisma } from '../../prisma.js';
+import { logger } from '../../logger.js';
 
 export const executeScheduledCampaign = inngest.createFunction(
   {
@@ -24,12 +26,22 @@ export const checkScheduledCampaigns = inngest.createFunction(
     triggers: [{ cron: '*/5 * * * *' }],
   },
   async () => {
-    const due = await prisma.campaign.findMany({
-      where: {
-        status: 'SCHEDULED',
-        scheduledAt: { lte: new Date() },
-      },
-    });
+    let due;
+    try {
+      due = await prisma.campaign.findMany({
+        where: {
+          status: 'SCHEDULED',
+          scheduledAt: { lte: new Date() },
+        },
+      });
+    } catch (err) {
+      // P2021 = table not yet created (migration pending) — skip silently
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+        logger.debug('checkScheduledCampaigns: Campaign table not yet available, skipping');
+        return { checked: 0 };
+      }
+      throw err;
+    }
 
     for (const campaign of due) {
       await inngest.send({
