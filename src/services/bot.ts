@@ -32,9 +32,13 @@ export type BotContext = Record<string, unknown> & {
   selectedBranchId?: string;
   branchOptions?: string[];
   localDateStr?: string;
+  slotStartIso?: string;
   pendingAppointmentId?: string;
   rescheduleAppointmentId?: string;
   csatAppointmentId?: string;
+  anyStaff?: boolean;
+  manageList?: string[];
+  managingAppointmentId?: string;
 };
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
@@ -261,7 +265,17 @@ async function processInboundWhatsApp(
     return;
   }
 
-  await routeConversation(conv, text);
+  try {
+    await routeConversation(conv, text);
+  } catch (err) {
+    logger.error({ err, convId: conv.id, step: conv.step }, 'route_conversation_error');
+    try {
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      await reply(conv, `Sorry, something went wrong on our end. Let's start over.\n\n${mainMenu(conv.salon)}`);
+    } catch (innerErr) {
+      logger.error({ innerErr }, 'error_recovery_failed');
+    }
+  }
 }
 
 async function routeConversation(
@@ -389,7 +403,7 @@ async function handleMenu(
         'Your bookings:',
         ...lines,
         '',
-        'To cancel, reply: cancel 1 (use your booking number), or BACK.',
+        'Reply CANCEL 1 to cancel or RESCHEDULE 1 to reschedule (use the booking number), or BACK.',
       ].join('\n'),
     );
     return;
@@ -433,13 +447,13 @@ async function handleMenu(
 
   if (choice === '6') {
     const lines = [
-      salon.name,
-      salon.addressLine ?? 'Address on file.',
+      salon.addressLine ?? 'Address not on file.',
       salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : '',
       salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : '',
       salon.accessibility ? `Accessibility: ${salon.accessibility}` : '',
     ].filter(Boolean);
-    await reply(conv, [`${salon.name}:`, ...lines].join('\n'));
+    await reply(conv, [`${salon.name}`, ...lines].join('\n'));
+    await reply(conv, mainMenu(salon));
     return;
   }
 
@@ -491,24 +505,32 @@ async function handlePickStaff(
   }
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staffList = await getStaffForService(conv.salonId, service.id);
+  // Guard: staff may have been deactivated since service step
+  if (staffList.length === 0) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `Sorry, no staff are currently available for this service. Please try another.\n\n${mainMenu(conv.salon)}`);
+    return;
+  }
+
   const n = parseInt(text, 10);
   const anyIdx = staffList.length + 1;
   if (!Number.isFinite(n) || n < 1 || n > anyIdx) {
-    await reply(conv, 'Invalid choice.');
+    await reply(conv, `Invalid choice. Reply with a number from 1 to ${anyIdx}, or BACK.`);
     return;
   }
-  let staffId: string;
-  if (n === anyIdx) {
-    staffId = staffList[0]!.id;
-    await saveCtx(conv.id, { selectedStaffId: staffId, anyStaff: true });
-  } else {
-    staffId = staffList[n - 1]!.id;
-    await saveCtx(conv.id, { selectedStaffId: staffId, anyStaff: false });
-  }
+
+  const isAny = n === anyIdx;
+  const staffId = isAny ? staffList[0]!.id : staffList[n - 1]!.id;
 
   const dates = await suggestBookingDates(conv.salonId, 14);
+  if (dates.length === 0) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `No available dates found. Please contact us directly to book.\n\n${mainMenu(conv.salon)}`);
+    return;
+  }
+
+  await saveCtx(conv.id, { selectedStaffId: staffId, anyStaff: isAny }, ConversationStep.PICK_DATE);
   const lines = dates.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
-  await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
   await reply(
     conv,
     [
@@ -516,7 +538,7 @@ async function handlePickStaff(
       ...lines,
       '',
       'Or type a date YYYY-MM-DD',
-      'BACK',
+      'Reply BACK to return to menu.',
     ].join('\n'),
   );
 }
@@ -536,16 +558,31 @@ async function handlePickDate(
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
 
+  const suggestions = await suggestBookingDates(conv.salonId, 14);
+
+  const showDateList = async (prefix: string) => {
+    if (suggestions.length === 0) {
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      await reply(conv, `No available dates found. Please contact us directly to book.\n\n${mainMenu(conv.salon)}`);
+      return;
+    }
+    const dateLines = suggestions.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
+    await reply(
+      conv,
+      [prefix, ...dateLines, '', 'Or type a date YYYY-MM-DD', 'Reply BACK to return to menu.'].join('\n'),
+    );
+  };
+
   let localDateStr: string | undefined;
   const n = parseInt(text, 10);
-  const suggestions = await suggestBookingDates(conv.salonId, 14);
-  if (Number.isFinite(n) && n >= 1 && n <= 10) {
+  if (Number.isFinite(n) && n >= 1 && n <= Math.min(suggestions.length, 10)) {
     localDateStr = suggestions[n - 1];
   } else if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
     localDateStr = text.trim();
   }
+
   if (!localDateStr) {
-    await reply(conv, 'Pick a number from the list or enter YYYY-MM-DD.');
+    await showDateList('Invalid input. Pick a number from the list or enter YYYY-MM-DD:');
     return;
   }
 
@@ -556,7 +593,7 @@ async function handlePickDate(
     localDateStr,
   });
   if (slots.length === 0) {
-    await reply(conv, 'No openings that day. Try another date (YYYY-MM-DD).');
+    await showDateList(`No openings on ${localDateStr}. Please choose another date:`);
     return;
   }
 
@@ -565,7 +602,7 @@ async function handlePickDate(
     const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
     return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
   });
-  await reply(conv, ['Pick a time slot:', ...lines, '', 'BACK'].join('\n'));
+  await reply(conv, ['Pick a time slot:', ...lines, '', 'Reply BACK to choose a different date.'].join('\n'));
 }
 
 async function handlePickSlot(
@@ -591,7 +628,11 @@ async function handlePickSlot(
   });
   const n = parseInt(text, 10);
   if (!Number.isFinite(n) || n < 1 || n > Math.min(slots.length, 8)) {
-    await reply(conv, 'Invalid slot.');
+    const slotLines = slots.slice(0, 8).map((s, i) => {
+      const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+      return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
+    });
+    await reply(conv, [`Invalid choice. Pick a slot number (1–${Math.min(slots.length, 8)}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
     return;
   }
   const slot = slots[n - 1]!;
@@ -649,8 +690,21 @@ async function handleConfirm(
     excludeAppointmentId: (ctx(conv).managingAppointmentId as string | undefined),
   });
   if (!slotFree) {
-    await reply(conv, 'Sorry, that time slot was just taken. Please choose another slot (reply BACK to start over).');
-    await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
+    const localDateStr = c.localDateStr as string | undefined;
+    if (localDateStr) {
+      const freshSlots = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr });
+      if (freshSlots.length > 0) {
+        await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
+        const slotLines = freshSlots.slice(0, 8).map((s, i) => {
+          const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+          return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
+        });
+        await reply(conv, ['Sorry, that slot was just taken. Please pick another time:', ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
+        return;
+      }
+    }
+    await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
+    await reply(conv, 'Sorry, that slot was just taken and no others remain that day. Please reply BACK to choose another date.');
     return;
   }
 
@@ -881,7 +935,7 @@ async function handleFaq(
 
   if (Number.isFinite(n) && n >= 1 && n <= faqs.length) {
     const f = faqs[n - 1]!;
-    await reply(conv, `${f.question}\n\n${f.answer}`);
+    await reply(conv, `${f.question}\n\n${f.answer}\n\nReply with another number, ask a question, or BACK.`);
     return;
   }
 
