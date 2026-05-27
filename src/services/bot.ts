@@ -13,7 +13,7 @@ import {
 } from '../lib/tenant.js';
 import { sendWithFallback } from './channelRouter.js';
 import { sendWhatsAppReply } from '../lib/twilio.js';
-import { emitMessageReceived } from '../lib/eventBus.js';
+import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
@@ -39,6 +39,8 @@ export type BotContext = Record<string, unknown> & {
   anyStaff?: boolean;
   manageList?: string[];
   managingAppointmentId?: string;
+  /** Consecutive unhandled-error count — triggers staff escalation at 2 */
+  errorCount?: number;
 };
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
@@ -284,11 +286,62 @@ async function processInboundWhatsApp(
 
   try {
     await routeConversation(conv, text);
+    // Reset error counter after any successful routing (best-effort — must not throw)
+    if ((ctx(conv).errorCount ?? 0) > 0) {
+      await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
+    }
   } catch (err) {
     logger.error({ err, convId: conv.id, step: conv.step }, 'route_conversation_error');
     try {
-      await saveCtx(conv.id, {}, ConversationStep.MENU);
-      await reply(conv, `Sorry, something went wrong on our end. Let's start over.\n\n${mainMenu(conv.salon)}`);
+      const prevCount = (ctx(conv).errorCount as number | undefined) ?? 0;
+      const errorCount = prevCount + 1;
+
+      if (errorCount >= 2) {
+        // Escalate: move to HANDOFF, notify user, open a ticket, ping dashboard
+        await saveCtx(conv.id, { errorCount }, ConversationStep.HANDOFF);
+
+        await reply(
+          conv,
+          'Oops! We ran into an unexpected problem and couldn\'t complete your request. ' +
+          'A team member has been notified and will reach out to you shortly. ' +
+          'We apologise for the inconvenience.',
+        );
+
+        // Open a support ticket so the dashboard shows it immediately
+        await getTenantDb().ticket.create({
+          data: {
+            salonId: conv.salonId,
+            customerId: conv.customerId,
+            status: 'OPEN',
+            subject: 'Bot escalation — requires immediate attention',
+            messages: {
+              create: {
+                direction: MessageDirection.INBOUND,
+                body:
+                  `Bot failed ${errorCount} consecutive time(s).\n` +
+                  `Last step: ${conv.step}\n` +
+                  `Last message: "${text.slice(0, 200)}"`,
+              },
+            },
+          },
+        });
+
+        // Push a real-time alert to every dashboard tab watching this salon
+        emitBotEscalation(conv.salonId, conv.customerId, conv.id, {
+          errorCount,
+          lastStep: conv.step,
+          lastText: text.slice(0, 200),
+        }).catch(() => {});
+
+        logger.warn(
+          { convId: conv.id, customerId: conv.customerId, errorCount },
+          'bot_escalated_to_staff',
+        );
+      } else {
+        // First failure — soft recovery, keep counting
+        await saveCtx(conv.id, { errorCount }, ConversationStep.MENU);
+        await reply(conv, `Sorry, something went wrong on our end. Let's start over.\n\n${mainMenu(conv.salon)}`);
+      }
     } catch (innerErr) {
       logger.error({ innerErr }, 'error_recovery_failed');
     }
@@ -344,6 +397,13 @@ async function routeConversation(
     case ConversationStep.CSAT:
       await handleCsat(conv, t);
       break;
+    case ConversationStep.HANDOFF:
+    case ConversationStep.CLOSED:
+      // A human agent has taken over — bot stays completely silent.
+      // The message is already recorded and the SSE event already emitted
+      // before routeConversation is called, so the dashboard will see it.
+      logger.info({ convId: conv.id, step: conv.step }, 'bot_silent_handoff');
+      return;
     default:
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       await reply(conv, mainMenu(salon));

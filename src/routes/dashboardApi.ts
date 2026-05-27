@@ -5,6 +5,9 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { earnStampForCompletedVisit } from '../services/loyalty.js';
 import { refundPaymentStaff } from '../services/payments.js';
 import { fuzzySearchCustomers } from '../services/customerSearch.js';
+import { sendWithFallback } from '../services/channelRouter.js';
+import { MessageDirection, ConversationStep } from '@prisma/client';
+import { emitMessageReceived } from '../lib/eventBus.js';
 import {
   getPlans,
   getSalonSubscription,
@@ -1035,6 +1038,205 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { deliveries };
     });
   });
+
+  // ─── Conversation / Human-Handoff Management ────────────────────────────
+  // These routes let staff reply to customers directly, take over a conversation
+  // from the bot, or release it back to the bot.
+
+  /** List all conversations, HANDOFF ones first so staff see what needs attention. */
+  app.get('/conversations', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const q = request.query as { step?: string; limit?: string; offset?: string };
+      const take = Math.min(Number(q.limit) || 50, 200);
+      const skip = Number(q.offset) || 0;
+
+      const where: Record<string, unknown> = {};
+      if (q.step) where.step = q.step;
+
+      const convs = await db.conversation.findMany({
+        where,
+        orderBy: [
+          // Surface HANDOFF convos first so staff see escalations immediately
+          { step: 'asc' },
+          { lastMessageAt: 'desc' },
+        ],
+        take,
+        skip,
+        include: {
+          customer: { select: { id: true, waId: true, displayName: true, firstName: true, lastName: true } },
+          messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+        },
+      });
+
+      return {
+        conversations: convs.map((c) => ({
+          id: c.id,
+          step: c.step,
+          lastMessageAt: c.lastMessageAt,
+          isHandoff: c.step === 'HANDOFF' || c.step === 'CLOSED',
+          customer: c.customer,
+          lastMessage: c.messages[0] ?? null,
+        })),
+        total: convs.length,
+        take,
+        skip,
+      };
+    });
+  });
+
+  /**
+   * Staff sends a WhatsApp message directly to the customer.
+   * Keeps the conversation in HANDOFF — the bot will remain silent.
+   */
+  app.post<{ Params: { id: string }; Body: { body: string } }>(
+    '/conversations/:id/reply',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const body = request.body?.body?.trim();
+        if (!body) {
+          reply.code(400);
+          return { error: 'body_required' };
+        }
+
+        const conv = await db.conversation.findFirst({
+          where: { id: request.params.id },
+          include: { customer: true },
+        });
+        if (!conv) {
+          reply.code(404);
+          return { error: 'conversation_not_found' };
+        }
+
+        // Send via WhatsApp (same channel router the bot uses)
+        let providerSid: string | null = null;
+        try {
+          const { result } = await sendWithFallback({
+            salonId: user.salonId,
+            to: conv.customer.waId,
+            body,
+          });
+          providerSid = result.providerMessageId ?? null;
+        } catch {
+          reply.code(502);
+          return { error: 'message_send_failed' };
+        }
+
+        // Record as an outbound message from staff
+        const message = await db.message.create({
+          data: {
+            conversationId: conv.id,
+            customerId: conv.customerId,
+            direction: MessageDirection.OUTBOUND,
+            body,
+            providerSid,
+          },
+        });
+
+        await db.conversation.update({
+          where: { id: conv.id },
+          data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'staff_whatsapp_reply',
+            entity: 'Conversation',
+            entityId: conv.id,
+            payload: { bodyLen: body.length },
+          },
+        });
+
+        // Let other dashboard tabs see the outbound message in real-time
+        emitMessageReceived(user.salonId, conv.customerId, body).catch(() => {});
+
+        return { ok: true, messageId: message.id };
+      });
+    },
+  );
+
+  /**
+   * Take over a conversation — moves it to HANDOFF so the bot goes silent.
+   * Call this before replying manually so the bot doesn't race you.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/conversations/:id/handoff',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const conv = await db.conversation.findFirst({ where: { id: request.params.id } });
+        if (!conv) {
+          reply.code(404);
+          return { error: 'conversation_not_found' };
+        }
+
+        await db.conversation.update({
+          where: { id: conv.id },
+          data: { step: ConversationStep.HANDOFF },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'conversation_handoff',
+            entity: 'Conversation',
+            entityId: conv.id,
+          },
+        });
+
+        return { ok: true, step: 'HANDOFF' };
+      });
+    },
+  );
+
+  /**
+   * Release a conversation back to the bot — resets step to MENU and clears
+   * the error counter so the bot greets the customer cleanly next time they text.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/conversations/:id/release',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const conv = await db.conversation.findFirst({ where: { id: request.params.id } });
+        if (!conv) {
+          reply.code(404);
+          return { error: 'conversation_not_found' };
+        }
+
+        const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
+        // Strip error counter so the bot doesn't immediately re-escalate
+        const { errorCount: _drop, ...cleanCtx } = currentCtx;
+
+        await db.conversation.update({
+          where: { id: conv.id },
+          data: {
+            step: ConversationStep.MENU,
+            context: cleanCtx as object,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'conversation_release',
+            entity: 'Conversation',
+            entityId: conv.id,
+          },
+        });
+
+        return { ok: true, step: 'MENU' };
+      });
+    },
+  );
 }
 
 function csvEscape(s: string): string {

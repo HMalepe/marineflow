@@ -91,3 +91,17 @@ export function emitMessageReceived(salonId: string, customerId: string, body: s
     timestamp: new Date().toISOString(),
   });
 }
+
+export function emitBotEscalation(
+  salonId: string,
+  customerId: string,
+  conversationId: string,
+  context: { errorCount: number; lastStep: string; lastText: string },
+) {
+  return publishEvent({
+    type: 'bot.escalation',
+    salonId,
+    payload: { customerId, conversationId, urgent: true, ...context },
+    timestamp: new Date().toISOString(),
+  });
+}
