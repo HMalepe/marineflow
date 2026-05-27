@@ -1175,9 +1175,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'conversation_not_found' };
         }
 
+        const existingCtx = (conv.context ?? {}) as Record<string, unknown>;
         await db.conversation.update({
           where: { id: conv.id },
-          data: { step: ConversationStep.HANDOFF },
+          data: {
+            step: ConversationStep.HANDOFF,
+            context: { ...existingCtx, handoffByStaff: true } as object,
+          },
         });
 
         await db.auditLog.create({
@@ -1212,8 +1216,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
-        // Strip error counter so the bot doesn't immediately re-escalate
-        const { errorCount: _drop, ...cleanCtx } = currentCtx;
+        // Strip error counter and staff-handoff flag so the bot starts clean
+        const { errorCount: _drop, handoffByStaff: _drop2, ...cleanCtx } = currentCtx;
 
         await db.conversation.update({
           where: { id: conv.id },

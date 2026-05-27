@@ -1,6 +1,7 @@
 import {
   ConversationStep,
   MessageDirection,
+  Prisma,
   type Conversation,
   type Customer,
   type Salon,
@@ -41,6 +42,8 @@ export type BotContext = Record<string, unknown> & {
   managingAppointmentId?: string;
   /** Consecutive unhandled-error count — triggers staff escalation at 2 */
   errorCount?: number;
+  /** True when a human agent explicitly took over via the dashboard (keeps bot silent). */
+  handoffByStaff?: boolean;
 };
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
@@ -293,6 +296,17 @@ async function processInboundWhatsApp(
   } catch (err) {
     logger.error({ err, convId: conv.id, step: conv.step }, 'route_conversation_error');
     try {
+      // P2021 = table doesn't exist yet (migration pending) — infrastructure error,
+      // not a logic error. Reset quietly to MENU so the bot keeps working.
+      const isInfraError =
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        (err.code === 'P2021' || err.code === 'P2002');
+      if (isInfraError) {
+        await saveCtx(conv.id, {}, ConversationStep.MENU);
+        await reply(conv, mainMenu(conv.salon));
+        return;
+      }
+
       const prevCount = (ctx(conv).errorCount as number | undefined) ?? 0;
       const errorCount = prevCount + 1;
 
@@ -399,10 +413,17 @@ async function routeConversation(
       break;
     case ConversationStep.HANDOFF:
     case ConversationStep.CLOSED:
-      // A human agent has taken over — bot stays completely silent.
-      // The message is already recorded and the SSE event already emitted
-      // before routeConversation is called, so the dashboard will see it.
-      logger.info({ convId: conv.id, step: conv.step }, 'bot_silent_handoff');
+      if (ctx(conv).handoffByStaff) {
+        // A human agent explicitly claimed this conversation — stay silent.
+        // Message is already recorded; dashboard SSE has already been emitted.
+        logger.info({ convId: conv.id, step: conv.step }, 'bot_silent_handoff');
+        return;
+      }
+      // Bot-error HANDOFF with no staff claim — auto-recover so the customer
+      // isn't stuck indefinitely.
+      logger.info({ convId: conv.id }, 'bot_auto_recover_handoff');
+      await saveCtx(conv.id, { errorCount: undefined }, ConversationStep.MENU);
+      await reply(conv, mainMenu(salon));
       return;
     default:
       await saveCtx(conv.id, {}, ConversationStep.MENU);
