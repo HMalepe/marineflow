@@ -11,7 +11,8 @@ import {
   resolveTenantForInbound,
   type ResolvedTenant,
 } from '../lib/tenant.js';
-import { sendWhatsAppReply } from '../lib/twilio.js';
+import { sendWithFallback } from './channelRouter.js';
+import { emitMessageReceived } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
@@ -69,27 +70,33 @@ async function reply(
   text: string,
   outboundSid?: string | null,
 ) {
-  let sid = outboundSid ?? null;
-  if (!sid) {
-    sid = await sendWhatsAppReply(conv.customer.waId, text);
-  }
-  if (sid) {
-    await getTenantDb().message.create({
-      data: {
-        conversationId: conv.id,
-        customerId: conv.customerId,
-        direction: MessageDirection.OUTBOUND,
+  let providerSid: string | null = outboundSid ?? null;
+  if (!providerSid) {
+    try {
+      const { result } = await sendWithFallback({
+        salonId: conv.salonId,
+        to: conv.customer.waId,
         body: text,
-        providerSid: sid,
-      },
-    });
-    await getTenantDb().conversation.update({
-      where: { id: conv.id },
-      data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
-    });
-  } else {
-    logger.debug({ to: conv.customer.waId }, 'twilio_not_configured_skip_outbound_persist');
+      });
+      providerSid = result.providerMessageId ?? null;
+    } catch (err) {
+      logger.error({ err, to: conv.customer.waId }, 'reply_send_failed');
+      return;
+    }
   }
+  await getTenantDb().message.create({
+    data: {
+      conversationId: conv.id,
+      customerId: conv.customerId,
+      direction: MessageDirection.OUTBOUND,
+      body: text,
+      providerSid,
+    },
+  });
+  await getTenantDb().conversation.update({
+    where: { id: conv.id },
+    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+  });
 }
 
 function mainMenu(salon: Salon): string {
@@ -213,6 +220,11 @@ async function processInboundWhatsApp(
       payload: { len: text.length },
     },
   });
+
+  // Notify the dashboard SSE stream — fire-and-forget, must not block the transaction
+  emitMessageReceived(salon.id, customer.id, text).catch((err) =>
+    logger.warn({ err }, 'sse_emit_failed'),
+  );
 
   const lower = text.toLowerCase();
   if (lower === 'undo' || lower === 'back') {

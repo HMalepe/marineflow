@@ -14,7 +14,7 @@ import { logger } from './lib/logger.js';
 import { redisPing, redis } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
 import { twilioMessaging } from './lib/integrations/messaging/twilio-impl.js';
-import { whatsappCloudMessaging } from './lib/integrations/messaging/whatsapp-cloud-impl.js';
+import { whatsappCloudMessaging, verifyWebhookRawBuffer } from './lib/integrations/messaging/whatsapp-cloud-impl.js';
 import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
 import { resolveTenantForInbound } from './lib/tenant.js';
@@ -174,58 +174,79 @@ export async function buildApp() {
     );
   });
 
-  app.get('/webhooks/whatsapp', async (request, reply) => {
-    const q = request.query as {
-      'hub.mode'?: string;
-      'hub.verify_token'?: string;
-      'hub.challenge'?: string;
-    };
-    if (
-      q['hub.mode'] === 'subscribe' &&
-      env.META_WEBHOOK_VERIFY_TOKEN &&
-      q['hub.verify_token'] === env.META_WEBHOOK_VERIFY_TOKEN
-    ) {
-      return reply.send(q['hub.challenge'] ?? '');
-    }
-    return reply.code(403).send({ error: 'forbidden' });
-  });
+  // Meta webhook routes need raw body access for correct HMAC-SHA256 verification.
+  // Fastify parses JSON before handlers run; re-serialising a parsed object can produce
+  // different bytes (e.g. Unicode normalisation, key order) causing signature mismatches.
+  // We mirror the same raw-body plugin pattern used for the Stripe webhook.
+  await app.register(async function metaWebhookRawBody(f) {
+    f.addContentTypeParser(
+      'application/json',
+      { parseAs: 'buffer', bodyLimit: 2 * 1024 * 1024 },
+      (_req, body, done) => { done(null, body); },
+    );
 
-  app.post('/webhooks/whatsapp', async (request, reply) => {
-    const raw = request.body as unknown;
-    const signature =
-      typeof request.headers['x-hub-signature-256'] === 'string'
-        ? request.headers['x-hub-signature-256']
-        : undefined;
+    f.get('/webhooks/whatsapp', async (request, reply) => {
+      const q = request.query as {
+        'hub.mode'?: string;
+        'hub.verify_token'?: string;
+        'hub.challenge'?: string;
+      };
+      if (
+        q['hub.mode'] === 'subscribe' &&
+        env.META_WEBHOOK_VERIFY_TOKEN &&
+        q['hub.verify_token'] === env.META_WEBHOOK_VERIFY_TOKEN
+      ) {
+        return reply.send(q['hub.challenge'] ?? '');
+      }
+      return reply.code(403).send({ error: 'forbidden' });
+    });
 
-    if (!signature || !whatsappCloudMessaging.verifyWebhook(raw, signature)) {
-      return reply.code(401).send({ error: 'invalid_signature' });
-    }
+    f.post('/webhooks/whatsapp', async (request, reply) => {
+      const buf = request.body as Buffer;
+      const signature =
+        typeof request.headers['x-hub-signature-256'] === 'string'
+          ? request.headers['x-hub-signature-256']
+          : undefined;
 
-    const messages = whatsappCloudMessaging.parseInboundBatch(raw);
-    if (messages.length === 0) {
+      if (!signature || !verifyWebhookRawBuffer(buf, signature)) {
+        logger.warn({ hasSig: !!signature }, 'meta_webhook_signature_failed');
+        return reply.code(401).send({ error: 'invalid_signature' });
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(buf.toString('utf8'));
+      } catch {
+        return reply.code(400).send({ error: 'invalid_json' });
+      }
+
+      const messages = whatsappCloudMessaging.parseInboundBatch(parsed);
+      if (messages.length === 0) {
+        return reply.send({ received: true });
+      }
+
+      for (const inbound of messages) {
+        logger.info({ from: inbound.fromPhoneE164, externalId: inbound.externalId }, 'meta_webhook_received');
+        const recorded = await recordWebhookEvent({
+          provider: 'meta',
+          providerEventId: inbound.externalId,
+          payload: parsed,
+          verified: true,
+          salonId: undefined,
+        });
+        if (recorded === 'duplicate') continue;
+
+        await handleInboundWhatsApp({
+          from: inbound.fromPhoneE164,
+          body: inbound.body,
+          messageSid: inbound.externalId,
+          metaPhoneNumberId: inbound.metaPhoneNumberId,
+          twilioTo: inbound.toAddress,
+        });
+      }
+
       return reply.send({ received: true });
-    }
-
-    for (const inbound of messages) {
-      const recorded = await recordWebhookEvent({
-        provider: 'meta',
-        providerEventId: inbound.externalId,
-        payload: raw,
-        verified: true,
-        salonId: undefined,
-      });
-      if (recorded === 'duplicate') continue;
-
-      await handleInboundWhatsApp({
-        from: inbound.fromPhoneE164,
-        body: inbound.body,
-        messageSid: inbound.externalId,
-        metaPhoneNumberId: inbound.metaPhoneNumberId,
-        twilioTo: inbound.toAddress,
-      });
-    }
-
-    return reply.send({ received: true });
+    });
   });
 
   await app.register(async function stripeRawBody(f) {

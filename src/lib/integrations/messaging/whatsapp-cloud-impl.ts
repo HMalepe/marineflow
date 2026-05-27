@@ -7,6 +7,17 @@ import type {
   SentMessage,
 } from './types.js';
 
+/** Verify Meta webhook signature against the raw request body Buffer. */
+export function verifyWebhookRawBuffer(buf: Buffer, signature: string | undefined): boolean {
+  if (!env.META_APP_SECRET || !signature) return false;
+  const expected = Buffer.from(
+    crypto.createHmac('sha256', env.META_APP_SECRET).update(buf).digest('hex'),
+  );
+  const provided = Buffer.from(signature.replace(/^sha256=/, ''));
+  if (expected.length !== provided.length) return false;
+  return crypto.timingSafeEqual(expected, provided);
+}
+
 const API_BASE = 'https://graph.facebook.com';
 
 function apiUrl(phoneNumberId: string): string {
