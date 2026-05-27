@@ -6,6 +6,10 @@ const SLOT_STEP_MIN = 15;
 
 export type Slot = { start: Date; end: Date };
 
+/** Returned by getAvailableSlots. `tooLong` is true when the service + buffers
+ *  exceed the length of the business day — no amount of date-picking will help. */
+export type AvailableSlotsResult = { slots: Slot[]; tooLong: boolean };
+
 function hasTimeOffConflict(staffId: string, start: Date, end: Date, timeOffs: TimeOff[]): boolean {
   return timeOffs.some((t) => t.staffId === staffId && t.start < end && t.end > start);
 }
@@ -21,13 +25,15 @@ function hasAppointmentConflict(
 
 /**
  * Build candidate slots for a calendar day (YYYY-MM-DD) in the salon's timezone.
+ * Returns { slots, tooLong } where tooLong = true means the service duration
+ * exceeds the business-day length — no slots will ever be available on any day.
  */
 export async function getAvailableSlots(input: {
   salonId: string;
   service: Service;
   staff: Staff;
   localDateStr: string;
-}): Promise<Slot[]> {
+}): Promise<AvailableSlotsResult> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: input.salonId },
     include: { businessHours: true },
@@ -35,13 +41,21 @@ export async function getAvailableSlots(input: {
   const tz = salon.timezone;
 
   const dayStart = DateTime.fromISO(input.localDateStr, { zone: tz }).startOf('day');
-  if (!dayStart.isValid) return [];
+  if (!dayStart.isValid) return { slots: [], tooLong: false };
 
   /** 0=Sunday .. 6=Saturday (match Prisma BusinessHour.dayOfWeek) */
   const daySun0 = dayStart.weekday === 7 ? 0 : dayStart.weekday;
 
   const row = salon.businessHours.find((h) => h.dayOfWeek === daySun0);
-  if (!row) return [];
+  if (!row) return { slots: [], tooLong: false };
+
+  const duration = input.service.durationMin + input.service.bufferMin + input.staff.breakMin;
+
+  // EC-11: if the total duration exceeds the business day, no slot can ever fit
+  const businessDayMinutes = row.closeMin - row.openMin;
+  if (duration > businessDayMinutes) {
+    return { slots: [], tooLong: true };
+  }
 
   const open = dayStart.set({ hour: Math.floor(row.openMin / 60), minute: row.openMin % 60, second: 0 });
   const close = dayStart.set({
@@ -49,9 +63,6 @@ export async function getAvailableSlots(input: {
     minute: row.closeMin % 60,
     second: 0,
   });
-
-  const duration =
-    input.service.durationMin + input.service.bufferMin + input.staff.breakMin;
 
   const openUtc = open.toUTC();
   const closeUtc = close.toUTC();
@@ -92,7 +103,7 @@ export async function getAvailableSlots(input: {
     }
     cursor = cursor.plus({ minutes: SLOT_STEP_MIN });
   }
-  return slots;
+  return { slots, tooLong: false };
 }
 
 /** Next N calendar dates (YYYY-MM-DD) in salon TZ that have at least one slot possible (has business hours row).
