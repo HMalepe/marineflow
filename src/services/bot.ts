@@ -12,6 +12,7 @@ import {
   type ResolvedTenant,
 } from '../lib/tenant.js';
 import { sendWithFallback } from './channelRouter.js';
+import { sendWhatsAppReply } from '../lib/twilio.js';
 import { emitMessageReceived } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
 import { logger } from '../lib/logger.js';
