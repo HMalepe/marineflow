@@ -397,6 +397,13 @@ async function routeConversation(
     case ConversationStep.CSAT:
       await handleCsat(conv, t);
       break;
+    case ConversationStep.HANDOFF:
+    case ConversationStep.CLOSED:
+      // A human agent has taken over — bot stays completely silent.
+      // The message is already recorded and the SSE event already emitted
+      // before routeConversation is called, so the dashboard will see it.
+      logger.info({ convId: conv.id, step: conv.step }, 'bot_silent_handoff');
+      return;
     default:
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       await reply(conv, mainMenu(salon));
