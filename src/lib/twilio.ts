@@ -19,16 +19,18 @@ export async function sendWhatsAppReply(toWaId: string, body: string): Promise<s
     return null;
   }
   const to = toWaId.startsWith('whatsapp:') ? toWaId : `whatsapp:${toWaId}`;
+  // Twilio requires "whatsapp:+XXXX" format for the from number
+  const from = env.TWILIO_WHATSAPP_FROM.startsWith('whatsapp:')
+    ? env.TWILIO_WHATSAPP_FROM
+    : `whatsapp:${env.TWILIO_WHATSAPP_FROM}`;
   try {
-    const msg = await tw.messages.create({
-      from: env.TWILIO_WHATSAPP_FROM,
-      to,
-      body,
-    });
-    logger.info({ sid: msg.sid, to }, 'twilio_message_sent');
+    const msg = await tw.messages.create({ from, to, body });
+    logger.info({ sid: msg.sid, to, from }, 'twilio_message_sent');
     return msg.sid;
   } catch (err: unknown) {
-    logger.error({ err, to, from: env.TWILIO_WHATSAPP_FROM }, 'twilio_send_failed');
-    throw err;
+    // Log and return null — do NOT re-throw. Re-throwing here rolls back the
+    // entire withTenantContext Prisma transaction, losing the inbound message record.
+    logger.error({ err, to, from }, 'twilio_send_failed');
+    return null;
   }
 }
