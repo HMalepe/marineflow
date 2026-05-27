@@ -72,12 +72,17 @@ export async function mobileApiRoutes(app: FastifyInstance) {
         return { error: 'service_or_staff_not_found' };
       }
 
-      const slots = await getAvailableSlots({
+      const { slots, tooLong } = await getAvailableSlots({
         salonId: user.salonId,
         service,
         staff,
         localDateStr: date,
       });
+
+      if (tooLong) {
+        reply.code(422);
+        return { error: 'service_duration_exceeds_business_hours' };
+      }
 
       return {
         slots: slots.map((s) => ({

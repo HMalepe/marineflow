@@ -155,9 +155,24 @@ export async function handleInboundWhatsApp(input: {
 
   logger.info({ tenantId: tenant.id, waId, textLen: text.length }, 'bot_processing');
 
-  await withTenantContext(tenant.id, async () => {
-    await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
-  });
+  // EC-19: Per-user Redis mutex to serialise concurrent messages from the same number
+  const lockKey = `conv:lock:${tenant.id}:${waId}`;
+  let lockAcquired = false;
+  try {
+    const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
+    lockAcquired = acquired === 'OK';
+    if (!lockAcquired) {
+      logger.warn({ tenantId: tenant.id, waId }, 'concurrent_message_blocked');
+      return;
+    }
+    await withTenantContext(tenant.id, async () => {
+      await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
+    });
+  } finally {
+    if (lockAcquired) {
+      await redis.del(lockKey).catch(() => {});
+    }
+  }
 }
 
 async function processInboundWhatsApp(
@@ -165,6 +180,8 @@ async function processInboundWhatsApp(
   input: { waId: string; text: string; messageSid: string },
 ): Promise<void> {
   const { waId, text, messageSid } = input;
+  // EC-07/EC-15: drop empty messages (media-only, delivery receipts, etc.)
+  if (!text) return;
   const salon = await getTenantDb().salon.findUniqueOrThrow({ where: { id: tenant.id } });
 
   let customer = await getTenantDb().customer.findUnique({
@@ -341,6 +358,18 @@ async function handleMenu(
   const choice = text.trim();
 
   if (choice === '1') {
+    // EC-09/EC-18: Wipe stale booking fields before starting a fresh flow
+    await saveCtx(conv.id, {
+      selectedServiceId: undefined,
+      selectedStaffId: undefined,
+      selectedBranchId: undefined,
+      branchOptions: undefined,
+      localDateStr: undefined,
+      slotStartIso: undefined,
+      anyStaff: undefined,
+      managingAppointmentId: undefined,
+    });
+
     // Check for multi-branch — if salon has >1 branch, ask which branch first
     const branches = await getTenantDb().branch.findMany({
       where: { salonId: salon.id, isActive: true },
@@ -364,26 +393,28 @@ async function handleMenu(
       orderBy: { sortOrder: 'asc' },
     });
     if (services.length === 0) {
-      await reply(conv, 'No services configured yet. Please contact the salon.');
+      // EC-05: return to menu so user isn't left in a dead end
+      await reply(conv, `No services configured yet. Please contact the salon.\n\n${mainMenu(salon)}`);
       return;
     }
-    const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
+    const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
     await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
     await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
     return;
   }
 
   if (choice === '2') {
+    // EC-02: only show active future bookings; EC-08: show up to 8
     const upcoming = await getTenantDb().appointment.findMany({
       where: {
         customerId: conv.customerId,
         salonId: salon.id,
-        start: { gte: new Date(Date.now() - 86400000) },
-        status: { notIn: ['CANCELLED'] },
+        start: { gte: new Date() },
+        status: { in: ['CONFIRMED', 'HELD', 'PENDING_PAYMENT', 'CONFIRMED_PAID'] },
       },
       orderBy: { start: 'asc' },
       include: { service: true, staff: true },
-      take: 5,
+      take: 8,
     });
     if (upcoming.length === 0) {
       await reply(conv, `No upcoming bookings found.\n\n${mainMenu(salon)}`);
@@ -470,7 +501,7 @@ async function handlePickService(
     orderBy: { sortOrder: 'asc' },
   });
   if (!Number.isFinite(n) || n < 1 || n > services.length) {
-    const svcLines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
+    const svcLines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
     await reply(conv, [`Invalid choice. Pick a number (1–${services.length}):`, ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
     return;
   }
@@ -487,7 +518,7 @@ async function handlePickService(
     return;
   }
   const lines = [
-    ...staff.map((s, i) => `${i + 1}. ${s.name}`),
+    ...staff.map((s, i) => `${i + 1}. ${sanitize(s.name)}`),
     `${staff.length + 1}. Any available`,
   ];
   await reply(conv, ['Choose stylist:', ...lines, '', 'BACK'].join('\n'));
@@ -521,7 +552,26 @@ async function handlePickStaff(
   }
 
   const isAny = n === anyIdx;
-  const staffId = isAny ? staffList[0]!.id : staffList[n - 1]!.id;
+  let staffId: string;
+  if (isAny) {
+    // EC-06: Load-balance by selecting staff with the fewest upcoming appointments
+    const counts = await Promise.all(
+      staffList.map(async (s) => {
+        const count = await getTenantDb().appointment.count({
+          where: {
+            staffId: s.id,
+            start: { gte: new Date() },
+            status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
+          },
+        });
+        return { id: s.id, count };
+      }),
+    );
+    counts.sort((a, b) => a.count - b.count);
+    staffId = counts[0]!.id;
+  } else {
+    staffId = staffList[n - 1]!.id;
+  }
 
   const dates = await suggestBookingDates(conv.salonId, 14);
   if (dates.length === 0) {
@@ -587,12 +637,18 @@ async function handlePickDate(
     return;
   }
 
-  const slots = await getAvailableSlots({
+  // EC-11: getAvailableSlots now returns { slots, tooLong }
+  const { slots, tooLong } = await getAvailableSlots({
     salonId: conv.salonId,
     service,
     staff,
     localDateStr,
   });
+  if (tooLong) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `Sorry, this service is too long to fit within business hours. Please contact us directly.\n\n${mainMenu(conv.salon)}`);
+    return;
+  }
   if (slots.length === 0) {
     await showDateList(`No openings on ${localDateStr}. Please choose another date:`);
     return;
@@ -621,12 +677,18 @@ async function handlePickSlot(
   }
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
-  const slots = await getAvailableSlots({
+  // EC-11: getAvailableSlots now returns { slots, tooLong }
+  const { slots, tooLong } = await getAvailableSlots({
     salonId: conv.salonId,
     service,
     staff,
     localDateStr,
   });
+  if (tooLong || slots.length === 0) {
+    await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
+    await reply(conv, 'No slots are available for this date. Please reply BACK to choose a different date.');
+    return;
+  }
   const n = parseInt(text, 10);
   if (!Number.isFinite(n) || n < 1 || n > Math.min(slots.length, 8)) {
     const slotLines = slots.slice(0, 8).map((s, i) => {
@@ -647,7 +709,7 @@ async function handlePickSlot(
     conv,
     [
       `Confirm booking?`,
-      `${service.name} with ${staff.name}`,
+      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
       dt.toFormat('cccc, dd LLL yyyy HH:mm'),
       '',
       `Reply YES to confirm, or BACK.`,
@@ -659,9 +721,9 @@ async function handleConfirm(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  const lower = text.toLowerCase();
-  if (lower !== 'yes' && lower !== 'y') {
-    await reply(conv, 'Cancelled booking flow. Say BACK or start again with 1.');
+  // EC-03: accept natural affirmations, not just exact "yes"/"y"
+  if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(text.trim())) {
+    await reply(conv, 'Booking not confirmed. Reply YES to confirm, or BACK to return to menu.');
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     return;
   }
@@ -676,12 +738,23 @@ async function handleConfirm(
     return;
   }
 
+  // EC-17: Re-check salon status in case it was suspended after the booking flow started
+  const freshSalon = await getTenantDb().salon.findUniqueOrThrow({ where: { id: conv.salonId } });
+  if (freshSalon.status === 'SUSPENDED' || freshSalon.status === 'CHURNED') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `Sorry, this salon is not currently accepting bookings. Please try again later.\n\n${mainMenu(conv.salon)}`);
+    return;
+  }
+
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
   const start = new Date(slotIso);
   const end = new Date(
     start.getTime() + (service.durationMin + service.bufferMin + staff.breakMin) * 60_000,
   );
+
+  // EC-01: Advisory lock to serialise concurrent bookings for the same staff/time slot
+  await getTenantDb().$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${staff.id + ':' + start.toISOString()}))`;
 
   const slotFree = await validateSlotAvailable({
     salonId: conv.salonId,
@@ -693,7 +766,8 @@ async function handleConfirm(
   if (!slotFree) {
     const localDateStr = c.localDateStr as string | undefined;
     if (localDateStr) {
-      const freshSlots = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr });
+      // EC-11: destructure new return type
+      const { slots: freshSlots } = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr });
       if (freshSlots.length > 0) {
         await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
         const slotLines = freshSlots.slice(0, 8).map((s, i) => {
@@ -807,7 +881,7 @@ async function handleConfirm(
     [
       redeem.redeemed && redeem.note ? `${redeem.note}\n` : '',
       `Booked! Reference: ${appointment.id.slice(0, 8)}`,
-      `${service.name} with ${staff.name}`,
+      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
       DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
       '',
       mainMenu(conv.salon),
@@ -831,8 +905,9 @@ async function handleManageBooking(
     return;
   }
 
-  const cancelMatch = /^cancel\s*(\d+)$/i.exec(text.trim());
-  const rescheduleMatch = /^reschedule\s*(\d+)$/i.exec(text.trim());
+  // EC-04: removed $ anchor so trailing whitespace/punctuation doesn't break match
+  const cancelMatch = /^cancel\s*(\d+)/i.exec(text.trim());
+  const rescheduleMatch = /^reschedule\s*(\d+)/i.exec(text.trim());
 
   if (cancelMatch) {
     const idx = parseInt(cancelMatch[1]!, 10);
@@ -867,7 +942,7 @@ async function handleManageBooking(
         payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp' },
       },
     });
-    await reply(conv, `Cancelled ${appt.service.name} with ${appt.staff.name}.\n\n${mainMenu(conv.salon)}`);
+    await reply(conv, `Cancelled ${sanitize(appt.service.name)} with ${sanitize(appt.staff.name)}.\n\n${mainMenu(conv.salon)}`);
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     return;
   }
@@ -947,7 +1022,9 @@ async function handleFaq(
 
   if (Number.isFinite(n) && n >= 1 && n <= faqs.length) {
     const f = faqs[n - 1]!;
-    await reply(conv, `${f.question}\n\n${f.answer}\n\nReply with another number, ask a question, or BACK.`);
+    // EC-14: WhatsApp messages cap at ~4096 chars; truncate long answers
+    const answer = f.answer.length > 3900 ? f.answer.slice(0, 3900) + '…' : f.answer;
+    await reply(conv, `${f.question}\n\n${answer}\n\nReply with another number, ask a question, or BACK.`);
     return;
   }
 
@@ -956,7 +1033,10 @@ async function handleFaq(
     const { semanticSearch } = await import('../lib/integrations/ai/index.js');
     const results = await semanticSearch(conv.salonId, text, { limit: 1, threshold: 0.72 });
     if (results.length > 0) {
-      await reply(conv, `${results[0]!.content}\n\nReply with a FAQ number, ask another question, or BACK.`);
+      // EC-14: truncate semantic results too
+      const content = results[0]!.content;
+      const truncated = content.length > 3900 ? content.slice(0, 3900) + '…' : content;
+      await reply(conv, `${truncated}\n\nReply with a FAQ number, ask another question, or BACK.`);
       return;
     }
   } catch {
@@ -1001,7 +1081,13 @@ async function handlePickBranch(
     where: { salonId: conv.salon.id, active: true },
     orderBy: { sortOrder: 'asc' },
   });
-  const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
+  // EC-05: guard against empty service list after branch selection
+  if (services.length === 0) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `No services configured yet. Please contact the salon.\n\n${mainMenu(conv.salon)}`);
+    return;
+  }
+  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
   await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
 
@@ -1084,6 +1170,11 @@ async function handleCsat(
 
 function fmtMoney(cents: number): string {
   return `R${(cents / 100).toFixed(2)}`;
+}
+
+/** EC-13: Strip WhatsApp markdown chars from user-controlled strings to prevent formatting injection. */
+function sanitize(s: string): string {
+  return s.replace(/[*_~`[\]]/g, '');
 }
 
 function fmtDt(d: Date, zone: string): string {
