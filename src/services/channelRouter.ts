@@ -4,6 +4,7 @@ import { whatsappCloudMessaging } from '../lib/integrations/messaging/whatsapp-c
 import { smsMessaging } from '../lib/integrations/messaging/sms-impl.js';
 import { callBookingConfirmation } from '../lib/integrations/messaging/voice.js';
 import { logger } from '../lib/logger.js';
+import { isTwilioConfigured } from '../config.js';
 import type { SentMessage } from '../lib/integrations/messaging/types.js';
 
 export type Channel = 'whatsapp' | 'sms' | 'voice';
@@ -40,8 +41,9 @@ export async function sendWithFallback(params: {
     }
   }
 
-  // Try WhatsApp via Twilio
-  if (salon.twilioWhatsAppFrom) {
+  // Try WhatsApp via Twilio — gate on DB field OR env-level config so that
+  // deployments that set TWILIO_* env vars without the salon DB field still work.
+  if (salon.twilioWhatsAppFrom || isTwilioConfigured()) {
     try {
       const result = await twilioMessaging.sendText({
         to: `whatsapp:${params.to}`,
