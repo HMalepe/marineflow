@@ -95,3 +95,29 @@ DO $$ BEGIN
   CREATE POLICY salon_isolation ON "WebhookSubscription"
     USING ("salonId" = current_setting('app.current_tenant', true));
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ── WebhookEvent (Twilio / provider inbound event log) ────────────────────────
+
+CREATE TABLE IF NOT EXISTS "WebhookEvent" (
+  "id"              TEXT        NOT NULL,
+  "salonId"         TEXT,
+  "provider"        TEXT        NOT NULL,
+  "providerEventId" TEXT        NOT NULL,
+  "payload"         JSONB       NOT NULL DEFAULT '{}',
+  "verified"        BOOLEAN     NOT NULL DEFAULT false,
+  "processedAt"     TIMESTAMP(3),
+  "createdAt"       TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "WebhookEvent_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "WebhookEvent_provider_providerEventId_key"
+  ON "WebhookEvent"("provider", "providerEventId");
+
+CREATE INDEX IF NOT EXISTS "WebhookEvent_salonId_createdAt_idx"
+  ON "WebhookEvent"("salonId", "createdAt");
+
+DO $$ BEGIN
+  ALTER TABLE "WebhookEvent"
+    ADD CONSTRAINT "WebhookEvent_salonId_fkey"
+    FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
