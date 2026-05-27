@@ -386,7 +386,7 @@ async function handleMenu(
       take: 5,
     });
     if (upcoming.length === 0) {
-      await reply(conv, 'No upcoming bookings found.');
+      await reply(conv, `No upcoming bookings found.\n\n${mainMenu(salon)}`);
       return;
     }
     const lines = upcoming.map((a, i) =>
@@ -429,13 +429,13 @@ async function handleMenu(
       orderBy: { sortOrder: 'asc' },
       take: 10,
     });
-    await saveCtx(conv.id, {}, ConversationStep.FAQ);
     if (faqs.length === 0) {
-      await reply(conv, 'No FAQs yet. For hours & address, reply 6 from main menu.');
+      await reply(conv, `No FAQs available yet.\n\n${mainMenu(salon)}`);
       return;
     }
+    await saveCtx(conv.id, {}, ConversationStep.FAQ);
     const lines = faqs.map((f, i) => `${i + 1}. ${f.question}`);
-    await reply(conv, ['FAQs — reply with a number, or ask a question:', ...lines, '', 'BACK for menu.'].join('\n'));
+    await reply(conv, ['FAQs — reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
     return;
   }
 
@@ -470,7 +470,8 @@ async function handlePickService(
     orderBy: { sortOrder: 'asc' },
   });
   if (!Number.isFinite(n) || n < 1 || n > services.length) {
-    await reply(conv, 'Invalid choice. Pick a number from the list or BACK.');
+    const svcLines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
+    await reply(conv, [`Invalid choice. Pick a number (1–${services.length}):`, ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
     return;
   }
   const service = services[n - 1]!;
@@ -786,6 +787,8 @@ async function handleConfirm(
           `Booking held (${appointment.id.slice(0, 8)}).`,
           `Please complete payment: ${sessionUrl}`,
           'We will confirm once payment succeeds.',
+          '',
+          mainMenu(conv.salon),
         ]
           .filter(Boolean)
           .join('\n'),
@@ -794,7 +797,7 @@ async function handleConfirm(
     }
     await reply(
       conv,
-      'Booking created — payment link unavailable (configure STRIPE_SECRET_KEY). Staff will confirm manually.',
+      `Booking created — payment link unavailable. Staff will confirm manually.\n\n${mainMenu(conv.salon)}`,
     );
     return;
   }
@@ -806,6 +809,8 @@ async function handleConfirm(
       `Booked! Reference: ${appointment.id.slice(0, 8)}`,
       `${service.name} with ${staff.name}`,
       DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
+      '',
+      mainMenu(conv.salon),
     ]
       .filter(Boolean)
       .join('\n'),
@@ -894,10 +899,17 @@ async function handleManageBooking(
     );
 
     const dates = await suggestBookingDates(conv.salonId);
+    const dateLines = dates.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
     await reply(
       conv,
-      `Rescheduling ${appt.service.name} with ${appt.staff.name}.\nPick a new date:\n` +
-        dates.map((d, i) => `${i + 1} — ${d}`).join('\n'),
+      [
+        `Rescheduling ${appt.service.name} with ${appt.staff.name}.`,
+        'Pick a new date:',
+        ...dateLines,
+        '',
+        'Or type a date YYYY-MM-DD',
+        'Reply BACK to cancel and return to menu.',
+      ].join('\n'),
     );
     return;
   }
@@ -918,8 +930,8 @@ async function handleComplaint(
       messages: { create: { direction: MessageDirection.INBOUND, body: text } },
     },
   });
-  await reply(conv, 'Thanks — we logged your complaint and will respond shortly.');
   await saveCtx(conv.id, {}, ConversationStep.MENU);
+  await reply(conv, `Thanks — we logged your complaint and will respond shortly.\n\n${mainMenu(conv.salon)}`);
 }
 
 async function handleFaq(
@@ -944,7 +956,7 @@ async function handleFaq(
     const { semanticSearch } = await import('../lib/integrations/ai/index.js');
     const results = await semanticSearch(conv.salonId, text, { limit: 1, threshold: 0.72 });
     if (results.length > 0) {
-      await reply(conv, results[0]!.content);
+      await reply(conv, `${results[0]!.content}\n\nReply with a FAQ number, ask another question, or BACK.`);
       return;
     }
   } catch {
