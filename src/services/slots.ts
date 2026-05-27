@@ -95,7 +95,8 @@ export async function getAvailableSlots(input: {
   return slots;
 }
 
-/** Next N calendar dates (YYYY-MM-DD) in salon TZ that have at least one slot possible (has business hours row). */
+/** Next N calendar dates (YYYY-MM-DD) in salon TZ that have at least one slot possible (has business hours row).
+ *  Starts from tomorrow to avoid showing today when remaining slots may already be exhausted. */
 export async function suggestBookingDates(salonId: string, days = 14): Promise<string[]> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: salonId },
@@ -103,7 +104,8 @@ export async function suggestBookingDates(salonId: string, days = 14): Promise<s
   });
   const tz = salon.timezone;
   const out: string[] = [];
-  let d = DateTime.now().setZone(tz).startOf('day');
+  // Start from tomorrow so we never offer today with potentially no remaining slots
+  let d = DateTime.now().setZone(tz).startOf('day').plus({ days: 1 });
   for (let i = 0; i < days; i++) {
     const sun0 = d.weekday === 7 ? 0 : d.weekday;
     if (salon.businessHours.some((h) => h.dayOfWeek === sun0)) {
