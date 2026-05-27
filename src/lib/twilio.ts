@@ -18,11 +18,13 @@ export async function sendWhatsAppReply(toWaId: string, body: string): Promise<s
     logger.error({ hasClient: !!tw, hasFrom: !!env.TWILIO_WHATSAPP_FROM }, 'twilio_send_aborted_no_config');
     return null;
   }
-  const to = toWaId.startsWith('whatsapp:') ? toWaId : `whatsapp:${toWaId}`;
-  // Twilio requires "whatsapp:+XXXX" format for the from number
+  // Twilio WhatsApp requires E.164 with leading +: whatsapp:+27XXXXXXXXX
+  // normalizeWaId strips the +, so we must add it back here.
+  const toDigits = toWaId.replace(/^whatsapp:/i, '').replace(/^\+/, '');
+  const to = `whatsapp:+${toDigits}`;
   const from = env.TWILIO_WHATSAPP_FROM.startsWith('whatsapp:')
     ? env.TWILIO_WHATSAPP_FROM
-    : `whatsapp:${env.TWILIO_WHATSAPP_FROM}`;
+    : `whatsapp:+${env.TWILIO_WHATSAPP_FROM.replace(/^\+/, '')}`;
   try {
     const msg = await tw.messages.create({ from, to, body });
     logger.info({ sid: msg.sid, to, from }, 'twilio_message_sent');
