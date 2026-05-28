@@ -30,7 +30,7 @@ async function main() {
       parkingNotes: 'Lot behind building.',
       accessibility: 'Step-free entrance.',
       phoneDisplay: '+1 (555) 010-0199',
-      twilioWhatsAppFrom: 'whatsapp:+14155238886',
+      twilioWhatsAppFrom: process.env.TWILIO_WHATSAPP_FROM ?? 'whatsapp:+15559619390',
       metadata: {},
     },
     update: { name: 'MarineFlow Demo', tradingName: 'MarineFlow' },
