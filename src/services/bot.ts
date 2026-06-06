@@ -25,7 +25,7 @@ import {
   getStampBalance,
   redeemForNextBookingTx,
 } from './loyalty.js';
-import { createDepositCheckoutSession } from './payments.js';
+import { createPayfastPaymentUrl, createDepositCheckoutSession } from './payments.js';
 
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
@@ -927,13 +927,25 @@ async function handleConfirm(
   const needPay =
     !redeem.redeemed && ((service.depositCents ?? 0) > 0 || service.fullPay);
   if (needPay) {
-    const sessionUrl = await createDepositCheckoutSession({
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      appointmentId: appointment.id,
-      service,
-      mode: service.fullPay ? 'full' : 'deposit',
-    });
+    // PayFast preferred (ZAR, SA market); fall back to Stripe if PayFast not configured
+    const sessionUrl =
+      (await createPayfastPaymentUrl({
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: appointment.id,
+        service,
+        mode: service.fullPay ? 'full' : 'deposit',
+        customerFirstName: conv.customer.firstName ?? conv.customer.displayName ?? undefined,
+        customerLastName: conv.customer.lastName ?? undefined,
+        customerEmail: conv.customer.email ?? undefined,
+      })) ??
+      (await createDepositCheckoutSession({
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: appointment.id,
+        service,
+        mode: service.fullPay ? 'full' : 'deposit',
+      }));
     if (sessionUrl) {
       await reply(
         conv,

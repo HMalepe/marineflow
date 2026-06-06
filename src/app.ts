@@ -18,7 +18,7 @@ import { whatsappCloudMessaging, verifyWebhookRawBuffer } from './lib/integratio
 import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
 import { resolveTenantForInbound } from './lib/tenant.js';
-import { handleStripeWebhook } from './services/payments.js';
+import { handleStripeWebhook, handlePayfastITN } from './services/payments.js';
 import { serve } from 'inngest/fastify';
 import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
@@ -270,6 +270,17 @@ export async function buildApp() {
       return reply.send({ received: true });
     });
   }, { prefix: '/webhooks' });
+
+  // PayFast ITN (Instant Transaction Notification) — plain form POST, no raw body needed
+  app.post('/webhooks/payfast/itn', async (request, reply) => {
+    try {
+      await handlePayfastITN(request.body as Record<string, string>);
+    } catch (err) {
+      logger.error({ err }, 'payfast_itn_error');
+    }
+    // PayFast requires a 200 response regardless
+    return reply.code(200).send();
+  });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(plannedRoutes, { prefix: '/api/planned' });
