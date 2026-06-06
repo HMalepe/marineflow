@@ -714,6 +714,193 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── Service CRUD ────────────────────────────────────────────
+
+  app.get('/services', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const services = await db.service.findMany({
+        where: { deletedAt: null },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      });
+      return { services };
+    });
+  });
+
+  app.post<{
+    Body: {
+      name: string;
+      description?: string;
+      priceCents: number;
+      durationMin: number;
+      bufferMin?: number;
+      active?: boolean;
+    };
+  }>(
+    '/services',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { name, description, priceCents, durationMin, bufferMin, active } = request.body;
+        if (!name?.trim()) {
+          reply.code(400);
+          return { error: 'name_required' };
+        }
+        if (!Number.isFinite(priceCents) || priceCents < 0) {
+          reply.code(400);
+          return { error: 'invalid_price' };
+        }
+        if (!Number.isFinite(durationMin) || durationMin < 1) {
+          reply.code(400);
+          return { error: 'invalid_duration' };
+        }
+
+        const service = await db.service.create({
+          data: {
+            salonId: user.salonId,
+            name: name.trim(),
+            description: description?.trim() || null,
+            priceCents: Math.round(priceCents),
+            durationMin: Math.round(durationMin),
+            bufferMin: Math.round(bufferMin ?? 0),
+            active: active ?? true,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'service_create',
+            entity: 'Service',
+            entityId: service.id,
+          },
+        });
+
+        return { service };
+      });
+    },
+  );
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      description?: string | null;
+      priceCents?: number;
+      durationMin?: number;
+      bufferMin?: number;
+      active?: boolean;
+    };
+  }>(
+    '/services/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.service.findFirst({
+          where: { id: request.params.id, deletedAt: null },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        const { name, description, priceCents, durationMin, bufferMin, active } = request.body;
+        if (name !== undefined && !name.trim()) {
+          reply.code(400);
+          return { error: 'name_required' };
+        }
+        if (priceCents !== undefined && (!Number.isFinite(priceCents) || priceCents < 0)) {
+          reply.code(400);
+          return { error: 'invalid_price' };
+        }
+        if (durationMin !== undefined && (!Number.isFinite(durationMin) || durationMin < 1)) {
+          reply.code(400);
+          return { error: 'invalid_duration' };
+        }
+
+        const updated = await db.service.update({
+          where: { id: existing.id },
+          data: {
+            ...(name !== undefined && { name: name.trim() }),
+            ...(description !== undefined && { description: description?.trim() || null }),
+            ...(priceCents !== undefined && { priceCents: Math.round(priceCents) }),
+            ...(durationMin !== undefined && { durationMin: Math.round(durationMin) }),
+            ...(bufferMin !== undefined && { bufferMin: Math.round(bufferMin) }),
+            ...(active !== undefined && { active }),
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'service_update',
+            entity: 'Service',
+            entityId: existing.id,
+          },
+        });
+
+        return { service: updated };
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/services/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.service.findFirst({
+          where: { id: request.params.id, deletedAt: null },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        const apptCount = await db.appointment.count({
+          where: { serviceId: existing.id, status: { notIn: ['CANCELLED'] } },
+        });
+        if (apptCount > 0) {
+          await db.service.update({
+            where: { id: existing.id },
+            data: { active: false },
+          });
+          await db.auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'service_deactivate',
+              entity: 'Service',
+              entityId: existing.id,
+              payload: { reason: 'has_appointments' },
+            },
+          });
+          return { ok: true, deactivated: true };
+        }
+
+        await db.service.update({
+          where: { id: existing.id },
+          data: { deletedAt: new Date(), active: false },
+        });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'service_delete',
+            entity: 'Service',
+            entityId: existing.id,
+          },
+        });
+        return { ok: true };
+      });
+    },
+  );
+
   // ─── Analytics Overview ──────────────────────────────────────────────
   app.get('/analytics/overview', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
