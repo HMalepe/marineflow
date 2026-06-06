@@ -31,6 +31,7 @@ export default async function DashboardLayout({
           <NavLink href="/analytics">Analytics</NavLink>
           <NavLink href="/staff">Staff</NavLink>
           <NavLink href="/services">Services</NavLink>
+          <NavLink href="/faqs">FAQs</NavLink>
           <NavLink href="/branches">Branches</NavLink>
           {isOwner && <NavLink href="/billing">Billing</NavLink>}
           {isOwner && <NavLink href="/settings">Settings</NavLink>}

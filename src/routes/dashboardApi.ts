@@ -23,6 +23,42 @@ import {
 } from '../services/uploads.js';
 import { exportCustomerData, eraseCustomerData } from '../services/compliance.js';
 import { generateWebhookSecret } from '../services/webhookDelivery.js';
+import { embedFaqItem } from '../services/knowledge.js';
+import type { FaqStatus } from '@prisma/client';
+
+type FaqApiStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+function faqToApiStatus(status: FaqStatus): FaqApiStatus {
+  if (status === 'APPROVED') return 'APPROVED';
+  if (status === 'ARCHIVED') return 'REJECTED';
+  return 'PENDING';
+}
+
+function faqFromApiStatus(status: FaqApiStatus): FaqStatus {
+  if (status === 'APPROVED') return 'APPROVED';
+  if (status === 'REJECTED') return 'ARCHIVED';
+  return 'DRAFT';
+}
+
+function serializeFaq(item: {
+  id: string;
+  question: string;
+  answer: string;
+  sortOrder: number;
+  status: FaqStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: item.id,
+    question: item.question,
+    answer: item.answer,
+    sortOrder: item.sortOrder,
+    status: faqToApiStatus(item.status),
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
+  };
+}
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
@@ -896,6 +932,181 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: existing.id,
           },
         });
+        return { ok: true };
+      });
+    },
+  );
+
+  // ── FAQ CRUD ────────────────────────────────────────────────
+
+  app.get('/faqs', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const items = await db.faqItem.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      });
+      return { faqs: items.map(serializeFaq) };
+    });
+  });
+
+  app.post<{
+    Body: { question: string; answer: string; sortOrder?: number };
+  }>(
+    '/faqs',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { question, answer, sortOrder } = request.body;
+        if (!question?.trim() || !answer?.trim()) {
+          reply.code(400);
+          return { error: 'question_and_answer_required' };
+        }
+
+        let order = sortOrder;
+        if (order === undefined || !Number.isFinite(order)) {
+          const max = await db.faqItem.aggregate({ _max: { sortOrder: true } });
+          order = (max._max.sortOrder ?? -1) + 1;
+        }
+
+        const item = await db.faqItem.create({
+          data: {
+            salonId: user.salonId,
+            question: question.trim(),
+            answer: answer.trim(),
+            sortOrder: Math.round(order),
+            status: 'DRAFT',
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'faq_create',
+            entity: 'FaqItem',
+            entityId: item.id,
+          },
+        });
+
+        return { faq: serializeFaq(item) };
+      });
+    },
+  );
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      question?: string;
+      answer?: string;
+      sortOrder?: number;
+      status?: FaqApiStatus;
+    };
+  }>(
+    '/faqs/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.faqItem.findFirst({
+          where: { id: request.params.id },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        const { question, answer, sortOrder, status } = request.body;
+        if (question !== undefined && !question.trim()) {
+          reply.code(400);
+          return { error: 'question_required' };
+        }
+        if (answer !== undefined && !answer.trim()) {
+          reply.code(400);
+          return { error: 'answer_required' };
+        }
+        if (status !== undefined && !['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+          reply.code(400);
+          return { error: 'invalid_status' };
+        }
+
+        const dbStatus = status !== undefined ? faqFromApiStatus(status) : undefined;
+        const updated = await db.faqItem.update({
+          where: { id: existing.id },
+          data: {
+            ...(question !== undefined && { question: question.trim() }),
+            ...(answer !== undefined && { answer: answer.trim() }),
+            ...(sortOrder !== undefined && { sortOrder: Math.round(sortOrder) }),
+            ...(dbStatus !== undefined && {
+              status: dbStatus,
+              approvedAt: dbStatus === 'APPROVED' ? new Date() : null,
+              approvedBy: dbStatus === 'APPROVED' ? user.sub : null,
+            }),
+          },
+        });
+
+        if (dbStatus === 'APPROVED') {
+          try {
+            await embedFaqItem(updated.id, user.salonId);
+          } catch {
+            // Embedding is best-effort; FAQ still saved
+          }
+        } else if (dbStatus === 'ARCHIVED' || dbStatus === 'DRAFT') {
+          await db.faqEmbedding.deleteMany({ where: { faqItemId: updated.id } });
+        } else if (
+          dbStatus === undefined &&
+          (question !== undefined || answer !== undefined) &&
+          existing.status === 'APPROVED'
+        ) {
+          try {
+            await embedFaqItem(updated.id, user.salonId);
+          } catch {
+            // best-effort re-embed after content edit
+          }
+        }
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'faq_update',
+            entity: 'FaqItem',
+            entityId: existing.id,
+            payload: status ? { status } : undefined,
+          },
+        });
+
+        return { faq: serializeFaq(updated) };
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/faqs/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.faqItem.findFirst({
+          where: { id: request.params.id },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        await db.faqItem.delete({ where: { id: existing.id } });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'faq_delete',
+            entity: 'FaqItem',
+            entityId: existing.id,
+          },
+        });
+
         return { ok: true };
       });
     },
