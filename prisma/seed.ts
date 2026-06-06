@@ -6,6 +6,8 @@ const prisma = new PrismaClient();
 
 async function main() {
   const slug = process.env.DEFAULT_SALON_SLUG ?? 'demo-salon';
+  const twilioFrom =
+    process.env.TWILIO_WHATSAPP_FROM ?? 'whatsapp:+27624760899';
 
   const salon = await prisma.salon.upsert({
     where: { slug },
@@ -17,23 +19,32 @@ async function main() {
       industryTemplate: 'salon',
       status: 'TRIAL',
       tier: 'starter',
-      timezone: 'America/New_York',
-      defaultCurrency: 'usd',
-      locale: 'en',
+      timezone: 'Africa/Johannesburg',
+      defaultCurrency: 'zar',
+      locale: 'en-ZA',
       botName: 'Ava',
       toneFormality: 50,
       toneWarmth: 70,
       tonePlayfulness: 40,
       tonePace: 30,
       toneSalesEnergy: 30,
-      addressLine: '123 Main Street',
+      addressLine: 'Johannesburg, South Africa',
       parkingNotes: 'Lot behind building.',
       accessibility: 'Step-free entrance.',
-      phoneDisplay: '+1 (555) 010-0199',
-      twilioWhatsAppFrom: 'whatsapp:+14155238886',
+      phoneDisplay: '+27 10 000 0000',
+      twilioWhatsAppFrom: twilioFrom,
       metadata: {},
     },
-    update: { name: 'MarineFlow Demo', tradingName: 'MarineFlow' },
+    update: {
+      name: 'MarineFlow Demo',
+      tradingName: 'MarineFlow',
+      timezone: 'Africa/Johannesburg',
+      defaultCurrency: 'zar',
+      locale: 'en-ZA',
+      phoneDisplay: '+27 10 000 0000',
+      addressLine: 'Johannesburg, South Africa',
+      twilioWhatsAppFrom: twilioFrom,
+    },
   });
 
   const hourRows = [
@@ -167,6 +178,24 @@ async function main() {
     update: { passwordHash: hash },
   });
 
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD ?? 'ChangeMe123!';
+  const superAdminHash = await bcrypt.hash(superAdminPassword, 10);
+  await prisma.staffUser.upsert({
+    where: { email: 'holiday.malepe@gmail.com' },
+    create: {
+      salonId: salon.id,
+      email: 'holiday.malepe@gmail.com',
+      passwordHash: superAdminHash,
+      name: 'Holiday Malepe',
+      role: 'SUPER_ADMIN',
+    },
+    update: {
+      passwordHash: superAdminHash,
+      name: 'Holiday Malepe',
+      role: 'SUPER_ADMIN',
+    },
+  });
+
   await prisma.faqItem.deleteMany({ where: { salonId: salon.id } });
   await prisma.faqItem.createMany({
     data: [
@@ -209,6 +238,10 @@ async function main() {
   });
 
   console.log('Seed OK — salon', salon.slug, '| dashboard: owner@demo-salon.local / demo123');
+  console.log(
+    'SUPER_ADMIN — holiday.malepe@gmail.com /',
+    process.env.SUPER_ADMIN_PASSWORD ? '(SUPER_ADMIN_PASSWORD env)' : 'ChangeMe123!',
+  );
 }
 
 main()

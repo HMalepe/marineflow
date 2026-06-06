@@ -68,6 +68,7 @@ enum PaymentProvider {
 }
 
 enum StaffRole {
+  SUPER_ADMIN
   OWNER
   MANAGER
   STYLIST
