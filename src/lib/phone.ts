@@ -14,3 +14,11 @@ export function normalizeWaId(from: string): string {
   }
   return s;
 }
+
+/** Normalize a login phone to E.164 with + prefix (e.g. +27821234567). */
+export function normalizeLoginPhone(input: string): string {
+  const trimmed = input.trim();
+  const withPlus = trimmed.startsWith('+') ? trimmed : `+${trimmed}`;
+  const digits = normalizeWaId(withPlus);
+  return `+${digits}`;
+}
