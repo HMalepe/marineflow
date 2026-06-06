@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { requireAuth, requireRole } from './auth.js';
 import { withUserTenant } from '../lib/db/withUserTenant.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
@@ -1085,6 +1085,43 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  /** Full message thread for a conversation (dashboard chat view). */
+  app.get<{ Params: { id: string } }>('/conversations/:id/messages', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const conv = await db.conversation.findFirst({
+        where: { id: request.params.id },
+        include: {
+          customer: {
+            select: { id: true, waId: true, displayName: true, firstName: true, lastName: true },
+          },
+        },
+      });
+      if (!conv) {
+        reply.code(404);
+        return { error: 'conversation_not_found' };
+      }
+
+      const messages = await db.message.findMany({
+        where: { conversationId: conv.id },
+        orderBy: { createdAt: 'asc' },
+        take: 200,
+      });
+
+      return {
+        conversationId: conv.id,
+        step: conv.step,
+        customer: conv.customer,
+        messages: messages.map((m) => ({
+          id: m.id,
+          direction: m.direction,
+          body: m.body,
+          createdAt: m.createdAt,
+        })),
+      };
+    });
+  });
+
   /**
    * Staff sends a WhatsApp message directly to the customer.
    * Keeps the conversation in HANDOFF — the bot will remain silent.
@@ -1203,43 +1240,53 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
    * Release a conversation back to the bot — resets step to MENU and clears
    * the error counter so the bot greets the customer cleanly next time they text.
    */
+  const releaseConversationHandler = async (
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply,
+  ) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const conv = await db.conversation.findFirst({ where: { id: request.params.id } });
+      if (!conv) {
+        reply.code(404);
+        return { error: 'conversation_not_found' };
+      }
+
+      const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
+      const { errorCount: _drop, handoffByStaff: _drop2, ...cleanCtx } = currentCtx;
+
+      await db.conversation.update({
+        where: { id: conv.id },
+        data: {
+          step: ConversationStep.MENU,
+          context: cleanCtx as object,
+        },
+      });
+
+      await db.auditLog.create({
+        data: {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          action: 'conversation_release',
+          entity: 'Conversation',
+          entityId: conv.id,
+        },
+      });
+
+      return { ok: true, step: 'MENU' };
+    });
+  };
+
   app.post<{ Params: { id: string } }>(
     '/conversations/:id/release',
     { preHandler: requireRole('OWNER', 'MANAGER') },
-    async (request, reply) => {
-      return withUserTenant(request, reply, async (user) => {
-        const db = getTenantDb();
-        const conv = await db.conversation.findFirst({ where: { id: request.params.id } });
-        if (!conv) {
-          reply.code(404);
-          return { error: 'conversation_not_found' };
-        }
+    releaseConversationHandler,
+  );
 
-        const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
-        // Strip error counter and staff-handoff flag so the bot starts clean
-        const { errorCount: _drop, handoffByStaff: _drop2, ...cleanCtx } = currentCtx;
-
-        await db.conversation.update({
-          where: { id: conv.id },
-          data: {
-            step: ConversationStep.MENU,
-            context: cleanCtx as object,
-          },
-        });
-
-        await db.auditLog.create({
-          data: {
-            salonId: user.salonId,
-            actorUserId: user.sub,
-            action: 'conversation_release',
-            entity: 'Conversation',
-            entityId: conv.id,
-          },
-        });
-
-        return { ok: true, step: 'MENU' };
-      });
-    },
+  app.post<{ Params: { id: string } }>(
+    '/conversations/:id/handoff/release',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    releaseConversationHandler,
   );
 }
 

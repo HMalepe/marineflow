@@ -7,7 +7,12 @@ interface EventStreamOptions {
   onEvent?: (type: string, payload: Record<string, unknown>) => void;
 }
 
-const EVENT_TYPES = ['appointment.created', 'appointment.updated', 'message.received'];
+const EVENT_TYPES = [
+  'appointment.created',
+  'appointment.updated',
+  'message.received',
+  'bot.escalation',
+];
 
 export function useEventStream({ token, onEvent }: EventStreamOptions) {
   const [connected, setConnected] = useState(false);
