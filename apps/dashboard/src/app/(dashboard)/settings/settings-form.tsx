@@ -5,6 +5,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 
+function formatRole(role: string): string {
+  return role.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface Props {
   user: {
     id: string;
@@ -31,16 +35,16 @@ export function SettingsForm({ user }: Props) {
 
       <Separator />
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-start gap-6">
         <div>
           <p className="text-sm font-medium">Role</p>
-          <Badge variant="secondary" className="mt-1">
-            {user.role}
+          <Badge variant="secondary" className="mt-1 capitalize">
+            {formatRole(user.role)}
           </Badge>
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium">Salon ID</p>
-          <code className="text-xs text-muted-foreground">{user.salonId}</code>
+          <code className="text-xs text-muted-foreground break-all">{user.salonId}</code>
         </div>
       </div>
     </div>

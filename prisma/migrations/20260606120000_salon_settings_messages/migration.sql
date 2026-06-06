@@ -1,0 +1,7 @@
+ALTER TABLE "Salon"
+  ADD COLUMN IF NOT EXISTS "openTime" TEXT DEFAULT '09:00',
+  ADD COLUMN IF NOT EXISTS "closeTime" TEXT DEFAULT '17:00',
+  ADD COLUMN IF NOT EXISTS "welcomeMessage" TEXT,
+  ADD COLUMN IF NOT EXISTS "afterHoursMessage" TEXT;
+
+ALTER TABLE "Salon" ALTER COLUMN "timezone" SET DEFAULT 'Africa/Johannesburg';

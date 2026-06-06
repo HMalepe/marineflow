@@ -76,6 +76,125 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/settings', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: {
+          id: true,
+          name: true,
+          timezone: true,
+          openTime: true,
+          closeTime: true,
+          welcomeMessage: true,
+          afterHoursMessage: true,
+          status: true,
+          botName: true,
+        },
+      });
+      return {
+        salon: {
+          ...salon,
+          botActive: salon.status === 'ACTIVE',
+        },
+      };
+    });
+  });
+
+  app.patch<{
+    Body: {
+      openTime?: string;
+      closeTime?: string;
+      timezone?: string;
+      welcomeMessage?: string | null;
+      afterHoursMessage?: string | null;
+      botActive?: boolean;
+      status?: 'ACTIVE' | 'SUSPENDED';
+    };
+  }>(
+    '/settings',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const {
+          openTime,
+          closeTime,
+          timezone,
+          welcomeMessage,
+          afterHoursMessage,
+          botActive,
+          status,
+        } = request.body;
+
+        const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+        if (openTime !== undefined && !timeRe.test(openTime)) {
+          reply.code(400);
+          return { error: 'invalid_open_time' };
+        }
+        if (closeTime !== undefined && !timeRe.test(closeTime)) {
+          reply.code(400);
+          return { error: 'invalid_close_time' };
+        }
+        if (timezone !== undefined && !timezone.trim()) {
+          reply.code(400);
+          return { error: 'invalid_timezone' };
+        }
+
+        let nextStatus = status;
+        if (botActive !== undefined) {
+          nextStatus = botActive ? 'ACTIVE' : 'SUSPENDED';
+        }
+
+        const updated = await db.salon.update({
+          where: { id: user.salonId },
+          data: {
+            ...(openTime !== undefined && { openTime }),
+            ...(closeTime !== undefined && { closeTime }),
+            ...(timezone !== undefined && { timezone: timezone.trim() }),
+            ...(welcomeMessage !== undefined && { welcomeMessage: welcomeMessage?.trim() || null }),
+            ...(afterHoursMessage !== undefined && {
+              afterHoursMessage: afterHoursMessage?.trim() || null,
+            }),
+            ...(nextStatus !== undefined && {
+              status: nextStatus,
+              statusChangedAt: new Date(),
+            }),
+          },
+          select: {
+            id: true,
+            name: true,
+            timezone: true,
+            openTime: true,
+            closeTime: true,
+            welcomeMessage: true,
+            afterHoursMessage: true,
+            status: true,
+            botName: true,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'settings_update',
+            entity: 'Salon',
+            entityId: user.salonId,
+          },
+        });
+
+        return {
+          salon: {
+            ...updated,
+            botActive: updated.status === 'ACTIVE',
+          },
+        };
+      });
+    },
+  );
+
   app.get('/appointments/today', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();

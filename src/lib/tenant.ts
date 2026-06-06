@@ -84,7 +84,7 @@ export async function resolveTenantForInbound(input: {
 }
 
 export function assertTenantActive(tenant: ResolvedTenant): void {
-  if (tenant.status === 'SUSPENDED' || tenant.status === 'CHURNED') {
+  if (tenant.status === 'CHURNED') {
     throw new Error('tenant_inactive');
   }
 }

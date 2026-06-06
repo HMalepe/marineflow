@@ -134,13 +134,18 @@ model Salon {
   tier           String       @default("starter")
   agencyId       String?
   agency         Agency?      @relation(fields: [agencyId], references: [id], onDelete: SetNull)
-  timezone       String       @default("America/New_York")
+  timezone       String       @default("Africa/Johannesburg")
   defaultCurrency String      @default("usd")
   locale         String       @default("en")
   addressLine    String?
   parkingNotes   String?
   accessibility  String?
   phoneDisplay   String?
+  /// Default daily open/close for bot after-hours messaging (HH:MM, salon timezone)
+  openTime       String?      @default("09:00")
+  closeTime      String?      @default("17:00")
+  welcomeMessage String?      @db.Text
+  afterHoursMessage String?   @db.Text
   botName        String       @default("Ava")
   botVoiceBrief  String?      @db.Text
   toneFormality  Int          @default(50)

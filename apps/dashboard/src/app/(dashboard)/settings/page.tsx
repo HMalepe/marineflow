@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { SettingsForm } from './settings-form';
+import { SalonSettingsForm } from './salon-settings-form';
 
 interface MeResponse {
   user: {
@@ -25,11 +26,13 @@ export default async function SettingsPage() {
     // handled in UI
   }
 
+  const canEditSalon = user?.role === 'OWNER' || user?.role === 'MANAGER';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
-        <p className="text-muted-foreground">Manage your account and salon</p>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground text-sm mt-1">Manage your account, salon hours, and WhatsApp bot</p>
       </div>
 
       <Card>
@@ -45,6 +48,18 @@ export default async function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {canEditSalon && token && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Salon &amp; WhatsApp Bot</CardTitle>
+            <CardDescription>Hours, automated messages, and bot availability</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SalonSettingsForm token={token} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -110,8 +110,11 @@ async function reply(
 }
 
 function mainMenu(salon: Salon): string {
+  const welcome =
+    salon.welcomeMessage?.trim() ||
+    `Welcome to ${salon.name}! Reply with a number:`;
   return [
-    `Welcome to ${salon.name}! Reply with a number:`,
+    welcome,
     '1 — Book an appointment',
     '2 — My bookings',
     '3 — My rewards / loyalty',
@@ -120,6 +123,29 @@ function mainMenu(salon: Salon): string {
     '6 — Hours & address',
     '0 — Talk to a human (we will reply soon)',
   ].join('\n');
+}
+
+function parseHmToMin(hm: string): number {
+  const [h, m] = hm.split(':').map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+function isWithinBusinessHours(salon: Salon, now = new Date()): boolean {
+  const open = salon.openTime ?? '09:00';
+  const close = salon.closeTime ?? '17:00';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: salon.timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  const nowMin = hour * 60 + minute;
+  const openMin = parseHmToMin(open);
+  const closeMin = parseHmToMin(close);
+  if (closeMin <= openMin) return nowMin >= openMin || nowMin < closeMin;
+  return nowMin >= openMin && nowMin < closeMin;
 }
 
 export async function handleInboundWhatsApp(input: {
@@ -252,6 +278,53 @@ async function processInboundWhatsApp(
   emitMessageReceived(salon.id, customer.id, text).catch((err) =>
     logger.warn({ err }, 'sse_emit_failed'),
   );
+
+  if (salon.status !== 'ACTIVE') {
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: salon.id,
+        customerId: customer.id,
+        status: 'OPEN',
+        subject: 'Bot paused — customer needs human reply',
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: `Bot is paused. Customer message: ${text}`,
+          },
+        },
+      },
+    });
+    await saveCtx(conv.id, {}, ConversationStep.HANDOFF);
+    await reply(
+      conv,
+      salon.afterHoursMessage?.trim() ||
+        'Thanks for your message. Our team will reply as soon as possible.',
+    );
+    return;
+  }
+
+  if (!isWithinBusinessHours(salon) && ['GREETING', 'MENU', 'IDLE'].includes(conv.step)) {
+    const afterHours =
+      salon.afterHoursMessage?.trim() ||
+      `We're currently closed. Our hours are ${salon.openTime ?? '09:00'}–${salon.closeTime ?? '17:00'}. We'll reply when we're back.`;
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: salon.id,
+        customerId: customer.id,
+        status: 'OPEN',
+        subject: 'After-hours message',
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: `After-hours inbound: ${text}`,
+          },
+        },
+      },
+    });
+    await saveCtx(conv.id, {}, ConversationStep.HANDOFF);
+    await reply(conv, afterHours);
+    return;
+  }
 
   const lower = text.toLowerCase();
   if (lower === 'undo' || lower === 'back') {
