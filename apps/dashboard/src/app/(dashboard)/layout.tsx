@@ -24,19 +24,28 @@ export default async function DashboardLayout({
           <p className="text-xs text-muted-foreground capitalize">{user.role.toLowerCase().replace('_', ' ')}</p>
         </div>
         <nav className="flex-1 p-4 space-y-1">
-          <NavLink href="/">Overview</NavLink>
-          <NavLink href="/appointments">Appointments</NavLink>
-          <NavLink href="/customers">Customers</NavLink>
-          <NavLink href="/conversations">Conversations</NavLink>
-          <NavLink href="/analytics">Analytics</NavLink>
-          <NavLink href="/staff">Staff</NavLink>
-          <NavLink href="/services">Services</NavLink>
-          <NavLink href="/faqs">FAQs</NavLink>
-          <NavLink href="/branches">Branches</NavLink>
-          {isOwner && <NavLink href="/billing">Billing</NavLink>}
-          {isOwner && <NavLink href="/settings">Settings</NavLink>}
-          {isAdmin && <NavLink href="/agency">Agency</NavLink>}
-          {isAdmin && <NavLink href="/admin">Admin</NavLink>}
+          {isAdmin ? (
+            <>
+              <NavLink href="/">Overview</NavLink>
+              <NavLink href="/agency">Salons</NavLink>
+              <NavLink href="/admin">Admin</NavLink>
+              <NavLink href="/analytics">Analytics</NavLink>
+            </>
+          ) : (
+            <>
+              <NavLink href="/">Overview</NavLink>
+              <NavLink href="/appointments">Appointments</NavLink>
+              <NavLink href="/customers">Customers</NavLink>
+              <NavLink href="/conversations">Conversations</NavLink>
+              <NavLink href="/analytics">Analytics</NavLink>
+              <NavLink href="/staff">Staff</NavLink>
+              <NavLink href="/services">Services</NavLink>
+              <NavLink href="/faqs">Bot FAQs</NavLink>
+              <NavLink href="/branches">Branches</NavLink>
+              {isOwner && <NavLink href="/billing">Billing</NavLink>}
+              {isOwner && <NavLink href="/settings">Settings</NavLink>}
+            </>
+          )}
         </nav>
         <div className="p-4 border-t">
           <LogoutButton />
