@@ -505,6 +505,59 @@ export async function adminApiRoutes(app: FastifyInstance) {
     return { pastDue, trialExpiring, overQuota };
   });
 
+  // ─── Billing Overview ─────────────────────────────────────────────
+  app.get('/billing', async () => {
+    const [activeSubscriptions, allSubscriptions, statusGroups] = await Promise.all([
+      prisma.salonSubscription.findMany({
+        where: { status: 'ACTIVE' },
+        include: { plan: true },
+      }),
+      prisma.salonSubscription.findMany({
+        include: {
+          plan: true,
+          salon: { select: { id: true, name: true, slug: true, status: true, tier: true, createdAt: true } },
+        },
+        orderBy: { salon: { createdAt: 'desc' } },
+      }),
+      prisma.salonSubscription.groupBy({
+        by: ['status'],
+        _count: { status: true },
+      }),
+    ]);
+
+    const mrr = activeSubscriptions.reduce((sum, sub) => sum + sub.plan.priceMonthly, 0);
+    const arr = mrr * 12;
+
+    const byStatus: Record<string, number> = {
+      ACTIVE: 0,
+      TRIAL: 0,
+      PAST_DUE: 0,
+      CANCELLED: 0,
+      PAUSED: 0,
+    };
+    for (const g of statusGroups) {
+      byStatus[g.status] = g._count.status;
+    }
+
+    const subscriptions = allSubscriptions.map((sub) => ({
+      salonId: sub.salon.id,
+      salonName: sub.salon.name,
+      salonSlug: sub.salon.slug,
+      salonStatus: sub.salon.status,
+      tier: sub.salon.tier,
+      status: sub.status,
+      planId: sub.planId,
+      planName: sub.plan.name,
+      priceMonthly: sub.plan.priceMonthly,
+      currentPeriodEnd: sub.currentPeriodEnd,
+      trialEndsAt: sub.trialEndsAt,
+      cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+      createdAt: sub.salon.createdAt,
+    }));
+
+    return { mrr, arr, byStatus, subscriptions };
+  });
+
   // ─── Observability ───────────────────────────────────────────────────
   app.get('/observability/metrics', async () => {
     return getPlatformMetrics();

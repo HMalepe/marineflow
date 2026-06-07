@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { impersonateSalon } from './actions';
 import { formatSaPhone, isValidSaPhoneLocal, stripPhoneDigits, formatSaPhoneDisplay } from '@/lib/phone';
 import { ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +149,7 @@ export function AdminSalonList({ token }: Props) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [addUserSalon, setAddUserSalon] = useState<Salon | null>(null);
+  const [impersonating, setImpersonating] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<CreatedSalonCredentials | null>(null);
 
   const [createForm, setCreateForm] = useState({
@@ -334,6 +336,17 @@ export function AdminSalonList({ token }: Props) {
     }
   }
 
+  async function handleImpersonate(salon: Salon) {
+    setImpersonating(salon.id);
+    try {
+      const res = await adminFetch<{ token: string }>(`/salons/${salon.id}/impersonate`, token, { method: 'POST' });
+      await impersonateSalon(res.token);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Impersonation failed', 'error');
+      setImpersonating(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -363,7 +376,7 @@ export function AdminSalonList({ token }: Props) {
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Staff</TableHead>
                 <TableHead className="text-right">Customers</TableHead>
-                <TableHead className="text-right w-[100px]">Actions</TableHead>
+                <TableHead className="text-right w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -398,9 +411,14 @@ export function AdminSalonList({ token }: Props) {
                     <TableCell className="text-right tabular-nums">{s.staffUserCount}</TableCell>
                     <TableCell className="text-right tabular-nums">{s.customerCount}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => setAddUserSalon(s)}>
-                        Add User
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" disabled={impersonating === s.id} onClick={() => void handleImpersonate(s)}>
+                          {impersonating === s.id ? '…' : 'Login as'}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setAddUserSalon(s)}>
+                          Add User
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
