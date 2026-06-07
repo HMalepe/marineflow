@@ -42,9 +42,8 @@ interface Salon {
 
 interface CreatedSalonCredentials {
   salonName: string;
+  whatsappNumber: string;
   ownerEmail: string;
-  ownerPassword: string;
-  ownerPhone?: string;
 }
 
 interface Props {
@@ -149,8 +148,6 @@ export function AdminSalonList({ token }: Props) {
     slugManual: false,
     ownerName: '',
     ownerEmail: '',
-    ownerPhone: '',
-    ownerPassword: '',
     whatsappNumber: '',
     timezone: 'Africa/Johannesburg',
     industryTemplate: 'salon',
@@ -211,8 +208,6 @@ export function AdminSalonList({ token }: Props) {
       slugManual: false,
       ownerName: '',
       ownerEmail: '',
-      ownerPhone: '',
-      ownerPassword: '',
       whatsappNumber: '',
       timezone: 'Africa/Johannesburg',
       industryTemplate: 'salon',
@@ -230,21 +225,13 @@ export function AdminSalonList({ token }: Props) {
       showToast('Fill in all required fields', 'error');
       return;
     }
-    if (createForm.ownerPassword.length < 8) {
-      showToast('Owner password must be at least 8 characters', 'error');
-      return;
-    }
-    if (createForm.ownerPhone && !isValidSaPhoneLocal(stripPhoneDigits(createForm.ownerPhone))) {
-      showToast('Enter a valid owner phone number', 'error');
+    if (!createForm.whatsappNumber.trim()) {
+      showToast('WhatsApp business number is required', 'error');
       return;
     }
 
     setSavingCreate(true);
     try {
-      const ownerPhone = createForm.ownerPhone.trim()
-        ? formatSaPhone(createForm.ownerPhone)
-        : undefined;
-
       await adminFetch<{ salon: Salon; user: { email: string; phone: string | null } }>(
         '/salons',
         token,
@@ -255,22 +242,17 @@ export function AdminSalonList({ token }: Props) {
             slug,
             ownerName: createForm.ownerName.trim(),
             ownerEmail: createForm.ownerEmail.trim(),
-            ownerPassword: createForm.ownerPassword,
-            ...(ownerPhone && { ownerPhone }),
             timezone: createForm.timezone,
             industryTemplate: createForm.industryTemplate,
-            ...(createForm.whatsappNumber.trim() && {
-              whatsappNumber: createForm.whatsappNumber.trim(),
-            }),
+            whatsappNumber: createForm.whatsappNumber.trim(),
           }),
         },
       );
 
       setCredentials({
         salonName: createForm.name.trim(),
+        whatsappNumber: createForm.whatsappNumber.trim(),
         ownerEmail: createForm.ownerEmail.trim(),
-        ownerPassword: createForm.ownerPassword,
-        ...(ownerPhone && { ownerPhone }),
       });
       setCreateOpen(false);
       resetCreateForm();
@@ -417,16 +399,14 @@ export function AdminSalonList({ token }: Props) {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="text-muted-foreground">
-              Login credentials for <span className="font-medium text-foreground">{credentials.salonName}</span>
+              First-time login for <span className="font-medium text-foreground">{credentials.salonName}</span>
               {' '}(shown once — copy now):
             </p>
             <dl className="grid gap-1 font-mono text-xs bg-background/80 rounded-lg border p-3">
-              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Dashboard:</dt><dd>{DASHBOARD_URL}</dd></div>
-              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Email:</dt><dd>{credentials.ownerEmail}</dd></div>
-              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Password:</dt><dd>{credentials.ownerPassword}</dd></div>
-              {credentials.ownerPhone && (
-                <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Phone:</dt><dd>{credentials.ownerPhone} (same password)</dd></div>
-              )}
+              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Dashboard:</dt><dd>{DASHBOARD_URL}/login</dd></div>
+              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">WhatsApp #:</dt><dd>{credentials.whatsappNumber}</dd></div>
+              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Steps:</dt><dd>Enter WhatsApp number → create password → done</dd></div>
+              <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Email fallback:</dt><dd>{credentials.ownerEmail}</dd></div>
             </dl>
             <Button variant="outline" size="sm" onClick={() => setCredentials(null)}>Dismiss</Button>
           </CardContent>
@@ -469,27 +449,17 @@ export function AdminSalonList({ token }: Props) {
               <Input id="owner-email" type="email" value={createForm.ownerEmail} onChange={(e) => setCreateForm((f) => ({ ...f, ownerEmail: e.target.value }))} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="owner-phone">Owner phone</Label>
-              <div className="flex">
-                <span className="inline-flex items-center rounded-l-lg border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">+27</span>
-                <Input
-                  id="owner-phone"
-                  type="tel"
-                  inputMode="numeric"
-                  value={createForm.ownerPhone}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, ownerPhone: formatSaPhoneDisplay(e.target.value) }))}
-                  placeholder="82 123 4567"
-                  className="rounded-l-none"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="owner-password">Owner password *</Label>
-              <Input id="owner-password" type="password" minLength={8} value={createForm.ownerPassword} onChange={(e) => setCreateForm((f) => ({ ...f, ownerPassword: e.target.value }))} required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="whatsapp">WhatsApp number</Label>
-              <Input id="whatsapp" placeholder="+27821234567 or whatsapp:+27…" value={createForm.whatsappNumber} onChange={(e) => setCreateForm((f) => ({ ...f, whatsappNumber: e.target.value }))} />
+              <Label htmlFor="whatsapp">WhatsApp business number *</Label>
+              <Input
+                id="whatsapp"
+                placeholder="+27821234567"
+                value={createForm.whatsappNumber}
+                onChange={(e) => setCreateForm((f) => ({ ...f, whatsappNumber: e.target.value }))}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                The number registered on Meta for this salon. The owner uses it to sign in and create their password.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="timezone">Timezone</Label>

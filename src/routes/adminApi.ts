@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
+import { randomBytes } from 'node:crypto';
 import type { StaffRole, TenantStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { normalizeLoginPhone } from '../lib/phone.js';
@@ -94,10 +95,13 @@ export async function adminApiRoutes(app: FastifyInstance) {
     if (!name || !slug || !ownerEmail || !ownerName) {
       return reply.code(400).send({ error: 'missing_required_fields' });
     }
+    if (!body.whatsappNumber?.trim()) {
+      return reply.code(400).send({ error: 'whatsapp_number_required' });
+    }
     if (!isValidSalonSlug(slug)) {
       return reply.code(400).send({ error: 'invalid_slug_format' });
     }
-    if (ownerPassword.length < 8) {
+    if (ownerPassword.length > 0 && ownerPassword.length < 8) {
       return reply.code(400).send({ error: 'password_too_short' });
     }
 
@@ -118,7 +122,10 @@ export async function adminApiRoutes(app: FastifyInstance) {
       ? normalizeTwilioWhatsAppFrom(body.whatsappNumber)
       : undefined;
 
-    const passwordHash = await bcrypt.hash(ownerPassword, BCRYPT_ROUNDS);
+    const passwordHash = await bcrypt.hash(
+      ownerPassword.length >= 8 ? ownerPassword : randomBytes(32).toString('hex'),
+      BCRYPT_ROUNDS,
+    );
 
     const result = await prisma.$transaction(async (tx) => {
       const salon = await tx.salon.create({
