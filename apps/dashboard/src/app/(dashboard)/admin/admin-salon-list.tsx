@@ -46,6 +46,13 @@ interface CreatedSalonCredentials {
   ownerEmail: string;
 }
 
+interface TwilioWhatsAppOption {
+  phoneE164: string;
+  twilioWhatsAppFrom: string;
+  status: string | null;
+  assignedSalon: { id: string; name: string } | null;
+}
+
 interface Props {
   token: string;
 }
@@ -161,6 +168,8 @@ export function AdminSalonList({ token }: Props) {
   });
   const [savingCreate, setSavingCreate] = useState(false);
   const [savingUser, setSavingUser] = useState(false);
+  const [twilioNumbers, setTwilioNumbers] = useState<TwilioWhatsAppOption[]>([]);
+  const [loadingTwilioNumbers, setLoadingTwilioNumbers] = useState(false);
 
   const pages = Math.max(1, Math.ceil(total / 25));
 
@@ -173,6 +182,15 @@ export function AdminSalonList({ token }: Props) {
     const t = setTimeout(() => setToast(null), 4500);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (!createOpen) return;
+    setLoadingTwilioNumbers(true);
+    void adminFetch<{ numbers: TwilioWhatsAppOption[] }>('/twilio/whatsapp-numbers', token)
+      .then((data) => setTwilioNumbers(data.numbers))
+      .catch(() => showToast('Could not load Twilio WhatsApp numbers', 'error'))
+      .finally(() => setLoadingTwilioNumbers(false));
+  }, [createOpen, token, showToast]);
 
   const loadSalons = useCallback(async () => {
     setLoading(true);
@@ -259,7 +277,17 @@ export function AdminSalonList({ token }: Props) {
       showToast('Salon created', 'success');
       await loadSalons();
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Create failed', 'error');
+      if (e instanceof ApiError) {
+        if (e.message.includes('whatsapp_not_on_twilio')) {
+          showToast('That number is not on your Twilio account', 'error');
+        } else if (e.message.includes('whatsapp_already_assigned')) {
+          showToast('That number is already assigned to another salon', 'error');
+        } else {
+          showToast(e.message, 'error');
+        }
+      } else {
+        showToast('Create failed', 'error');
+      }
     } finally {
       setSavingCreate(false);
     }
@@ -450,15 +478,26 @@ export function AdminSalonList({ token }: Props) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="whatsapp">WhatsApp business number *</Label>
-              <Input
+              <select
                 id="whatsapp"
-                placeholder="+27821234567"
                 value={createForm.whatsappNumber}
                 onChange={(e) => setCreateForm((f) => ({ ...f, whatsappNumber: e.target.value }))}
                 required
-              />
+                disabled={loadingTwilioNumbers}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">
+                  {loadingTwilioNumbers ? 'Loading Twilio numbers…' : 'Select a Twilio WhatsApp number…'}
+                </option>
+                {twilioNumbers.map((n) => (
+                  <option key={n.phoneE164} value={n.phoneE164} disabled={!!n.assignedSalon}>
+                    {n.phoneE164}
+                    {n.assignedSalon ? ` (assigned to ${n.assignedSalon.name})` : ''}
+                  </option>
+                ))}
+              </select>
               <p className="text-xs text-muted-foreground">
-                The number registered on Meta for this salon. The owner uses it to sign in and create their password.
+                Only numbers registered on your Twilio account. The owner uses this to sign in and create their password.
               </p>
             </div>
             <div className="space-y-2">

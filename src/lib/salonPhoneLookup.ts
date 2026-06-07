@@ -1,30 +1,27 @@
 import { prisma } from './prisma.js';
 import { normalizeLoginPhone, normalizeWaId } from './phone.js';
+import { findTwilioSenderByPhone, isTwilioRegisteredWhatsAppNumber } from './twilioSenders.js';
 
-export function phonesMatch(a: string | null | undefined, b: string): boolean {
-  if (!a?.trim()) return false;
-  return normalizeWaId(a) === normalizeWaId(b);
-}
-
-/** Find salon whose registered WhatsApp business number matches E.164 phone. */
+/** Find salon linked to a Twilio-registered WhatsApp business number. */
 export async function findSalonByWhatsAppPhone(phoneE164: string) {
+  if (!(await isTwilioRegisteredWhatsAppNumber(phoneE164))) {
+    return null;
+  }
+
   const targetDigits = normalizeWaId(phoneE164);
   const salons = await prisma.salon.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, twilioWhatsAppFrom: { not: null } },
     select: {
       id: true,
       name: true,
       slug: true,
       twilioWhatsAppFrom: true,
-      phoneDisplay: true,
     },
   });
 
   return (
     salons.find(
-      (s) =>
-        (s.twilioWhatsAppFrom && normalizeWaId(s.twilioWhatsAppFrom) === targetDigits) ||
-        phonesMatch(s.phoneDisplay, phoneE164),
+      (s) => s.twilioWhatsAppFrom && normalizeWaId(s.twilioWhatsAppFrom) === targetDigits,
     ) ?? null
   );
 }
@@ -44,3 +41,5 @@ export function validateStrongPassword(password: string): string | null {
 export function ownerEmailForSalon(slug: string): string {
   return `owner+${slug}@marineflow.local`;
 }
+
+export { findTwilioSenderByPhone, isTwilioRegisteredWhatsAppNumber };

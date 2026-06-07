@@ -49,6 +49,10 @@ export type Env = z.infer<typeof envSchema>;
 
 export const env: Env = envSchema.parse(process.env);
 
+export function isTwilioAccountConfigured(): boolean {
+  return Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN);
+}
+
 export function isTwilioConfigured(): boolean {
-  return Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_WHATSAPP_FROM);
+  return Boolean(isTwilioAccountConfigured() && env.TWILIO_WHATSAPP_FROM);
 }

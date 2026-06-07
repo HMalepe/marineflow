@@ -1,15 +1,21 @@
 import twilio from 'twilio';
-import { env, isTwilioConfigured } from '../config.js';
+import { env, isTwilioAccountConfigured } from '../config.js';
 import { logger } from './logger.js';
 
 let client: ReturnType<typeof twilio> | null = null;
 
-export function getTwilioClient(): ReturnType<typeof twilio> | null {
-  if (!isTwilioConfigured()) return null;
+/** Twilio REST client (account SID + auth token only). */
+export function getTwilioAccountClient(): ReturnType<typeof twilio> | null {
+  if (!isTwilioAccountConfigured()) return null;
   if (!client) {
     client = twilio(env.TWILIO_ACCOUNT_SID!, env.TWILIO_AUTH_TOKEN!);
   }
   return client;
+}
+
+/** @deprecated Prefer getTwilioAccountClient — same client, clearer name. */
+export function getTwilioClient(): ReturnType<typeof twilio> | null {
+  return getTwilioAccountClient();
 }
 
 export async function sendWhatsAppReply(toWaId: string, body: string): Promise<string | null> {

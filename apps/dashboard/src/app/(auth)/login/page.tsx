@@ -252,8 +252,8 @@ export default function LoginPage() {
                     />
                   </div>
                   <p id="phone-hint" className="text-xs text-muted-foreground leading-relaxed">
-                    Enter the WhatsApp business number registered for your salon. No Meta account
-                    needed — we&apos;ll recognize it and let you set up your password on first visit.
+                    Enter the WhatsApp business number assigned to your salon on MarineFlow (from our Twilio account).
+                    On first visit you&apos;ll create your password — no Meta account needed.
                   </p>
                 </div>
                 {error && (

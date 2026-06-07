@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma.js';
 import { normalizeLoginPhone } from '../lib/phone.js';
 import {
   findSalonByWhatsAppPhone,
+  isTwilioRegisteredWhatsAppNumber,
   isValidSaLoginPhone,
   ownerEmailForSalon,
   validateStrongPassword,
@@ -59,6 +60,10 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'invalid_phone' });
     }
 
+    if (!(await isTwilioRegisteredWhatsAppNumber(phone))) {
+      return reply.code(404).send({ error: 'number_not_on_twilio' });
+    }
+
     const existingUser = await prisma.staffUser.findUnique({
       where: { phone },
       include: { salon: { select: { name: true } } },
@@ -78,7 +83,7 @@ export async function authRoutes(app: FastifyInstance) {
       };
     }
 
-    return reply.code(404).send({ error: 'number_not_registered' });
+    return reply.code(404).send({ error: 'number_not_linked' });
   });
 
   /** First-time setup: owner sets password for their registered WhatsApp business number. */
@@ -97,6 +102,10 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'invalid_phone' });
     }
 
+    if (!(await isTwilioRegisteredWhatsAppNumber(phone))) {
+      return reply.code(404).send({ error: 'number_not_on_twilio' });
+    }
+
     const passwordError = validateStrongPassword(password);
     if (passwordError) {
       return reply.code(400).send({ error: 'weak_password', message: passwordError });
@@ -109,7 +118,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const salon = await findSalonByWhatsAppPhone(phone);
     if (!salon) {
-      return reply.code(404).send({ error: 'number_not_registered' });
+      return reply.code(404).send({ error: 'number_not_linked' });
     }
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
@@ -157,6 +166,9 @@ export async function authRoutes(app: FastifyInstance) {
       const phone = normalizeLoginPhone(phoneRaw);
       if (!isValidSaLoginPhone(phone)) {
         return reply.code(400).send({ error: 'invalid_phone' });
+      }
+      if (!(await isTwilioRegisteredWhatsAppNumber(phone))) {
+        return reply.code(401).send({ error: 'number_not_on_twilio' });
       }
       user = await prisma.staffUser.findUnique({ where: { phone } });
     } else if (email) {

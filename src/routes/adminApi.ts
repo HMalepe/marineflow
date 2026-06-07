@@ -7,8 +7,8 @@ import { normalizeLoginPhone } from '../lib/phone.js';
 import {
   DEFAULT_BUSINESS_HOURS,
   isValidSalonSlug,
-  normalizeTwilioWhatsAppFrom,
 } from '../lib/salonDefaults.js';
+import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 
 const BCRYPT_ROUNDS = 12;
@@ -71,6 +71,24 @@ export async function adminApiRoutes(app: FastifyInstance) {
     return { token, admin: { id: admin.id, email: admin.email, name: admin.name } };
   });
 
+  // ─── Twilio WhatsApp numbers (platform account) ────────────────────
+  app.get('/twilio/whatsapp-numbers', async () => {
+    const senders = await listTwilioWhatsAppSenders();
+    const assigned = await prisma.salon.findMany({
+      where: { deletedAt: null, twilioWhatsAppFrom: { not: null } },
+      select: { id: true, name: true, twilioWhatsAppFrom: true },
+    });
+
+    return {
+      numbers: senders.map((s) => ({
+        phoneE164: s.phoneE164,
+        twilioWhatsAppFrom: s.twilioWhatsAppFrom,
+        status: s.status ?? null,
+        assignedSalon: assigned.find((a) => a.twilioWhatsAppFrom === s.twilioWhatsAppFrom) ?? null,
+      })),
+    };
+  });
+
   // ─── Create Salon ──────────────────────────────────────────────────
   app.post('/salons', async (request, reply) => {
     const body = request.body as {
@@ -118,9 +136,19 @@ export async function adminApiRoutes(app: FastifyInstance) {
       if (phoneTaken) return reply.code(409).send({ error: 'phone_taken' });
     }
 
-    const twilioWhatsAppFrom = body.whatsappNumber?.trim()
-      ? normalizeTwilioWhatsAppFrom(body.whatsappNumber)
-      : undefined;
+    const twilioSender = await findTwilioSenderByPhone(body.whatsappNumber.trim());
+    if (!twilioSender) {
+      return reply.code(400).send({ error: 'whatsapp_not_on_twilio' });
+    }
+
+    const alreadyAssigned = await prisma.salon.findFirst({
+      where: { deletedAt: null, twilioWhatsAppFrom: twilioSender.twilioWhatsAppFrom },
+    });
+    if (alreadyAssigned) {
+      return reply.code(409).send({ error: 'whatsapp_already_assigned', salonName: alreadyAssigned.name });
+    }
+
+    const twilioWhatsAppFrom = twilioSender.twilioWhatsAppFrom;
 
     const passwordHash = await bcrypt.hash(
       ownerPassword.length >= 8 ? ownerPassword : randomBytes(32).toString('hex'),
@@ -356,9 +384,25 @@ export async function adminApiRoutes(app: FastifyInstance) {
       data.timezone = tz;
     }
     if (body.whatsappNumber !== undefined) {
-      data.twilioWhatsAppFrom = body.whatsappNumber.trim()
-        ? normalizeTwilioWhatsAppFrom(body.whatsappNumber)
-        : null;
+      const raw = body.whatsappNumber.trim();
+      if (!raw) {
+        return reply.code(400).send({ error: 'whatsapp_number_required' });
+      }
+      const twilioSender = await findTwilioSenderByPhone(raw);
+      if (!twilioSender) {
+        return reply.code(400).send({ error: 'whatsapp_not_on_twilio' });
+      }
+      const alreadyAssigned = await prisma.salon.findFirst({
+        where: {
+          deletedAt: null,
+          twilioWhatsAppFrom: twilioSender.twilioWhatsAppFrom,
+          NOT: { id },
+        },
+      });
+      if (alreadyAssigned) {
+        return reply.code(409).send({ error: 'whatsapp_already_assigned', salonName: alreadyAssigned.name });
+      }
+      data.twilioWhatsAppFrom = twilioSender.twilioWhatsAppFrom;
     }
 
     if (Object.keys(data).length === 0) {

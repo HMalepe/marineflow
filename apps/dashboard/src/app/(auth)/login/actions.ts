@@ -19,6 +19,18 @@ export async function checkPhone(
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
+      if (data.error === 'number_not_on_twilio') {
+        return {
+          error:
+            'This number is not registered on MarineFlow. Use the WhatsApp business number assigned to your salon.',
+        };
+      }
+      if (data.error === 'number_not_linked') {
+        return {
+          error:
+            'This number is on our system but not linked to a salon yet. Contact MarineFlow support.',
+        };
+      }
       if (data.error === 'number_not_registered') {
         return {
           error:
@@ -50,8 +62,11 @@ export async function setupPassword(
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       if (data.error === 'weak_password') return { error: data.message ?? 'Password too weak' };
-      if (data.error === 'number_not_registered') {
+      if (data.error === 'number_not_on_twilio') {
         return { error: 'This number is not registered on MarineFlow' };
+      }
+      if (data.error === 'number_not_linked') {
+        return { error: 'This number is not linked to a salon yet — contact support' };
       }
       if (data.error === 'phone_already_setup') {
         return { error: 'This number already has a password — sign in instead' };
@@ -86,6 +101,9 @@ export async function login(input: LoginInput): Promise<{ error?: string }> {
       if (err === 'invalid_credentials') return { error: 'Incorrect password' };
       if (err === 'email_or_phone_required') return { error: 'Email or phone number is required' };
       if (err === 'password_required') return { error: 'Password is required' };
+      if (err === 'number_not_on_twilio') {
+        return { error: 'This number is not registered on MarineFlow' };
+      }
       if (err === 'invalid_phone') return { error: 'Enter a valid South African mobile number' };
       return { error: err ?? 'Invalid credentials' };
     }
