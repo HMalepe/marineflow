@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { buildApp } from './app.js';
 import { env } from './config.js';
+import { syncSuperAdminPasswordFromEnv } from './lib/syncSuperAdmin.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -61,6 +62,13 @@ try {
       console.error('[STARTUP] Baseline failed — server starting anyway:', be.stderr || be.stdout || be.message);
     }
   }
+}
+
+try {
+  console.log('[STARTUP] Syncing super admin password from env (if set)...');
+  await syncSuperAdminPasswordFromEnv();
+} catch (e) {
+  console.error('[STARTUP] Super admin sync failed — continuing:', e);
 }
 
 const app = await buildApp();
