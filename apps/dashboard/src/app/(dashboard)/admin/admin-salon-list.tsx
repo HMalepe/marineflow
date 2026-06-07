@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import {
   Sheet,
@@ -550,7 +551,7 @@ export function AdminSalonList({ token }: Props) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="user-password">Password *</Label>
-              <Input id="user-password" type="password" minLength={8} value={addUserForm.password} onChange={(e) => setAddUserForm((f) => ({ ...f, password: e.target.value }))} required />
+              <PasswordInput id="user-password" minLength={8} value={addUserForm.password} onChange={(e) => setAddUserForm((f) => ({ ...f, password: e.target.value }))} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="user-role">Role</Label>
