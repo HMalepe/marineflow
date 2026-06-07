@@ -167,9 +167,6 @@ export async function authRoutes(app: FastifyInstance) {
       if (!isValidSaLoginPhone(phone)) {
         return reply.code(400).send({ error: 'invalid_phone' });
       }
-      if (!(await isTwilioRegisteredWhatsAppNumber(phone))) {
-        return reply.code(401).send({ error: 'number_not_on_twilio' });
-      }
       user = await prisma.staffUser.findUnique({ where: { phone } });
     } else if (email) {
       user = await prisma.staffUser.findUnique({ where: { email } });

@@ -245,6 +245,7 @@ model Customer {
   marketingConsentAt  DateTime?
   preferredStaffId    String?
   preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id])
+  passwordHash        String?
   loyaltyStampsCached Int?
   lastInteractionAt   DateTime?
   deletedAt           DateTime?

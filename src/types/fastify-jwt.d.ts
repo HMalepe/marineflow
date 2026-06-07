@@ -5,6 +5,7 @@ declare module '@fastify/jwt' {
     payload: {
       sub: string;
       email?: string;
+      phone?: string;
       name?: string;
       salonId?: string;
       role?: string;

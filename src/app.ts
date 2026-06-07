@@ -22,6 +22,7 @@ import { handleStripeWebhook } from './services/payments.js';
 import { serve } from 'inngest/fastify';
 import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
+import { clientAuthRoutes } from './routes/clientAuth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
 import { adminApiRoutes } from './routes/adminApi.js';
 import { agencyApiRoutes } from './routes/agencyApi.js';
@@ -272,6 +273,7 @@ export async function buildApp() {
   }, { prefix: '/webhooks' });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(clientAuthRoutes, { prefix: '/api/client/auth' });
   await app.register(plannedRoutes, { prefix: '/api/planned' });
   await app.register(dashboardApiRoutes, { prefix: '/api' });
   await app.register(adminApiRoutes, { prefix: '/admin' });
