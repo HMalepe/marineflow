@@ -22,7 +22,7 @@ import { handleStripeWebhook } from './services/payments.js';
 import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
 import { payfastAdapter } from './lib/integrations/payments/payfast.js';
 import { serve } from 'inngest/fastify';
-import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns } from './lib/inngest/index.js';
+import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { clientAuthRoutes } from './routes/clientAuth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
@@ -304,7 +304,7 @@ export async function buildApp() {
     url: '/api/inngest',
     handler: serve({
       client: inngest,
-      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns],
+      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity],
     }),
   });
 

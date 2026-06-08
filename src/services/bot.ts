@@ -26,6 +26,8 @@ import {
   redeemForNextBookingTx,
 } from './loyalty.js';
 import { createDepositCheckoutSession } from './payments.js';
+import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
+import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
@@ -44,6 +46,8 @@ export type BotContext = Record<string, unknown> & {
   errorCount?: number;
   /** True when a human agent explicitly took over via the dashboard (keeps bot silent). */
   handoffByStaff?: boolean;
+  /** AI-suggested quick book slots (A/B/C). */
+  quickPickOptions?: QuickPickOption[];
 };
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
@@ -295,6 +299,14 @@ async function processInboundWhatsApp(
     logger.warn({ err }, 'sse_emit_failed'),
   );
 
+  const inboundAt = new Date().toISOString();
+  scheduleConversationActivity({
+    conversationId: conv.id,
+    salonId: salon.id,
+    customerWaId: waId,
+    activityAt: inboundAt,
+  }).catch(() => {});
+
   if (salon.status !== 'ACTIVE' && salon.status !== 'TRIAL') {
     await getTenantDb().ticket.create({
       data: {
@@ -354,6 +366,21 @@ async function processInboundWhatsApp(
     );
     await saveCtx(conv.id, {}, ConversationStep.IDLE);
     return;
+  }
+
+  const aiSteps: ConversationStep[] = [
+    ConversationStep.GREETING,
+    ConversationStep.MENU,
+    ConversationStep.IDLE,
+    ConversationStep.FAQ,
+  ];
+  if (aiSteps.includes(conv.step)) {
+    const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
+    if (aiResult.handled && aiResult.reply) {
+      await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
+      await reply(conv, aiResult.reply);
+      return;
+    }
   }
 
   try {
@@ -817,6 +844,35 @@ async function handlePickSlot(
   text: string,
 ) {
   const c = ctx(conv);
+  const quickPick = matchQuickPick(text, c.quickPickOptions);
+  if (quickPick) {
+    const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: quickPick.serviceId } });
+    const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: quickPick.staffId } });
+    await saveCtx(
+      conv.id,
+      {
+        selectedServiceId: quickPick.serviceId,
+        selectedStaffId: quickPick.staffId,
+        localDateStr: quickPick.localDateStr,
+        slotStartIso: quickPick.slotStartIso,
+        quickPickOptions: undefined,
+      },
+      ConversationStep.CONFIRM_BOOKING,
+    );
+    const dt = DateTime.fromISO(quickPick.slotStartIso).setZone(conv.salon.timezone);
+    await reply(
+      conv,
+      [
+        `Perfect — let's lock this in:`,
+        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+        '',
+        `Reply YES to confirm and continue to payment, or BACK.`,
+      ].join('\n'),
+    );
+    return;
+  }
+
   const serviceId = c.selectedServiceId as string | undefined;
   const staffId = c.selectedStaffId as string | undefined;
   const localDateStr = c.localDateStr as string | undefined;
@@ -1178,14 +1234,16 @@ async function handleFaq(
     return;
   }
 
-  // Semantic search fallback for free-text questions
+  // Semantic search + Claude synthesis for free-text questions
   try {
     const { semanticSearch } = await import('../lib/integrations/ai/index.js');
-    const results = await semanticSearch(conv.salonId, text, { limit: 1, threshold: 0.72 });
+    const { synthesizeFaqAnswer } = await import('./botAssistant.js');
+    const results = await semanticSearch(conv.salonId, text, { limit: 3, threshold: 0.65 });
     if (results.length > 0) {
-      // EC-14: truncate semantic results too
-      const content = results[0]!.content;
-      const truncated = content.length > 3900 ? content.slice(0, 3900) + '…' : content;
+      const chunks = results.map((r) => r.content);
+      const synthesized = await synthesizeFaqAnswer(conv.salon, text, chunks);
+      const answer = synthesized ?? results[0]!.content;
+      const truncated = answer.length > 3900 ? answer.slice(0, 3900) + '…' : answer;
       await reply(conv, `${truncated}\n\nReply with a FAQ number, ask another question, or BACK.`);
       return;
     }
