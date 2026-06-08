@@ -67,6 +67,25 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     await requireAuth(request, reply);
   });
 
+  app.patch('/me/name', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { name } = request.body as { name?: string };
+      const trimmed = name?.trim();
+      if (!trimmed || trimmed.length < 2 || trimmed.length > 80) {
+        return reply.code(400).send({ error: 'invalid_name' });
+      }
+      const db = getTenantDb();
+      const u = await db.staffUser.update({
+        where: { id: user.sub },
+        data: { name: trimmed },
+        select: { id: true, email: true, name: true, role: true, salonId: true },
+      });
+      return { user: u };
+    });
+  });
+
   app.post('/me/change-password', {
     config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
   }, async (request, reply) => {

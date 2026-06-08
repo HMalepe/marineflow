@@ -27,7 +27,7 @@ export default async function DashboardLayout({
       businessName = data.salon.displayName;
     }
   } catch {
-    // Fall back to JWT name if API unavailable
+    // fall back to JWT name
   }
 
   const isOwner = user.role === 'OWNER';
@@ -37,15 +37,20 @@ export default async function DashboardLayout({
     <div className="min-h-screen flex">
       {/* Sidebar */}
       <aside className="w-64 border-r bg-card hidden md:flex flex-col">
-        <div className="p-6 border-b">
-          <h1 className="text-xl font-bold">MarineFlow</h1>
-          <p className="text-sm font-semibold mt-2 leading-tight">{businessName}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{formatRole(user.role)}</p>
+
+        {/* Business identity */}
+        <div className="px-5 py-5 border-b">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1.5">
+            {formatRole(user.role)}
+          </p>
+          <p className="text-base font-bold leading-tight truncate">{businessName}</p>
           {user.phone && (
-            <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">{user.phone}</p>
+            <p className="text-xs text-muted-foreground mt-1 tabular-nums">{user.phone}</p>
           )}
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-0.5">
           {isAdmin ? (
             <>
               <NavLink href="/">Overview</NavLink>
@@ -69,7 +74,36 @@ export default async function DashboardLayout({
             </>
           )}
         </nav>
-        <div className="p-4 border-t">
+
+        {/* Product watermark */}
+        <div className="px-5 py-3 border-t border-b">
+          <div className="flex items-center gap-2">
+            {/* WhatsApp-green pulse dot */}
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#25d366] opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#25d366]" />
+            </span>
+            <div>
+              <p
+                className="text-[13px] font-bold leading-none tracking-tight"
+                style={{
+                  background: 'linear-gradient(90deg, #25d366 0%, #128c7e 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}
+              >
+                MarineFlow
+              </p>
+              <p className="text-[10px] text-muted-foreground/80 leading-tight mt-0.5 tracking-wide">
+                WhatsApp Chatbot
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Logout */}
+        <div className="p-4">
           <LogoutButton />
         </div>
       </aside>

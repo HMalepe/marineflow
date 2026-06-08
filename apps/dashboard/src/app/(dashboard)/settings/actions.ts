@@ -40,6 +40,17 @@ export async function changePassword(
   }
 }
 
+export async function updateName(name: string): Promise<{ error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    await apiFetch('/me/name', { method: 'PATCH', body: JSON.stringify({ name }) }, token);
+    return {};
+  } catch (e) {
+    return { error: e instanceof ApiError ? e.message : 'Failed to update name' };
+  }
+}
+
 export async function saveDisplayName(tradingName: string): Promise<{ salon?: SalonSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };
