@@ -1,5 +1,6 @@
 import { getToken, getUser } from '@/lib/auth';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
+import { API_MISCONFIGURED_MESSAGE, isApiMisconfiguredForProduction } from '@/lib/api-config';
 import { BillingClient } from './billing-client';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,7 +13,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { getApiBaseUrl } from '@/lib/api-config';
+
+const API_URL = getApiBaseUrl();
 
 interface Plan {
   id: string;
@@ -221,17 +224,7 @@ export default async function BillingPage() {
     return <AdminBillingPage token={token ?? ''} />;
   }
 
-  let plans: Plan[] = [];
-  let subscription: Subscription | null = null;
-
-  try {
-    const [plansRes, subRes] = await Promise.all([
-      apiFetch<{ plans: Plan[] }>('/subscription/plans', {}, token),
-      apiFetch<{ subscription: Subscription | null }>('/subscription', {}, token),
-    ]);
-    plans = plansRes.plans;
-    subscription = subRes.subscription;
-  } catch {
+  if (isApiMisconfiguredForProduction()) {
     return (
       <div className="space-y-8">
         <div>
@@ -240,7 +233,39 @@ export default async function BillingPage() {
             Manage your plan and payment method.
           </p>
         </div>
-        <p className="text-sm text-destructive">Failed to load billing information. Please try again.</p>
+        <p className="text-sm text-destructive">{API_MISCONFIGURED_MESSAGE}</p>
+      </div>
+    );
+  }
+
+  let plans: Plan[] = [];
+  let subscription: Subscription | null = null;
+  let loadError: string | null = null;
+
+  try {
+    const [plansRes, subRes] = await Promise.all([
+      apiFetch<{ plans: Plan[] }>('/subscription/plans', {}, token),
+      apiFetch<{ subscription: Subscription | null }>('/subscription', {}, token),
+    ]);
+    plans = plansRes.plans;
+    subscription = subRes.subscription;
+  } catch (e) {
+    loadError = e instanceof ApiError ? e.message : 'Failed to load billing information';
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold">Billing &amp; Subscription</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Manage your plan and payment method.
+          </p>
+        </div>
+        <p className="text-sm text-destructive">{loadError}. Please try again.</p>
+        <p className="text-xs text-muted-foreground">
+          API: {API_URL} — if this looks wrong, update NEXT_PUBLIC_API_URL and redeploy.
+        </p>
       </div>
     );
   }
