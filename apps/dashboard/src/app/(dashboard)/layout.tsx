@@ -22,6 +22,9 @@ export default async function DashboardLayout({
           <h1 className="text-xl font-bold">MarineFlow</h1>
           <p className="text-xs text-muted-foreground mt-1">{user.name}</p>
           <p className="text-xs text-muted-foreground capitalize">{user.role.toLowerCase().replace('_', ' ')}</p>
+          {user.phone && (
+            <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">{user.phone}</p>
+          )}
         </div>
         <nav className="flex-1 p-4 space-y-1">
           {isAdmin ? (

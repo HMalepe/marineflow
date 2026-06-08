@@ -26,7 +26,7 @@ export async function clearToken(): Promise<void> {
   store.delete(TOKEN_KEY);
 }
 
-export async function getUser(): Promise<{ sub: string; email: string; name: string; role: string; salonId: string } | null> {
+export async function getUser(): Promise<{ sub: string; email: string; name: string; role: string; salonId: string; phone?: string } | null> {
   const token = await getToken();
   if (!token) return null;
 
