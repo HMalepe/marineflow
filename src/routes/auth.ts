@@ -27,6 +27,7 @@ function issueToken(app: FastifyInstance, user: StaffUser) {
     {
       sub: user.id,
       email: user.email,
+      phone: user.phone ?? undefined,
       name: user.name,
       salonId: user.salonId,
       role: user.role,
