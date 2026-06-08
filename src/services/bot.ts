@@ -148,6 +148,22 @@ function isWithinBusinessHours(salon: Salon, now = new Date()): boolean {
   return nowMin >= openMin && nowMin < closeMin;
 }
 
+function afterHoursHumanReply(salon: Salon): string {
+  const open = salon.openTime ?? '09:00';
+  const close = salon.closeTime ?? '17:00';
+  return (
+    salon.afterHoursMessage?.trim() ||
+    `We're closed for live support right now (our hours are ${open}–${close}). ` +
+    `Someone from our team will contact you when we open. ` +
+    `You can still book appointments, check loyalty, and browse FAQs anytime.`
+  );
+}
+
+function isHumanHandoffRequest(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower.includes('human') || lower.includes('talk to') || text.trim() === '0';
+}
+
 export async function handleInboundWhatsApp(input: {
   from: string;
   body: string;
@@ -303,29 +319,6 @@ async function processInboundWhatsApp(
     return;
   }
 
-  if (!isWithinBusinessHours(salon) && ['GREETING', 'MENU', 'IDLE'].includes(conv.step)) {
-    const afterHours =
-      salon.afterHoursMessage?.trim() ||
-      `We're currently closed. Our hours are ${salon.openTime ?? '09:00'}–${salon.closeTime ?? '17:00'}. We'll reply when we're back.`;
-    await getTenantDb().ticket.create({
-      data: {
-        salonId: salon.id,
-        customerId: customer.id,
-        status: 'OPEN',
-        subject: 'After-hours message',
-        messages: {
-          create: {
-            direction: MessageDirection.INBOUND,
-            body: `After-hours inbound: ${text}`,
-          },
-        },
-      },
-    });
-    await saveCtx(conv.id, {}, ConversationStep.HANDOFF);
-    await reply(conv, afterHours);
-    return;
-  }
-
   const lower = text.toLowerCase();
   if (lower === 'undo' || lower === 'back') {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -333,11 +326,7 @@ async function processInboundWhatsApp(
     return;
   }
 
-  if (
-    lower.includes('human') ||
-    lower.includes('talk to') ||
-    text === '0'
-  ) {
+  if (isHumanHandoffRequest(text)) {
     await getTenantDb().ticket.create({
       data: {
         salonId: salon.id,
@@ -352,6 +341,13 @@ async function processInboundWhatsApp(
         },
       },
     });
+
+    if (!isWithinBusinessHours(salon)) {
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      await reply(conv, `${afterHoursHumanReply(salon)}\n\n${mainMenu(salon)}`);
+      return;
+    }
+
     await reply(
       conv,
       'Thanks — a team member will read this chat and respond as soon as possible.',

@@ -198,7 +198,10 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     TIMEZONE_OPTIONS.find((t) => t.value === timezone)?.label ?? timezone;
 
   const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
-  const defaultAfterHours = `We're currently closed. Our hours are ${openTime}–${closeTime}. We'll reply when we're back.`;
+  const defaultAfterHours =
+    `We're closed for live support right now (our hours are ${openTime}–${closeTime}). ` +
+    `Someone from our team will contact you when we open. ` +
+    `Customers can still book, check loyalty, and browse FAQs 24/7.`;
 
   const previewWelcome = welcomeMessage.trim() || defaultWelcome;
   const previewAfterHours = afterHoursMessage.trim() || defaultAfterHours;
@@ -432,7 +435,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
                 )}
               />
               <p className="text-xs text-muted-foreground">
-                Sent outside business hours or when the bot is paused. Creates a handoff for your team.
+                Sent when a customer chooses &quot;Talk to a human&quot; outside business hours. Bookings, FAQs, and loyalty still work 24/7.
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -474,7 +477,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
             <p className="text-xs text-muted-foreground">
               {previewMode === 'welcome'
                 ? 'Preview uses your welcome text plus the numbered menu on the bot.'
-                : 'Preview of the closed-hours auto-reply.'}
+                : 'Preview of the reply when someone asks for a human outside your opening hours.'}
             </p>
           </div>
         </form>
