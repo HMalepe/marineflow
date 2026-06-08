@@ -22,7 +22,7 @@ const envSchema = z.object({
   PAYFAST_MERCHANT_ID: z.string().optional(),
   PAYFAST_MERCHANT_KEY: z.string().optional(),
   PAYFAST_PASSPHRASE: z.string().optional(),
-  PAYFAST_IS_TEST: z.coerce.boolean().default(true),
+  PAYFAST_IS_TEST: z.coerce.boolean().default(false),
   SESSION_SECRET: z.string().min(16),
   DEFAULT_SALON_SLUG: z.string().default('demo-salon'),
   MESSAGING_PROVIDER: z.enum(['twilio', 'meta']).default('twilio'),

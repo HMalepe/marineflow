@@ -19,6 +19,8 @@ import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
 import { resolveTenantForInbound } from './lib/tenant.js';
 import { handleStripeWebhook } from './services/payments.js';
+import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
+import { payfastAdapter } from './lib/integrations/payments/payfast.js';
 import { serve } from 'inngest/fastify';
 import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
@@ -271,6 +273,21 @@ export async function buildApp() {
       return reply.send({ received: true });
     });
   }, { prefix: '/webhooks' });
+
+  app.post('/webhooks/payfast/subscription', async (request, reply) => {
+    const body = request.body as Record<string, string>;
+    const verified = payfastAdapter.verifyWebhook(body, {});
+    if (!verified.valid) {
+      logger.warn({ reference: body.m_payment_id }, 'payfast_subscription_itn_invalid');
+      return reply.code(400).send('Invalid signature');
+    }
+    try {
+      await handlePayfastSubscriptionWebhook(body);
+    } catch (err) {
+      logger.error({ err, reference: body.m_payment_id }, 'payfast_subscription_itn_error');
+    }
+    return reply.send('OK');
+  });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(clientAuthRoutes, { prefix: '/api/client/auth' });

@@ -3,9 +3,9 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
 import { isPayfastConfigured } from '../lib/billingUrls.js';
 
-const PAYFAST_URL = env.NODE_ENV === 'production'
-  ? 'https://www.payfast.co.za/eng/process'
-  : 'https://sandbox.payfast.co.za/eng/process';
+const PAYFAST_URL = env.PAYFAST_IS_TEST
+  ? 'https://sandbox.payfast.co.za/eng/process'
+  : 'https://www.payfast.co.za/eng/process';
 
 interface CreateSubscriptionInput {
   salonId: string;
@@ -181,9 +181,9 @@ export async function cancelSubscription(salonId: string) {
   if (sub.cancelAtPeriodEnd) return { ok: true as const, alreadyScheduled: true as const };
 
   if (sub.payfastSubscriptionId && env.PAYFAST_MERCHANT_ID) {
-    const cancelUrl = env.NODE_ENV === 'production'
-      ? `https://api.payfast.co.za/subscriptions/${sub.payfastSubscriptionId}/cancel`
-      : `https://sandbox.payfast.co.za/subscriptions/${sub.payfastSubscriptionId}/cancel`;
+    const cancelUrl = env.PAYFAST_IS_TEST
+      ? `https://sandbox.payfast.co.za/subscriptions/${sub.payfastSubscriptionId}/cancel`
+      : `https://api.payfast.co.za/subscriptions/${sub.payfastSubscriptionId}/cancel`;
 
     const timestamp = new Date().toISOString().replace(/\.\d+Z$/, '+02:00');
     const sig = generateApiSignature(timestamp);
