@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { saveDisplayName, saveHours, saveMessages, saveBotActive, type SalonSettings } from './actions';
 
 const WHATSAPP_LIMIT = 4096;
+
+export type { SalonSettings };
 
 const TIMEZONE_OPTIONS = [
   { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg (SAST)' },
@@ -27,26 +29,8 @@ const TIMEZONE_OPTIONS = [
 
 type PreviewMode = 'welcome' | 'afterHours';
 
-interface SalonSettings {
-  id: string;
-  name: string;
-  tradingName: string | null;
-  timezone: string;
-  openTime: string | null;
-  closeTime: string | null;
-  welcomeMessage: string | null;
-  afterHoursMessage: string | null;
-  status: string;
-  botActive: boolean;
-  botName: string;
-}
-
 interface Props {
-  token: string;
-}
-
-function formatRole(role: string): string {
-  return role.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  initialSettings: SalonSettings;
 }
 
 function WhatsAppPreview({
@@ -149,46 +133,20 @@ function Toast({
   );
 }
 
-function SettingsSkeleton() {
-  return (
-    <div className="space-y-8 animate-pulse">
-      <div className="space-y-3">
-        <div className="h-5 w-36 bg-muted rounded" />
-        <div className="h-4 w-full max-w-md bg-muted rounded" />
-        <div className="grid gap-4 sm:grid-cols-2 mt-4">
-          <div className="h-8 bg-muted rounded" />
-          <div className="h-8 bg-muted rounded" />
-        </div>
-      </div>
-      <div className="h-px bg-muted" />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-3">
-          <div className="h-24 bg-muted rounded" />
-          <div className="h-20 bg-muted rounded" />
-        </div>
-        <div className="h-48 bg-muted rounded-xl" />
-      </div>
-    </div>
-  );
-}
-
-export function SalonSettingsForm({ token }: Props) {
+export function SalonSettingsForm({ initialSettings }: Props) {
   const router = useRouter();
-  const [salon, setSalon] = useState<SalonSettings | null>(null);
-  const [saved, setSaved] = useState<SalonSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const [salon, setSalon] = useState<SalonSettings>(initialSettings);
+  const [saved, setSaved] = useState<SalonSettings>(initialSettings);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('welcome');
 
-  const [tradingName, setTradingName] = useState('');
-  const [timezone, setTimezone] = useState('Africa/Johannesburg');
-  const [openTime, setOpenTime] = useState('09:00');
-  const [closeTime, setCloseTime] = useState('17:00');
-  const [welcomeMessage, setWelcomeMessage] = useState('');
-  const [afterHoursMessage, setAfterHoursMessage] = useState('');
-  const [botActive, setBotActive] = useState(true);
+  const [tradingName, setTradingName] = useState(initialSettings.tradingName ?? '');
+  const [timezone, setTimezone] = useState(initialSettings.timezone || 'Africa/Johannesburg');
+  const [openTime, setOpenTime] = useState(initialSettings.openTime ?? '09:00');
+  const [closeTime, setCloseTime] = useState(initialSettings.closeTime ?? '17:00');
+  const [welcomeMessage, setWelcomeMessage] = useState(initialSettings.welcomeMessage ?? '');
+  const [afterHoursMessage, setAfterHoursMessage] = useState(initialSettings.afterHoursMessage ?? '');
+  const [botActive, setBotActive] = useState(initialSettings.botActive);
 
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
@@ -215,39 +173,11 @@ export function SalonSettingsForm({ token }: Props) {
     setWelcomeMessage(s.welcomeMessage ?? '');
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
-    setLoadError(false);
   }, []);
 
-  const loadSettings = useCallback(
-    async (silent = false) => {
-      if (!token) return;
-      if (!silent) setLoading(true);
-      else setRefreshing(true);
-      try {
-        const data = await apiFetch<{ salon: SalonSettings }>('/settings', {}, token);
-        applySalon(data.salon);
-      } catch (e) {
-        setLoadError(true);
-        showToast(e instanceof ApiError ? e.message : 'Failed to load settings', 'error');
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [token, applySalon, showToast],
-  );
-
-  useEffect(() => {
-    void loadSettings();
-  }, [loadSettings]);
-
-  const displayNameDirty = useMemo(() => {
-    if (!saved) return false;
-    return tradingName !== (saved.tradingName ?? '');
-  }, [saved, tradingName]);
+  const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
 
   const hoursDirty = useMemo(() => {
-    if (!saved) return false;
     return (
       timezone !== (saved.timezone || 'Africa/Johannesburg') ||
       openTime !== (saved.openTime ?? '09:00') ||
@@ -256,25 +186,18 @@ export function SalonSettingsForm({ token }: Props) {
   }, [saved, timezone, openTime, closeTime]);
 
   const messagesDirty = useMemo(() => {
-    if (!saved) return false;
     return (
       welcomeMessage !== (saved.welcomeMessage ?? '') ||
       afterHoursMessage !== (saved.afterHoursMessage ?? '')
     );
   }, [saved, welcomeMessage, afterHoursMessage]);
 
-  const botDirty = useMemo(() => {
-    if (!saved) return false;
-    return botActive !== saved.botActive;
-  }, [saved, botActive]);
+  const botDirty = useMemo(() => botActive !== saved.botActive, [saved, botActive]);
 
   const timezoneLabel =
     TIMEZONE_OPTIONS.find((t) => t.value === timezone)?.label ?? timezone;
 
-  const defaultWelcome = salon
-    ? `Welcome to ${salon.name}! Reply with a number:`
-    : 'Welcome! Reply with a number:';
-
+  const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
   const defaultAfterHours = `We're currently closed. Our hours are ${openTime}–${closeTime}. We'll reply when we're back.`;
 
   const previewWelcome = welcomeMessage.trim() || defaultWelcome;
@@ -284,7 +207,7 @@ export function SalonSettingsForm({ token }: Props) {
   const welcomeOver = welcomeMessage.length > WHATSAPP_LIMIT;
   const afterHoursOver = afterHoursMessage.length > WHATSAPP_LIMIT;
 
-  async function saveDisplayName(e: React.FormEvent) {
+  async function handleSaveDisplayName(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = tradingName.trim();
     if (!trimmed) {
@@ -292,100 +215,64 @@ export function SalonSettingsForm({ token }: Props) {
       return;
     }
     setSavingDisplayName(true);
-    try {
-      const data = await apiFetch<{ salon: SalonSettings }>(
-        '/settings',
-        { method: 'PATCH', body: JSON.stringify({ tradingName: trimmed }) },
-        token,
-      );
-      applySalon(data.salon);
+    const result = await saveDisplayName(trimmed);
+    if (result.salon) {
+      applySalon(result.salon);
       showToast('Business display name saved', 'success');
       router.refresh();
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
-    } finally {
-      setSavingDisplayName(false);
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
     }
+    setSavingDisplayName(false);
   }
 
-  async function saveHours(e: React.FormEvent) {
+  async function handleSaveHours(e: React.FormEvent) {
     e.preventDefault();
     setSavingHours(true);
-    try {
-      const data = await apiFetch<{ salon: SalonSettings }>(
-        '/settings',
-        { method: 'PATCH', body: JSON.stringify({ openTime, closeTime, timezone }) },
-        token,
-      );
-      applySalon(data.salon);
+    const result = await saveHours(openTime, closeTime, timezone);
+    if (result.salon) {
+      applySalon(result.salon);
       showToast('Business hours saved', 'success');
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
-    } finally {
-      setSavingHours(false);
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
     }
+    setSavingHours(false);
   }
 
-  async function saveMessages(e: React.FormEvent) {
+  async function handleSaveMessages(e: React.FormEvent) {
     e.preventDefault();
     if (welcomeOver || afterHoursOver) {
       showToast(`Messages must be under ${WHATSAPP_LIMIT.toLocaleString()} characters`, 'error');
       return;
     }
     setSavingMessages(true);
-    try {
-      const data = await apiFetch<{ salon: SalonSettings }>(
-        '/settings',
-        {
-          method: 'PATCH',
-          body: JSON.stringify({
-            welcomeMessage: welcomeMessage.trim() || null,
-            afterHoursMessage: afterHoursMessage.trim() || null,
-          }),
-        },
-        token,
-      );
-      applySalon(data.salon);
+    const result = await saveMessages(
+      welcomeMessage.trim() || null,
+      afterHoursMessage.trim() || null,
+    );
+    if (result.salon) {
+      applySalon(result.salon);
       showToast('Bot messages saved', 'success');
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
-    } finally {
-      setSavingMessages(false);
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
     }
+    setSavingMessages(false);
   }
 
-  async function saveBot(e: React.FormEvent) {
+  async function handleSaveBot(e: React.FormEvent) {
     e.preventDefault();
     setSavingBot(true);
-    try {
-      const data = await apiFetch<{ salon: SalonSettings }>(
-        '/settings',
-        { method: 'PATCH', body: JSON.stringify({ botActive }) },
-        token,
-      );
-      applySalon(data.salon);
+    const result = await saveBotActive(botActive);
+    if (result.salon) {
+      applySalon(result.salon);
       showToast(
         botActive ? 'Bot is live on WhatsApp' : 'Bot paused — team will handle all messages',
         'success',
       );
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
-    } finally {
-      setSavingBot(false);
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
     }
-  }
-
-  if (loading) return <SettingsSkeleton />;
-
-  if (loadError || !salon) {
-    return (
-      <div className="rounded-lg border border-dashed p-8 text-center space-y-3">
-        <p className="text-sm text-muted-foreground">Could not load salon settings.</p>
-        <Button type="button" size="sm" variant="outline" onClick={() => void loadSettings()}>
-          Try again
-        </Button>
-      </div>
-    );
+    setSavingBot(false);
   }
 
   return (
@@ -394,9 +281,6 @@ export function SalonSettingsForm({ token }: Props) {
         <p className="text-sm text-muted-foreground">
           WhatsApp bot name: <span className="font-medium text-foreground">{salon.name}</span>
         </p>
-        <Button type="button" variant="outline" size="sm" disabled={refreshing} onClick={() => void loadSettings(true)}>
-          {refreshing ? 'Refreshing…' : 'Refresh'}
-        </Button>
       </div>
 
       {/* Dashboard business name */}
@@ -408,7 +292,7 @@ export function SalonSettingsForm({ token }: Props) {
             still uses <span className="font-medium text-foreground">{salon.name}</span>.
           </p>
         </div>
-        <form onSubmit={(e) => void saveDisplayName(e)} className="space-y-4 max-w-md">
+        <form onSubmit={(e) => void handleSaveDisplayName(e)} className="space-y-4 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="tradingName">Display name</Label>
             <Input
@@ -444,7 +328,7 @@ export function SalonSettingsForm({ token }: Props) {
           <span className="font-medium">{timezoneLabel}</span>
         </div>
 
-        <form onSubmit={(e) => void saveHours(e)} className="space-y-4">
+        <form onSubmit={(e) => void handleSaveHours(e)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="open-time">Opens</Label>
@@ -507,7 +391,7 @@ export function SalonSettingsForm({ token }: Props) {
           </p>
         </div>
 
-        <form onSubmit={(e) => void saveMessages(e)} className="grid gap-6 lg:grid-cols-2">
+        <form onSubmit={(e) => void handleSaveMessages(e)} className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -607,7 +491,7 @@ export function SalonSettingsForm({ token }: Props) {
           </p>
         </div>
 
-        <form onSubmit={(e) => void saveBot(e)} className="space-y-4">
+        <form onSubmit={(e) => void handleSaveBot(e)} className="space-y-4">
           <div
             className={cn(
               'rounded-lg border p-4 transition-colors',

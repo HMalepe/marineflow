@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { SettingsForm } from './settings-form';
-import { SalonSettingsForm } from './salon-settings-form';
+import { SalonSettingsForm, type SalonSettings } from './salon-settings-form';
 
 interface MeResponse {
   user: {
@@ -18,6 +18,7 @@ interface MeResponse {
 export default async function SettingsPage() {
   const token = await getToken();
   let user: MeResponse['user'] | null = null;
+  let salonSettings: SalonSettings | null = null;
 
   try {
     const data = await apiFetch<MeResponse>('/me', {}, token);
@@ -27,6 +28,15 @@ export default async function SettingsPage() {
   }
 
   const canEditSalon = user?.role === 'OWNER' || user?.role === 'MANAGER';
+
+  if (canEditSalon && token) {
+    try {
+      const data = await apiFetch<{ salon: SalonSettings }>('/settings', {}, token);
+      salonSettings = data.salon;
+    } catch {
+      // handled in UI
+    }
+  }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -49,14 +59,18 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      {canEditSalon && token && (
+      {canEditSalon && (
         <Card>
           <CardHeader>
             <CardTitle>Business &amp; WhatsApp Bot</CardTitle>
             <CardDescription>Dashboard display name, hours, automated messages, and bot availability</CardDescription>
           </CardHeader>
           <CardContent>
-            <SalonSettingsForm token={token} />
+            {salonSettings ? (
+              <SalonSettingsForm initialSettings={salonSettings} />
+            ) : (
+              <p className="text-sm text-destructive">Could not load salon settings. Please refresh the page.</p>
+            )}
           </CardContent>
         </Card>
       )}

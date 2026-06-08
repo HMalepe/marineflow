@@ -56,11 +56,11 @@ export async function buildApp() {
   });
 
   // CORS
-  const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',')
-    : ['http://localhost:3001'];
+  const corsOrigins = process.env.CORS_ORIGINS;
+  const corsOrigin: string | string[] | boolean =
+    corsOrigins === '*' ? true : corsOrigins ? corsOrigins.split(',') : ['http://localhost:3001'];
   await app.register(cors, {
-    origin: allowedOrigins,
+    origin: corsOrigin,
     credentials: true,
   });
 

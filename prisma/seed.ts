@@ -162,7 +162,7 @@ async function main() {
       role: 'OWNER',
       staffId: alice.id,
     },
-    update: { passwordHash: hash },
+    update: { staffId: alice.id },
   });
 
   await prisma.staffUser.upsert({
@@ -175,7 +175,7 @@ async function main() {
       role: 'STYLIST',
       staffId: bob.id,
     },
-    update: { passwordHash: hash },
+    update: { staffId: bob.id },
   });
 
   const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD ?? 'ChangeMe123!';
@@ -190,7 +190,6 @@ async function main() {
       role: 'SUPER_ADMIN',
     },
     update: {
-      passwordHash: superAdminHash,
       name: 'Holiday Malepe',
       role: 'SUPER_ADMIN',
     },
