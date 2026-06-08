@@ -72,7 +72,15 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: { id: user.sub },
         select: { id: true, email: true, name: true, role: true, salonId: true },
       });
-      return { user: u };
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: { name: true, tradingName: true },
+      });
+      const displayName = salon.tradingName?.trim() || salon.name;
+      return {
+        user: u,
+        salon: { displayName, whatsappName: salon.name },
+      };
     });
   });
 
@@ -84,6 +92,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         select: {
           id: true,
           name: true,
+          tradingName: true,
           timezone: true,
           openTime: true,
           closeTime: true,
@@ -104,6 +113,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   app.patch<{
     Body: {
+      tradingName?: string | null;
       openTime?: string;
       closeTime?: string;
       timezone?: string;
@@ -119,6 +129,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const {
+          tradingName,
           openTime,
           closeTime,
           timezone,
@@ -127,6 +138,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botActive,
           status,
         } = request.body;
+
+        if (tradingName !== undefined && tradingName !== null && !tradingName.trim()) {
+          reply.code(400);
+          return { error: 'invalid_trading_name' };
+        }
 
         const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
         if (openTime !== undefined && !timeRe.test(openTime)) {
@@ -150,6 +166,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const updated = await db.salon.update({
           where: { id: user.salonId },
           data: {
+            ...(tradingName !== undefined && {
+              tradingName: tradingName?.trim() || null,
+            }),
             ...(openTime !== undefined && { openTime }),
             ...(closeTime !== undefined && { closeTime }),
             ...(timezone !== undefined && { timezone: timezone.trim() }),
@@ -165,6 +184,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           select: {
             id: true,
             name: true,
+            tradingName: true,
             timezone: true,
             openTime: true,
             closeTime: true,

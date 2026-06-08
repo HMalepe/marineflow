@@ -52,8 +52,8 @@ export default async function SettingsPage() {
       {canEditSalon && token && (
         <Card>
           <CardHeader>
-            <CardTitle>Salon &amp; WhatsApp Bot</CardTitle>
-            <CardDescription>Hours, automated messages, and bot availability</CardDescription>
+            <CardTitle>Business &amp; WhatsApp Bot</CardTitle>
+            <CardDescription>Dashboard display name, hours, automated messages, and bot availability</CardDescription>
           </CardHeader>
           <CardContent>
             <SalonSettingsForm token={token} />

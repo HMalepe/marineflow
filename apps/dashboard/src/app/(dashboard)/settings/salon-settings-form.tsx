@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ type PreviewMode = 'welcome' | 'afterHours';
 interface SalonSettings {
   id: string;
   name: string;
+  tradingName: string | null;
   timezone: string;
   openTime: string | null;
   closeTime: string | null;
@@ -171,6 +173,7 @@ function SettingsSkeleton() {
 }
 
 export function SalonSettingsForm({ token }: Props) {
+  const router = useRouter();
   const [salon, setSalon] = useState<SalonSettings | null>(null);
   const [saved, setSaved] = useState<SalonSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -179,6 +182,7 @@ export function SalonSettingsForm({ token }: Props) {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('welcome');
 
+  const [tradingName, setTradingName] = useState('');
   const [timezone, setTimezone] = useState('Africa/Johannesburg');
   const [openTime, setOpenTime] = useState('09:00');
   const [closeTime, setCloseTime] = useState('17:00');
@@ -186,6 +190,7 @@ export function SalonSettingsForm({ token }: Props) {
   const [afterHoursMessage, setAfterHoursMessage] = useState('');
   const [botActive, setBotActive] = useState(true);
 
+  const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
@@ -203,6 +208,7 @@ export function SalonSettingsForm({ token }: Props) {
   const applySalon = useCallback((s: SalonSettings) => {
     setSalon(s);
     setSaved(s);
+    setTradingName(s.tradingName ?? '');
     setTimezone(s.timezone || 'Africa/Johannesburg');
     setOpenTime(s.openTime ?? '09:00');
     setCloseTime(s.closeTime ?? '17:00');
@@ -234,6 +240,11 @@ export function SalonSettingsForm({ token }: Props) {
   useEffect(() => {
     void loadSettings();
   }, [loadSettings]);
+
+  const displayNameDirty = useMemo(() => {
+    if (!saved) return false;
+    return tradingName !== (saved.tradingName ?? '');
+  }, [saved, tradingName]);
 
   const hoursDirty = useMemo(() => {
     if (!saved) return false;
@@ -272,6 +283,30 @@ export function SalonSettingsForm({ token }: Props) {
 
   const welcomeOver = welcomeMessage.length > WHATSAPP_LIMIT;
   const afterHoursOver = afterHoursMessage.length > WHATSAPP_LIMIT;
+
+  async function saveDisplayName(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = tradingName.trim();
+    if (!trimmed) {
+      showToast('Enter a business display name', 'error');
+      return;
+    }
+    setSavingDisplayName(true);
+    try {
+      const data = await apiFetch<{ salon: SalonSettings }>(
+        '/settings',
+        { method: 'PATCH', body: JSON.stringify({ tradingName: trimmed }) },
+        token,
+      );
+      applySalon(data.salon);
+      showToast('Business display name saved', 'success');
+      router.refresh();
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
+    } finally {
+      setSavingDisplayName(false);
+    }
+  }
 
   async function saveHours(e: React.FormEvent) {
     e.preventDefault();
@@ -357,12 +392,41 @@ export function SalonSettingsForm({ token }: Props) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-muted-foreground">
-          Configure <span className="font-medium text-foreground">{salon.name}</span>
+          WhatsApp bot name: <span className="font-medium text-foreground">{salon.name}</span>
         </p>
         <Button type="button" variant="outline" size="sm" disabled={refreshing} onClick={() => void loadSettings(true)}>
           {refreshing ? 'Refreshing…' : 'Refresh'}
         </Button>
       </div>
+
+      {/* Dashboard business name */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Business display name</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Shown in your dashboard sidebar (e.g. Solupair). Does not change what customers see on WhatsApp — the bot
+            still uses <span className="font-medium text-foreground">{salon.name}</span>.
+          </p>
+        </div>
+        <form onSubmit={(e) => void saveDisplayName(e)} className="space-y-4 max-w-md">
+          <div className="space-y-2">
+            <Label htmlFor="tradingName">Display name</Label>
+            <Input
+              id="tradingName"
+              value={tradingName}
+              onChange={(e) => setTradingName(e.target.value)}
+              placeholder="e.g. Solupair"
+              maxLength={120}
+              required
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={!displayNameDirty || savingDisplayName}>
+            {savingDisplayName ? 'Saving…' : 'Save display name'}
+          </Button>
+        </form>
+      </section>
+
+      <Separator />
 
       {/* Business Hours */}
       <section className="space-y-4">

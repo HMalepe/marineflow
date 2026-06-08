@@ -1,7 +1,15 @@
 import Link from 'next/link';
-import { getUser } from '@/lib/auth';
+import { getToken, getUser } from '@/lib/auth';
+import { apiFetch } from '@/lib/api';
 import { redirect } from 'next/navigation';
 import { LogoutButton } from './logout-button';
+
+function formatRole(role: string): string {
+  return role
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default async function DashboardLayout({
   children,
@@ -10,6 +18,17 @@ export default async function DashboardLayout({
 }) {
   const user = await getUser();
   if (!user) redirect('/login');
+
+  const token = await getToken();
+  let businessName = user.name;
+  try {
+    if (token) {
+      const data = await apiFetch<{ salon: { displayName: string } }>('/me', {}, token);
+      businessName = data.salon.displayName;
+    }
+  } catch {
+    // Fall back to JWT name if API unavailable
+  }
 
   const isOwner = user.role === 'OWNER';
   const isAdmin = user.role === 'SUPER_ADMIN';
@@ -20,8 +39,8 @@ export default async function DashboardLayout({
       <aside className="w-64 border-r bg-card hidden md:flex flex-col">
         <div className="p-6 border-b">
           <h1 className="text-xl font-bold">MarineFlow</h1>
-          <p className="text-xs text-muted-foreground mt-1">{user.name}</p>
-          <p className="text-xs text-muted-foreground capitalize">{user.role.toLowerCase().replace('_', ' ')}</p>
+          <p className="text-sm font-semibold mt-2 leading-tight">{businessName}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{formatRole(user.role)}</p>
           {user.phone && (
             <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">{user.phone}</p>
           )}

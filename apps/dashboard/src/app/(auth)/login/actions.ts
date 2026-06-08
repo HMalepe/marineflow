@@ -1,8 +1,9 @@
 'use server';
 
 import { setToken } from '@/lib/auth';
+import { API_MISCONFIGURED_MESSAGE, getApiBaseUrl, isApiMisconfiguredForProduction } from '@/lib/api-config';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+const API_URL = getApiBaseUrl();
 
 type LoginInput =
   | { method: 'email'; email: string; password: string }
@@ -11,6 +12,9 @@ type LoginInput =
 export async function checkPhone(
   phone: string,
 ): Promise<{ status: 'login' | 'setup'; salonName: string } | { error: string }> {
+  if (isApiMisconfiguredForProduction()) {
+    return { error: API_MISCONFIGURED_MESSAGE };
+  }
   try {
     const res = await fetch(`${API_URL}/api/auth/check-phone`, {
       method: 'POST',
@@ -52,6 +56,9 @@ export async function setupPassword(
   phone: string,
   password: string,
 ): Promise<{ error?: string }> {
+  if (isApiMisconfiguredForProduction()) {
+    return { error: API_MISCONFIGURED_MESSAGE };
+  }
   try {
     const res = await fetch(`${API_URL}/api/auth/setup-password`, {
       method: 'POST',
@@ -83,6 +90,9 @@ export async function setupPassword(
 }
 
 export async function login(input: LoginInput): Promise<{ error?: string }> {
+  if (isApiMisconfiguredForProduction()) {
+    return { error: API_MISCONFIGURED_MESSAGE };
+  }
   try {
     const body =
       input.method === 'email'
@@ -98,7 +108,12 @@ export async function login(input: LoginInput): Promise<{ error?: string }> {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       const err = data.error as string | undefined;
-      if (err === 'invalid_credentials') return { error: 'Incorrect password' };
+      if (err === 'invalid_credentials') {
+        return {
+          error:
+            'Incorrect email or password. Use the Email tab with holiday.malepe@gmail.com and your SUPER_ADMIN_PASSWORD from Railway.',
+        };
+      }
       if (err === 'email_or_phone_required') return { error: 'Email or phone number is required' };
       if (err === 'password_required') return { error: 'Password is required' };
       if (err === 'number_not_on_twilio') {
@@ -111,7 +126,8 @@ export async function login(input: LoginInput): Promise<{ error?: string }> {
     const { token } = (await res.json()) as { token: string };
     await setToken(token);
     return {};
-  } catch {
-    return { error: 'Unable to connect to server' };
+  } catch (err) {
+    console.error('[login] API request failed', { apiUrl: API_URL, err });
+    return { error: 'Unable to connect to server — set NEXT_PUBLIC_API_URL=https://marineflow.co.za on Vercel' };
   }
 }
