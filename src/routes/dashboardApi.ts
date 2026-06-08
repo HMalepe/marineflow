@@ -17,6 +17,7 @@ import {
   cancelSubscription,
   checkQuota,
 } from '../services/subscription.js';
+import { billingReturnUrl, resolveDashboardOrigin } from '../lib/billingUrls.js';
 import {
   generatePresignedUpload,
   confirmUpload,
@@ -1408,30 +1409,46 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post('/subscription/checkout', async (request, reply) => {
-    return withUserTenant(request, reply, async (user) => {
-      const { planTier, billingCycle } = request.body as {
-        planTier: string;
-        billingCycle: 'monthly' | 'annual';
-      };
+  app.post(
+    '/subscription/checkout',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { planTier, billingCycle } = request.body as {
+          planTier: string;
+          billingCycle: 'monthly' | 'annual';
+        };
 
-      if (!planTier || !['monthly', 'annual'].includes(billingCycle)) {
-        reply.code(400);
-        return { error: 'invalid_input' };
-      }
+        if (!planTier || !['monthly', 'annual'].includes(billingCycle)) {
+          reply.code(400);
+          return { error: 'invalid_input' };
+        }
 
-      const result = await createPayfastSubscription({
-        salonId: user.salonId,
-        planTier,
-        billingCycle,
-        returnUrl: `${request.headers.origin ?? ''}/settings?billing=success`,
-        cancelUrl: `${request.headers.origin ?? ''}/settings?billing=cancelled`,
-        notifyUrl: `${process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000'}/webhooks/payfast/subscription`,
+        const dashboardOrigin = resolveDashboardOrigin(request.headers.origin);
+
+        const result = await createPayfastSubscription({
+          salonId: user.salonId,
+          planTier,
+          billingCycle,
+          returnUrl: billingReturnUrl(dashboardOrigin, 'success'),
+          cancelUrl: billingReturnUrl(dashboardOrigin, 'cancelled'),
+          notifyUrl: `${process.env.PUBLIC_BASE_URL ?? 'http://localhost:3000'}/webhooks/payfast/subscription`,
+        });
+
+        if (!result.ok) {
+          const status = result.error === 'payfast_not_configured' ? 503 : 400;
+          reply.code(status);
+          return { error: result.error };
+        }
+
+        return {
+          url: result.url,
+          formData: result.formData,
+          summary: result.summary,
+        };
       });
-
-      return result;
-    });
-  });
+    },
+  );
 
   app.post(
     '/subscription/cancel',
@@ -1443,7 +1460,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: result.error };
         }
-        return { ok: true };
+        return { ok: true, alreadyScheduled: 'alreadyScheduled' in result ? result.alreadyScheduled : false };
       });
     },
   );

@@ -15,6 +15,11 @@ export async function POST(request: Request) {
   });
 
   const data = await res.json();
-  if (!res.ok) return NextResponse.json(data, { status: res.status });
+  if (!res.ok) {
+    return NextResponse.json(
+      { error: data.error ?? 'checkout_failed', message: data.message },
+      { status: res.status },
+    );
+  }
   return NextResponse.json(data);
 }

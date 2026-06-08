@@ -1,20 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  AlertCircle,
+  Calendar,
+  Check,
+  CreditCard,
+  Loader2,
+  ShieldCheck,
+  Sparkles,
+  Wrench,
+  X,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-interface Plan {
-  id: string;
-  name: string;
-  tier: string;
-  priceMonthly: number;
-  priceAnnual: number;
-  maxStaff: number;
-  maxBranches: number;
-  maxServices: number;
-  features: string[];
-  aiEnabled: boolean;
-}
+import { Badge } from '@/components/ui/badge';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import {
+  type BillingCycle,
+  type BillingPlan,
+  checkoutErrorMessage,
+  computeBillingQuote,
+  formatZAR,
+  isSubscriptionActive,
+  pickPaidPlan,
+  subscriptionStatusMeta,
+} from '@/lib/billing';
 
 interface Subscription {
   id: string;
@@ -22,31 +41,126 @@ interface Subscription {
   status: string;
   billingProvider: string;
   currentPeriodEnd: string | null;
+  trialEndsAt?: string | null;
   cancelAtPeriodEnd: boolean;
-  plan: Plan;
+  plan: BillingPlan;
 }
 
 interface Props {
-  plans: Plan[];
+  plans: BillingPlan[];
   subscription: Subscription | null;
   token: string;
+  checkoutStatus?: 'success' | 'cancelled' | null;
 }
 
-export function BillingClient({ plans, subscription, token }: Props) {
-  const [cycle, setCycle] = useState<'monthly' | 'annual'>('monthly');
-  const [loading, setLoading] = useState<string | null>(null);
+const FEATURES = [
+  'WhatsApp booking bot on your business number',
+  'Owner dashboard, CRM & appointment calendar',
+  'Loyalty stamps, campaigns & customer insights',
+  'AI-powered FAQs and smart search',
+];
 
-  async function handleSubscribe(planTier: string) {
-    setLoading(planTier);
+const STEPS = [
+  {
+    icon: CreditCard,
+    title: 'Pay subscription on PayFast',
+    body: 'Secure recurring billing — monthly or annual, your choice.',
+  },
+  {
+    icon: Wrench,
+    title: 'We invoice setup & onboarding',
+    body: 'One-off fee before go-live. We configure your bot, services, and staff.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Go live on WhatsApp',
+    body: 'Customers book through your number. You manage everything from the dashboard.',
+  },
+];
+
+function StatusBanner({
+  variant,
+  title,
+  message,
+  onDismiss,
+}: {
+  variant: 'success' | 'warning' | 'error';
+  title: string;
+  message: string;
+  onDismiss?: () => void;
+}) {
+  const styles = {
+    success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100',
+    warning: 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100',
+    error: 'border-destructive/30 bg-destructive/10 text-destructive',
+  };
+
+  return (
+    <div className={`relative rounded-xl border px-4 py-3 pr-10 ${styles[variant]}`}>
+      <p className="font-medium text-sm">{title}</p>
+      <p className="text-sm mt-0.5 opacity-90">{message}</p>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="absolute top-3 right-3 rounded-md p-1 opacity-70 hover:opacity-100"
+          aria-label="Dismiss"
+        >
+          <X className="size-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function BillingClient({ plans, subscription, token, checkoutStatus }: Props) {
+  const router = useRouter();
+  const plan = pickPaidPlan(plans);
+  const [cycle, setCycle] = useState<BillingCycle>('monthly');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [banner, setBanner] = useState(checkoutStatus ?? null);
+
+  const dismissBanner = useCallback(() => {
+    setBanner(null);
+    router.replace('/billing');
+  }, [router]);
+
+  if (!plan) {
+    return (
+      <Card>
+        <CardContent className="py-10 text-center text-muted-foreground">
+          <p className="font-medium">No plans available</p>
+          <p className="text-sm mt-1">Contact support@marineflow.co.za to subscribe.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const selectedPlan = plan;
+  const quote = computeBillingQuote(selectedPlan, cycle);
+  const active = isSubscriptionActive(subscription);
+  const statusMeta = subscription ? subscriptionStatusMeta(subscription.status) : null;
+  const canSubscribe = !active;
+
+  async function handleSubscribe() {
+    setError(null);
+    setLoading(true);
     try {
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planTier, billingCycle: cycle, token }),
+        body: JSON.stringify({ planTier: selectedPlan.tier, billingCycle: cycle, token }),
       });
       const data = await res.json();
+
+      if (!res.ok) {
+        setError(checkoutErrorMessage(data.error));
+        return;
+      }
+
       if (data.url && data.formData) {
-        // Create a form and submit to PayFast
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = data.url;
@@ -59,156 +173,352 @@ export function BillingClient({ plans, subscription, token }: Props) {
         }
         document.body.appendChild(form);
         form.submit();
+        return;
       }
+
+      setError('Could not start checkout. Please try again.');
+    } catch {
+      setError('Network error. Check your connection and try again.');
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   }
 
   async function handleCancel() {
-    if (!confirm('Are you sure you want to cancel your subscription?')) return;
-    setLoading('cancel');
-    await fetch('/api/billing/cancel', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-    });
-    window.location.reload();
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch('/api/billing/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(checkoutErrorMessage(data.error));
+        setShowCancelConfirm(false);
+        return;
+      }
+      setShowCancelConfirm(false);
+      setBanner(null);
+      router.refresh();
+    } catch {
+      setError('Could not cancel subscription. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const currentTier = subscription?.plan.tier ?? 'starter';
+  const payfastCta =
+    cycle === 'monthly'
+      ? `Continue to PayFast — ${formatZAR(selectedPlan.priceMonthly)}/mo`
+      : `Continue to PayFast — ${formatZAR(selectedPlan.priceAnnual)}/yr`;
 
   return (
     <div className="space-y-6">
-      {/* Current Plan */}
-      {subscription && (
-        <div className="border rounded-lg p-6 bg-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Current Plan</p>
-              <p className="text-xl font-bold">{subscription.plan.name}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                Status: <span className="font-medium capitalize">{subscription.status.toLowerCase()}</span>
-                {subscription.currentPeriodEnd && (
-                  <> &middot; Renews {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
-                )}
-              </p>
+      {banner === 'success' && (
+        <StatusBanner
+          variant="success"
+          title="Payment submitted"
+          message="PayFast is processing your subscription. Full access activates once payment confirms — usually within a few minutes."
+          onDismiss={dismissBanner}
+        />
+      )}
+      {banner === 'cancelled' && (
+        <StatusBanner
+          variant="warning"
+          title="Checkout cancelled"
+          message="No charge was made. Choose a plan below when you are ready."
+          onDismiss={dismissBanner}
+        />
+      )}
+      {error && (
+        <StatusBanner
+          variant="error"
+          title="Something went wrong"
+          message={error}
+          onDismiss={() => setError(null)}
+        />
+      )}
+
+      {subscription && statusMeta && (
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+            <div className="space-y-1">
+              <CardTitle className="text-lg">Your subscription</CardTitle>
+              <CardDescription>{statusMeta.description}</CardDescription>
             </div>
-            {subscription.status === 'ACTIVE' && !subscription.cancelAtPeriodEnd && (
-              <Button variant="ghost" onClick={handleCancel} disabled={loading === 'cancel'}>
-                Cancel Plan
+            <Badge className={`border shrink-0 ${statusMeta.badgeClass}`}>
+              {statusMeta.label}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              <div>
+                <span className="text-muted-foreground">Plan </span>
+                <span className="font-medium">{subscription.plan.name}</span>
+              </div>
+              {subscription.currentPeriodEnd && subscription.status === 'ACTIVE' && (
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="size-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">
+                    {subscription.cancelAtPeriodEnd ? 'Access until' : 'Renews'}{' '}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    {new Date(subscription.currentPeriodEnd).toLocaleDateString('en-ZA', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </span>
+                </div>
+              )}
+              {subscription.billingProvider && (
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="size-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground">Billing via </span>
+                  <span className="font-medium capitalize">{subscription.billingProvider}</span>
+                </div>
+              )}
+            </div>
+
+            {subscription.cancelAtPeriodEnd && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                Cancellation scheduled — you keep full access until the end of your billing period.
+              </p>
+            )}
+
+            {active && !showCancelConfirm && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => setShowCancelConfirm(true)}
+                disabled={loading}
+              >
+                Cancel subscription
               </Button>
             )}
-            {subscription.cancelAtPeriodEnd && (
-              <span className="text-sm text-amber-600 font-medium">Cancels at period end</span>
+
+            {showCancelConfirm && (
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                <div className="flex gap-2">
+                  <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Cancel at period end?</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your WhatsApp bot and dashboard stay active until{' '}
+                      {subscription.currentPeriodEnd
+                        ? new Date(subscription.currentPeriodEnd).toLocaleDateString('en-ZA')
+                        : 'the end of your billing period'}
+                      . No refund for the current period.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleCancel}
+                    disabled={loading}
+                  >
+                    {loading ? <Loader2 className="size-4 animate-spin" /> : 'Yes, cancel'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCancelConfirm(false)}
+                    disabled={loading}
+                  >
+                    Keep subscription
+                  </Button>
+                </div>
+              </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {canSubscribe && (
+        <div className="grid lg:grid-cols-5 gap-6 items-start">
+          <div className="lg:col-span-3 space-y-4">
+            <div className="inline-flex rounded-lg border bg-muted/50 p-1 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setCycle('monthly')}
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  cycle === 'monthly'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                onClick={() => setCycle('annual')}
+                className={`flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                  cycle === 'annual'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Annual upfront
+                {quote.annualSavingsCents > 0 && (
+                  <span className="ml-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    Save {formatZAR(quote.annualSavingsCents)}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            <Card className="ring-primary/20 shadow-md">
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-xl">{selectedPlan.name}</CardTitle>
+                    <CardDescription className="mt-1">
+                      Everything you need to run bookings on WhatsApp
+                    </CardDescription>
+                  </div>
+                  {cycle === 'annual' && quote.annualSavingsCents > 0 && (
+                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 shrink-0">
+                      Best value
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                <ul className="space-y-2">
+                  {FEATURES.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm">
+                      <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                  <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                    Up to {selectedPlan.maxStaff} staff · {selectedPlan.maxBranches} branches · unlimited services
+                  </li>
+                </ul>
+
+                <Separator />
+
+                <div className="space-y-3">
+                  <PriceRow
+                    label="Subscription (PayFast)"
+                    detail={quote.payfastLabel}
+                    amount={quote.recurringCents}
+                    highlight
+                  />
+                  <PriceRow
+                    label="Installation & onboarding"
+                    detail="Invoiced once before go-live — not charged on PayFast"
+                    amount={quote.setupCents}
+                  />
+                  <div className="rounded-lg bg-muted/60 px-4 py-3 flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold">Total due at signup</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        PayFast today + setup invoice from our team
+                      </p>
+                    </div>
+                    <p className="text-2xl font-bold tabular-nums">{formatZAR(quote.totalDueCents)}</p>
+                  </div>
+                </div>
+              </CardContent>
+
+              <CardFooter className="flex-col gap-2 items-stretch border-t bg-muted/30">
+                <Button
+                  className="w-full h-11 text-base"
+                  onClick={handleSubscribe}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                      Opening PayFast…
+                    </>
+                  ) : (
+                    payfastCta
+                  )}
+                </Button>
+                <p className="text-[11px] text-center text-muted-foreground leading-relaxed">
+                  You&apos;ll complete payment on PayFast&apos;s secure site. Setup fee is invoiced
+                  separately ({formatZAR(quote.setupCents)}) before we onboard your salon.
+                </p>
+              </CardFooter>
+            </Card>
+          </div>
+
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">How it works</CardTitle>
+                <CardDescription>Simple, transparent pricing — no hidden tiers</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {STEPS.map((step, i) => (
+                  <div key={step.title} className="flex gap-3">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <step.icon className="size-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">
+                        <span className="text-muted-foreground mr-1.5">{i + 1}.</span>
+                        {step.title}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-0.5">{step.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <p className="text-xs text-muted-foreground mt-4 text-center leading-relaxed">
+              All prices in ZAR (South African Rand). VAT may apply where relevant.
+              Questions? Email support@marineflow.co.za
+            </p>
           </div>
         </div>
       )}
 
-      {/* Billing Cycle Toggle */}
-      <div className="flex items-center justify-center gap-2">
-        <button
-          onClick={() => setCycle('monthly')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            cycle === 'monthly' ? 'bg-primary text-primary-foreground' : 'bg-muted'
-          }`}
-        >
-          Monthly
-        </button>
-        <button
-          onClick={() => setCycle('annual')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            cycle === 'annual' ? 'bg-primary text-primary-foreground' : 'bg-muted'
-          }`}
-        >
-          Annual <span className="text-xs opacity-75">(save 20%)</span>
-        </button>
-      </div>
-
-      {/* Plan Cards */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {plans.map((plan) => {
-          const price = cycle === 'annual' ? plan.priceAnnual / 12 : plan.priceMonthly;
-          const isCurrent = plan.tier === currentTier;
-
-          return (
-            <div
-              key={plan.id}
-              className={`border rounded-xl p-6 flex flex-col ${
-                plan.tier === 'pro' ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''
-              }`}
-            >
-              {plan.tier === 'pro' && (
-                <div className="text-xs font-bold text-primary mb-2 uppercase tracking-wide">
-                  Most Popular
-                </div>
-              )}
-              <h3 className="text-lg font-bold">{plan.name}</h3>
-              <div className="mt-2">
-                <span className="text-3xl font-bold">
-                  R{(price / 100).toFixed(0)}
-                </span>
-                <span className="text-muted-foreground text-sm">/mo</span>
-              </div>
-
-              <ul className="mt-4 space-y-2 flex-1">
-                <li className="text-sm flex items-center gap-2">
-                  <Check /> Up to {plan.maxStaff === 9999 ? 'unlimited' : plan.maxStaff} staff
-                </li>
-                <li className="text-sm flex items-center gap-2">
-                  <Check /> {plan.maxBranches === 9999 ? 'Unlimited' : plan.maxBranches} branch{plan.maxBranches > 1 ? 'es' : ''}
-                </li>
-                <li className="text-sm flex items-center gap-2">
-                  <Check /> {plan.maxServices === 9999 ? 'Unlimited' : plan.maxServices} services
-                </li>
-                {plan.aiEnabled && (
-                  <li className="text-sm flex items-center gap-2">
-                    <Check /> AI-powered FAQ & search
-                  </li>
-                )}
-                {plan.features.includes('priority_support') && (
-                  <li className="text-sm flex items-center gap-2">
-                    <Check /> Priority support
-                  </li>
-                )}
-              </ul>
-
-              <div className="mt-6">
-                {isCurrent ? (
-                  <Button className="w-full" disabled variant="outline">
-                    Current Plan
-                  </Button>
-                ) : plan.priceMonthly === 0 ? (
-                  <Button className="w-full" variant="outline" disabled>
-                    Free
-                  </Button>
-                ) : (
-                  <Button
-                    className="w-full"
-                    onClick={() => handleSubscribe(plan.tier)}
-                    disabled={loading === plan.tier}
-                  >
-                    {loading === plan.tier ? 'Redirecting...' : 'Upgrade'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="text-xs text-center text-muted-foreground">
-        Payments processed securely via PayFast. All prices in South African Rand (ZAR).
-      </p>
+      {active && (
+        <Card className="border-dashed">
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">
+            You&apos;re on the {selectedPlan.name} plan. Need to change billing cycle or have a billing
+            question? Contact{' '}
+            <a href="mailto:support@marineflow.co.za" className="text-primary underline-offset-4 hover:underline">
+              support@marineflow.co.za
+            </a>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
 
-function Check() {
+function PriceRow({
+  label,
+  detail,
+  amount,
+  highlight,
+}: {
+  label: string;
+  detail: string;
+  amount: number;
+  highlight?: boolean;
+}) {
   return (
-    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className={`text-sm ${highlight ? 'font-medium' : 'text-muted-foreground'}`}>{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{detail}</p>
+      </div>
+      <p className={`tabular-nums shrink-0 ${highlight ? 'text-lg font-bold' : 'font-semibold'}`}>
+        {formatZAR(amount)}
+      </p>
+    </div>
   );
 }

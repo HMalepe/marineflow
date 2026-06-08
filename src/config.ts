@@ -35,6 +35,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
+  DASHBOARD_URL: z.string().url().optional(),
   CORS_ORIGINS: z.string().optional(),
   SENTRY_DSN: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),

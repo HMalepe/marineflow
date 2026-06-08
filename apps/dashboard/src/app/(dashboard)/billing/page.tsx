@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch, ApiError } from '@/lib/api';
 import { API_MISCONFIGURED_MESSAGE, isApiMisconfiguredForProduction } from '@/lib/api-config';
@@ -12,23 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
 import { getApiBaseUrl } from '@/lib/api-config';
+import type { BillingPlan } from '@/lib/billing';
 
 const API_URL = getApiBaseUrl();
-
-interface Plan {
-  id: string;
-  name: string;
-  tier: string;
-  priceMonthly: number;
-  priceAnnual: number;
-  maxStaff: number;
-  maxBranches: number;
-  maxServices: number;
-  features: string[];
-  aiEnabled: boolean;
-}
 
 interface Subscription {
   id: string;
@@ -36,8 +24,9 @@ interface Subscription {
   status: string;
   billingProvider: string;
   currentPeriodEnd: string | null;
+  trialEndsAt?: string | null;
   cancelAtPeriodEnd: boolean;
-  plan: Plan;
+  plan: BillingPlan;
 }
 
 interface AdminSubscription {
@@ -123,7 +112,7 @@ async function AdminBillingPage({ token }: { token: string }) {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Billing &amp; Subscriptions</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Billing &amp; Subscriptions</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Platform-wide subscription and revenue overview.
         </p>
@@ -217,37 +206,46 @@ async function AdminBillingPage({ token }: { token: string }) {
   );
 }
 
-export default async function BillingPage() {
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ checkout?: string }>;
+}) {
+  const params = await searchParams;
+  const checkoutStatus =
+    params.checkout === 'success' || params.checkout === 'cancelled'
+      ? params.checkout
+      : null;
+
   const [token, user] = await Promise.all([getToken(), getUser()]);
 
   if (user?.role === 'SUPER_ADMIN') {
     return <AdminBillingPage token={token ?? ''} />;
   }
 
+  if (user?.role !== 'OWNER') {
+    redirect('/');
+  }
+
   if (isApiMisconfiguredForProduction()) {
     return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold">Billing &amp; Subscription</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Manage your plan and payment method.
-          </p>
-        </div>
+      <div className="space-y-8 max-w-3xl">
+        <BillingPageHeader />
         <p className="text-sm text-destructive">{API_MISCONFIGURED_MESSAGE}</p>
       </div>
     );
   }
 
-  let plans: Plan[] = [];
+  let plans: BillingPlan[] = [];
   let subscription: Subscription | null = null;
   let loadError: string | null = null;
 
   try {
     const [plansRes, subRes] = await Promise.all([
-      apiFetch<{ plans: Plan[] }>('/subscription/plans', {}, token),
+      apiFetch<{ plans: BillingPlan[] }>('/subscription/plans', {}, token),
       apiFetch<{ subscription: Subscription | null }>('/subscription', {}, token),
     ]);
-    plans = plansRes.plans;
+    plans = plansRes.plans.filter((p) => p.priceMonthly > 0);
     subscription = subRes.subscription;
   } catch (e) {
     loadError = e instanceof ApiError ? e.message : 'Failed to load billing information';
@@ -255,31 +253,42 @@ export default async function BillingPage() {
 
   if (loadError) {
     return (
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold">Billing &amp; Subscription</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Manage your plan and payment method.
-          </p>
-        </div>
-        <p className="text-sm text-destructive">{loadError}. Please try again.</p>
-        <p className="text-xs text-muted-foreground">
-          API: {API_URL} — if this looks wrong, update NEXT_PUBLIC_API_URL and redeploy.
-        </p>
+      <div className="space-y-8 max-w-3xl">
+        <BillingPageHeader />
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-sm text-destructive font-medium">{loadError}</p>
+            <p className="text-sm text-muted-foreground mt-2">Please refresh the page or try again later.</p>
+            <p className="text-xs text-muted-foreground mt-4">
+              API: {API_URL} — if this looks wrong, update NEXT_PUBLIC_API_URL and redeploy.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Billing &amp; Subscription</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Manage your plan and payment method.
-        </p>
-      </div>
+    <div className="space-y-8 max-w-5xl">
+      <BillingPageHeader />
 
-      <BillingClient plans={plans} subscription={subscription} token={token ?? ''} />
+      <BillingClient
+        plans={plans}
+        subscription={subscription}
+        token={token ?? ''}
+        checkoutStatus={checkoutStatus}
+      />
+    </div>
+  );
+}
+
+function BillingPageHeader() {
+  return (
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
+      <p className="text-muted-foreground text-sm mt-1">
+        One simple plan — WhatsApp bookings, dashboard, and onboarding included.
+      </p>
     </div>
   );
 }

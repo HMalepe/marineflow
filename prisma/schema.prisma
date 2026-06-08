@@ -954,9 +954,11 @@ enum SubscriptionStatus {
 model SubscriptionPlan {
   id             String   @id @default(cuid())
   name           String   /// e.g. "Starter", "Pro", "Enterprise"
-  tier           String   @unique /// starter | pro | enterprise
+  tier           String   @unique /// starter | marineflow | pro | enterprise
   priceMonthly   Int      /// cents (ZAR)
   priceAnnual    Int      /// cents (ZAR)
+  setupFeeMonthly Int     @default(0) /// one-off onboarding (monthly billing path), cents
+  setupFeeAnnual  Int     @default(0) /// one-off onboarding (annual billing path), cents
   maxStaff       Int      @default(3)
   maxBranches    Int      @default(1)
   maxServices    Int      @default(10)

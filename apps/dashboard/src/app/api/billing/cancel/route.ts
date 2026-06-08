@@ -14,6 +14,8 @@ export async function POST(request: Request) {
   });
 
   const data = await res.json();
-  if (!res.ok) return NextResponse.json(data, { status: res.status });
+  if (!res.ok) {
+    return NextResponse.json({ error: data.error ?? 'cancel_failed' }, { status: res.status });
+  }
   return NextResponse.json(data);
 }
