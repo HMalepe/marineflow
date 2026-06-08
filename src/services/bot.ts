@@ -279,7 +279,7 @@ async function processInboundWhatsApp(
     logger.warn({ err }, 'sse_emit_failed'),
   );
 
-  if (salon.status !== 'ACTIVE') {
+  if (salon.status !== 'ACTIVE' && salon.status !== 'TRIAL') {
     await getTenantDb().ticket.create({
       data: {
         salonId: salon.id,

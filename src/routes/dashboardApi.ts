@@ -1562,13 +1562,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   /** List all conversations, HANDOFF ones first so staff see what needs attention. */
   app.get('/conversations', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as { step?: string; limit?: string; offset?: string };
       const take = Math.min(Number(q.limit) || 50, 200);
       const skip = Number(q.offset) || 0;
 
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = { salonId: user.salonId };
       if (q.step) where.step = q.step;
 
       const convs = await db.conversation.findMany({
