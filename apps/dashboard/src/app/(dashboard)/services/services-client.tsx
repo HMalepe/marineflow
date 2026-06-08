@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SERVICE_TEMPLATES, SERVICE_BUSINESS_TYPES, SERVICE_CATEGORIES_BY_TYPE } from './service-templates';
+import type { ServiceTemplate } from './service-templates';
 import {
   Sheet,
   SheetContent,
@@ -128,6 +130,10 @@ export function ServicesClient({ token }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ServiceForm>(emptyForm);
+  const [templateStep, setTemplateStep] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateBizType, setTemplateBizType] = useState('');
+  const [templateCategory, setTemplateCategory] = useState('');
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
@@ -186,12 +192,17 @@ export function ServicesClient({ token }: Props) {
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
+    setTemplateStep(true);
+    setTemplateSearch('');
+    setTemplateBizType('');
+    setTemplateCategory('');
     setSheetOpen(true);
   }
 
   function openEdit(service: Service) {
     setEditingId(service.id);
     setForm(serviceToForm(service));
+    setTemplateStep(false);
     setSheetOpen(true);
   }
 
@@ -199,6 +210,21 @@ export function ServicesClient({ token }: Props) {
     setSheetOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    setTemplateStep(false);
+    setTemplateSearch('');
+    setTemplateBizType('');
+    setTemplateCategory('');
+  }
+
+  function applyTemplate(t: ServiceTemplate) {
+    setForm({
+      name: t.name,
+      description: t.description,
+      priceRands: String(t.suggestedPriceRands),
+      durationMin: String(t.suggestedDurationMin),
+      bufferMin: '0',
+    });
+    setTemplateStep(false);
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -465,89 +491,123 @@ export function ServicesClient({ token }: Props) {
 
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{editingId ? 'Edit service' : 'New service'}</SheetTitle>
-            <SheetDescription>
-              {editingId
-                ? 'Changes apply to new bookings. Existing appointments keep their original details.'
-                : 'Active services appear in the WhatsApp booking menu immediately.'}
-            </SheetDescription>
-          </SheetHeader>
-          <form onSubmit={handleSave} className="flex flex-col gap-4 px-4 pb-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Haircut & Style"
-                autoFocus
-                required
+          {templateStep ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Choose a template</SheetTitle>
+                <SheetDescription>
+                  Pick a service to pre-fill the form, then customise it. Or start from scratch.
+                </SheetDescription>
+              </SheetHeader>
+              <TemplatePicker
+                search={templateSearch}
+                onSearch={setTemplateSearch}
+                bizType={templateBizType}
+                onBizType={(v) => { setTemplateBizType(v); setTemplateCategory(''); }}
+                category={templateCategory}
+                onCategory={setTemplateCategory}
+                onSelect={applyTemplate}
+                onSkip={() => setTemplateStep(false)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <textarea
-                id="description"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="What the customer can expect"
-                rows={3}
-                className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price">Price (R) *</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.priceRands}
-                  onChange={(e) => setForm((f) => ({ ...f, priceRands: e.target.value }))}
-                  placeholder="250.00"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="duration">Duration (min) *</Label>
-                <Input
-                  id="duration"
-                  type="number"
-                  min="1"
-                  step="5"
-                  value={form.durationMin}
-                  onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="buffer">Buffer after appointment (min)</Label>
-              <Input
-                id="buffer"
-                type="number"
-                min="0"
-                step="5"
-                value={form.bufferMin}
-                onChange={(e) => setForm((f) => ({ ...f, bufferMin: e.target.value }))}
-              />
-              {slotPreviewMin > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Slot blocked on calendar: <strong>{slotPreviewMin} min</strong> total
-                </p>
+            </>
+          ) : (
+            <>
+              <SheetHeader>
+                <SheetTitle>{editingId ? 'Edit service' : 'New service'}</SheetTitle>
+                <SheetDescription>
+                  {editingId
+                    ? 'Changes apply to new bookings. Existing appointments keep their original details.'
+                    : 'Active services appear in the WhatsApp booking menu immediately.'}
+                </SheetDescription>
+              </SheetHeader>
+              {!editingId && (
+                <div className="px-4 pt-1 pb-0">
+                  <button
+                    type="button"
+                    onClick={() => setTemplateStep(true)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    ← Back to templates
+                  </button>
+                </div>
               )}
-            </div>
-            <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2">
-              <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create service'}
-              </Button>
-            </SheetFooter>
-          </form>
+              <form onSubmit={handleSave} className="flex flex-col gap-4 px-4 pb-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Haircut & Style"
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <textarea
+                    id="description"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="What the customer can expect"
+                    rows={3}
+                    className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Price (R) *</Label>
+                    <Input
+                      id="price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.priceRands}
+                      onChange={(e) => setForm((f) => ({ ...f, priceRands: e.target.value }))}
+                      placeholder="250.00"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duration (min) *</Label>
+                    <Input
+                      id="duration"
+                      type="number"
+                      min="1"
+                      step="5"
+                      value={form.durationMin}
+                      onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="buffer">Buffer after appointment (min)</Label>
+                  <Input
+                    id="buffer"
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={form.bufferMin}
+                    onChange={(e) => setForm((f) => ({ ...f, bufferMin: e.target.value }))}
+                  />
+                  {slotPreviewMin > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Slot blocked on calendar: <strong>{slotPreviewMin} min</strong> total
+                    </p>
+                  )}
+                </div>
+                <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create service'}
+                  </Button>
+                </SheetFooter>
+              </form>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 
@@ -578,6 +638,166 @@ export function ServicesClient({ token }: Props) {
       {toast && (
         <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />
       )}
+    </div>
+  );
+}
+
+function TemplatePicker({
+  search,
+  onSearch,
+  bizType,
+  onBizType,
+  category,
+  onCategory,
+  onSelect,
+  onSkip,
+}: {
+  search: string;
+  onSearch: (v: string) => void;
+  bizType: string;
+  onBizType: (v: string) => void;
+  category: string;
+  onCategory: (v: string) => void;
+  onSelect: (t: ServiceTemplate) => void;
+  onSkip: () => void;
+}) {
+  const categories = bizType ? (SERVICE_CATEGORIES_BY_TYPE[bizType] ?? []) : [];
+
+  const filtered = (() => {
+    const q = search.trim().toLowerCase();
+    return SERVICE_TEMPLATES.filter((t) => {
+      if (bizType && t.businessType !== bizType) return false;
+      if (category && t.category !== category) return false;
+      if (!q) return true;
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q)
+      );
+    });
+  })();
+
+  return (
+    <div className="flex flex-col gap-3 px-4 pb-4">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full justify-center font-medium"
+        onClick={onSkip}
+      >
+        ✏️ Write your own from scratch
+      </Button>
+
+      <Input
+        placeholder="Search services… (fade, massage, pedicure…)"
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+        autoFocus
+      />
+
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Business type</p>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => onBizType('')}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+              !bizType
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+            )}
+          >
+            All
+          </button>
+          {SERVICE_BUSINESS_TYPES.map((bt) => (
+            <button
+              key={bt}
+              type="button"
+              onClick={() => onBizType(bt)}
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                bizType === bt
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+              )}
+            >
+              {bt}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {bizType && categories.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Category</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              onClick={() => onCategory('')}
+              className={cn(
+                'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                !category
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+              )}
+            >
+              All categories
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => onCategory(cat)}
+                className={cn(
+                  'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
+                  category === cat
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        {filtered.length} template{filtered.length !== 1 ? 's' : ''} — click one to pre-fill the form
+      </p>
+
+      <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto pr-1">
+        {filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No templates match. <button type="button" className="text-primary hover:underline" onClick={onSkip}>Start from scratch</button>.
+          </p>
+        ) : (
+          filtered.map((t, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(t)}
+              className="text-left rounded-lg border border-border hover:border-primary/50 hover:bg-muted/60 transition-colors p-3 group"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium text-sm leading-tight group-hover:text-primary">{t.name}</p>
+                <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">
+                  R {t.suggestedPriceRands} · {t.suggestedDurationMin} min
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>
+              <div className="flex gap-1.5 mt-2">
+                <span className="text-[10px] bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">{t.category}</span>
+                {!bizType && (
+                  <span className="text-[10px] bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">{t.businessType}</span>
+                )}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
     </div>
   );
 }
