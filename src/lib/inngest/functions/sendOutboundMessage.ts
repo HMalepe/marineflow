@@ -23,7 +23,7 @@ export const sendOutboundMessage = inngest.createFunction(
   {
     id: 'send-outbound-message',
     retries: 3,
-    concurrency: [{ limit: 50 }],
+    concurrency: [{ limit: 5 }],
     triggers: [{ event: 'message/send.outbound' }],
   },
   async ({ event, step }) => {

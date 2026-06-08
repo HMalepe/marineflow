@@ -22,7 +22,7 @@ import { handleStripeWebhook } from './services/payments.js';
 import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
 import { payfastAdapter } from './lib/integrations/payments/payfast.js';
 import { serve } from 'inngest/fastify';
-import { inngest, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity } from './lib/inngest/index.js';
+import { inngest, inngestIsDev, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { clientAuthRoutes } from './routes/clientAuth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
@@ -298,6 +298,12 @@ export async function buildApp() {
   await app.register(sseRoutes, { prefix: '/api' });
   await app.register(mobileApiRoutes, { prefix: '/api' });
   await app.register(internalRoutes, { prefix: '/internal' });
+
+  if (env.NODE_ENV === 'production' && !env.INNGEST_SIGNING_KEY) {
+    logger.warn('INNGEST_SIGNING_KEY is missing — /api/inngest will fail until set in Railway');
+  } else if (inngestIsDev) {
+    logger.info('Inngest dev mode (local dev server or INNGEST_DEV=1)');
+  }
 
   app.route({
     method: ['GET', 'POST', 'PUT'],

@@ -32,6 +32,8 @@ const envSchema = z.object({
   META_API_VERSION: z.string().default('v21.0'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
+  /** Set to 1 for local Inngest dev server; auto-enabled in development when no signing key. */
+  INNGEST_DEV: z.coerce.boolean().optional(),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   CLAUDE_MODEL: z.string().default('claude-sonnet-4-20250514'),
