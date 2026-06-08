@@ -660,33 +660,38 @@ export function FaqsClient({ token }: Props) {
                   ))}
                 </div>
 
-                <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
-                  {FAQ_TEMPLATES
-                    .filter((t) => {
-                      const matchCat = templateCategory === 'All' || t.category === templateCategory;
-                      const q = templateSearch.trim().toLowerCase();
-                      const matchSearch = !q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q);
-                      return matchCat && matchSearch;
-                    })
-                    .map((t, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => applyTemplate(t.question, t.answer)}
-                        className="w-full text-left rounded-lg border bg-card px-3 py-2.5 hover:bg-accent hover:border-primary/40 transition-colors group"
-                      >
-                        <p className="text-sm font-medium leading-snug group-hover:text-accent-foreground">{t.question}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{t.category}</p>
-                      </button>
-                    ))}
-                  {FAQ_TEMPLATES.filter((t) => {
+                {(() => {
+                  const q = templateSearch.trim().toLowerCase();
+                  const filtered = FAQ_TEMPLATES.filter((t) => {
                     const matchCat = templateCategory === 'All' || t.category === templateCategory;
-                    const q = templateSearch.trim().toLowerCase();
-                    return (matchCat) && (!q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q));
-                  }).length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-6">No templates match your search.</p>
-                  )}
-                </div>
+                    const matchSearch = !q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q);
+                    return matchCat && matchSearch;
+                  });
+                  return (
+                    <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
+                      {filtered.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-6">No templates match your search.</p>
+                      )}
+                      {filtered.length > 0 && (
+                        <p className="text-xs text-muted-foreground pb-0.5">{filtered.length} template{filtered.length !== 1 ? 's' : ''}</p>
+                      )}
+                      {filtered.map((t, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => applyTemplate(t.question, t.answer)}
+                          className="w-full text-left rounded-lg border bg-card px-3 py-2.5 hover:bg-accent hover:border-primary/40 transition-colors group"
+                        >
+                          <p className="text-sm font-medium leading-snug group-hover:text-accent-foreground">{t.question}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                            {t.answer.replace(/\n/g, ' ').slice(0, 120)}{t.answer.length > 120 ? '…' : ''}
+                          </p>
+                          <span className="inline-block mt-1 text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground/70">{t.category}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </>
           ) : (

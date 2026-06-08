@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -57,15 +56,15 @@ const MAX_AVATAR_BYTES = 450_000;
 
 const DEFAULT_SCHEDULE: ScheduleDay[] = [
   { weekday: 0, enabled: false, startTime: '09:00', endTime: '17:00' },
-  { weekday: 1, enabled: true, startTime: '09:00', endTime: '17:00' },
-  { weekday: 2, enabled: true, startTime: '09:00', endTime: '17:00' },
-  { weekday: 3, enabled: true, startTime: '09:00', endTime: '17:00' },
-  { weekday: 4, enabled: true, startTime: '09:00', endTime: '17:00' },
-  { weekday: 5, enabled: true, startTime: '09:00', endTime: '17:00' },
+  { weekday: 1, enabled: true,  startTime: '09:00', endTime: '17:00' },
+  { weekday: 2, enabled: true,  startTime: '09:00', endTime: '17:00' },
+  { weekday: 3, enabled: true,  startTime: '09:00', endTime: '17:00' },
+  { weekday: 4, enabled: true,  startTime: '09:00', endTime: '17:00' },
+  { weekday: 5, enabled: true,  startTime: '09:00', endTime: '17:00' },
   { weekday: 6, enabled: false, startTime: '09:00', endTime: '17:00' },
 ];
 
-// ─── Schedule helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 interface ScheduleDay {
   weekday: number;
@@ -84,10 +83,10 @@ function workingHoursToSchedule(hours: WorkingHour[]): ScheduleDay[] {
 }
 
 function scheduleToPayload(schedule: ScheduleDay[]) {
-  return schedule.filter((d) => d.enabled).map(({ weekday, startTime, endTime }) => ({ weekday, startTime, endTime }));
+  return schedule
+    .filter((d) => d.enabled)
+    .map(({ weekday, startTime, endTime }) => ({ weekday, startTime, endTime }));
 }
-
-// ─── Date helpers ─────────────────────────────────────────────────────────────
 
 function isOnTimeOff(member: StaffMember): boolean {
   const now = new Date();
@@ -98,8 +97,41 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function isoDateStr(d: Date) {
-  return d.toISOString().slice(0, 10);
+// Local YYYY-MM-DD without timezone shift
+function localDateStr(d: Date) {
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+// Send date boundaries in UTC so server/client always agree on the day
+function dateToUtcStart(ymd: string) { return ymd + 'T00:00:00.000Z'; }
+function dateToUtcEnd(ymd: string)   { return ymd + 'T23:59:59.999Z'; }
+
+// ─── Toggle ───────────────────────────────────────────────────────────────────
+
+function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className={cn(
+        'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        on ? 'bg-primary' : 'bg-muted-foreground/25',
+      )}
+    >
+      <span
+        className={cn(
+          'absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform',
+          on ? 'translate-x-[22px]' : 'translate-x-0.5',
+        )}
+      />
+    </button>
+  );
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -126,16 +158,16 @@ function Toast({ message, type, onDismiss }: { message: string; type: 'success' 
   );
 }
 
-// ─── Avatar ───────────────────────────────────────────────────────────────────
+// ─── Avatar display ───────────────────────────────────────────────────────────
 
 function Avatar({ member, size = 'md' }: { member: StaffMember; size?: 'sm' | 'md' | 'lg' }) {
   const label = (member.displayName || member.name)
     .split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase() ?? '').join('');
-  const sizeClass = size === 'lg' ? 'size-16' : size === 'sm' ? 'size-8' : 'size-12';
+  const sizeClass = size === 'lg' ? 'size-16' : size === 'sm' ? 'size-9' : 'size-12';
   const textClass = size === 'lg' ? 'text-xl' : size === 'sm' ? 'text-xs' : 'text-base';
   return (
     <div className={cn('relative shrink-0', sizeClass)}>
-      <div className={cn('rounded-2xl overflow-hidden bg-muted border flex items-center justify-center', sizeClass)}>
+      <div className={cn('rounded-2xl overflow-hidden bg-muted border-2 border-background shadow-sm flex items-center justify-center', sizeClass)}>
         {member.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={member.avatarUrl} alt={member.name} className="size-full object-cover" />
@@ -143,9 +175,11 @@ function Avatar({ member, size = 'md' }: { member: StaffMember; size?: 'sm' | 'm
           <span className={cn('font-bold text-muted-foreground select-none', textClass)}>{label}</span>
         )}
       </div>
-      {/* Booking count bubble */}
       {(member._count?.appointments ?? 0) > 0 && (
-        <span className="absolute -bottom-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center shadow-sm border-2 border-background tabular-nums">
+        <span
+          title={`${member._count!.appointments} confirmed bookings via WhatsApp`}
+          className="absolute -bottom-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center shadow border-2 border-background tabular-nums"
+        >
           {member._count!.appointments > 999 ? '999+' : member._count!.appointments}
         </span>
       )}
@@ -153,115 +187,26 @@ function Avatar({ member, size = 'md' }: { member: StaffMember; size?: 'sm' | 'm
   );
 }
 
-// ─── Staff Card ───────────────────────────────────────────────────────────────
+// ─── Avatar uploader ──────────────────────────────────────────────────────────
 
-function StaffCard({
-  member,
-  onEdit,
-  onSchedule,
-  onTimeOff,
-  onToggleActive,
-  busy,
+function AvatarUploader({
+  current,
+  name,
+  onChange,
 }: {
-  member: StaffMember;
-  onEdit: (m: StaffMember) => void;
-  onSchedule: (m: StaffMember) => void;
-  onTimeOff: (m: StaffMember) => void;
-  onToggleActive: (m: StaffMember) => void;
-  busy: boolean;
+  current: string | null;
+  name: string;
+  onChange: (url: string | null) => void;
 }) {
-  const onLeave = isOnTimeOff(member);
-  const displayName = member.displayName || member.name;
-
-  const workDays = DAYS.filter((_, i) => member.workingHours.some((h) => h.weekday === i));
-
-  return (
-    <div
-      className={cn(
-        'group rounded-2xl border bg-card shadow-sm transition-all',
-        (!member.active || onLeave) && 'opacity-50 grayscale',
-        member.active && !onLeave && 'hover:shadow-md',
-      )}
-    >
-      <div className="p-4 flex gap-4">
-        <Avatar member={member} size="lg" />
-
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-semibold text-sm leading-tight truncate">{displayName}</p>
-              {member.displayName && member.displayName !== member.name && (
-                <p className="text-xs text-muted-foreground">{member.name}</p>
-              )}
-              {member.bio && (
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{member.bio}</p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5 shrink-0">
-              {!member.active && <Badge variant="secondary" className="text-xs">Inactive</Badge>}
-              {member.active && onLeave && <Badge className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">On leave</Badge>}
-              {member.active && !onLeave && !member.isBookable && <Badge variant="outline" className="text-xs">Not bookable</Badge>}
-              {member.active && !onLeave && member.isBookable && <Badge className="text-xs bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30">Available</Badge>}
-            </div>
-          </div>
-
-          {member.specialties.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {member.specialties.map((s) => (
-                <span key={s} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{s}</span>
-              ))}
-            </div>
-          )}
-
-          {workDays.length > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              {DAYS.map((d, i) => {
-                const works = member.workingHours.some((h) => h.weekday === i);
-                return (
-                  <span
-                    key={d}
-                    className={cn(
-                      'text-[10px] font-medium w-7 text-center rounded-full py-0.5',
-                      works ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground/40',
-                    )}
-                  >
-                    {d}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-1.5 pt-1" onClick={(e) => e.stopPropagation()}>
-            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onEdit(member)}>Edit</Button>
-            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onSchedule(member)}>Schedule</Button>
-            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onTimeOff(member)}>Time off</Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              className={cn(
-                'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity',
-                member.active ? 'text-muted-foreground hover:text-destructive' : 'text-muted-foreground hover:text-foreground',
-              )}
-              onClick={() => onToggleActive(member)}
-            >
-              {member.active ? 'Deactivate' : 'Reactivate'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Avatar Upload ────────────────────────────────────────────────────────────
-
-function AvatarUploader({ current, name, onChange }: { current: string | null; name: string; onChange: (url: string | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(current);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync when a different staff member is loaded into the form
+  useEffect(() => {
+    setPreview(current);
+    setError(null);
+  }, [current]);
 
   const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 
@@ -312,8 +257,11 @@ function AvatarUploader({ current, name, onChange }: { current: string | null; n
             {preview ? 'Change' : 'Upload photo'}
           </Button>
           {preview && (
-            <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive"
-              onClick={() => { setPreview(null); onChange(null); if (inputRef.current) inputRef.current.value = ''; }}>
+            <Button
+              type="button" size="sm" variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => { setPreview(null); onChange(null); if (inputRef.current) inputRef.current.value = ''; }}
+            >
               Remove
             </Button>
           )}
@@ -325,7 +273,7 @@ function AvatarUploader({ current, name, onChange }: { current: string | null; n
   );
 }
 
-// ─── Schedule Editor ──────────────────────────────────────────────────────────
+// ─── Schedule editor ──────────────────────────────────────────────────────────
 
 function ScheduleEditor({ schedule, onChange }: { schedule: ScheduleDay[]; onChange: (s: ScheduleDay[]) => void }) {
   function toggle(weekday: number) {
@@ -336,35 +284,33 @@ function ScheduleEditor({ schedule, onChange }: { schedule: ScheduleDay[]; onCha
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {schedule.map((day) => (
-        <div key={day.weekday} className={cn('flex items-center gap-3 rounded-lg p-2.5 border transition-colors', day.enabled ? 'bg-muted/30' : 'opacity-50')}>
-          <button
-            type="button"
-            onClick={() => toggle(day.weekday)}
-            className={cn(
-              'w-12 h-5 rounded-full transition-colors shrink-0 relative',
-              day.enabled ? 'bg-primary' : 'bg-muted-foreground/20',
-            )}
-            aria-pressed={day.enabled}
-          >
-            <span className={cn('absolute top-0.5 size-4 rounded-full bg-white shadow transition-transform', day.enabled ? 'translate-x-7' : 'translate-x-0.5')} />
-          </button>
-          <span className="w-8 text-xs font-semibold shrink-0">{DAYS[day.weekday]}</span>
+        <div
+          key={day.weekday}
+          className={cn(
+            'flex items-center gap-3 rounded-xl px-3 py-2.5 border transition-colors',
+            day.enabled ? 'bg-muted/30 border-border' : 'bg-transparent border-border/50 opacity-60',
+          )}
+        >
+          <Toggle on={day.enabled} onToggle={() => toggle(day.weekday)} />
+          <span className={cn('w-9 text-xs font-semibold shrink-0', day.enabled ? 'text-foreground' : 'text-muted-foreground')}>
+            {DAYS[day.weekday]}
+          </span>
           {day.enabled ? (
-            <div className="flex items-center gap-2 flex-1">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               <input
                 type="time"
                 value={day.startTime}
                 onChange={(e) => setTime(day.weekday, 'startTime', e.target.value)}
-                className="flex-1 rounded border border-input bg-transparent px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                className="flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
               />
-              <span className="text-xs text-muted-foreground">–</span>
+              <span className="text-xs text-muted-foreground shrink-0">–</span>
               <input
                 type="time"
                 value={day.endTime}
                 onChange={(e) => setTime(day.weekday, 'endTime', e.target.value)}
-                className="flex-1 rounded border border-input bg-transparent px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                className="flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           ) : (
@@ -376,7 +322,134 @@ function ScheduleEditor({ schedule, onChange }: { schedule: ScheduleDay[]; onCha
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Staff card ───────────────────────────────────────────────────────────────
+
+function StaffCard({
+  member,
+  onEdit,
+  onSchedule,
+  onTimeOff,
+  onToggleActive,
+  busy,
+}: {
+  member: StaffMember;
+  onEdit: (m: StaffMember) => void;
+  onSchedule: (m: StaffMember) => void;
+  onTimeOff: (m: StaffMember) => void;
+  onToggleActive: (m: StaffMember) => void;
+  busy: boolean;
+}) {
+  const onLeave = isOnTimeOff(member);
+  const displayName = member.displayName || member.name;
+  const hasSchedule = member.workingHours.length > 0;
+
+  return (
+    <div
+      className={cn(
+        'group rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md',
+        !member.active && 'opacity-50 grayscale',
+        member.active && onLeave && 'opacity-60 grayscale',
+      )}
+    >
+      <div className="p-4 flex gap-4">
+        <Avatar member={member} size="lg" />
+
+        <div className="flex-1 min-w-0 space-y-2">
+          {/* Name + status */}
+          <div className="flex flex-wrap items-start justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="font-semibold text-sm leading-tight truncate">{displayName}</p>
+              {member.displayName && member.displayName !== member.name && (
+                <p className="text-[11px] text-muted-foreground leading-tight">{member.name}</p>
+              )}
+              {member.bio && (
+                <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">{member.bio}</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1 shrink-0">
+              {!member.active && (
+                <Badge variant="secondary" className="text-[10px] py-0">Inactive</Badge>
+              )}
+              {member.active && onLeave && (
+                <Badge className="text-[10px] py-0 bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">On leave</Badge>
+              )}
+              {member.active && !onLeave && !member.isBookable && (
+                <Badge variant="outline" className="text-[10px] py-0">Not bookable</Badge>
+              )}
+              {member.active && !onLeave && member.isBookable && (
+                <Badge className="text-[10px] py-0 bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30">Available</Badge>
+              )}
+            </div>
+          </div>
+
+          {/* Specialties */}
+          {member.specialties.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {member.specialties.map((s) => (
+                <span key={s} className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{s}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Weekly schedule strip */}
+          {hasSchedule ? (
+            <div className="flex gap-0.5">
+              {DAYS.map((d, i) => {
+                const wh = member.workingHours.find((h) => h.weekday === i);
+                return (
+                  <span
+                    key={d}
+                    title={wh ? `${d}: ${wh.startTime} – ${wh.endTime}` : `${d}: day off`}
+                    className={cn(
+                      'text-[10px] font-semibold flex-1 text-center rounded-md py-0.5',
+                      wh ? 'bg-primary/10 text-primary' : 'bg-muted/60 text-muted-foreground/30',
+                    )}
+                  >
+                    {d[0]}
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSchedule(member)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-primary transition-colors"
+            >
+              <span className="text-base leading-none">＋</span> Set weekly schedule
+            </button>
+          )}
+
+          {/* Action row */}
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onEdit(member)}>
+              Edit
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onSchedule(member)}>
+              Schedule
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onTimeOff(member)}>
+              Time off
+            </Button>
+            <Button
+              type="button" size="sm" variant="ghost" disabled={busy}
+              className={cn(
+                'transition-opacity',
+                'opacity-100 sm:opacity-0 sm:group-hover:opacity-100',
+                member.active ? 'text-muted-foreground hover:text-destructive' : 'text-primary hover:text-primary',
+              )}
+              onClick={() => onToggleActive(member)}
+            >
+              {member.active ? 'Deactivate' : 'Reactivate'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
   initialStaff: StaffMember[];
@@ -390,21 +463,25 @@ export function StaffClient({ initialStaff, token }: Props) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
   const [selected, setSelected] = useState<StaffMember | null>(null);
 
-  // Edit form state
-  const [editForm, setEditForm] = useState({ name: '', displayName: '', bio: '', specialties: '', isBookable: true, avatarUrl: null as string | null });
+  const [editForm, setEditForm] = useState({
+    name: '', displayName: '', bio: '', specialties: '', isBookable: true, avatarUrl: null as string | null,
+  });
 
-  // Schedule state
   const [schedule, setSchedule] = useState<ScheduleDay[]>(DEFAULT_SCHEDULE);
   const [savingSchedule, setSavingSchedule] = useState(false);
 
-  // Time off state
   const [timeOffs, setTimeOffs] = useState<TimeOff[]>([]);
   const [loadingTimeOff, setLoadingTimeOff] = useState(false);
-  const [newTimeOff, setNewTimeOff] = useState({ start: isoDateStr(new Date()), end: isoDateStr(new Date(Date.now() + 86400000)), reason: '' });
+  const [newTimeOff, setNewTimeOff] = useState({
+    start: localDateStr(new Date()),
+    end: localDateStr(new Date(Date.now() + 86400000)),
+    reason: '',
+  });
   const [addingTimeOff, setAddingTimeOff] = useState(false);
 
   useEffect(() => {
@@ -413,7 +490,9 @@ export function StaffClient({ initialStaff, token }: Props) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const showToast = (message: string, type: 'success' | 'error') => setToast({ message, type });
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -425,10 +504,11 @@ export function StaffClient({ initialStaff, token }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, showToast]);
 
   function openEdit(member: StaffMember) {
     setSelected(member);
+    setDeleteConfirm(false);
     setEditForm({
       name: member.name,
       displayName: member.displayName ?? '',
@@ -442,6 +522,7 @@ export function StaffClient({ initialStaff, token }: Props) {
 
   function openAddNew() {
     setSelected(null);
+    setDeleteConfirm(false);
     setEditForm({ name: '', displayName: '', bio: '', specialties: '', isBookable: true, avatarUrl: null });
     setSheetMode('edit');
   }
@@ -469,6 +550,7 @@ export function StaffClient({ initialStaff, token }: Props) {
   function closeSheet() {
     setSheetMode(null);
     setSelected(null);
+    setDeleteConfirm(false);
   }
 
   async function handleSaveEdit(e: React.FormEvent) {
@@ -493,8 +575,23 @@ export function StaffClient({ initialStaff, token }: Props) {
       }
       closeSheet();
       await reload();
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDeleteStaff() {
+    if (!selected) return;
+    setBusyId(selected.id);
+    try {
+      await apiFetch(`/staff/${selected.id}`, { method: 'DELETE' }, token);
+      showToast('Staff member removed', 'success');
+      closeSheet();
+      await reload();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Delete failed', 'error');
     } finally {
       setBusyId(null);
     }
@@ -505,12 +602,16 @@ export function StaffClient({ initialStaff, token }: Props) {
     setSavingSchedule(true);
     try {
       const hours = scheduleToPayload(schedule);
-      await apiFetch(`/staff/${selected.id}/working-hours`, { method: 'PUT', body: JSON.stringify({ hours }) }, token);
+      await apiFetch(
+        `/staff/${selected.id}/working-hours`,
+        { method: 'PUT', body: JSON.stringify({ hours }) },
+        token,
+      );
       showToast('Schedule saved', 'success');
       closeSheet();
       await reload();
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
     } finally {
       setSavingSchedule(false);
     }
@@ -522,17 +623,28 @@ export function StaffClient({ initialStaff, token }: Props) {
     setAddingTimeOff(true);
     try {
       const payload = {
-        start: new Date(newTimeOff.start + 'T00:00:00').toISOString(),
-        end: new Date(newTimeOff.end + 'T23:59:59').toISOString(),
+        // Use UTC midnight / end-of-day so date boundaries never drift with timezone
+        start: dateToUtcStart(newTimeOff.start),
+        end: dateToUtcEnd(newTimeOff.end),
         reason: newTimeOff.reason.trim() || null,
       };
-      const data = await apiFetch<{ timeOff: TimeOff }>(`/staff/${selected.id}/time-off`, { method: 'POST', body: JSON.stringify(payload) }, token);
-      setTimeOffs((prev) => [...prev, data.timeOff].sort((a, b) => a.start.localeCompare(b.start)));
-      setNewTimeOff({ start: isoDateStr(new Date()), end: isoDateStr(new Date(Date.now() + 86400000)), reason: '' });
+      const data = await apiFetch<{ timeOff: TimeOff }>(
+        `/staff/${selected.id}/time-off`,
+        { method: 'POST', body: JSON.stringify(payload) },
+        token,
+      );
+      setTimeOffs((prev) =>
+        [...prev, data.timeOff].sort((a, b) => a.start.localeCompare(b.start)),
+      );
+      setNewTimeOff({
+        start: localDateStr(new Date()),
+        end: localDateStr(new Date(Date.now() + 86400000)),
+        reason: '',
+      });
       showToast('Time off added', 'success');
       await reload();
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Failed to add time off', 'error');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to add time off', 'error');
     } finally {
       setAddingTimeOff(false);
     }
@@ -545,19 +657,23 @@ export function StaffClient({ initialStaff, token }: Props) {
       setTimeOffs((prev) => prev.filter((t) => t.id !== timeOffId));
       showToast('Time off removed', 'success');
       await reload();
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Failed to remove', 'error');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to remove', 'error');
     }
   }
 
   async function handleToggleActive(member: StaffMember) {
     setBusyId(member.id);
     try {
-      await apiFetch(`/staff/${member.id}`, { method: 'PATCH', body: JSON.stringify({ active: !member.active }) }, token);
+      await apiFetch(
+        `/staff/${member.id}`,
+        { method: 'PATCH', body: JSON.stringify({ active: !member.active }) },
+        token,
+      );
       showToast(member.active ? 'Staff member deactivated' : 'Staff member reactivated', 'success');
       await reload();
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Update failed', 'error');
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Update failed', 'error');
     } finally {
       setBusyId(null);
     }
@@ -565,15 +681,17 @@ export function StaffClient({ initialStaff, token }: Props) {
 
   const active = staff.filter((s) => s.active);
   const inactive = staff.filter((s) => !s.active);
+  const totalBookings = staff.reduce((n, s) => n + (s._count?.appointments ?? 0), 0);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Staff</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {active.length} active · {staff.reduce((n, s) => n + (s._count?.appointments ?? 0), 0).toLocaleString()} total bookings via WhatsApp
+            {active.length} active member{active.length !== 1 ? 's' : ''}
+            {totalBookings > 0 && ` · ${totalBookings.toLocaleString()} bookings via WhatsApp`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -584,31 +702,33 @@ export function StaffClient({ initialStaff, token }: Props) {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+      {/* ── Legend ── */}
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
-          <span className="inline-flex size-4 rounded-full bg-primary items-center justify-center text-[9px] text-primary-foreground font-bold">12</span>
-          Bookings via WhatsApp
+          <span className="inline-flex size-4 rounded-full bg-primary items-center justify-center text-[9px] text-primary-foreground font-bold">9</span>
+          WhatsApp bookings
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-green-600/20 border border-green-600/30 inline-block" />
-          Available today
+          <span className="size-2.5 rounded-full bg-green-500 inline-block" />
+          Available
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-amber-500/20 border border-amber-500/30 inline-block" />
-          On leave
+          <span className="size-2.5 rounded-full bg-amber-500 inline-block" />
+          On leave — card greyed out
         </span>
-        <span className="flex items-center gap-1.5 opacity-50">
-          <span className="w-3 h-3 rounded-sm bg-muted inline-block border" />
-          Inactive / greyed out
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-full bg-muted-foreground/30 inline-block" />
+          Inactive — greyed out
         </span>
       </div>
 
-      {/* Active staff */}
+      {/* ── Active staff ── */}
       {active.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Active</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+        <section>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+            Active · {active.length}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {active.map((m) => (
               <StaffCard
                 key={m.id}
@@ -621,14 +741,16 @@ export function StaffClient({ initialStaff, token }: Props) {
               />
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Inactive staff */}
+      {/* ── Inactive staff ── */}
       {inactive.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">Inactive</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+        <section>
+          <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+            Inactive · {inactive.length}
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {inactive.map((m) => (
               <StaffCard
                 key={m.id}
@@ -641,23 +763,29 @@ export function StaffClient({ initialStaff, token }: Props) {
               />
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {staff.length === 0 && !loading && (
-        <div className="text-center py-16">
-          <p className="text-muted-foreground text-sm mb-3">No staff members yet.</p>
-          <Button onClick={openAddNew}>Add your first staff member</Button>
+        <div className="text-center py-20 rounded-2xl border-2 border-dashed border-border">
+          <p className="text-2xl mb-2">👩‍💼</p>
+          <p className="font-semibold text-sm">No staff members yet</p>
+          <p className="text-muted-foreground text-xs mt-1 mb-4">
+            Add your stylists, therapists, and team members here.
+          </p>
+          <Button onClick={openAddNew}>Add first staff member</Button>
         </div>
       )}
 
-      {/* ── Edit / Add Sheet ── */}
+      {/* ══ Edit / Add Sheet ══ */}
       <Sheet open={sheetMode === 'edit'} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>{selected ? 'Edit staff member' : 'Add staff member'}</SheetTitle>
             <SheetDescription>
-              {selected ? 'Update profile details and photo.' : 'Add a new stylist, therapist, or team member.'}
+              {selected
+                ? 'Update profile details and photo.'
+                : 'Add a new stylist, therapist, or team member.'}
             </SheetDescription>
           </SheetHeader>
           <form onSubmit={(e) => void handleSaveEdit(e)} className="flex flex-col gap-5 px-4 pb-4">
@@ -668,7 +796,9 @@ export function StaffClient({ initialStaff, token }: Props) {
             />
 
             <div className="space-y-2">
-              <Label htmlFor="staff-name">Full name <span className="text-destructive">*</span></Label>
+              <Label htmlFor="staff-name">
+                Full name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="staff-name"
                 value={editForm.name}
@@ -680,12 +810,14 @@ export function StaffClient({ initialStaff, token }: Props) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="staff-display">Display name / nickname</Label>
+              <Label htmlFor="staff-display">
+                Display name <span className="text-muted-foreground text-xs font-normal">(nickname shown to customers)</span>
+              </Label>
               <Input
                 id="staff-display"
                 value={editForm.displayName}
                 onChange={(e) => setEditForm((f) => ({ ...f, displayName: e.target.value }))}
-                placeholder="e.g. Zee (shown to customers)"
+                placeholder="e.g. Zee"
               />
             </div>
 
@@ -705,25 +837,58 @@ export function StaffClient({ initialStaff, token }: Props) {
                 id="staff-specialties"
                 value={editForm.specialties}
                 onChange={(e) => setEditForm((f) => ({ ...f, specialties: e.target.value }))}
-                placeholder="Braids, Relaxers, Natural Hair (comma-separated)"
+                placeholder="Braids, Relaxers, Natural Hair"
               />
-              <p className="text-xs text-muted-foreground">Comma-separated list shown as tags on the card.</p>
+              <p className="text-xs text-muted-foreground">Comma-separated — shown as tags on the card.</p>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center justify-between rounded-xl border p-3 gap-4">
               <div>
                 <p className="text-sm font-medium">Bookable via WhatsApp</p>
-                <p className="text-xs text-muted-foreground">Customers can request this staff member when booking.</p>
+                <p className="text-xs text-muted-foreground">Customers can request this team member when booking.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setEditForm((f) => ({ ...f, isBookable: !f.isBookable }))}
-                className={cn('w-11 h-6 rounded-full transition-colors relative shrink-0', editForm.isBookable ? 'bg-primary' : 'bg-muted-foreground/20')}
-                aria-pressed={editForm.isBookable}
-              >
-                <span className={cn('absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform', editForm.isBookable ? 'translate-x-5.5' : 'translate-x-0.5')} />
-              </button>
+              <Toggle
+                on={editForm.isBookable}
+                onToggle={() => setEditForm((f) => ({ ...f, isBookable: !f.isBookable }))}
+              />
             </div>
+
+            {/* Delete zone — only for existing staff */}
+            {selected && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                <p className="text-xs font-medium text-destructive">Danger zone</p>
+                {deleteConfirm ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      This permanently removes {selected.displayName || selected.name} and all their schedule data. This cannot be undone.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button" size="sm" variant="destructive"
+                        disabled={busyId !== null}
+                        onClick={() => void handleDeleteStaff()}
+                      >
+                        {busyId !== null ? 'Deleting…' : 'Yes, delete'}
+                      </Button>
+                      <Button
+                        type="button" size="sm" variant="outline"
+                        onClick={() => setDeleteConfirm(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    type="button" size="sm" variant="outline"
+                    className="text-destructive hover:text-destructive border-destructive/40 hover:bg-destructive/10"
+                    onClick={() => setDeleteConfirm(true)}
+                  >
+                    Remove staff member…
+                  </Button>
+                )}
+              </div>
+            )}
 
             <SheetFooter className="px-0">
               <Button type="button" variant="outline" onClick={closeSheet}>Cancel</Button>
@@ -735,13 +900,14 @@ export function StaffClient({ initialStaff, token }: Props) {
         </SheetContent>
       </Sheet>
 
-      {/* ── Schedule Sheet ── */}
+      {/* ══ Schedule Sheet ══ */}
       <Sheet open={sheetMode === 'schedule'} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Weekly schedule</SheetTitle>
             <SheetDescription>
-              Set the days and hours {selected?.displayName || selected?.name} is available for bookings.
+              Set which days and hours {selected?.displayName || selected?.name} is available for bookings.
+              The bot will only offer slots during these hours.
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-5 px-4 pb-4">
@@ -757,8 +923,8 @@ export function StaffClient({ initialStaff, token }: Props) {
 
             <ScheduleEditor schedule={schedule} onChange={setSchedule} />
 
-            <p className="text-xs text-muted-foreground">
-              Days toggled off are shown as &ldquo;Day off&rdquo;. When fully booked on a working day, the staff card is greyed out automatically.
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Days toggled off will show as unavailable in the WhatsApp booking flow. Use the <strong>Time off</strong> sheet for temporary absence like sick days or leave.
             </p>
 
             <SheetFooter className="px-0">
@@ -771,14 +937,15 @@ export function StaffClient({ initialStaff, token }: Props) {
         </SheetContent>
       </Sheet>
 
-      {/* ── Time Off Sheet ── */}
+      {/* ══ Time Off Sheet ══ */}
       <Sheet open={sheetMode === 'timeoff'} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Time off & leave</SheetTitle>
+            <SheetTitle>Time off &amp; leave</SheetTitle>
             <SheetDescription>
-              Schedule leave, sick days, or holidays for {selected?.displayName || selected?.name}.
-              The staff card will show greyed out on these dates.
+              Schedule leave, sick days, or holidays for{' '}
+              <strong>{selected?.displayName || selected?.name}</strong>.
+              The card greys out and the slot becomes unavailable to customers on these dates.
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-5 px-4 pb-4">
@@ -789,7 +956,7 @@ export function StaffClient({ initialStaff, token }: Props) {
               </div>
             )}
 
-            {/* Add new */}
+            {/* Add form */}
             <form onSubmit={(e) => void handleAddTimeOff(e)} className="rounded-xl border p-4 space-y-3 bg-muted/20">
               <p className="text-sm font-semibold">Add time off</p>
               <div className="grid grid-cols-2 gap-3">
@@ -800,7 +967,7 @@ export function StaffClient({ initialStaff, token }: Props) {
                     type="date"
                     value={newTimeOff.start}
                     onChange={(e) => setNewTimeOff((s) => ({ ...s, start: e.target.value }))}
-                    className="w-full rounded border border-input bg-transparent px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     required
                   />
                 </div>
@@ -812,7 +979,7 @@ export function StaffClient({ initialStaff, token }: Props) {
                     value={newTimeOff.end}
                     min={newTimeOff.start}
                     onChange={(e) => setNewTimeOff((s) => ({ ...s, end: e.target.value }))}
-                    className="w-full rounded border border-input bg-transparent px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
                     required
                   />
                 </div>
@@ -831,41 +998,45 @@ export function StaffClient({ initialStaff, token }: Props) {
               </Button>
             </form>
 
-            {/* Existing */}
+            {/* Existing list */}
             <div>
               <p className="text-sm font-semibold mb-2">Upcoming &amp; current</p>
-              {loadingTimeOff && <p className="text-xs text-muted-foreground">Loading…</p>}
+              {loadingTimeOff && (
+                <p className="text-xs text-muted-foreground py-3">Loading…</p>
+              )}
               {!loadingTimeOff && timeOffs.length === 0 && (
-                <p className="text-xs text-muted-foreground">No time off scheduled.</p>
+                <p className="text-xs text-muted-foreground py-3">No time off scheduled.</p>
               )}
               <div className="space-y-2">
                 {timeOffs.map((t) => {
                   const now = new Date();
-                  const start = new Date(t.start);
-                  const end = new Date(t.end);
-                  const isNow = start <= now && end >= now;
-                  const isPast = end < now;
+                  const isNow = new Date(t.start) <= now && new Date(t.end) >= now;
+                  const isPast = new Date(t.end) < now;
                   return (
                     <div
                       key={t.id}
                       className={cn(
-                        'flex items-start justify-between gap-3 rounded-lg border p-3',
+                        'flex items-start justify-between gap-3 rounded-xl border p-3',
                         isNow && 'border-amber-500/40 bg-amber-500/5',
                         isPast && 'opacity-50',
                       )}
                     >
-                      <div className="space-y-0.5">
-                        <p className="text-sm font-medium">
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="text-sm font-medium leading-tight">
                           {formatDate(t.start)} – {formatDate(t.end)}
                         </p>
                         {t.reason && <p className="text-xs text-muted-foreground">{t.reason}</p>}
-                        {isNow && <Badge className="text-[10px] bg-amber-500/15 text-amber-700 border-amber-500/30">Active now</Badge>}
-                        {isPast && <Badge variant="outline" className="text-[10px]">Past</Badge>}
+                        <div className="flex gap-1 pt-0.5">
+                          {isNow && (
+                            <Badge className="text-[10px] bg-amber-500/15 text-amber-700 border-amber-500/30">Active now</Badge>
+                          )}
+                          {isPast && (
+                            <Badge variant="outline" className="text-[10px]">Past</Badge>
+                          )}
+                        </div>
                       </div>
                       <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
+                        type="button" size="sm" variant="ghost"
                         className="text-destructive hover:text-destructive shrink-0"
                         onClick={() => void handleDeleteTimeOff(t.id)}
                       >
