@@ -1,7 +1,7 @@
 'use server';
 
 import { getToken } from '@/lib/auth';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
 
 export interface SalonSettings {
   id: string;
@@ -15,6 +15,27 @@ export interface SalonSettings {
   status: string;
   botActive: boolean;
   botName: string;
+}
+
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    await apiFetch('/me/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }, token);
+    return {};
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 401) return { error: 'Current password is incorrect' };
+      if (e.status === 400) return { error: e.message };
+    }
+    return { error: 'Failed to change password' };
+  }
 }
 
 export async function saveDisplayName(tradingName: string): Promise<{ salon?: SalonSettings; error?: string }> {

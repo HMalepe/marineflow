@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import bcrypt from 'bcryptjs';
 import { requireAuth, requireRole } from './auth.js';
+import { validateStrongPassword } from '../lib/salonPhoneLookup.js';
 import { withUserTenant } from '../lib/db/withUserTenant.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { earnStampForCompletedVisit } from '../services/loyalty.js';
@@ -63,6 +65,34 @@ function serializeFaq(item: {
 export async function dashboardApiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request, reply) => {
     await requireAuth(request, reply);
+  });
+
+  app.post('/me/change-password', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { currentPassword, newPassword } = request.body as {
+        currentPassword?: string;
+        newPassword?: string;
+      };
+      if (!currentPassword || !newPassword) {
+        return reply.code(400).send({ error: 'fields_required' });
+      }
+      const passwordError = validateStrongPassword(newPassword);
+      if (passwordError) {
+        return reply.code(400).send({ error: 'weak_password', message: passwordError });
+      }
+      const db = getTenantDb();
+      const u = await db.staffUser.findUniqueOrThrow({
+        where: { id: user.sub },
+        select: { passwordHash: true },
+      });
+      const ok = await bcrypt.compare(currentPassword, u.passwordHash);
+      if (!ok) {
+        return reply.code(401).send({ error: 'wrong_current_password' });
+      }
+      const hash = await bcrypt.hash(newPassword, 12);
+      await db.staffUser.update({ where: { id: user.sub }, data: { passwordHash: hash } });
+      return { ok: true };
+    });
   });
 
   app.get('/me', async (request, reply) => {

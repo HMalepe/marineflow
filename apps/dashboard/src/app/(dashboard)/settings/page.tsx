@@ -4,6 +4,7 @@ import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { SettingsForm } from './settings-form';
 import { SalonSettingsForm, type SalonSettings } from './salon-settings-form';
+import { ChangePasswordForm } from './change-password-form';
 
 interface MeResponse {
   user: {
@@ -74,6 +75,16 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Change Password</CardTitle>
+          <CardDescription>Update your dashboard login password</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangePasswordForm />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
