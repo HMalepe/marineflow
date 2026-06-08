@@ -24,11 +24,33 @@ function apiUrl(phoneNumberId: string): string {
   return `${API_BASE}/${env.META_API_VERSION}/${phoneNumberId}/messages`;
 }
 
+function buildMediaPayload(options: SendOptions): Record<string, unknown> | null {
+  const { mediaUrl, mediaType, body } = options;
+  if (!mediaUrl || !mediaType) return null;
+  const caption = body.trim() || undefined;
+  if (mediaType === 'video') {
+    return {
+      type: 'video',
+      video: { link: mediaUrl, ...(caption ? { caption } : {}) },
+    };
+  }
+  return {
+    type: 'image',
+    image: { link: mediaUrl, ...(caption ? { caption } : {}) },
+  };
+}
+
 export const whatsappCloudMessaging: MessagingProvider = {
   async sendText(options: SendOptions): Promise<SentMessage> {
     const { to, body, phoneNumberId } = options;
     if (!phoneNumberId) throw new Error('phoneNumberId required for Meta Cloud API');
     if (!env.META_ACCESS_TOKEN) throw new Error('META_ACCESS_TOKEN not configured');
+
+    const mediaPayload = buildMediaPayload(options);
+    const payload = mediaPayload ?? {
+      type: 'text',
+      text: { preview_url: false, body },
+    };
 
     const response = await fetch(apiUrl(phoneNumberId), {
       method: 'POST',
@@ -40,8 +62,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: to.replace(/^\+/, ''),
-        type: 'text',
-        text: { preview_url: false, body },
+        ...payload,
       }),
     });
 

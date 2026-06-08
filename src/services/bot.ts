@@ -28,6 +28,17 @@ import {
 import { createDepositCheckoutSession } from './payments.js';
 import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
+import {
+  applyMarketingConsentChoice,
+  buildConsentAcceptedMessage,
+  buildConsentDeclinedMessage,
+  buildConsentStopMessage,
+  buildPopiaConsentMessage,
+  isGlobalMarketingOptIn,
+  isGlobalMarketingOptOut,
+  needsMarketingConsentPrompt,
+  parseMarketingConsentReply,
+} from './marketingConsent.js';
 
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
@@ -331,6 +342,9 @@ async function processInboundWhatsApp(
     return;
   }
 
+  const consentHandled = await handleMarketingConsentFlow(conv, text);
+  if (consentHandled) return;
+
   const lower = text.toLowerCase();
   if (lower === 'undo' || lower === 'back') {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -458,6 +472,67 @@ async function processInboundWhatsApp(
   }
 }
 
+async function handleMarketingConsentFlow(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+): Promise<boolean> {
+  const salon = conv.salon;
+  const status = conv.customer.marketingConsentStatus;
+
+  if (isGlobalMarketingOptOut(text)) {
+    if (status !== 'DECLINED') {
+      await applyMarketingConsentChoice({
+        customerId: conv.customerId,
+        salonId: salon.id,
+        choice: 'decline',
+        source: 'whatsapp_stop',
+      });
+    }
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `${buildConsentStopMessage()}\n\n${mainMenu(salon)}`);
+    return true;
+  }
+
+  if (status === 'DECLINED' && isGlobalMarketingOptIn(text)) {
+    await applyMarketingConsentChoice({
+      customerId: conv.customerId,
+      salonId: salon.id,
+      choice: 'accept',
+      source: 'whatsapp_opt_in',
+    });
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `${buildConsentAcceptedMessage()}\n\n${mainMenu(salon)}`);
+    return true;
+  }
+
+  if (!needsMarketingConsentPrompt(status)) {
+    return false;
+  }
+
+  const choice = parseMarketingConsentReply(text);
+  if (choice) {
+    await applyMarketingConsentChoice({
+      customerId: conv.customerId,
+      salonId: salon.id,
+      choice,
+      source: 'whatsapp',
+    });
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    const ack = choice === 'accept' ? buildConsentAcceptedMessage() : buildConsentDeclinedMessage();
+    await reply(conv, `${ack}\n\n${mainMenu(salon)}`);
+    return true;
+  }
+
+  if (conv.step !== ConversationStep.MARKETING_CONSENT) {
+    await saveCtx(conv.id, {}, ConversationStep.MARKETING_CONSENT);
+    await reply(conv, buildPopiaConsentMessage(salon.tradingName ?? salon.name));
+    return true;
+  }
+
+  await reply(conv, 'Please reply *ACCEPT* or *DECLINE* for marketing messages (POPIA).');
+  return true;
+}
+
 async function routeConversation(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -470,6 +545,9 @@ async function routeConversation(
     case ConversationStep.MENU:
     case ConversationStep.IDLE:
       await handleMenu(conv, t);
+      break;
+    case ConversationStep.MARKETING_CONSENT:
+      await handleMarketingConsentFlow(conv, t);
       break;
     case ConversationStep.PICK_SERVICE:
       await handlePickService(conv, t);

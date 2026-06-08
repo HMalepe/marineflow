@@ -19,18 +19,26 @@ export async function sendWithFallback(params: {
   to: string;
   body: string;
   phoneNumberId?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video' | 'document' | 'audio';
 }): Promise<{ channel: Channel; result: SentMessage }> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: params.salonId },
     select: { whatsappPhoneId: true, twilioWhatsAppFrom: true },
   });
 
+  const sendOpts = {
+    to: params.to,
+    body: params.body,
+    mediaUrl: params.mediaUrl,
+    mediaType: params.mediaType,
+  };
+
   // Try WhatsApp Cloud API
   if (salon.whatsappPhoneId) {
     try {
       const result = await whatsappCloudMessaging.sendText({
-        to: params.to,
-        body: params.body,
+        ...sendOpts,
         phoneNumberId: salon.whatsappPhoneId,
       });
       if (result.providerMessageId) {
@@ -46,8 +54,8 @@ export async function sendWithFallback(params: {
   if (salon.twilioWhatsAppFrom || isTwilioConfigured()) {
     try {
       const result = await twilioMessaging.sendText({
+        ...sendOpts,
         to: `whatsapp:${params.to}`,
-        body: params.body,
       });
       if (result.providerMessageId) {
         return { channel: 'whatsapp', result };
@@ -57,17 +65,19 @@ export async function sendWithFallback(params: {
     }
   }
 
-  // Fallback to SMS
-  try {
-    const result = await smsMessaging.sendText({
-      to: params.to,
-      body: params.body,
-    });
-    if (result.providerMessageId) {
-      return { channel: 'sms', result };
+  // Media newsletters must stay on WhatsApp — SMS cannot carry attachments.
+  if (!params.mediaUrl) {
+    try {
+      const result = await smsMessaging.sendText({
+        to: params.to,
+        body: params.body,
+      });
+      if (result.providerMessageId) {
+        return { channel: 'sms', result };
+      }
+    } catch (err) {
+      logger.warn({ err }, 'sms_fallthrough');
     }
-  } catch (err) {
-    logger.warn({ err }, 'sms_fallthrough');
   }
 
   // All channels failed

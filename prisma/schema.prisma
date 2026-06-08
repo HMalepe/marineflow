@@ -101,8 +101,15 @@ enum TicketStatus {
   RESOLVED
 }
 
+enum MarketingConsentStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 enum ConversationStep {
   GREETING
+  MARKETING_CONSENT
   MENU
   PICK_BRANCH
   PICK_SERVICE
@@ -242,8 +249,9 @@ model Customer {
   tags                String[]  @default([])
   notes               String?   @db.Text
   source              String    @default("whatsapp")  /// whatsapp | web | import | referral
-  marketingConsent    Boolean   @default(false)
-  marketingConsentAt  DateTime?
+  marketingConsent        Boolean                 @default(false)
+  marketingConsentStatus  MarketingConsentStatus  @default(PENDING)
+  marketingConsentAt      DateTime?
   preferredStaffId    String?
   preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id])
   passwordHash        String?
@@ -800,6 +808,10 @@ model Campaign {
   name          String
   templateName  String
   templateLang  String         @default("en")
+  /** Public HTTPS URL for WhatsApp image/video attachment */
+  mediaUrl      String?
+  /** image | video */
+  mediaType     String?
   audienceFilter Json          @default("{}")
   status        CampaignStatus @default(DRAFT)
   scheduledAt   DateTime?

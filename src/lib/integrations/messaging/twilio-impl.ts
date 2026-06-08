@@ -11,7 +11,7 @@ import type {
 
 export const twilioMessaging: MessagingProvider = {
   async sendText(options: SendOptions): Promise<SentMessage> {
-    const sid = await sendWhatsAppReply(options.to, options.body);
+    const sid = await sendWhatsAppReply(options.to, options.body, options.mediaUrl);
     return { providerMessageId: sid, timestamp: new Date() };
   },
 

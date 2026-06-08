@@ -46,7 +46,7 @@ export async function buildQuickPickOptions(input: {
 }): Promise<QuickPickOption[]> {
   const max = input.maxOptions ?? 3;
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: input.serviceId } });
-  let staffList = await getStaffForService(input.salonId, input.serviceId);
+  const staffList = await getStaffForService(input.salonId, input.serviceId);
   if (staffList.length === 0) return [];
 
   const staff = input.staffId

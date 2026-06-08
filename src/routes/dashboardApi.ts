@@ -28,6 +28,27 @@ import { exportCustomerData, eraseCustomerData } from '../services/compliance.js
 import { generateWebhookSecret } from '../services/webhookDelivery.js';
 import { embedFaqItem } from '../services/knowledge.js';
 import type { FaqStatus } from '@prisma/client';
+import {
+  setMarketingConsent,
+  parseMarketingConsentStatus,
+} from '../services/marketingConsent.js';
+
+export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
+import {
+  cancelCampaign,
+  countAudience,
+  countOptedInCustomers,
+  createCampaign,
+  getCampaign,
+  listCampaigns,
+  listCustomerTags,
+  queueCampaignSend,
+  serializeCampaign,
+  parseCampaignMediaType,
+  validateCampaignMedia,
+  updateCampaign,
+  type AudienceFilter,
+} from '../services/campaigns.js';
 
 type FaqApiStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -788,6 +809,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         displayName: customer.displayName,
         email: customer.email,
         waId: customer.waId,
+        marketingConsent: customer.marketingConsent,
+        marketingConsentStatus: customer.marketingConsentStatus,
+        marketingConsentAt: customer.marketingConsentAt?.toISOString() ?? null,
         createdAt: customer.createdAt,
         loyaltyStamps: loyaltySum._sum.delta ?? 0,
         appointments: appointments.map((a) => ({
@@ -807,7 +831,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
-  app.patch<{ Params: { id: string }; Body: { tags?: string[]; notes?: string; marketingConsent?: boolean; preferredStaffId?: string | null } }>(
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      tags?: string[];
+      notes?: string;
+      marketingConsent?: boolean;
+      marketingConsentStatus?: MarketingConsentStatus;
+      preferredStaffId?: string | null;
+    };
+  }>(
     '/customers/:id',
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
@@ -825,15 +858,38 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         if (request.body.tags !== undefined) data.tags = request.body.tags;
         if (request.body.notes !== undefined) data.notes = request.body.notes;
         if (request.body.preferredStaffId !== undefined) data.preferredStaffId = request.body.preferredStaffId;
-        if (request.body.marketingConsent !== undefined) {
-          data.marketingConsent = request.body.marketingConsent;
-          data.marketingConsentAt = request.body.marketingConsent ? new Date() : null;
+
+        if (request.body.marketingConsentStatus !== undefined) {
+          const status = parseMarketingConsentStatus(request.body.marketingConsentStatus);
+          if (!status) {
+            reply.code(400);
+            return {
+              error: 'invalid_consent_status',
+              message: 'Marketing consent status must be PENDING, ACCEPTED, or DECLINED.',
+            };
+          }
+          await setMarketingConsent({
+            customerId: existing.id,
+            salonId: user.salonId,
+            status,
+            source: 'dashboard',
+          });
+        } else if (request.body.marketingConsent !== undefined) {
+          await setMarketingConsent({
+            customerId: existing.id,
+            salonId: user.salonId,
+            status: request.body.marketingConsent ? 'ACCEPTED' : 'DECLINED',
+            source: 'dashboard',
+          });
         }
 
-        const updated = await db.customer.update({
-          where: { id: existing.id },
-          data,
-        });
+        const patchData = { ...data };
+
+        if (Object.keys(patchData).length > 0) {
+          await db.customer.update({ where: { id: existing.id }, data: patchData });
+        }
+
+        const finalCustomer = await db.customer.findUniqueOrThrow({ where: { id: existing.id } });
 
         await db.auditLog.create({
           data: {
@@ -842,11 +898,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             action: 'customer_update',
             entity: 'Customer',
             entityId: existing.id,
-            payload: data as unknown as Record<string, string | number | boolean | null>,
+            payload: {
+              ...patchData,
+              ...(request.body.marketingConsentStatus !== undefined ||
+              request.body.marketingConsent !== undefined
+                ? { marketingConsentStatus: finalCustomer.marketingConsentStatus }
+                : {}),
+            } as unknown as Record<string, string | number | boolean | null>,
           },
         });
 
-        return { customer: updated };
+        return { customer: finalCustomer };
       });
     },
   );
@@ -1502,11 +1564,29 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         return { error: 'filename and mimeType required' };
       }
 
+      const purposeValue = purpose ?? 'general';
+      if (purposeValue === 'campaign') {
+        const allowed = [
+          'image/jpeg',
+          'image/png',
+          'image/webp',
+          'video/mp4',
+          'video/quicktime',
+        ];
+        if (!allowed.includes(mimeType)) {
+          reply.code(400);
+          return {
+            error: 'invalid_campaign_media',
+            message: 'Newsletter media must be JPEG, PNG, WebP, or MP4 video.',
+          };
+        }
+      }
+
       const result = await generatePresignedUpload(
         user.salonId,
         filename,
         mimeType,
-        purpose ?? 'general',
+        purposeValue,
       );
 
       return result;
@@ -1886,7 +1966,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       }
 
       const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
-      const { errorCount: _drop, handoffByStaff: _drop2, ...cleanCtx } = currentCtx;
+      const cleanCtx = { ...currentCtx };
+      delete cleanCtx.errorCount;
+      delete cleanCtx.handoffByStaff;
 
       await db.conversation.update({
         where: { id: conv.id },
@@ -1920,6 +2002,333 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     '/conversations/:id/handoff/release',
     { preHandler: requireRole('OWNER', 'MANAGER') },
     releaseConversationHandler,
+  );
+
+  // ── Marketing campaigns (WhatsApp newsletter) ───────────────
+
+  app.get('/campaigns', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const items = await listCampaigns();
+      return { campaigns: items.map(serializeCampaign) };
+    });
+  });
+
+  app.get('/campaigns/meta', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const [tags, optedInCount] = await Promise.all([
+        listCustomerTags(user.salonId),
+        countOptedInCustomers(user.salonId),
+      ]);
+      return { tags, optedInCount };
+    });
+  });
+
+  app.post<{ Body: { audienceFilter?: AudienceFilter } }>(
+    '/campaigns/audience-preview',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const filter = (request.body?.audienceFilter ?? { type: 'all' }) as AudienceFilter;
+        const count = await countAudience(user.salonId, filter);
+        return { count };
+      });
+    },
+  );
+
+  app.get<{ Params: { id: string } }>('/campaigns/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const item = await getCampaign(request.params.id);
+      if (!item) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { campaign: serializeCampaign(item) };
+    });
+  });
+
+  app.post<{
+    Body: {
+      name: string;
+      message?: string;
+      mediaUrl?: string | null;
+      mediaType?: string | null;
+      audienceFilter?: AudienceFilter;
+      scheduledAt?: string | null;
+      sendNow?: boolean;
+    };
+  }>(
+    '/campaigns',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { name, message, mediaUrl, mediaType, audienceFilter, scheduledAt, sendNow } =
+          request.body ?? {};
+        if (!name?.trim()) {
+          reply.code(400);
+          return { error: 'name_required', message: 'Add a campaign name.' };
+        }
+
+        const trimmedMessage = message?.trim() ?? '';
+        const parsedMediaType = mediaUrl ? parseCampaignMediaType(mediaType) : null;
+        const mediaError = validateCampaignMedia(mediaUrl ?? null, parsedMediaType);
+        if (mediaError) {
+          reply.code(400);
+          return { error: 'invalid_media', message: mediaError };
+        }
+        if (!trimmedMessage && !mediaUrl) {
+          reply.code(400);
+          return {
+            error: 'content_required',
+            message: 'Add a message, photo, or video for your newsletter.',
+          };
+        }
+        if (trimmedMessage.length > 1024) {
+          reply.code(400);
+          return { error: 'message_too_long', message: 'Caption must be 1,024 characters or fewer.' };
+        }
+
+        let scheduleDate: Date | null = null;
+        if (scheduledAt) {
+          scheduleDate = new Date(scheduledAt);
+          if (Number.isNaN(scheduleDate.getTime())) {
+            reply.code(400);
+            return { error: 'invalid_schedule', message: 'That date and time is not valid.' };
+          }
+          if (scheduleDate.getTime() <= Date.now()) {
+            reply.code(400);
+            return { error: 'schedule_must_be_future', message: 'Schedule time must be in the future.' };
+          }
+        }
+
+        if (sendNow && scheduleDate) {
+          reply.code(400);
+          return { error: 'send_now_or_schedule' };
+        }
+
+        const audience = audienceFilter ?? { type: 'all' as const };
+        const recipientCount = await countAudience(user.salonId, audience);
+        if (recipientCount === 0) {
+          reply.code(400);
+          return { error: 'empty_audience', message: 'No customers match this audience with marketing consent.' };
+        }
+
+        const item = await createCampaign({
+          salonId: user.salonId,
+          name: name.trim(),
+          message: trimmedMessage,
+          mediaUrl: mediaUrl ?? null,
+          mediaType: parsedMediaType,
+          audienceFilter: audience,
+          scheduledAt: sendNow ? null : scheduleDate,
+          createdBy: user.sub,
+        });
+
+        await getTenantDb().auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: sendNow ? 'campaign_send_now' : scheduleDate ? 'campaign_schedule' : 'campaign_create',
+            entity: 'Campaign',
+            entityId: item.id,
+          },
+        });
+
+        if (sendNow) {
+          await queueCampaignSend(item.id, user.salonId);
+        }
+
+        return { campaign: serializeCampaign(item) };
+      });
+    },
+  );
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      message?: string;
+      mediaUrl?: string | null;
+      mediaType?: string | null;
+      clearMedia?: boolean;
+      audienceFilter?: AudienceFilter;
+      scheduledAt?: string | null;
+    };
+  }>(
+    '/campaigns/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const existing = await getCampaign(request.params.id);
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        const { name, message, mediaUrl, mediaType, clearMedia, audienceFilter, scheduledAt } =
+          request.body ?? {};
+        if (name !== undefined && !name.trim()) {
+          reply.code(400);
+          return { error: 'name_required', message: 'Add a campaign name.' };
+        }
+
+        const nextMessage = message !== undefined ? message.trim() : existing.templateName;
+        let nextMediaUrl = existing.mediaUrl;
+        let nextMediaType = parseCampaignMediaType(existing.mediaType);
+
+        if (clearMedia) {
+          nextMediaUrl = null;
+          nextMediaType = null;
+        } else if (mediaUrl !== undefined) {
+          nextMediaUrl = mediaUrl;
+          nextMediaType = mediaUrl ? parseCampaignMediaType(mediaType) : null;
+        } else if (mediaType !== undefined && nextMediaUrl) {
+          nextMediaType = parseCampaignMediaType(mediaType);
+        }
+
+        if (nextMediaUrl && !nextMediaType) {
+          reply.code(400);
+          return { error: 'invalid_media', message: 'Choose image or video for the attachment.' };
+        }
+        const mediaError = validateCampaignMedia(nextMediaUrl, nextMediaType);
+        if (mediaError) {
+          reply.code(400);
+          return { error: 'invalid_media', message: mediaError };
+        }
+        if (!nextMessage && !nextMediaUrl) {
+          reply.code(400);
+          return {
+            error: 'content_required',
+            message: 'Add a message, photo, or video for your newsletter.',
+          };
+        }
+        if (nextMessage.length > 1024) {
+          reply.code(400);
+          return { error: 'message_too_long', message: 'Caption must be 1,024 characters or fewer.' };
+        }
+
+        let scheduleDate: Date | null | undefined;
+        if (scheduledAt !== undefined) {
+          if (scheduledAt === null) {
+            scheduleDate = null;
+          } else {
+            scheduleDate = new Date(scheduledAt);
+            if (Number.isNaN(scheduleDate.getTime())) {
+              reply.code(400);
+              return { error: 'invalid_schedule', message: 'That date and time is not valid.' };
+            }
+            if (scheduleDate.getTime() <= Date.now()) {
+              reply.code(400);
+              return { error: 'schedule_must_be_future', message: 'Schedule time must be in the future.' };
+            }
+          }
+        }
+
+        if (audienceFilter) {
+          const count = await countAudience(user.salonId, audienceFilter);
+          if (count === 0) {
+            reply.code(400);
+            return { error: 'empty_audience', message: 'No customers match this audience with marketing consent.' };
+          }
+        }
+
+        try {
+          const updated = await updateCampaign(request.params.id, {
+            name: name?.trim(),
+            message: message !== undefined ? nextMessage : undefined,
+            mediaUrl: clearMedia || mediaUrl !== undefined ? nextMediaUrl : undefined,
+            mediaType: clearMedia || mediaUrl !== undefined || mediaType !== undefined ? nextMediaType : undefined,
+            audienceFilter,
+            scheduledAt: scheduleDate,
+          });
+
+          await getTenantDb().auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'campaign_update',
+              entity: 'Campaign',
+              entityId: updated.id,
+            },
+          });
+
+          return { campaign: serializeCampaign(updated) };
+        } catch (err) {
+          if (err instanceof Error && err.message === 'campaign_not_editable') {
+            reply.code(409);
+            return { error: 'campaign_not_editable', message: 'Only draft or scheduled campaigns can be edited.' };
+          }
+          throw err;
+        }
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/campaigns/:id/send',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const existing = await getCampaign(request.params.id);
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        try {
+          await queueCampaignSend(request.params.id, user.salonId);
+          await getTenantDb().auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'campaign_send_now',
+              entity: 'Campaign',
+              entityId: existing.id,
+            },
+          });
+          return { ok: true, message: 'Campaign queued for sending.' };
+        } catch (err) {
+          if (err instanceof Error && err.message === 'campaign_not_sendable') {
+            reply.code(409);
+            return { error: 'campaign_not_sendable', message: 'This campaign has already been sent or cancelled.' };
+          }
+          throw err;
+        }
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/campaigns/:id/cancel',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const existing = await getCampaign(request.params.id);
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+
+        try {
+          const updated = await cancelCampaign(request.params.id);
+          await getTenantDb().auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'campaign_cancel',
+              entity: 'Campaign',
+              entityId: updated.id,
+            },
+          });
+          return { campaign: serializeCampaign(updated) };
+        } catch (err) {
+          if (err instanceof Error && err.message === 'campaign_not_cancellable') {
+            reply.code(409);
+            return { error: 'campaign_not_cancellable', message: 'Only draft or scheduled campaigns can be cancelled.' };
+          }
+          throw err;
+        }
+      });
+    },
   );
 }
 

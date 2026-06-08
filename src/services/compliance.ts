@@ -55,6 +55,7 @@ export async function exportCustomerData(customerId: string) {
       notes: customer.notes,
       source: customer.source,
       marketingConsent: customer.marketingConsent,
+      marketingConsentStatus: customer.marketingConsentStatus,
       marketingConsentAt: customer.marketingConsentAt,
       createdAt: customer.createdAt,
     },
@@ -117,6 +118,7 @@ export async function eraseCustomerData(customerId: string) {
       notes: null,
       tags: [],
       marketingConsent: false,
+      marketingConsentStatus: 'DECLINED',
       deletedAt: new Date(),
     },
   });

@@ -1,0 +1,204 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { Film, ImageIcon, Loader2, Upload, X } from 'lucide-react';
+import { apiFetch, ApiError } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+export type CampaignMediaType = 'image' | 'video';
+
+const IMAGE_MAX = 5 * 1024 * 1024;
+const VIDEO_MAX = 16 * 1024 * 1024;
+
+function mimeToMediaType(mime: string): CampaignMediaType | null {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  return null;
+}
+
+interface Props {
+  token: string;
+  mediaUrl: string | null;
+  mediaType: CampaignMediaType | null;
+  onChange: (next: { mediaUrl: string | null; mediaType: CampaignMediaType | null }) => void;
+  disabled?: boolean;
+}
+
+export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disabled }: Props) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [localPreview, setLocalPreview] = useState<string | null>(null);
+
+  const preview = localPreview ?? mediaUrl;
+
+  async function handleFile(file: File) {
+    setError(null);
+    const type = mimeToMediaType(file.type);
+    if (!type) {
+      setError('Use JPEG, PNG, WebP, or MP4 video.');
+      return;
+    }
+    const max = type === 'image' ? IMAGE_MAX : VIDEO_MAX;
+    if (file.size > max) {
+      setError(type === 'image' ? 'Images must be under 5 MB.' : 'Videos must be under 16 MB.');
+      return;
+    }
+
+    setUploading(true);
+    const blobUrl = URL.createObjectURL(file);
+    setLocalPreview(blobUrl);
+
+    try {
+      const presign = await apiFetch<{
+        uploadUrl: string;
+        fileKey: string;
+        publicUrl: string;
+      }>(
+        '/uploads/presign',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            filename: file.name,
+            mimeType: file.type,
+            purpose: 'campaign',
+          }),
+        },
+        token,
+      );
+
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+
+      if (!putRes.ok) {
+        throw new Error('Upload failed — check storage configuration (S3).');
+      }
+
+      await apiFetch(
+        '/uploads/confirm',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            fileKey: presign.fileKey,
+            filename: file.name,
+            mimeType: file.type,
+            sizeBytes: file.size,
+            purpose: 'campaign',
+          }),
+        },
+        token,
+      );
+
+      onChange({ mediaUrl: presign.publicUrl, mediaType: type });
+    } catch (err) {
+      setLocalPreview(null);
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function clearMedia() {
+    setLocalPreview(null);
+    setError(null);
+    onChange({ mediaUrl: null, mediaType: null });
+    if (inputRef.current) inputRef.current.value = '';
+  }
+
+  return (
+    <div className="space-y-3">
+      {preview ? (
+        <div className="relative rounded-xl border overflow-hidden bg-muted/30">
+          {mediaType === 'video' || preview.endsWith('.mp4') ? (
+            <video src={preview} controls className="w-full max-h-48 object-cover bg-black" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="Newsletter attachment" className="w-full max-h-48 object-cover" />
+          )}
+          <div className="absolute top-2 right-2 flex gap-1">
+            <BadgePill type={mediaType ?? 'image'} />
+            {!disabled && (
+              <button
+                type="button"
+                onClick={clearMedia}
+                className="flex size-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                aria-label="Remove media"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={disabled || uploading}
+          onClick={() => inputRef.current?.click()}
+          className={cn(
+            'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 transition-colors',
+            'hover:border-[#128c7e]/50 hover:bg-[#25d366]/5',
+            disabled && 'opacity-50 cursor-not-allowed',
+          )}
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="size-8 text-[#128c7e] animate-spin" />
+              <span className="text-sm text-muted-foreground">Uploading…</span>
+            </>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <ImageIcon className="size-6 text-muted-foreground" />
+                <Film className="size-6 text-muted-foreground" />
+              </div>
+              <span className="text-sm font-medium">Add photo or video</span>
+              <span className="text-xs text-muted-foreground text-center max-w-xs">
+                JPG, PNG, WebP up to 5 MB · MP4 up to 16 MB
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs text-[#128c7e] font-medium mt-1">
+                <Upload className="size-3.5" />
+                Choose file
+              </span>
+            </>
+          )}
+        </button>
+      )}
+
+      {preview && !disabled && (
+        <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
+          Replace media
+        </Button>
+      )}
+
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleFile(file);
+        }}
+      />
+    </div>
+  );
+}
+
+function BadgePill({ type }: { type: CampaignMediaType }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white uppercase tracking-wide">
+      {type === 'video' ? <Film className="size-3" /> : <ImageIcon className="size-3" />}
+      {type}
+    </span>
+  );
+}

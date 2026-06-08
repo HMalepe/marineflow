@@ -4,6 +4,9 @@ export interface SendOptions {
   idempotencyKey?: string;
   /** Meta Cloud API phone_number_id — required for Meta provider */
   phoneNumberId?: string;
+  /** Public HTTPS URL — sends as WhatsApp image or video with caption */
+  mediaUrl?: string;
+  mediaType?: MediaType;
   /** For template sends */
   templateName?: string;
   templateLang?: string;

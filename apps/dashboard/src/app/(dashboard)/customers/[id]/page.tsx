@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
@@ -8,10 +9,35 @@ interface CustomerDetail {
   displayName: string | null;
   email: string | null;
   waId: string | null;
+  marketingConsentStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  marketingConsentAt: string | null;
   createdAt: string;
   loyaltyStamps: number;
   appointments: AppointmentSummary[];
   messages: MessageSummary[];
+}
+
+function consentLabel(status: CustomerDetail['marketingConsentStatus']): {
+  text: string;
+  className: string;
+} {
+  switch (status) {
+    case 'ACCEPTED':
+      return {
+        text: 'Marketing accepted (POPIA)',
+        className: 'bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30',
+      };
+    case 'DECLINED':
+      return {
+        text: 'Marketing declined',
+        className: 'bg-muted text-muted-foreground border-border',
+      };
+    default:
+      return {
+        text: 'Awaiting POPIA choice',
+        className: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-600/30',
+      };
+  }
 }
 
 interface AppointmentSummary {
@@ -49,6 +75,8 @@ export default async function CustomerDetailPage({
     );
   }
 
+  const consent = consentLabel(customer.marketingConsentStatus);
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -61,6 +89,16 @@ export default async function CustomerDetailPage({
           <h1 className="text-2xl font-bold">
             {customer.displayName ?? `${customer.firstName} ${customer.lastName}`}
           </h1>
+          <div className="flex flex-wrap gap-2 items-center mt-2">
+            <Badge variant="outline" className={consent.className}>
+              {consent.text}
+            </Badge>
+            {customer.marketingConsentAt && (
+              <span className="text-xs text-muted-foreground">
+                Updated {new Date(customer.marketingConsentAt).toLocaleDateString('en-ZA')}
+              </span>
+            )}
+          </div>
           <div className="flex gap-4 text-sm text-muted-foreground mt-1">
             {customer.email && <span>{customer.email}</span>}
             {customer.waId && <span className="font-mono">{customer.waId}</span>}
