@@ -155,6 +155,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           id: true,
           name: true,
           tradingName: true,
+          logoUrl: true,
           timezone: true,
           openTime: true,
           closeTime: true,
@@ -181,6 +182,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       timezone?: string;
       welcomeMessage?: string | null;
       afterHoursMessage?: string | null;
+      logoUrl?: string | null;
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
     };
@@ -192,6 +194,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const db = getTenantDb();
         const {
           tradingName,
+          logoUrl,
           openTime,
           closeTime,
           timezone,
@@ -200,6 +203,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botActive,
           status,
         } = request.body;
+
+        if (logoUrl !== undefined && logoUrl !== null) {
+          const maxBytes = 600_000; // ~450KB base64 → ~340KB image — enough for any logo
+          if (logoUrl.length > maxBytes) {
+            reply.code(400);
+            return { error: 'logo_too_large' };
+          }
+          if (!logoUrl.startsWith('data:image/') && !/^https?:\/\//.test(logoUrl)) {
+            reply.code(400);
+            return { error: 'invalid_logo_url' };
+          }
+        }
 
         if (tradingName !== undefined && tradingName !== null && !tradingName.trim()) {
           reply.code(400);
@@ -231,6 +246,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(tradingName !== undefined && {
               tradingName: tradingName?.trim() || null,
             }),
+            ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
             ...(openTime !== undefined && { openTime }),
             ...(closeTime !== undefined && { closeTime }),
             ...(timezone !== undefined && { timezone: timezone.trim() }),
@@ -247,6 +263,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             id: true,
             name: true,
             tradingName: true,
+            logoUrl: true,
             timezone: true,
             openTime: true,
             closeTime: true,

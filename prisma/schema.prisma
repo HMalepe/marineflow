@@ -147,6 +147,7 @@ model Salon {
   closeTime      String?      @default("17:00")
   welcomeMessage String?      @db.Text
   afterHoursMessage String?   @db.Text
+  logoUrl        String?      @db.Text
   botName        String       @default("Ava")
   botVoiceBrief  String?      @db.Text
   toneFormality  Int          @default(50)

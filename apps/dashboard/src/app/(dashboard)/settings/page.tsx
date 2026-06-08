@@ -5,6 +5,7 @@ import { apiFetch } from '@/lib/api';
 import { SettingsForm } from './settings-form';
 import { SalonSettingsForm, type SalonSettings } from './salon-settings-form';
 import { ChangePasswordForm } from './change-password-form';
+import { LogoUpload } from './logo-upload';
 
 interface MeResponse {
   user: {
@@ -59,6 +60,18 @@ export default async function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {canEditSalon && salonSettings && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Logo</CardTitle>
+            <CardDescription>Your salon&apos;s brand mark — shown in the sidebar</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <LogoUpload current={salonSettings.logoUrl} salonName={salonSettings.tradingName ?? salonSettings.name} />
+          </CardContent>
+        </Card>
+      )}
 
       {canEditSalon && (
         <Card>

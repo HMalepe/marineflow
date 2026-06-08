@@ -7,6 +7,7 @@ export interface SalonSettings {
   id: string;
   name: string;
   tradingName: string | null;
+  logoUrl: string | null;
   timezone: string;
   openTime: string | null;
   closeTime: string | null;
@@ -48,6 +49,20 @@ export async function updateName(name: string): Promise<{ error?: string }> {
     return {};
   } catch (e) {
     return { error: e instanceof ApiError ? e.message : 'Failed to update name' };
+  }
+}
+
+export async function saveLogo(logoUrl: string | null): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ logoUrl }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof ApiError ? e.message : 'Failed to save logo' };
   }
 }
 
