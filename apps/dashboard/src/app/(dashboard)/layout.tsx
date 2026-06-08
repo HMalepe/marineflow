@@ -20,16 +20,9 @@ export default async function DashboardLayout({
   if (!user) redirect('/login');
 
   const token = await getToken();
-  let businessName = user.name;
+  const ownerName = user.name;
+  let businessName = user.businessName;
   let logoUrl: string | null = null;
-  try {
-    if (token) {
-      const data = await apiFetch<{ salon: { displayName: string } }>('/me', {}, token);
-      businessName = data.salon.displayName;
-    }
-  } catch {
-    // fall back to JWT name
-  }
   try {
     if (token && (user.role === 'OWNER' || user.role === 'MANAGER')) {
       const data = await apiFetch<{ salon: { logoUrl: string | null } }>('/settings', {}, token);
@@ -49,11 +42,11 @@ export default async function DashboardLayout({
 
         {/* Business identity */}
         <div className="px-4 py-4 border-b flex items-center gap-3">
-          {/* Logo / initials avatar */}
-          <div className="shrink-0 size-10 rounded-xl overflow-hidden bg-muted flex items-center justify-center border">
+          {/* Logo / initials avatar — white bg keeps dark logos visible */}
+          <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={businessName} className="size-full object-contain p-0.5" />
+              <img src={logoUrl} alt={businessName} className="size-full object-contain p-1" />
             ) : (
               <span className="text-sm font-bold text-muted-foreground select-none">
                 {businessName.split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase() ?? '').join('')}
@@ -61,12 +54,13 @@ export default async function DashboardLayout({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 leading-none mb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 leading-none mb-0.5">
               {formatRole(user.role)}
             </p>
             <p className="text-sm font-bold leading-tight truncate">{businessName}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight truncate mt-0.5">{ownerName}</p>
             {user.phone && (
-              <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">{user.phone}</p>
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5 tabular-nums">{user.phone}</p>
             )}
           </div>
         </div>
