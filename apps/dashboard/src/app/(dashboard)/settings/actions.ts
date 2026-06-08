@@ -1,6 +1,6 @@
 'use server';
 
-import { getToken } from '@/lib/auth';
+import { getToken, clearToken } from '@/lib/auth';
 import { apiFetch, ApiError } from '@/lib/api';
 
 export interface SalonSettings {
@@ -28,6 +28,8 @@ export async function changePassword(
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
     }, token);
+    // Invalidate the current session — user must log in with the new password.
+    await clearToken();
     return {};
   } catch (e) {
     if (e instanceof ApiError) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -14,14 +15,13 @@ function validateStrongPassword(password: string): string | null {
 }
 
 export function ChangePasswordForm() {
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setSuccess(false);
 
     const form = new FormData(e.currentTarget);
     const current = form.get('currentPassword') as string;
@@ -39,8 +39,8 @@ export function ChangePasswordForm() {
     if (result.error) {
       setError(result.error);
     } else {
-      setSuccess(true);
-      (e.target as HTMLFormElement).reset();
+      // Session cleared server-side — redirect to login.
+      router.push('/login');
     }
   }
 
@@ -63,11 +63,6 @@ export function ChangePasswordForm() {
       {error && (
         <p role="alert" className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
           {error}
-        </p>
-      )}
-      {success && (
-        <p role="status" className="text-sm text-green-700 dark:text-green-400 rounded-md bg-green-600/10 px-3 py-2">
-          Password updated successfully.
         </p>
       )}
 

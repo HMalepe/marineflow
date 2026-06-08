@@ -67,7 +67,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     await requireAuth(request, reply);
   });
 
-  app.post('/me/change-password', async (request, reply) => {
+  app.post('/me/change-password', {
+    config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const { currentPassword, newPassword } = request.body as {
         currentPassword?: string;
@@ -91,6 +93,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       }
       const hash = await bcrypt.hash(newPassword, 12);
       await db.staffUser.update({ where: { id: user.sub }, data: { passwordHash: hash } });
+      await db.auditLog.create({
+        data: {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          action: 'PASSWORD_CHANGED',
+          entity: 'StaffUser',
+          entityId: user.sub,
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent'] ?? null,
+        },
+      });
       return { ok: true };
     });
   });
