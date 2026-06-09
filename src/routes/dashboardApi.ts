@@ -108,6 +108,25 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.patch('/me/email', {
+    config: { rateLimit: { max: 10, timeWindow: '1 hour' } },
+  }, async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { email } = request.body as { email?: string };
+      const trimmed = email?.trim().toLowerCase();
+      if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        return reply.code(400).send({ error: 'invalid_email' });
+      }
+      const db = getTenantDb();
+      const u = await db.staffUser.update({
+        where: { id: user.sub },
+        data: { email: trimmed },
+        select: { id: true, email: true, name: true, role: true, salonId: true },
+      });
+      return { user: u };
+    });
+  });
+
   app.post('/me/change-password', {
     config: { rateLimit: { max: 5, timeWindow: '1 hour' } },
   }, async (request, reply) => {
