@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { SERVICE_TEMPLATES, SERVICE_BUSINESS_TYPES, SERVICE_CATEGORIES_BY_TYPE } from './service-templates';
+import { SERVICE_TEMPLATES, SERVICE_INDUSTRY_GROUPS, SERVICE_BUSINESS_TYPES_BY_GROUP, SERVICE_CATEGORIES_BY_TYPE } from './service-templates';
 import type { ServiceTemplate } from './service-templates';
 import {
   Sheet,
@@ -132,6 +132,7 @@ export function ServicesClient({ token }: Props) {
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [templateStep, setTemplateStep] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
+  const [templateGroup, setTemplateGroup] = useState('');
   const [templateBizType, setTemplateBizType] = useState('');
   const [templateCategory, setTemplateCategory] = useState('');
   const [saving, setSaving] = useState(false);
@@ -502,6 +503,8 @@ export function ServicesClient({ token }: Props) {
               <TemplatePicker
                 search={templateSearch}
                 onSearch={setTemplateSearch}
+                group={templateGroup}
+                onGroup={(v) => { setTemplateGroup(v); setTemplateBizType(''); setTemplateCategory(''); }}
                 bizType={templateBizType}
                 onBizType={(v) => { setTemplateBizType(v); setTemplateCategory(''); }}
                 category={templateCategory}
@@ -645,6 +648,8 @@ export function ServicesClient({ token }: Props) {
 function TemplatePicker({
   search,
   onSearch,
+  group,
+  onGroup,
   bizType,
   onBizType,
   category,
@@ -654,6 +659,8 @@ function TemplatePicker({
 }: {
   search: string;
   onSearch: (v: string) => void;
+  group: string;
+  onGroup: (v: string) => void;
   bizType: string;
   onBizType: (v: string) => void;
   category: string;
@@ -661,21 +668,31 @@ function TemplatePicker({
   onSelect: (t: ServiceTemplate) => void;
   onSkip: () => void;
 }) {
+  const bizTypesInGroup = group ? (SERVICE_BUSINESS_TYPES_BY_GROUP[group] ?? []) : [];
   const categories = bizType ? (SERVICE_CATEGORIES_BY_TYPE[bizType] ?? []) : [];
 
   const filtered = (() => {
     const q = search.trim().toLowerCase();
     return SERVICE_TEMPLATES.filter((t) => {
+      if (group && t.industryGroup !== group) return false;
       if (bizType && t.businessType !== bizType) return false;
       if (category && t.category !== category) return false;
       if (!q) return true;
       return (
         t.name.toLowerCase().includes(q) ||
         t.description.toLowerCase().includes(q) ||
-        t.category.toLowerCase().includes(q)
+        t.category.toLowerCase().includes(q) ||
+        t.businessType.toLowerCase().includes(q)
       );
     });
   })();
+
+  const chipClass = (active: boolean) => cn(
+    'rounded-full px-3 py-1 text-xs font-medium border transition-colors whitespace-nowrap',
+    active
+      ? 'bg-primary text-primary-foreground border-primary'
+      : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+  );
 
   return (
     <div className="flex flex-col gap-3 px-4 pb-4">
@@ -696,69 +713,38 @@ function TemplatePicker({
         autoFocus
       />
 
+      {/* Level 1 — Industry group */}
       <div>
-        <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Business type</p>
+        <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Industry</p>
         <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => onBizType('')}
-            className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
-              !bizType
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
-            )}
-          >
-            All
-          </button>
-          {SERVICE_BUSINESS_TYPES.map((bt) => (
-            <button
-              key={bt}
-              type="button"
-              onClick={() => onBizType(bt)}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
-                bizType === bt
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
-              )}
-            >
-              {bt}
-            </button>
+          <button type="button" onClick={() => onGroup('')} className={chipClass(!group)}>All</button>
+          {SERVICE_INDUSTRY_GROUPS.map((g) => (
+            <button key={g} type="button" onClick={() => onGroup(g)} className={chipClass(group === g)}>{g}</button>
           ))}
         </div>
       </div>
 
+      {/* Level 2 — Business type (only shown when a group is selected) */}
+      {group && bizTypesInGroup.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Business type</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => onBizType('')} className={chipClass(!bizType)}>All</button>
+            {bizTypesInGroup.map((bt) => (
+              <button key={bt} type="button" onClick={() => onBizType(bt)} className={chipClass(bizType === bt)}>{bt}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Level 3 — Category (only shown when a business type is selected) */}
       {bizType && categories.length > 0 && (
         <div>
           <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Category</p>
           <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => onCategory('')}
-              className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
-                !category
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
-              )}
-            >
-              All categories
-            </button>
+            <button type="button" onClick={() => onCategory('')} className={chipClass(!category)}>All</button>
             {categories.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => onCategory(cat)}
-                className={cn(
-                  'rounded-full px-3 py-1 text-xs font-medium border transition-colors',
-                  category === cat
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
-                )}
-              >
-                {cat}
-              </button>
+              <button key={cat} type="button" onClick={() => onCategory(cat)} className={chipClass(category === cat)}>{cat}</button>
             ))}
           </div>
         </div>
@@ -768,7 +754,7 @@ function TemplatePicker({
         {filtered.length} template{filtered.length !== 1 ? 's' : ''} — click one to pre-fill the form
       </p>
 
-      <div className="flex flex-col gap-2 max-h-[55vh] overflow-y-auto pr-1">
+      <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
         {filtered.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
             No templates match. <button type="button" className="text-primary hover:underline" onClick={onSkip}>Start from scratch</button>.
@@ -784,11 +770,11 @@ function TemplatePicker({
               <div className="flex items-start justify-between gap-2">
                 <p className="font-medium text-sm leading-tight group-hover:text-primary">{t.name}</p>
                 <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">
-                  R {t.suggestedPriceRands} · {t.suggestedDurationMin} min
+                  {t.suggestedDurationMin > 0 ? `R ${t.suggestedPriceRands} · ${t.suggestedDurationMin} min` : `R ${t.suggestedPriceRands}`}
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>
-              <div className="flex gap-1.5 mt-2">
+              <div className="flex flex-wrap gap-1.5 mt-2">
                 <span className="text-[10px] bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">{t.category}</span>
                 {!bizType && (
                   <span className="text-[10px] bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">{t.businessType}</span>
