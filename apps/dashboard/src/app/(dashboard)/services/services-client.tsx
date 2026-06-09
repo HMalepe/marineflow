@@ -474,7 +474,7 @@ export function ServicesClient({ token }: Props) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      className="text-destructive hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteTarget(service);

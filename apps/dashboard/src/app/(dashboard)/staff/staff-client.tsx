@@ -599,6 +599,11 @@ export function StaffClient({ initialStaff, token }: Props) {
 
   async function handleSaveSchedule() {
     if (!selected) return;
+    const invalid = schedule.find((d) => d.enabled && d.startTime >= d.endTime);
+    if (invalid) {
+      showToast(`End time must be after start time (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][invalid.weekday]})`, 'error');
+      return;
+    }
     setSavingSchedule(true);
     try {
       const hours = scheduleToPayload(schedule);
