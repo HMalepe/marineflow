@@ -204,6 +204,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage: true,
           status: true,
           botName: true,
+          botAskMarketingConsent: true,
+          botAllowStaffPick: true,
+          botLoyaltyEnabled: true,
+          botRequireDepositStep: true,
         },
       });
       return {
@@ -227,6 +231,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
       botName?: string;
+      botAskMarketingConsent?: boolean;
+      botAllowStaffPick?: boolean;
+      botLoyaltyEnabled?: boolean;
+      botRequireDepositStep?: boolean;
     };
   }>(
     '/settings',
@@ -245,6 +253,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botActive,
           status,
           botName,
+          botAskMarketingConsent,
+          botAllowStaffPick,
+          botLoyaltyEnabled,
+          botRequireDepositStep,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -305,6 +317,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
               afterHoursMessage: afterHoursMessage?.trim() || null,
             }),
             ...(botName !== undefined && { botName: botName.trim() }),
+            ...(botAskMarketingConsent !== undefined && { botAskMarketingConsent }),
+            ...(botAllowStaffPick !== undefined && { botAllowStaffPick }),
+            ...(botLoyaltyEnabled !== undefined && { botLoyaltyEnabled }),
+            ...(botRequireDepositStep !== undefined && { botRequireDepositStep }),
             ...(nextStatus !== undefined && {
               status: nextStatus,
               statusChangedAt: new Date(),
@@ -322,6 +338,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             afterHoursMessage: true,
             status: true,
             botName: true,
+            botAskMarketingConsent: true,
+            botAllowStaffPick: true,
+            botLoyaltyEnabled: true,
+            botRequireDepositStep: true,
           },
         });
 

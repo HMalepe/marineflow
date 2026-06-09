@@ -16,6 +16,10 @@ export interface SalonSettings {
   status: string;
   botActive: boolean;
   botName: string;
+  botAskMarketingConsent: boolean;
+  botAllowStaffPick: boolean;
+  botLoyaltyEnabled: boolean;
+  botRequireDepositStep: boolean;
 }
 
 export async function updateEmail(email: string): Promise<{ error?: string }> {
@@ -116,6 +120,25 @@ export async function saveMessages(welcomeMessage: string | null, afterHoursMess
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
       body: JSON.stringify({ welcomeMessage, afterHoursMessage }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
+export async function saveBotBehaviour(flags: {
+  botAskMarketingConsent?: boolean;
+  botAllowStaffPick?: boolean;
+  botLoyaltyEnabled?: boolean;
+  botRequireDepositStep?: boolean;
+}): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(flags),
     }, token);
     return { salon: data.salon };
   } catch (e) {

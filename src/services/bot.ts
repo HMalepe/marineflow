@@ -128,16 +128,16 @@ function mainMenu(salon: Salon): string {
   const welcome =
     salon.welcomeMessage?.trim() ||
     `Welcome to ${salon.name}! Reply with a number:`;
-  return [
-    welcome,
+  const items = [
     '1 — Book an appointment',
     '2 — My bookings',
-    '3 — My rewards / loyalty',
+    ...(salon.botLoyaltyEnabled ? ['3 — My rewards / loyalty'] : []),
     '4 — FAQs',
     '5 — File a complaint',
     '6 — Hours & address',
     '0 — Talk to a human (we will reply soon)',
-  ].join('\n');
+  ];
+  return [welcome, ...items].join('\n');
 }
 
 function parseHmToMin(hm: string): number {
@@ -479,6 +479,9 @@ async function handleMarketingConsentFlow(
   const salon = conv.salon;
   const status = conv.customer.marketingConsentStatus;
 
+  // Owner can disable the POPIA consent prompt — skip the whole flow
+  if (!salon.botAskMarketingConsent) return false;
+
   if (isGlobalMarketingOptOut(text)) {
     if (status !== 'DECLINED') {
       await applyMarketingConsentChoice({
@@ -695,7 +698,7 @@ async function handleMenu(
     return;
   }
 
-  if (choice === '3') {
+  if (choice === '3' && salon.botLoyaltyEnabled) {
     await ensureLoyaltyProgram(salon.id);
     const bal = await getStampBalance(salon.id, conv.customerId);
     await saveCtx(conv.id, {}, ConversationStep.LOYALTY);
@@ -761,6 +764,18 @@ async function handlePickService(
     return;
   }
   const service = services[n - 1]!;
+
+  // If owner disabled staff selection, skip straight to date picking with "any" staff
+  if (!conv.salon.botAllowStaffPick) {
+    await saveCtx(
+      conv.id,
+      { selectedServiceId: service.id, selectedStaffId: undefined, anyStaff: true },
+      ConversationStep.PICK_DATE,
+    );
+    await handlePickDate(conv, '');
+    return;
+  }
+
   await saveCtx(
     conv.id,
     { selectedServiceId: service.id },
@@ -1085,12 +1100,12 @@ async function handleConfirm(
       end,
       status: redeem.redeemed
         ? 'CONFIRMED'
-        : service.depositCents || service.fullPay
+        : (conv.salon.botRequireDepositStep && (service.depositCents || service.fullPay))
           ? 'HELD'
           : 'CONFIRMED',
       loyaltyRedeemed: redeem.redeemed,
       rescheduledFromId: reschedulingId ?? undefined,
-      confirmedAt: !service.depositCents && !service.fullPay ? new Date() : undefined,
+      confirmedAt: (!conv.salon.botRequireDepositStep || (!service.depositCents && !service.fullPay)) ? new Date() : undefined,
     },
   });
 
@@ -1128,7 +1143,9 @@ async function handleConfirm(
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
 
   const needPay =
-    !redeem.redeemed && ((service.depositCents ?? 0) > 0 || service.fullPay);
+    conv.salon.botRequireDepositStep &&
+    !redeem.redeemed &&
+    ((service.depositCents ?? 0) > 0 || service.fullPay);
   if (needPay) {
     const sessionUrl = await createDepositCheckoutSession({
       salonId: conv.salonId,

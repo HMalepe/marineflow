@@ -157,6 +157,11 @@ model Salon {
   logoUrl        String?      @db.Text
   botName        String       @default("Ava")
   botVoiceBrief  String?      @db.Text
+  /// Bot behaviour toggles — owner-controlled from Settings
+  botAskMarketingConsent Boolean @default(true)
+  botAllowStaffPick      Boolean @default(true)
+  botLoyaltyEnabled      Boolean @default(true)
+  botRequireDepositStep  Boolean @default(true)
   toneFormality  Int          @default(50)
   toneWarmth     Int          @default(70)
   tonePlayfulness Int         @default(40)

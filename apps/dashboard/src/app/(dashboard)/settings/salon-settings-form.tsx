@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveBotName, type SalonSettings } from './actions';
+import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveBotName, saveBotBehaviour, type SalonSettings } from './actions';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -147,6 +147,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [welcomeMessage, setWelcomeMessage] = useState(initialSettings.welcomeMessage ?? '');
   const [afterHoursMessage, setAfterHoursMessage] = useState(initialSettings.afterHoursMessage ?? '');
   const [botActive, setBotActive] = useState(initialSettings.botActive);
+  const [botAskMarketingConsent, setBotAskMarketingConsent] = useState(initialSettings.botAskMarketingConsent ?? true);
+  const [botAllowStaffPick, setBotAllowStaffPick] = useState(initialSettings.botAllowStaffPick ?? true);
+  const [botLoyaltyEnabled, setBotLoyaltyEnabled] = useState(initialSettings.botLoyaltyEnabled ?? true);
+  const [botRequireDepositStep, setBotRequireDepositStep] = useState(initialSettings.botRequireDepositStep ?? true);
+  const [savingBotBehaviour, setSavingBotBehaviour] = useState(false);
   const [botNameVal, setBotNameVal] = useState(initialSettings.botName ?? 'Ava');
   const [savingBotName, setSavingBotName] = useState(false);
 
@@ -175,6 +180,10 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setWelcomeMessage(s.welcomeMessage ?? '');
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
+    setBotAskMarketingConsent(s.botAskMarketingConsent ?? true);
+    setBotAllowStaffPick(s.botAllowStaffPick ?? true);
+    setBotLoyaltyEnabled(s.botLoyaltyEnabled ?? true);
+    setBotRequireDepositStep(s.botRequireDepositStep ?? true);
     setBotNameVal(s.botName ?? 'Ava');
   }, []);
 
@@ -196,6 +205,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   }, [saved, welcomeMessage, afterHoursMessage]);
 
   const botDirty = useMemo(() => botActive !== saved.botActive, [saved, botActive]);
+  const botBehaviourDirty = useMemo(() =>
+    botAskMarketingConsent !== (saved.botAskMarketingConsent ?? true) ||
+    botAllowStaffPick !== (saved.botAllowStaffPick ?? true) ||
+    botLoyaltyEnabled !== (saved.botLoyaltyEnabled ?? true) ||
+    botRequireDepositStep !== (saved.botRequireDepositStep ?? true),
+  [saved, botAskMarketingConsent, botAllowStaffPick, botLoyaltyEnabled, botRequireDepositStep]);
   const botNameDirty = useMemo(() => botNameVal !== (saved.botName ?? 'Ava'), [saved, botNameVal]);
 
   const timezoneLabel =
@@ -264,6 +279,24 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       showToast(result.error ?? 'Save failed', 'error');
     }
     setSavingMessages(false);
+  }
+
+  async function handleSaveBotBehaviour(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingBotBehaviour(true);
+    const result = await saveBotBehaviour({
+      botAskMarketingConsent,
+      botAllowStaffPick,
+      botLoyaltyEnabled,
+      botRequireDepositStep,
+    });
+    if (result.salon) {
+      applySalon(result.salon);
+      showToast('Bot flow settings saved', 'success');
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
+    }
+    setSavingBotBehaviour(false);
   }
 
   async function handleSaveBotName(e: React.FormEvent) {
@@ -578,6 +611,73 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               {savingBot ? 'Saving…' : botDirty ? 'Save bot behaviour' : 'No changes'}
             </Button>
             {botDirty && (
+              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+            )}
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Bot conversation flow */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Conversation flow</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Control which steps the bot runs when a customer messages for the first time.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveBotBehaviour(e)} className="space-y-3 max-w-lg">
+          {[
+            {
+              key: 'botAskMarketingConsent' as const,
+              value: botAskMarketingConsent,
+              set: setBotAskMarketingConsent,
+              label: 'Ask for marketing consent (POPIA)',
+              description: 'Prompts new customers to accept or decline marketing messages before entering the menu.',
+            },
+            {
+              key: 'botAllowStaffPick' as const,
+              value: botAllowStaffPick,
+              set: setBotAllowStaffPick,
+              label: 'Let customers choose their stylist',
+              description: 'Shows a staff selection step after the customer picks a service. Disable to auto-assign the next available.',
+            },
+            {
+              key: 'botLoyaltyEnabled' as const,
+              value: botLoyaltyEnabled,
+              set: setBotLoyaltyEnabled,
+              label: 'Loyalty rewards in bot menu',
+              description: 'Shows "My rewards / loyalty" as a menu option so customers can check their stamp balance.',
+            },
+            {
+              key: 'botRequireDepositStep' as const,
+              value: botRequireDepositStep,
+              set: setBotRequireDepositStep,
+              label: 'Require deposit / payment before confirming',
+              description: 'When a service has a deposit or full-pay requirement, the bot sends a payment link before confirming. Disable to confirm immediately and collect payment in-person.',
+            },
+          ].map(({ key, value, set, label, description }) => (
+            <div key={key} className="rounded-lg border p-4">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={value}
+                  onChange={(e) => set(e.target.checked)}
+                  className="mt-0.5 size-4 rounded border-input accent-primary"
+                />
+                <div className="space-y-0.5">
+                  <p className="text-sm font-medium leading-snug">{label}</p>
+                  <p className="text-xs text-muted-foreground">{description}</p>
+                </div>
+              </label>
+            </div>
+          ))}
+          <div className="flex items-center gap-3 pt-1">
+            <Button type="submit" size="sm" disabled={savingBotBehaviour || !botBehaviourDirty}>
+              {savingBotBehaviour ? 'Saving…' : botBehaviourDirty ? 'Save flow settings' : 'No changes'}
+            </Button>
+            {botBehaviourDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
             )}
           </div>
