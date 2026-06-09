@@ -67,6 +67,12 @@ export async function resolveTenantFromTwilioAddress(
 /**
  * Resolve tenant for an inbound WhatsApp message.
  * Order: explicit Meta phone id → Twilio To → default slug fallback.
+ *
+ * Important: if an identifier (metaPhoneNumberId or twilioTo) is supplied but
+ * matches no salon, we return null rather than falling back to the default
+ * salon. Falling back would route a cross-tenant message to the demo/fallback
+ * salon and cause duplicate bot replies when both Twilio and Meta webhooks
+ * fire for the same phone number.
  */
 export async function resolveTenantForInbound(input: {
   metaPhoneNumberId?: string;
@@ -75,11 +81,18 @@ export async function resolveTenantForInbound(input: {
   if (input.metaPhoneNumberId) {
     const byMeta = await resolveTenantFromMetaPhoneId(input.metaPhoneNumberId);
     if (byMeta) return byMeta;
+    // metaPhoneNumberId provided but matched no salon — do not fall through
+    // to Twilio or the default, to prevent cross-tenant routing.
+    if (!input.twilioTo) return null;
   }
   if (input.twilioTo) {
     const byTwilio = await resolveTenantFromTwilioAddress(input.twilioTo);
     if (byTwilio) return byTwilio;
+    // twilioTo provided but matched no salon — return null so we don't
+    // accidentally send the demo-salon menu to a real customer.
+    return null;
   }
+  // No identifier at all (only possible in dev/test) — fall back to default.
   return findSalonBySlug(env.DEFAULT_SALON_SLUG);
 }
 

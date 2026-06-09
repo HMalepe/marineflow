@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SERVICE_TEMPLATES, SERVICE_INDUSTRY_GROUPS, SERVICE_BUSINESS_TYPES_BY_GROUP, SERVICE_CATEGORIES_BY_TYPE } from './service-templates';
+import type { ServiceTemplate } from './service-templates';
 import {
   Sheet,
   SheetContent,
@@ -128,6 +130,11 @@ export function ServicesClient({ token }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ServiceForm>(emptyForm);
+  const [templateStep, setTemplateStep] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateGroup, setTemplateGroup] = useState('');
+  const [templateBizType, setTemplateBizType] = useState('');
+  const [templateCategory, setTemplateCategory] = useState('');
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
@@ -186,12 +193,17 @@ export function ServicesClient({ token }: Props) {
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
+    setTemplateStep(true);
+    setTemplateSearch('');
+    setTemplateBizType('');
+    setTemplateCategory('');
     setSheetOpen(true);
   }
 
   function openEdit(service: Service) {
     setEditingId(service.id);
     setForm(serviceToForm(service));
+    setTemplateStep(false);
     setSheetOpen(true);
   }
 
@@ -199,6 +211,21 @@ export function ServicesClient({ token }: Props) {
     setSheetOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    setTemplateStep(false);
+    setTemplateSearch('');
+    setTemplateBizType('');
+    setTemplateCategory('');
+  }
+
+  function applyTemplate(t: ServiceTemplate) {
+    setForm({
+      name: t.name,
+      description: t.description,
+      priceRands: String(t.suggestedPriceRands),
+      durationMin: String(t.suggestedDurationMin),
+      bufferMin: '0',
+    });
+    setTemplateStep(false);
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -208,7 +235,7 @@ export function ServicesClient({ token }: Props) {
       return;
     }
 
-    const priceCents = Math.round(parseFloat(form.priceRands) * 100);
+    const priceCents = Math.round((parseFloat(form.priceRands) + Number.EPSILON) * 100);
     const durationMin = parseInt(form.durationMin, 10);
     const bufferMin = parseInt(form.bufferMin, 10) || 0;
 
@@ -355,14 +382,14 @@ export function ServicesClient({ token }: Props) {
             className="max-w-sm mt-2"
           />
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden lg:table-cell">Description</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Duration</TableHead>
+                <TableHead className="hidden sm:table-cell">Price</TableHead>
+                <TableHead className="hidden sm:table-cell">Duration</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right w-[90px]"> </TableHead>
               </TableRow>
@@ -408,20 +435,25 @@ export function ServicesClient({ token }: Props) {
                   }}
                 >
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{service.name}</span>
-                      {!service.active && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Hidden
-                        </Badge>
-                      )}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{service.name}</span>
+                        {!service.active && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Hidden
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="sm:hidden text-xs text-muted-foreground tabular-nums">
+                        {formatPrice(service.priceCents)} · {formatDuration(service)}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell max-w-[240px] truncate text-muted-foreground">
                     {service.description || '—'}
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{formatPrice(service.priceCents)}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell className="hidden sm:table-cell font-mono text-sm">{formatPrice(service.priceCents)}</TableCell>
+                  <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                     {formatDuration(service)}
                   </TableCell>
                   <TableCell>
@@ -447,7 +479,7 @@ export function ServicesClient({ token }: Props) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      className="text-destructive hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
                         setDeleteTarget(service);
@@ -465,89 +497,125 @@ export function ServicesClient({ token }: Props) {
 
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{editingId ? 'Edit service' : 'New service'}</SheetTitle>
-            <SheetDescription>
-              {editingId
-                ? 'Changes apply to new bookings. Existing appointments keep their original details.'
-                : 'Active services appear in the WhatsApp booking menu immediately.'}
-            </SheetDescription>
-          </SheetHeader>
-          <form onSubmit={handleSave} className="flex flex-col gap-4 px-4 pb-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Haircut & Style"
-                autoFocus
-                required
+          {templateStep ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Choose a template</SheetTitle>
+                <SheetDescription>
+                  Pick a service to pre-fill the form, then customise it. Or start from scratch.
+                </SheetDescription>
+              </SheetHeader>
+              <TemplatePicker
+                search={templateSearch}
+                onSearch={setTemplateSearch}
+                group={templateGroup}
+                onGroup={(v) => { setTemplateGroup(v); setTemplateBizType(''); setTemplateCategory(''); }}
+                bizType={templateBizType}
+                onBizType={(v) => { setTemplateBizType(v); setTemplateCategory(''); }}
+                category={templateCategory}
+                onCategory={setTemplateCategory}
+                onSelect={applyTemplate}
+                onSkip={() => setTemplateStep(false)}
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <textarea
-                id="description"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="What the customer can expect"
-                rows={3}
-                className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="price">Price (R) *</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.priceRands}
-                  onChange={(e) => setForm((f) => ({ ...f, priceRands: e.target.value }))}
-                  placeholder="250.00"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="duration">Duration (min) *</Label>
-                <Input
-                  id="duration"
-                  type="number"
-                  min="1"
-                  step="5"
-                  value={form.durationMin}
-                  onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
-                  required
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="buffer">Buffer after appointment (min)</Label>
-              <Input
-                id="buffer"
-                type="number"
-                min="0"
-                step="5"
-                value={form.bufferMin}
-                onChange={(e) => setForm((f) => ({ ...f, bufferMin: e.target.value }))}
-              />
-              {slotPreviewMin > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Slot blocked on calendar: <strong>{slotPreviewMin} min</strong> total
-                </p>
+            </>
+          ) : (
+            <>
+              <SheetHeader>
+                <SheetTitle>{editingId ? 'Edit service' : 'New service'}</SheetTitle>
+                <SheetDescription>
+                  {editingId
+                    ? 'Changes apply to new bookings. Existing appointments keep their original details.'
+                    : 'Active services appear in the WhatsApp booking menu immediately.'}
+                </SheetDescription>
+              </SheetHeader>
+              {!editingId && (
+                <div className="px-4 pt-1 pb-0">
+                  <button
+                    type="button"
+                    onClick={() => setTemplateStep(true)}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    ← Back to templates
+                  </button>
+                </div>
               )}
-            </div>
-            <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2">
-              <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create service'}
-              </Button>
-            </SheetFooter>
-          </form>
+              <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Haircut & Style"
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <textarea
+                    id="description"
+                    value={form.description}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    placeholder="What the customer can expect"
+                    rows={3}
+                    className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="price">Price (R) *</Label>
+                    <Input
+                      id="price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.priceRands}
+                      onChange={(e) => setForm((f) => ({ ...f, priceRands: e.target.value }))}
+                      placeholder="250.00"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="duration">Duration (min) *</Label>
+                    <Input
+                      id="duration"
+                      type="number"
+                      min="1"
+                      step="5"
+                      value={form.durationMin}
+                      onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="buffer">Buffer after appointment (min)</Label>
+                  <Input
+                    id="buffer"
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={form.bufferMin}
+                    onChange={(e) => setForm((f) => ({ ...f, bufferMin: e.target.value }))}
+                  />
+                  {slotPreviewMin > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Slot blocked on calendar: <strong>{slotPreviewMin} min</strong> total
+                    </p>
+                  )}
+                </div>
+                <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving}>
+                    {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create service'}
+                  </Button>
+                </SheetFooter>
+              </form>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 
@@ -578,6 +646,149 @@ export function ServicesClient({ token }: Props) {
       {toast && (
         <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />
       )}
+    </div>
+  );
+}
+
+function TemplatePicker({
+  search,
+  onSearch,
+  group,
+  onGroup,
+  bizType,
+  onBizType,
+  category,
+  onCategory,
+  onSelect,
+  onSkip,
+}: {
+  search: string;
+  onSearch: (v: string) => void;
+  group: string;
+  onGroup: (v: string) => void;
+  bizType: string;
+  onBizType: (v: string) => void;
+  category: string;
+  onCategory: (v: string) => void;
+  onSelect: (t: ServiceTemplate) => void;
+  onSkip: () => void;
+}) {
+  const bizTypesInGroup = group ? (SERVICE_BUSINESS_TYPES_BY_GROUP[group] ?? []) : [];
+  const categories = bizType ? (SERVICE_CATEGORIES_BY_TYPE[bizType] ?? []) : [];
+
+  const filtered = (() => {
+    const q = search.trim().toLowerCase();
+    return SERVICE_TEMPLATES.filter((t) => {
+      if (group && t.industryGroup !== group) return false;
+      if (bizType && t.businessType !== bizType) return false;
+      if (category && t.category !== category) return false;
+      if (!q) return true;
+      return (
+        t.name.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        t.category.toLowerCase().includes(q) ||
+        t.businessType.toLowerCase().includes(q)
+      );
+    });
+  })();
+
+  const chipClass = (active: boolean) => cn(
+    'rounded-full px-3 py-1 text-xs font-medium border transition-colors whitespace-nowrap',
+    active
+      ? 'bg-primary text-primary-foreground border-primary'
+      : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
+  );
+
+  return (
+    <div className="flex flex-col gap-3 px-4 pb-4">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full justify-center font-medium"
+        onClick={onSkip}
+      >
+        ✏️ Write your own from scratch
+      </Button>
+
+      <Input
+        placeholder="Search services… (fade, massage, pedicure…)"
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+        autoFocus
+      />
+
+      {/* Level 1 — Industry group */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Industry</p>
+        <div className="flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => onGroup('')} className={chipClass(!group)}>All</button>
+          {SERVICE_INDUSTRY_GROUPS.map((g) => (
+            <button key={g} type="button" onClick={() => onGroup(g)} className={chipClass(group === g)}>{g}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Level 2 — Business type (only shown when a group is selected) */}
+      {group && bizTypesInGroup.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Business type</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => onBizType('')} className={chipClass(!bizType)}>All</button>
+            {bizTypesInGroup.map((bt) => (
+              <button key={bt} type="button" onClick={() => onBizType(bt)} className={chipClass(bizType === bt)}>{bt}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Level 3 — Category (only shown when a business type is selected) */}
+      {bizType && categories.length > 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Category</p>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={() => onCategory('')} className={chipClass(!category)}>All</button>
+            {categories.map((cat) => (
+              <button key={cat} type="button" onClick={() => onCategory(cat)} className={chipClass(category === cat)}>{cat}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        {filtered.length} template{filtered.length !== 1 ? 's' : ''} — click one to pre-fill the form
+      </p>
+
+      <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
+        {filtered.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            No templates match. <button type="button" className="text-primary hover:underline" onClick={onSkip}>Start from scratch</button>.
+          </p>
+        ) : (
+          filtered.map((t, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onSelect(t)}
+              className="text-left rounded-lg border border-border hover:border-primary/50 hover:bg-muted/60 transition-colors p-3 group"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-medium text-sm leading-tight group-hover:text-primary">{t.name}</p>
+                <span className="text-xs text-muted-foreground font-mono whitespace-nowrap shrink-0">
+                  {t.suggestedDurationMin > 0 ? `R ${t.suggestedPriceRands} · ${t.suggestedDurationMin} min` : `R ${t.suggestedPriceRands}`}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.description}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <span className="text-[10px] bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">{t.category}</span>
+                {!bizType && (
+                  <span className="text-[10px] bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">{t.businessType}</span>
+                )}
+              </div>
+            </button>
+          ))
+        )}
+      </div>
     </div>
   );
 }

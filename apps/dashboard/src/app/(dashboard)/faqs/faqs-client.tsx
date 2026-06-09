@@ -34,6 +34,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 
 type FaqStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -296,6 +297,10 @@ export function FaqsClient({ token }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [templateStep, setTemplateStep] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const [templateCategory, setTemplateCategory] = useState<string>('All');
+  const [templateBizType, setTemplateBizType] = useState<string>('');
 
   const reorderEnabled = statusFilter === 'all' && !search.trim();
 
@@ -366,12 +371,17 @@ export function FaqsClient({ token }: Props) {
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
+    setTemplateStep(true);
+    setTemplateSearch('');
+    setTemplateCategory('All');
+    setTemplateBizType('');
     setSheetOpen(true);
   }
 
   function openEdit(faq: Faq) {
     setEditingId(faq.id);
     setForm({ question: faq.question, answer: faq.answer });
+    setTemplateStep(false);
     setSheetOpen(true);
   }
 
@@ -379,6 +389,15 @@ export function FaqsClient({ token }: Props) {
     setSheetOpen(false);
     setEditingId(null);
     setForm(emptyForm);
+    setTemplateStep(false);
+    setTemplateSearch('');
+    setTemplateCategory('All');
+    setTemplateBizType('');
+  }
+
+  function applyTemplate(question: string, answer: string) {
+    setForm({ question, answer });
+    setTemplateStep(false);
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -530,7 +549,9 @@ export function FaqsClient({ token }: Props) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">FAQ library</CardTitle>
-              {reorderEnabled ? (
+              {reordering ? (
+                <p className="text-xs text-primary mt-1 animate-pulse">Saving order…</p>
+              ) : reorderEnabled ? (
                 <p className="text-xs text-muted-foreground mt-1">Drag cards to set the order customers see on WhatsApp.</p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-1">Clear search and show all FAQs to reorder.</p>
@@ -600,65 +621,184 @@ export function FaqsClient({ token }: Props) {
 
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{editingId ? 'Edit FAQ' : 'Add FAQ'}</SheetTitle>
-            <SheetDescription>
-              New FAQs start as pending. Approve them when ready for the WhatsApp bot.
-            </SheetDescription>
-          </SheetHeader>
-          <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
-            <div className="space-y-2">
-              <Label htmlFor="faq-question">Question</Label>
-              <Input
-                id="faq-question"
-                value={form.question}
-                onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
-                placeholder="e.g. What are your opening hours?"
-                required
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <Label htmlFor="faq-answer">Answer</Label>
-                <span
-                  className={cn(
-                    'text-xs tabular-nums',
-                    answerOverLimit ? 'text-destructive font-medium' : 'text-muted-foreground',
-                  )}
+          {templateStep ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>Choose a template</SheetTitle>
+                <SheetDescription>
+                  Pick a template to pre-fill your question and answer, then edit it to match your business.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="flex flex-col gap-3 px-4 pb-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-start gap-2 border-dashed"
+                  onClick={() => setTemplateStep(false)}
                 >
-                  {answerLen.toLocaleString()} / {WHATSAPP_ANSWER_LIMIT.toLocaleString()}
-                </span>
+                  <span className="text-lg">✏️</span>
+                  Write your own from scratch
+                </Button>
+
+                <Input
+                  placeholder="Search templates…"
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  autoFocus
+                />
+
+                {/* Business type filter */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {(['', ...FAQ_BUSINESS_TYPES] as string[]).map((biz) => (
+                    <button
+                      key={biz || '__all__'}
+                      type="button"
+                      onClick={() => setTemplateBizType(biz)}
+                      className={cn(
+                        'shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
+                        templateBizType === biz
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                      )}
+                    >
+                      {biz || 'All businesses'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Category filter */}
+                <div className="flex flex-wrap gap-1.5">
+                  {FAQ_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setTemplateCategory(cat)}
+                      className={cn(
+                        'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
+                        templateCategory === cat
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                      )}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+
+                {(() => {
+                  const q = templateSearch.trim().toLowerCase();
+                  const visibleTemplates = FAQ_TEMPLATES.filter((t) => {
+                    const matchesBiz = !templateBizType || t.businessTypes.includes('All') || t.businessTypes.includes(templateBizType);
+                    const matchesCat = templateCategory === 'All' || t.category === templateCategory;
+                    const matchesSearch = !q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q);
+                    return matchesBiz && matchesCat && matchesSearch;
+                  });
+                  return (
+                    <div className="space-y-1.5 max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
+                      {visibleTemplates.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-6">No templates match your search.</p>
+                      )}
+                      {visibleTemplates.length > 0 && (
+                        <p className="text-xs text-muted-foreground pb-0.5">{visibleTemplates.length} template{visibleTemplates.length !== 1 ? 's' : ''}</p>
+                      )}
+                      {visibleTemplates.map((t, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => applyTemplate(t.question, t.answer)}
+                          className="w-full text-left rounded-lg border bg-card px-3 py-2.5 hover:bg-accent hover:border-primary/40 transition-colors group"
+                        >
+                          <p className="text-sm font-medium leading-snug group-hover:text-accent-foreground">{t.question}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">
+                            {t.answer.replace(/\n/g, ' ').slice(0, 120)}{t.answer.length > 120 ? '…' : ''}
+                          </p>
+                          <span className="inline-block mt-1 text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground/70">{t.category}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
-              <textarea
-                id="faq-answer"
-                value={form.answer}
-                onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
-                placeholder="Write a clear, concise answer customers will see on WhatsApp."
-                required
-                rows={8}
-                className={cn(
-                  'w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none',
-                  'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-                  'md:text-sm dark:bg-input/30 resize-y min-h-[120px]',
-                  answerOverLimit && 'border-destructive focus-visible:ring-destructive/30',
+            </>
+          ) : (
+            <>
+              <SheetHeader>
+                <SheetTitle>{editingId ? 'Edit FAQ' : 'Add FAQ'}</SheetTitle>
+                <SheetDescription>
+                  {editingId
+                    ? 'Update the question or answer below.'
+                    : 'New FAQs start as pending. Approve them when ready for the WhatsApp bot.'}
+                </SheetDescription>
+              </SheetHeader>
+              <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
+                {!editingId && (
+                  <button
+                    type="button"
+                    onClick={() => setTemplateStep(true)}
+                    className="text-xs text-primary hover:underline text-left"
+                  >
+                    ← Back to templates
+                  </button>
                 )}
-              />
-              {answerOverLimit && (
-                <p className="text-xs text-destructive">
-                  WhatsApp truncates long messages — keep answers under {WHATSAPP_ANSWER_LIMIT.toLocaleString()} characters.
-                </p>
-              )}
-            </div>
-            <SheetFooter className="px-0">
-              <Button type="button" variant="outline" onClick={closeSheet}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving || answerOverLimit}>
-                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add FAQ'}
-              </Button>
-            </SheetFooter>
-          </form>
+                <div className="space-y-2">
+                  <Label htmlFor="faq-question">Question</Label>
+                  <Input
+                    id="faq-question"
+                    value={form.question}
+                    onChange={(e) => setForm((f) => ({ ...f, question: e.target.value }))}
+                    placeholder="e.g. What are your opening hours?"
+                    required
+                    autoFocus={!templateStep}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="faq-answer">Answer</Label>
+                    <span
+                      className={cn(
+                        'text-xs tabular-nums',
+                        answerOverLimit ? 'text-destructive font-medium' : 'text-muted-foreground',
+                      )}
+                    >
+                      {answerLen.toLocaleString()} / {WHATSAPP_ANSWER_LIMIT.toLocaleString()}
+                    </span>
+                  </div>
+                  <textarea
+                    id="faq-answer"
+                    value={form.answer}
+                    onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
+                    placeholder="Write a clear, concise answer customers will see on WhatsApp."
+                    required
+                    rows={8}
+                    className={cn(
+                      'w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none',
+                      'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
+                      'md:text-sm dark:bg-input/30 resize-y min-h-[120px]',
+                      answerOverLimit && 'border-destructive focus-visible:ring-destructive/30',
+                    )}
+                  />
+                  {answerOverLimit && (
+                    <p className="text-xs text-destructive">
+                      WhatsApp truncates long messages — keep answers under {WHATSAPP_ANSWER_LIMIT.toLocaleString()} characters.
+                    </p>
+                  )}
+                  {form.answer.includes('[') && form.answer.includes(']') && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Replace the <strong>[bracketed]</strong> placeholders with your actual details before saving.
+                    </p>
+                  )}
+                </div>
+                <SheetFooter className="px-0">
+                  <Button type="button" variant="outline" onClick={closeSheet}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={saving || answerOverLimit}>
+                    {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add FAQ'}
+                  </Button>
+                </SheetFooter>
+              </form>
+            </>
+          )}
         </SheetContent>
       </Sheet>
 
@@ -671,11 +811,14 @@ export function FaqsClient({ token }: Props) {
         >
           <Card
             className="w-full max-w-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-faq-title"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
             <CardContent className="p-6 space-y-4">
-              <h2 className="font-semibold">Delete FAQ?</h2>
+              <h2 id="delete-faq-title" className="font-semibold">Delete FAQ?</h2>
               <p className="text-sm text-muted-foreground">
                 &ldquo;{truncate(deleteTarget.question, 80)}&rdquo; will be removed permanently and dropped from bot search.
               </p>

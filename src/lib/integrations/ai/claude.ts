@@ -32,7 +32,7 @@ export async function claudeJson<T>(input: {
     });
 
     const text = response.content
-      .filter((block) => block.type === 'text')
+      .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
       .map((block) => block.text)
       .join('\n')
       .trim();
@@ -66,7 +66,7 @@ export async function claudeText(input: {
     });
 
     return response.content
-      .filter((block) => block.type === 'text')
+      .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
       .map((block) => block.text)
       .join('\n')
       .trim() || null;

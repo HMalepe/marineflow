@@ -28,7 +28,7 @@ export async function clearToken(): Promise<void> {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
-export async function getUser(): Promise<{ sub: string; email: string; name: string; role: string; salonId: string; phone?: string } | null> {
+export async function getUser(): Promise<{ sub: string; email: string; name: string; businessName: string; role: string; salonId: string; phone?: string } | null> {
   const token = await getToken();
   if (!token) return null;
 
@@ -64,7 +64,8 @@ export async function getUser(): Promise<{ sub: string; email: string; name: str
     return {
       sub: user.id,
       email: user.email,
-      name: salon.displayName,
+      name: user.name,
+      businessName: salon.displayName,
       role: user.role,
       salonId: user.salonId,
       // phone not in /me response — read from raw JWT payload only for display

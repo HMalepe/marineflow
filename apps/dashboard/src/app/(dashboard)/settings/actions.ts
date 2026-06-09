@@ -18,6 +18,21 @@ export interface SalonSettings {
   botName: string;
 }
 
+export async function updateEmail(email: string): Promise<{ error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    await apiFetch('/me/email', { method: 'PATCH', body: JSON.stringify({ email }) }, token);
+    return {};
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 409) return { error: 'That email is already in use' };
+      if (e.status === 400) return { error: 'Enter a valid email address' };
+    }
+    return { error: e instanceof ApiError ? e.message : 'Failed to update email' };
+  }
+}
+
 export async function changePassword(
   currentPassword: string,
   newPassword: string,

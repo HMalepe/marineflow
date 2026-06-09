@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { updateName } from './actions';
+import { updateName, updateEmail } from './actions';
 
 function formatRole(role: string): string {
   return role.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -26,21 +26,34 @@ interface Props {
 export function SettingsForm({ user }: Props) {
   const router = useRouter();
   const [name, setName] = useState(user.name);
+  const [email, setEmail] = useState(user.email);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const dirty = name.trim() !== user.name && name.trim().length >= 2;
+  const nameDirty = name.trim() !== user.name && name.trim().length >= 2;
+  const emailDirty = email.trim().toLowerCase() !== user.email.toLowerCase() && email.includes('@');
+  const dirty = nameDirty || emailDirty;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setSaving(true);
-    const result = await updateName(name.trim());
-    setSaving(false);
-    if (result.error) {
-      setError(result.error);
-    } else {
+
+    try {
+      if (nameDirty) {
+        const result = await updateName(name.trim());
+        if (result.error) { setError(result.error); return; }
+      }
+      if (emailDirty) {
+        const result = await updateEmail(email.trim().toLowerCase());
+        if (result.error) { setError(result.error); return; }
+      }
+      setSuccess('Profile updated');
       router.refresh();
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -49,27 +62,39 @@ export function SettingsForm({ user }: Props) {
       <form onSubmit={(e) => void handleSave(e)}>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="display-name">Name</Label>
+            <Label htmlFor="display-name">Your name</Label>
             <Input
               id="display-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setSuccess(null); }}
               maxLength={80}
               required
             />
           </div>
           <div className="space-y-2">
-            <Label>Email</Label>
-            <Input value={user.email} readOnly className="bg-muted" />
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setSuccess(null); }}
+              maxLength={120}
+              required
+            />
           </div>
         </div>
+
         {error && (
           <p role="alert" className="text-sm text-destructive mt-2">{error}</p>
         )}
+        {success && (
+          <p role="status" className="text-sm text-green-600 dark:text-green-400 mt-2">{success} ✓</p>
+        )}
+
         {dirty && (
           <div className="mt-3">
             <Button type="submit" size="sm" disabled={saving}>
-              {saving ? 'Saving…' : 'Save name'}
+              {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>
         )}

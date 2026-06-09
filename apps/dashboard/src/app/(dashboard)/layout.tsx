@@ -1,8 +1,9 @@
-import Link from 'next/link';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { redirect } from 'next/navigation';
 import { LogoutButton } from './logout-button';
+import { MobileNav } from './mobile-nav';
+import { NavLinks } from './nav-links';
 
 function formatRole(role: string): string {
   return role
@@ -20,16 +21,9 @@ export default async function DashboardLayout({
   if (!user) redirect('/login');
 
   const token = await getToken();
-  let businessName = user.name;
+  const ownerName = user.name;
+  let businessName = user.businessName;
   let logoUrl: string | null = null;
-  try {
-    if (token) {
-      const data = await apiFetch<{ salon: { displayName: string } }>('/me', {}, token);
-      businessName = data.salon.displayName;
-    }
-  } catch {
-    // fall back to JWT name
-  }
   try {
     if (token && (user.role === 'OWNER' || user.role === 'MANAGER')) {
       const data = await apiFetch<{ salon: { logoUrl: string | null } }>('/settings', {}, token);
@@ -43,17 +37,25 @@ export default async function DashboardLayout({
   const isAdmin = user.role === 'SUPER_ADMIN';
 
   return (
-    <div className="min-h-screen flex">
-      {/* Sidebar */}
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Mobile header + bottom nav */}
+      <MobileNav
+        isAdmin={isAdmin}
+        isOwner={isOwner}
+        businessName={businessName}
+        logoUrl={logoUrl}
+      />
+
+      {/* Sidebar (desktop only) */}
       <aside className="w-64 border-r bg-card hidden md:flex flex-col">
 
         {/* Business identity */}
         <div className="px-4 py-4 border-b flex items-center gap-3">
-          {/* Logo / initials avatar */}
-          <div className="shrink-0 size-10 rounded-xl overflow-hidden bg-muted flex items-center justify-center border">
+          {/* Logo / initials avatar — white bg keeps dark logos visible */}
+          <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={businessName} className="size-full object-contain p-0.5" />
+              <img src={logoUrl} alt={businessName} className="size-full object-contain p-1" />
             ) : (
               <span className="text-sm font-bold text-muted-foreground select-none">
                 {businessName.split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase() ?? '').join('')}
@@ -61,41 +63,20 @@ export default async function DashboardLayout({
             )}
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 leading-none mb-1">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 leading-none mb-0.5">
               {formatRole(user.role)}
             </p>
             <p className="text-sm font-bold leading-tight truncate">{businessName}</p>
+            <p className="text-[11px] text-muted-foreground leading-tight truncate mt-0.5">{ownerName}</p>
             {user.phone && (
-              <p className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">{user.phone}</p>
+              <p className="text-[10px] text-muted-foreground/70 mt-0.5 tabular-nums">{user.phone}</p>
             )}
           </div>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5">
-          {isAdmin ? (
-            <>
-              <NavLink href="/">Overview</NavLink>
-              <NavLink href="/agency">Salons</NavLink>
-              <NavLink href="/admin">Admin</NavLink>
-              <NavLink href="/analytics">Analytics</NavLink>
-              <NavLink href="/billing">Billing</NavLink>
-            </>
-          ) : (
-            <>
-              <NavLink href="/">Overview</NavLink>
-              <NavLink href="/appointments">Appointments</NavLink>
-              <NavLink href="/customers">Customers</NavLink>
-              <NavLink href="/campaigns">Newsletter</NavLink>
-              <NavLink href="/conversations">Conversations</NavLink>
-              <NavLink href="/analytics">Analytics</NavLink>
-              <NavLink href="/staff">Staff</NavLink>
-              <NavLink href="/services">Services</NavLink>
-              <NavLink href="/faqs">Bot FAQs</NavLink>
-              {isOwner && <NavLink href="/billing">Billing</NavLink>}
-              {isOwner && <NavLink href="/settings">Settings</NavLink>}
-            </>
-          )}
+          <NavLinks isAdmin={isAdmin} isOwner={isOwner} />
         </nav>
 
         {/* Product watermark */}
@@ -132,20 +113,9 @@ export default async function DashboardLayout({
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-6 md:p-8 bg-muted/30">
+      <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8 bg-muted/30 min-w-0">
         {children}
       </main>
     </div>
-  );
-}
-
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="block px-3 py-2 rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-    >
-      {children}
-    </Link>
   );
 }
