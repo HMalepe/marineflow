@@ -235,7 +235,7 @@ export function ServicesClient({ token }: Props) {
       return;
     }
 
-    const priceCents = Math.round(parseFloat(form.priceRands) * 100);
+    const priceCents = Math.round((parseFloat(form.priceRands) + Number.EPSILON) * 100);
     const durationMin = parseInt(form.durationMin, 10);
     const bufferMin = parseInt(form.bufferMin, 10) || 0;
 
@@ -534,7 +534,7 @@ export function ServicesClient({ token }: Props) {
                   </button>
                 </div>
               )}
-              <form onSubmit={handleSave} className="flex flex-col gap-4 px-4 pb-4">
+              <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Name *</Label>
                   <Input

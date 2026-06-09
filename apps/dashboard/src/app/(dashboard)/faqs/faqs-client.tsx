@@ -549,7 +549,9 @@ export function FaqsClient({ token }: Props) {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-base">FAQ library</CardTitle>
-              {reorderEnabled ? (
+              {reordering ? (
+                <p className="text-xs text-primary mt-1 animate-pulse">Saving order…</p>
+              ) : reorderEnabled ? (
                 <p className="text-xs text-muted-foreground mt-1">Drag cards to set the order customers see on WhatsApp.</p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-1">Clear search and show all FAQs to reorder.</p>
@@ -809,11 +811,14 @@ export function FaqsClient({ token }: Props) {
         >
           <Card
             className="w-full max-w-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-faq-title"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
             <CardContent className="p-6 space-y-4">
-              <h2 className="font-semibold">Delete FAQ?</h2>
+              <h2 id="delete-faq-title" className="font-semibold">Delete FAQ?</h2>
               <p className="text-sm text-muted-foreground">
                 &ldquo;{truncate(deleteTarget.question, 80)}&rdquo; will be removed permanently and dropped from bot search.
               </p>
