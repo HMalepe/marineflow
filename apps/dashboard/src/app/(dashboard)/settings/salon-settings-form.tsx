@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { saveDisplayName, saveHours, saveMessages, saveBotActive, type SalonSettings } from './actions';
+import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveBotName, type SalonSettings } from './actions';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -147,6 +147,8 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [welcomeMessage, setWelcomeMessage] = useState(initialSettings.welcomeMessage ?? '');
   const [afterHoursMessage, setAfterHoursMessage] = useState(initialSettings.afterHoursMessage ?? '');
   const [botActive, setBotActive] = useState(initialSettings.botActive);
+  const [botNameVal, setBotNameVal] = useState(initialSettings.botName ?? 'Ava');
+  const [savingBotName, setSavingBotName] = useState(false);
 
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
@@ -173,6 +175,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setWelcomeMessage(s.welcomeMessage ?? '');
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
+    setBotNameVal(s.botName ?? 'Ava');
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -193,6 +196,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   }, [saved, welcomeMessage, afterHoursMessage]);
 
   const botDirty = useMemo(() => botActive !== saved.botActive, [saved, botActive]);
+  const botNameDirty = useMemo(() => botNameVal !== (saved.botName ?? 'Ava'), [saved, botNameVal]);
 
   const timezoneLabel =
     TIMEZONE_OPTIONS.find((t) => t.value === timezone)?.label ?? timezone;
@@ -262,6 +266,24 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setSavingMessages(false);
   }
 
+  async function handleSaveBotName(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = botNameVal.trim();
+    if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
+      showToast('Bot name must be 2–40 characters', 'error');
+      return;
+    }
+    setSavingBotName(true);
+    const result = await saveBotName(trimmed);
+    if (result.salon) {
+      applySalon(result.salon);
+      showToast(`Bot name updated to "${trimmed}"`, 'success');
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
+    }
+    setSavingBotName(false);
+  }
+
   async function handleSaveBot(e: React.FormEvent) {
     e.preventDefault();
     setSavingBot(true);
@@ -280,11 +302,33 @@ export function SalonSettingsForm({ initialSettings }: Props) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">
-          WhatsApp bot name: <span className="font-medium text-foreground">{salon.name}</span>
-        </p>
-      </div>
+      {/* Bot name */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">WhatsApp bot name</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            The name your bot introduces itself as to customers (e.g. &quot;Hi! I&apos;m <strong>{botNameVal || salon.botName}</strong>, your booking assistant&quot;).
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveBotName(e)} className="space-y-4 max-w-md">
+          <div className="space-y-2">
+            <Label htmlFor="botName">Bot name</Label>
+            <Input
+              id="botName"
+              value={botNameVal}
+              onChange={(e) => setBotNameVal(e.target.value)}
+              placeholder="e.g. Ava"
+              maxLength={40}
+              required
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={!botNameDirty || savingBotName}>
+            {savingBotName ? 'Saving…' : 'Save bot name'}
+          </Button>
+        </form>
+      </section>
+
+      <Separator />
 
       {/* Dashboard business name */}
       <section className="space-y-4">

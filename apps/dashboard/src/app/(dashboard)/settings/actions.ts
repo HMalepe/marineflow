@@ -123,6 +123,20 @@ export async function saveMessages(welcomeMessage: string | null, afterHoursMess
   }
 }
 
+export async function saveBotName(botName: string): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ botName }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
 export async function saveBotActive(botActive: boolean): Promise<{ salon?: SalonSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };

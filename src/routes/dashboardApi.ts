@@ -226,6 +226,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       logoUrl?: string | null;
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
+      botName?: string;
     };
   }>(
     '/settings',
@@ -243,6 +244,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage,
           botActive,
           status,
+          botName,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -275,6 +277,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_timezone' };
         }
+        if (botName !== undefined) {
+          const trimmed = botName.trim();
+          if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
+            reply.code(400);
+            return { error: 'invalid_bot_name' };
+          }
+        }
 
         let nextStatus = status;
         if (botActive !== undefined) {
@@ -295,6 +304,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(afterHoursMessage !== undefined && {
               afterHoursMessage: afterHoursMessage?.trim() || null,
             }),
+            ...(botName !== undefined && { botName: botName.trim() }),
             ...(nextStatus !== undefined && {
               status: nextStatus,
               statusChangedAt: new Date(),
