@@ -126,7 +126,6 @@ enum ConversationStep {
   IDLE
   HANDOFF
   CLOSED
-  MARKETING_CONSENT
 }
 
 model Salon {
@@ -820,8 +819,6 @@ model Campaign {
   totalRecipients Int          @default(0)
   delivered     Int            @default(0)
   failed        Int            @default(0)
-  mediaUrl      String?        @db.Text
-  mediaType     String?
   createdBy     String?
   createdAt     DateTime       @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
