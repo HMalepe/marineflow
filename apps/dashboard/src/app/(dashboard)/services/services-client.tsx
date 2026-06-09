@@ -382,14 +382,14 @@ export function ServicesClient({ token }: Props) {
             className="max-w-sm mt-2"
           />
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead className="hidden lg:table-cell">Description</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Duration</TableHead>
+                <TableHead className="hidden sm:table-cell">Price</TableHead>
+                <TableHead className="hidden sm:table-cell">Duration</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right w-[90px]"> </TableHead>
               </TableRow>
@@ -435,20 +435,25 @@ export function ServicesClient({ token }: Props) {
                   }}
                 >
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{service.name}</span>
-                      {!service.active && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Hidden
-                        </Badge>
-                      )}
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{service.name}</span>
+                        {!service.active && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Hidden
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="sm:hidden text-xs text-muted-foreground tabular-nums">
+                        {formatPrice(service.priceCents)} · {formatDuration(service)}
+                      </span>
                     </div>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell max-w-[240px] truncate text-muted-foreground">
                     {service.description || '—'}
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{formatPrice(service.priceCents)}</TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
+                  <TableCell className="hidden sm:table-cell font-mono text-sm">{formatPrice(service.priceCents)}</TableCell>
+                  <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
                     {formatDuration(service)}
                   </TableCell>
                   <TableCell>

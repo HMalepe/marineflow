@@ -1,8 +1,9 @@
-import Link from 'next/link';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { redirect } from 'next/navigation';
 import { LogoutButton } from './logout-button';
+import { MobileNav } from './mobile-nav';
+import { NavLinks } from './nav-links';
 
 function formatRole(role: string): string {
   return role
@@ -36,8 +37,16 @@ export default async function DashboardLayout({
   const isAdmin = user.role === 'SUPER_ADMIN';
 
   return (
-    <div className="min-h-screen flex">
-      {/* Sidebar */}
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Mobile header + bottom nav */}
+      <MobileNav
+        isAdmin={isAdmin}
+        isOwner={isOwner}
+        businessName={businessName}
+        logoUrl={logoUrl}
+      />
+
+      {/* Sidebar (desktop only) */}
       <aside className="w-64 border-r bg-card hidden md:flex flex-col">
 
         {/* Business identity */}
@@ -67,29 +76,7 @@ export default async function DashboardLayout({
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5">
-          {isAdmin ? (
-            <>
-              <NavLink href="/">Overview</NavLink>
-              <NavLink href="/agency">Salons</NavLink>
-              <NavLink href="/admin">Admin</NavLink>
-              <NavLink href="/analytics">Analytics</NavLink>
-              <NavLink href="/billing">Billing</NavLink>
-            </>
-          ) : (
-            <>
-              <NavLink href="/">Overview</NavLink>
-              <NavLink href="/appointments">Appointments</NavLink>
-              <NavLink href="/customers">Customers</NavLink>
-              <NavLink href="/campaigns">Newsletter</NavLink>
-              <NavLink href="/conversations">Conversations</NavLink>
-              <NavLink href="/analytics">Analytics</NavLink>
-              <NavLink href="/staff">Staff</NavLink>
-              <NavLink href="/services">Services</NavLink>
-              <NavLink href="/faqs">Bot FAQs</NavLink>
-              {isOwner && <NavLink href="/billing">Billing</NavLink>}
-              {isOwner && <NavLink href="/settings">Settings</NavLink>}
-            </>
-          )}
+          <NavLinks isAdmin={isAdmin} isOwner={isOwner} />
         </nav>
 
         {/* Product watermark */}
@@ -126,20 +113,9 @@ export default async function DashboardLayout({
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-6 md:p-8 bg-muted/30">
+      <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8 bg-muted/30 min-w-0">
         {children}
       </main>
     </div>
-  );
-}
-
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="block px-3 py-2 rounded-md text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-    >
-      {children}
-    </Link>
   );
 }
