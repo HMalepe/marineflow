@@ -34,7 +34,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import { FAQ_TEMPLATES, FAQ_CATEGORIES } from './faq-templates';
+import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 
 type FaqStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -300,6 +300,7 @@ export function FaqsClient({ token }: Props) {
   const [templateStep, setTemplateStep] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateCategory, setTemplateCategory] = useState<string>('All');
+  const [templateBizType, setTemplateBizType] = useState<string>('');
 
   const reorderEnabled = statusFilter === 'all' && !search.trim();
 
@@ -373,6 +374,7 @@ export function FaqsClient({ token }: Props) {
     setTemplateStep(true);
     setTemplateSearch('');
     setTemplateCategory('All');
+    setTemplateBizType('');
     setSheetOpen(true);
   }
 
@@ -390,6 +392,7 @@ export function FaqsClient({ token }: Props) {
     setTemplateStep(false);
     setTemplateSearch('');
     setTemplateCategory('All');
+    setTemplateBizType('');
   }
 
   function applyTemplate(question: string, answer: string) {
@@ -621,7 +624,7 @@ export function FaqsClient({ token }: Props) {
               <SheetHeader>
                 <SheetTitle>Choose a template</SheetTitle>
                 <SheetDescription>
-                  Pick a template to pre-fill your question and answer, then edit it to match your salon.
+                  Pick a template to pre-fill your question and answer, then edit it to match your business.
                 </SheetDescription>
               </SheetHeader>
               <div className="flex flex-col gap-3 px-4 pb-4">
@@ -642,8 +645,28 @@ export function FaqsClient({ token }: Props) {
                   autoFocus
                 />
 
+                {/* Business type filter */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                  {(['', ...FAQ_BUSINESS_TYPES] as string[]).map((biz) => (
+                    <button
+                      key={biz || '__all__'}
+                      type="button"
+                      onClick={() => setTemplateBizType(biz)}
+                      className={cn(
+                        'shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
+                        templateBizType === biz
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                      )}
+                    >
+                      {biz || 'All businesses'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Category filter */}
                 <div className="flex flex-wrap gap-1.5">
-                  {(['All', ...FAQ_CATEGORIES] as string[]).map((cat) => (
+                  {FAQ_CATEGORIES.map((cat) => (
                     <button
                       key={cat}
                       type="button"
@@ -662,20 +685,21 @@ export function FaqsClient({ token }: Props) {
 
                 {(() => {
                   const q = templateSearch.trim().toLowerCase();
-                  const filtered = FAQ_TEMPLATES.filter((t) => {
-                    const matchCat = templateCategory === 'All' || t.category === templateCategory;
-                    const matchSearch = !q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q);
-                    return matchCat && matchSearch;
+                  const visibleTemplates = FAQ_TEMPLATES.filter((t) => {
+                    const matchesBiz = !templateBizType || t.businessTypes.includes('All') || t.businessTypes.includes(templateBizType);
+                    const matchesCat = templateCategory === 'All' || t.category === templateCategory;
+                    const matchesSearch = !q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q);
+                    return matchesBiz && matchesCat && matchesSearch;
                   });
                   return (
-                    <div className="space-y-1.5 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
-                      {filtered.length === 0 && (
+                    <div className="space-y-1.5 max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
+                      {visibleTemplates.length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-6">No templates match your search.</p>
                       )}
-                      {filtered.length > 0 && (
-                        <p className="text-xs text-muted-foreground pb-0.5">{filtered.length} template{filtered.length !== 1 ? 's' : ''}</p>
+                      {visibleTemplates.length > 0 && (
+                        <p className="text-xs text-muted-foreground pb-0.5">{visibleTemplates.length} template{visibleTemplates.length !== 1 ? 's' : ''}</p>
                       )}
-                      {filtered.map((t, i) => (
+                      {visibleTemplates.map((t, i) => (
                         <button
                           key={i}
                           type="button"
@@ -743,11 +767,11 @@ export function FaqsClient({ token }: Props) {
                     onChange={(e) => setForm((f) => ({ ...f, answer: e.target.value }))}
                     placeholder="Write a clear, concise answer customers will see on WhatsApp."
                     required
-                    rows={10}
+                    rows={8}
                     className={cn(
                       'w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-2 text-base transition-colors outline-none',
                       'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
-                      'md:text-sm dark:bg-input/30 resize-y min-h-[160px]',
+                      'md:text-sm dark:bg-input/30 resize-y min-h-[120px]',
                       answerOverLimit && 'border-destructive focus-visible:ring-destructive/30',
                     )}
                   />
@@ -758,7 +782,7 @@ export function FaqsClient({ token }: Props) {
                   )}
                   {form.answer.includes('[') && form.answer.includes(']') && (
                     <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Replace the <strong>[bracketed]</strong> placeholders with your salon&apos;s actual details before saving.
+                      Replace the <strong>[bracketed]</strong> placeholders with your actual details before saving.
                     </p>
                   )}
                 </div>
