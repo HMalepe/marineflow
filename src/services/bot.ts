@@ -2218,14 +2218,24 @@ async function handleCsat(
   }
 
   const messages: Record<number, string> = {
-    1: 'We\'re sorry to hear that. We\'ll work to improve. Thank you for the feedback.',
-    2: 'Thank you for letting us know. We\'ll do better next time.',
+    1: "We're sorry to hear that. We'll work to improve. Thank you for the feedback.",
+    2: "Thank you for letting us know. We'll do better next time.",
     3: 'Thanks for the feedback! We appreciate it.',
     4: 'Great to hear! Thank you for your feedback.',
     5: 'Wonderful! So glad you had a great experience! 🌟',
   };
 
   await reply(conv, messages[rating] ?? 'Thank you!');
+
+  // §6.1 — send a Google review nudge immediately after a 5-star rating.
+  if (rating === 5 && conv.salon.googleReviewUrl) {
+    await reply(
+      conv,
+      "We'd love it if you shared your experience on Google — it helps other customers find us! 🌟\n\n" +
+        conv.salon.googleReviewUrl,
+    );
+  }
+
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await reply(conv, mainMenu(conv.salon));
 }

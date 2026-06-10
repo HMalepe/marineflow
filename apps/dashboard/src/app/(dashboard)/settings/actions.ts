@@ -30,6 +30,23 @@ export interface SalonSettings {
   contactEmail: string | null;
   mapsUrl: string | null;
   parkingNotes: string | null;
+  googleReviewUrl: string | null;
+}
+
+export async function saveGoogleReviewUrl(
+  googleReviewUrl: string | null,
+): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ googleReviewUrl }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
 }
 
 export async function saveLocation(

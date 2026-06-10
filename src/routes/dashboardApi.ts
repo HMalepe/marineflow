@@ -220,6 +220,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           contactEmail: true,
           mapsUrl: true,
           parkingNotes: true,
+          googleReviewUrl: true,
         },
       });
       return {
@@ -257,6 +258,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       contactEmail?: string | null;
       mapsUrl?: string | null;
       parkingNotes?: string | null;
+      googleReviewUrl?: string | null;
     };
   }>(
     '/settings',
@@ -289,6 +291,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           contactEmail,
           mapsUrl,
           parkingNotes,
+          googleReviewUrl,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -326,6 +329,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
             reply.code(400);
             return { error: 'invalid_bot_name' };
+          }
+        }
+        if (googleReviewUrl !== undefined && googleReviewUrl !== null) {
+          if (!googleReviewUrl.startsWith('https://')) {
+            reply.code(400);
+            return { error: 'invalid_google_review_url', message: 'Google Review URL must start with https://' };
           }
         }
 
@@ -367,6 +376,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(contactEmail !== undefined && { contactEmail: contactEmail?.trim() || null }),
             ...(mapsUrl !== undefined && { mapsUrl: mapsUrl?.trim() || null }),
             ...(parkingNotes !== undefined && { parkingNotes: parkingNotes?.trim() || null }),
+            ...(googleReviewUrl !== undefined && { googleReviewUrl: googleReviewUrl?.trim() || null }),
           },
           select: {
             id: true,
@@ -394,6 +404,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             inactivityMessage2: true,
             inactivityMessage2DelayMin: true,
             closingMessage: true,
+            googleReviewUrl: true,
           },
         });
 

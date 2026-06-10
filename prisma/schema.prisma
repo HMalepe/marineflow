@@ -167,6 +167,7 @@ model Salon {
   afterHoursMessage String?   @db.Text
   logoUrl        String?      @db.Text
   botName        String       @default("Ava")
+  googleReviewUrl String?     @db.Text
   botVoiceBrief  String?      @db.Text
   /// Bot behaviour toggles — owner-controlled from Settings
   botAskMarketingConsent Boolean @default(true)

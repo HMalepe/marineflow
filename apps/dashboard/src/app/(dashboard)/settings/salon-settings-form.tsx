@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveLocation, type SalonSettings } from './actions';
+import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveLocation, saveGoogleReviewUrl, type SalonSettings } from './actions';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -169,6 +169,9 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [mapsUrl, setMapsUrl] = useState(initialSettings.mapsUrl ?? '');
   const [parkingNotes, setParkingNotes] = useState(initialSettings.parkingNotes ?? '');
 
+  const [googleReviewUrl, setGoogleReviewUrl] = useState(initialSettings.googleReviewUrl ?? '');
+  const [savingGoogleReviewUrl, setSavingGoogleReviewUrl] = useState(false);
+
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
@@ -200,6 +203,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setContactEmail(s.contactEmail ?? '');
     setMapsUrl(s.mapsUrl ?? '');
     setParkingNotes(s.parkingNotes ?? '');
+    setGoogleReviewUrl(s.googleReviewUrl ?? '');
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -245,6 +249,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       parkingNotes !== (saved.parkingNotes ?? '')
     );
   }, [saved, addressLine, phoneDisplay, contactEmail, mapsUrl, parkingNotes]);
+
+  const googleReviewUrlDirty = useMemo(
+    () => googleReviewUrl !== (saved.googleReviewUrl ?? ''),
+    [saved, googleReviewUrl],
+  );
 
   const timezoneLabel =
     TIMEZONE_OPTIONS.find((t) => t.value === timezone)?.label ?? timezone;
@@ -438,6 +447,29 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       }
     } finally {
       setSavingLocation(false);
+    }
+  }
+
+  async function handleSaveGoogleReviewUrl(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = googleReviewUrl.trim();
+    if (trimmed && !trimmed.startsWith('https://')) {
+      showToast('Google Review URL must start with https://', 'error');
+      return;
+    }
+    setSavingGoogleReviewUrl(true);
+    try {
+      const result = await saveGoogleReviewUrl(trimmed || null);
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Google Review URL saved', 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingGoogleReviewUrl(false);
     }
   }
 
@@ -883,6 +915,41 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               {savingBotBehaviour ? 'Saving…' : 'Save flow settings'}
             </Button>
             {botBehaviourDirty && (
+              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+            )}
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Google Reviews */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Google Reviews</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Customers who rate their experience <span className="font-medium text-foreground">5 stars</span> will automatically receive this link via WhatsApp to leave a Google review.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveGoogleReviewUrl(e)} className="space-y-4 max-w-lg">
+          <div className="space-y-2">
+            <Label htmlFor="google-review-url">Google Review URL</Label>
+            <Input
+              id="google-review-url"
+              type="url"
+              value={googleReviewUrl}
+              onChange={(e) => setGoogleReviewUrl(e.target.value)}
+              placeholder="https://g.page/r/YOUR_REVIEW_LINK/review"
+            />
+            <p className="text-xs text-muted-foreground">
+              Paste your Google Business review link. Find it in Google Business Profile → &quot;Get more reviews&quot;. Leave blank to disable.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" size="sm" disabled={savingGoogleReviewUrl || !googleReviewUrlDirty}>
+              {savingGoogleReviewUrl ? 'Saving…' : 'Save review URL'}
+            </Button>
+            {googleReviewUrlDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
             )}
           </div>
