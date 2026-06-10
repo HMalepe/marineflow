@@ -57,6 +57,8 @@ export type BotContext = Record<string, unknown> & {
   errorCount?: number;
   /** True when a human agent explicitly took over via the dashboard (keeps bot silent). */
   handoffByStaff?: boolean;
+  /** Set when the bot auto-escalated due to negative sentiment — prevents re-escalation loop until staff resolves. */
+  negativeSentimentEscalated?: boolean;
   /** AI-suggested quick book slots (A/B/C). */
   quickPickOptions?: QuickPickOption[];
   /** True once the AI has given its first answer in the OTHER_QUERY flow */
@@ -82,12 +84,21 @@ const PROFILE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const PENDING_PROFILE_CLEAR: Pick<
   BotContext,
-  'pendingFirstName' | 'pendingLastName' | 'pendingEmail' | 'pendingDateOfBirth'
+  | 'pendingFirstName'
+  | 'pendingLastName'
+  | 'pendingEmail'
+  | 'pendingDateOfBirth'
+  | 'negativeSentimentEscalated'
+  | 'otherQueryAnswered'
+  | 'otherQueryText'
 > = {
   pendingFirstName: undefined,
   pendingLastName: undefined,
   pendingEmail: undefined,
   pendingDateOfBirth: undefined,
+  negativeSentimentEscalated: undefined,
+  otherQueryAnswered: undefined,
+  otherQueryText: undefined,
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
@@ -592,7 +603,9 @@ async function escalateNegativeSentiment(
     'negative_sentiment_escalation',
   );
 
-  await getTenantDb().ticket.create({
+  const db = getTenantDb();
+
+  await db.ticket.create({
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
@@ -607,19 +620,40 @@ async function escalateNegativeSentiment(
     },
   });
 
-  await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR }, ConversationStep.HANDOFF);
+  // Track escalation rate in analytics (best-effort)
+  await db.analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      type: 'negative_sentiment_escalation',
+      payload: { lastText: text.slice(0, 200), timestamp: new Date().toISOString() },
+    },
+  });
 
-  await reply(
-    conv,
-    "I can hear that you're frustrated, and I'm sorry for any inconvenience. " +
-      "I've flagged this for one of our team members who will reach out to you shortly. " +
-      "We want to make this right.",
+  // Set flag BEFORE reply so the HANDOFF handler's silence guard is in place
+  // for any concurrent message that arrives while the reply is in-flight.
+  // Spread PENDING_PROFILE_CLEAR to discard any dangling profile/query state.
+  await saveCtx(
+    conv.id,
+    { ...PENDING_PROFILE_CLEAR, negativeSentimentEscalated: true },
+    ConversationStep.HANDOFF,
   );
+
+  const isOpen = isWithinBusinessHours(conv.salon);
+  const holdingMessage = isOpen
+    ? "I can hear that you're frustrated, and I'm sorry for any inconvenience. " +
+      "I've flagged this for one of our team members who will reach out to you shortly. " +
+      "We want to make this right."
+    : "I can hear that you're frustrated, and I'm sorry for any inconvenience. " +
+      "I've flagged this for our team — we're currently outside business hours but someone will follow up with you as soon as we open. " +
+      "We want to make this right.";
+
+  await reply(conv, holdingMessage);
 
   emitBotEscalation(conv.salonId, conv.customerId, conv.id, {
     reason: 'negative_sentiment',
     lastText: text.slice(0, 200),
-  }).catch(() => {});
+  }).catch((err: unknown) => logger.warn({ err }, 'emit_escalation_failed'));
 }
 
 async function handleMarketingConsentFlow(
@@ -771,6 +805,12 @@ async function routeConversation(
         // A human agent explicitly claimed this conversation — stay silent.
         // Message is already recorded; dashboard SSE has already been emitted.
         logger.info({ convId: conv.id, step: conv.step }, 'bot_silent_handoff');
+        return;
+      }
+      if (ctx(conv).negativeSentimentEscalated) {
+        // Negative-sentiment escalation is pending staff pick-up — stay silent so
+        // we do not auto-recover to MENU and trigger a duplicate escalation loop.
+        logger.info({ convId: conv.id }, 'bot_silent_sentiment_handoff');
         return;
       }
       // Bot-error HANDOFF with no staff claim — auto-recover so the customer
