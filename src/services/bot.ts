@@ -1333,6 +1333,7 @@ async function handleBookingRating(
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
+      appointmentId: appointmentId ?? null,
       type: 'booking_process_rating',
       payload: { rating, appointmentId },
     },
@@ -1559,10 +1560,16 @@ async function handleHandoffRating(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  const upper = text.trim().toUpperCase();
+  if (upper === 'BACK' || upper === 'MENU' || upper === '0') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
   const rating = parseInt(text.trim(), 10);
 
   if (isNaN(rating) || rating < 1 || rating > 10) {
-    await reply(conv, 'Please reply with a number from 1 to 10.');
+    await reply(conv, 'Please reply with a number from 1 to 10.\n(or type MENU to return)');
     return;
   }
 

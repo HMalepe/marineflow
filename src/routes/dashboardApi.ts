@@ -503,9 +503,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'body_required' };
         }
         // Save message first — WhatsApp send is best-effort
-        const message = await db.ticketMessage.create({
-          data: { ticketId: ticket.id, direction: 'out', body },
-        });
+        const message = await db.ticketMessage.create({ data: { ticketId: ticket.id, direction: 'out', body } });
+        // Bump ticket updatedAt so it floats to top of the sorted list
+        await db.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
         try {
           await sendWithFallback({ salonId: user.salonId, to: ticket.customer.waId, body });
         } catch {
@@ -545,10 +545,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(404);
           return { error: 'not_found' };
         }
-        if (ticket.status === 'RESOLVED') {
-          return { ok: true }; // idempotent
+        // Atomic update — guards against concurrent resolve requests both sending WhatsApp
+        const updated = await db.ticket.updateMany({
+          where: { id: ticket.id, status: { not: 'RESOLVED' } },
+          data: { status: 'RESOLVED' },
+        });
+        if (updated.count === 0) {
+          return { ok: true }; // already resolved (race or double-click)
         }
-        await db.ticket.update({ where: { id: ticket.id }, data: { status: 'RESOLVED' } });
         try {
           await sendWithFallback({
             salonId: user.salonId,
