@@ -19,6 +19,8 @@ export interface AiAssistResult {
   reply?: string;
   step?: ConversationStep;
   contextPatch?: Record<string, unknown>;
+  /** Forwarded from OrchestratorResult — triggers auto-escalation in bot.ts before handled is checked */
+  negativeSentiment?: boolean;
 }
 
 function fmtMoney(cents: number): string {
@@ -163,6 +165,12 @@ export async function tryAiAssist(
   try {
     const ai = await loadAssistContext(conv, trimmed);
     if (!ai) return { handled: false };
+
+    // §4.4/§5 — negative sentiment detected: hand off to caller for escalation.
+    // Return before the switch so this cannot be bypassed by any intent value.
+    if (ai.negativeSentiment) {
+      return { handled: false, negativeSentiment: true };
+    }
 
     const services = await getTenantDb().service.findMany({
       where: { salonId: conv.salonId, active: true },

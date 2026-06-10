@@ -96,7 +96,7 @@ export function emitBotEscalation(
   salonId: string,
   customerId: string,
   conversationId: string,
-  context: { errorCount: number; lastStep: string; lastText: string },
+  context: { errorCount?: number; lastStep?: string; lastText: string; reason?: string },
 ) {
   return publishEvent({
     type: 'bot.escalation',

@@ -490,6 +490,11 @@ async function processInboundWhatsApp(
   ];
   if (aiSteps.includes(conv.step)) {
     const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
+    // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
+    if (aiResult.negativeSentiment) {
+      await escalateNegativeSentiment(conv, text);
+      return;
+    }
     if (aiResult.handled && aiResult.reply) {
       await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
       await reply(conv, aiResult.reply);
@@ -570,6 +575,51 @@ async function processInboundWhatsApp(
       logger.error({ innerErr }, 'error_recovery_failed');
     }
   }
+}
+
+/**
+ * §4.4 / §5 — Auto-escalate when the AI orchestrator detects genuine negative sentiment
+ * (anger, threats, abuse, extreme frustration, or distress).
+ * Opens a ticket, sends an empathetic holding message, and pings the dashboard.
+ * Called before the normal aiResult.handled check so it cannot be bypassed.
+ */
+async function escalateNegativeSentiment(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+): Promise<void> {
+  logger.info(
+    { convId: conv.id, customerId: conv.customerId },
+    'negative_sentiment_escalation',
+  );
+
+  await getTenantDb().ticket.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      status: 'OPEN',
+      subject: 'Negative sentiment detected — customer may need urgent help',
+      messages: {
+        create: {
+          direction: MessageDirection.INBOUND,
+          body: `AI flagged negative sentiment.\nCustomer message: "${text.slice(0, 300)}"`,
+        },
+      },
+    },
+  });
+
+  await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR }, ConversationStep.HANDOFF);
+
+  await reply(
+    conv,
+    "I can hear that you're frustrated, and I'm sorry for any inconvenience. " +
+      "I've flagged this for one of our team members who will reach out to you shortly. " +
+      "We want to make this right.",
+  );
+
+  emitBotEscalation(conv.salonId, conv.customerId, conv.id, {
+    reason: 'negative_sentiment',
+    lastText: text.slice(0, 200),
+  }).catch(() => {});
 }
 
 async function handleMarketingConsentFlow(
@@ -1850,6 +1900,11 @@ async function handleOtherQuery(
   // Try AI assist
   try {
     const aiResult = await tryAiAssist(conv, text, mainMenu(conv.salon));
+    // §4.4/§5 — negative sentiment detected: escalate immediately, skip FAQ loop
+    if (aiResult.negativeSentiment) {
+      await escalateNegativeSentiment(conv, text);
+      return;
+    }
     if (aiResult.handled && aiResult.reply) {
       await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
       await reply(conv, aiResult.reply);

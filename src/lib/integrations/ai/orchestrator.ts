@@ -33,6 +33,8 @@ export interface OrchestratorResult {
   staffId: string | null;
   serviceNameGuess: string | null;
   empathyNote: string | null;
+  /** true when the customer is angry, threatening, abusive, extremely frustrated, or in distress */
+  negativeSentiment: boolean;
 }
 
 const SYSTEM = `You are a warm, professional WhatsApp salon assistant. You help customers book appointments, answer FAQs, and navigate the bot — never robotic, never pushy.
@@ -42,6 +44,7 @@ Rules:
 - If the customer expresses emotions or free-text needs (e.g. sad, anxious, wants a haircut but hates menus) → intent "book", pick the best matching serviceId from the catalog, reply with empathy first.
 - Prefer intent "book" when they want an appointment; "faq" for questions; "loyalty" for rewards/stamps; "manage_booking" to change/cancel; "hours" for address/opening times; "human" only if they explicitly want a person; "menu" if they want options listed.
 - Keep reply under 320 characters, WhatsApp-friendly, no markdown.
+- Set negativeSentiment: true if the customer is angry, threatening, abusive, extremely frustrated, or in distress. Do NOT set it for mild frustration or impatience — only genuine negative emotion.
 - Output ONLY valid JSON matching the schema.`;
 
 export async function orchestrateConversation(input: OrchestratorInput): Promise<OrchestratorResult | null> {
@@ -75,6 +78,7 @@ export async function orchestrateConversation(input: OrchestratorInput): Promise
       staffId: 'string|null',
       serviceNameGuess: 'string|null',
       empathyNote: 'string|null — brief note if customer shared feelings',
+      negativeSentiment: 'boolean — true only for anger/threats/abuse/extreme distress, false otherwise',
     },
   });
 
