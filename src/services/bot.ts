@@ -765,11 +765,18 @@ async function handlePickService(
   }
   const service = services[n - 1]!;
 
-  // If owner disabled staff selection, skip straight to date picking with "any" staff
+  // If owner disabled staff selection, auto-assign first available staff
   if (!conv.salon.botAllowStaffPick) {
+    const availableStaff = await getStaffForService(conv.salonId, service.id);
+    if (availableStaff.length === 0) {
+      await reply(conv, `No staff available for this service yet.\n\n${mainMenu(conv.salon)}`);
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      return;
+    }
+    const assignedStaff = availableStaff[0]!;
     await saveCtx(
       conv.id,
-      { selectedServiceId: service.id, selectedStaffId: undefined, anyStaff: true },
+      { selectedServiceId: service.id, selectedStaffId: assignedStaff.id, anyStaff: true },
       ConversationStep.PICK_DATE,
     );
     await handlePickDate(conv, '');
