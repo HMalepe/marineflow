@@ -28,6 +28,7 @@ async function withJobTenant<T>(salonId: string, fn: () => Promise<T>): Promise<
 export const appointmentRating = inngest.createFunction(
   {
     id: 'appointment-rating',
+    retries: 2,
     triggers: [{ event: 'whatsapp/appointment.completed' }],
   },
   async ({ event, step }) => {

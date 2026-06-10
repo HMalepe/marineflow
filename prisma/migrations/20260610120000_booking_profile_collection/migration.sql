@@ -1,0 +1,10 @@
+-- First-time booking profile collection (§4.2)
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'MARKETING_CONSENT';
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'COLLECT_FIRST_NAME';
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'COLLECT_LAST_NAME';
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'COLLECT_EMAIL';
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'COLLECT_DATE_OF_BIRTH';
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'BOOKING_POPIA_CONSENT';
+
+-- Date of birth for age/pricing and marketing segmentation
+ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "dateOfBirth" TIMESTAMP(3);

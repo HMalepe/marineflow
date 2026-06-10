@@ -248,6 +248,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       contactEmail?: string | null;
       mapsUrl?: string | null;
       parkingNotes?: string | null;
+      botName?: string;
+      botAskMarketingConsent?: boolean;
+      botAllowStaffPick?: boolean;
+      botLoyaltyEnabled?: boolean;
+      botRequireDepositStep?: boolean;
+      inactivityMessage1?: string | null;
+      inactivityMessage1DelayMin?: number;
+      inactivityMessage2?: string | null;
+      inactivityMessage2DelayMin?: number;
+      closingMessage?: string | null;
     };
   }>(
     '/settings',
@@ -280,6 +290,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           contactEmail,
           mapsUrl,
           parkingNotes,
+          botName,
+          botAskMarketingConsent,
+          botAllowStaffPick,
+          botLoyaltyEnabled,
+          botRequireDepositStep,
+          inactivityMessage1,
+          inactivityMessage1DelayMin,
+          inactivityMessage2,
+          inactivityMessage2DelayMin,
+          closingMessage,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {

@@ -49,6 +49,7 @@ export async function exportCustomerData(customerId: string) {
       lastName: customer.lastName,
       displayName: customer.displayName,
       email: customer.email,
+      dateOfBirth: customer.dateOfBirth,
       waId: customer.waId,
       locale: customer.locale,
       tags: customer.tags,

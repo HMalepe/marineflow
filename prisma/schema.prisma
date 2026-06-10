@@ -111,6 +111,11 @@ enum ConversationStep {
   GREETING
   MARKETING_CONSENT
   MENU
+  COLLECT_FIRST_NAME
+  COLLECT_LAST_NAME
+  COLLECT_EMAIL
+  COLLECT_DATE_OF_BIRTH
+  BOOKING_POPIA_CONSENT
   PICK_BRANCH
   PICK_SERVICE
   PICK_STAFF
@@ -263,6 +268,7 @@ model Customer {
   firstName           String?
   lastName            String?
   email               String?
+  dateOfBirth         DateTime?
   locale              String    @default("en")
   tags                String[]  @default([])
   notes               String?   @db.Text
