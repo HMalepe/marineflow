@@ -20,12 +20,13 @@ export async function claudeJson<T>(input: {
   system: string;
   user: string;
   maxTokens?: number;
+  model?: string;
 }): Promise<T | null> {
   if (!isAnthropicConfigured()) return null;
 
   try {
     const response = await getClient().messages.create({
-      model: env.CLAUDE_MODEL,
+      model: input.model ?? env.CLAUDE_MODEL,
       max_tokens: input.maxTokens ?? 1024,
       system: input.system,
       messages: [{ role: 'user', content: input.user }],

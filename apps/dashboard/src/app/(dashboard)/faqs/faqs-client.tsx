@@ -302,6 +302,11 @@ export function FaqsClient({ token }: Props) {
   const [templateCategory, setTemplateCategory] = useState<string>('All');
   const [templateBizType, setTemplateBizType] = useState<string>('');
 
+  type SmartResult = { id: string; question: string; decision: 'approve' | 'needs_edit'; reason: string };
+  const [smartResults, setSmartResults] = useState<SmartResult[] | null>(null);
+  const [smartScanning, setSmartScanning] = useState(false);
+  const [smartApplying, setSmartApplying] = useState(false);
+
   const reorderEnabled = statusFilter === 'all' && !search.trim();
 
   const sensors = useSensors(
@@ -446,6 +451,40 @@ export function FaqsClient({ token }: Props) {
     }
   }
 
+  async function handleSmartScan() {
+    setSmartScanning(true);
+    try {
+      const data = await apiFetch<{ results: SmartResult[]; summary: { total: number; approve: number; needsEdit: number } }>(
+        '/faqs/smart-approve',
+        { method: 'POST' },
+        token,
+      );
+      setSmartResults(data.results);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Scan failed', 'error');
+    } finally {
+      setSmartScanning(false);
+    }
+  }
+
+  async function handleSmartApply() {
+    setSmartApplying(true);
+    try {
+      const data = await apiFetch<{ summary: { approve: number } }>(
+        '/faqs/smart-approve?apply=1',
+        { method: 'POST' },
+        token,
+      );
+      showToast(`${data.summary.approve} FAQ${data.summary.approve !== 1 ? 's' : ''} approved`, 'success');
+      setSmartResults(null);
+      await loadFaqs(true);
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Apply failed', 'error');
+    } finally {
+      setSmartApplying(false);
+    }
+  }
+
   async function updateStatus(faq: Faq, status: FaqStatus) {
     setBusyId(faq.id);
     setFaqs((prev) => prev.map((f) => (f.id === faq.id ? { ...f, status } : f)));
@@ -534,10 +573,21 @@ export function FaqsClient({ token }: Props) {
             Manage answers your WhatsApp bot shares. Only approved FAQs appear in the menu and semantic search.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => loadFaqs(true)} disabled={refreshing}>
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </Button>
+          {stats.pending > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void handleSmartScan()}
+              disabled={smartScanning}
+              className="border-yellow-600/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20"
+            >
+              {smartScanning ? '✨ Scanning…' : `✨ Smart approve (${stats.pending} pending)`}
+            </Button>
+          )}
           <Button onClick={openCreate}>Add FAQ</Button>
         </div>
       </div>
@@ -866,6 +916,65 @@ export function FaqsClient({ token }: Props) {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+
+      {/* Smart approve results modal */}
+      {smartResults && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !smartApplying && setSmartResults(null)}
+          onKeyDown={(e) => e.key === 'Escape' && !smartApplying && setSmartResults(null)}
+          role="presentation"
+        >
+          <Card
+            className="w-full max-w-lg max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">✨ Smart approve results</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                {smartResults.filter((r) => r.decision === 'approve').length} ready to approve
+                {' · '}
+                {smartResults.filter((r) => r.decision === 'needs_edit').length} need editing
+              </p>
+            </CardHeader>
+            <CardContent className="overflow-y-auto flex-1 space-y-2 pb-2">
+              {smartResults.map((r) => (
+                <div
+                  key={r.id}
+                  className={cn(
+                    'rounded-lg border px-3 py-2.5 flex items-start gap-2.5',
+                    r.decision === 'approve'
+                      ? 'border-green-600/25 bg-green-600/5'
+                      : 'border-yellow-600/25 bg-yellow-500/5',
+                  )}
+                >
+                  <span className="text-base mt-0.5 shrink-0">
+                    {r.decision === 'approve' ? '✅' : '✏️'}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-snug truncate">{r.question}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{r.reason}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+            <div className="p-4 border-t flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setSmartResults(null)} disabled={smartApplying}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void handleSmartApply()}
+                disabled={smartApplying || smartResults.filter((r) => r.decision === 'approve').length === 0}
+              >
+                {smartApplying
+                  ? 'Approving…'
+                  : `Approve ${smartResults.filter((r) => r.decision === 'approve').length} FAQ${smartResults.filter((r) => r.decision === 'approve').length !== 1 ? 's' : ''}`}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

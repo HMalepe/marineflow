@@ -49,6 +49,7 @@ import {
   updateCampaign,
   type AudienceFilter,
 } from '../services/campaigns.js';
+import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 
 type FaqApiStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -1463,6 +1464,116 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         });
 
         return { ok: true };
+      });
+    },
+  );
+
+  // ─── FAQ Smart Approve ───────────────────────────────────────────────
+  app.post(
+    '/faqs/smart-approve',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const pending = await db.faqItem.findMany({
+          where: { salonId: user.salonId, status: 'PENDING' },
+          select: { id: true, question: true, answer: true },
+        });
+
+        if (pending.length === 0) {
+          return { results: [], message: 'No pending FAQs to review' };
+        }
+
+        // ── Phase 1: free regex check ──────────────────────────────────
+        // Anything with unfilled template placeholders is instantly flagged
+        const PLACEHOLDER_RE = /\[(?!e\.g\.\s*\d|\d)[^\]]{2,}\]/i;
+        const GENERIC_PHRASES = ['e.g.', '[e.g.', 'route name', 'route number', 'your business'];
+
+        type Decision = { id: string; question: string; decision: 'approve' | 'needs_edit'; reason: string };
+        const results: Decision[] = [];
+        const needsAi: typeof pending = [];
+
+        for (const faq of pending) {
+          const combined = `${faq.question} ${faq.answer}`;
+          const hasPlaceholder = PLACEHOLDER_RE.test(combined);
+          const hasGeneric = GENERIC_PHRASES.some((p) => combined.toLowerCase().includes(p.toLowerCase()));
+          if (hasPlaceholder || hasGeneric) {
+            results.push({
+              id: faq.id,
+              question: faq.question,
+              decision: 'needs_edit',
+              reason: 'Contains unfilled placeholder text',
+            });
+          } else if (faq.answer.trim().length < 15) {
+            results.push({
+              id: faq.id,
+              question: faq.question,
+              decision: 'needs_edit',
+              reason: 'Answer is too short',
+            });
+          } else {
+            needsAi.push(faq);
+          }
+        }
+
+        // ── Phase 2: one batched Haiku call for borderline FAQs ────────
+        if (needsAi.length > 0 && isAnthropicConfigured()) {
+          const numbered = needsAi
+            .map((f, i) => `${i + 1}. Q: ${f.question}\n   A: ${f.answer.slice(0, 300)}`)
+            .join('\n\n');
+
+          const aiResult = await claudeJson<{ results: Array<{ index: number; decision: 'approve' | 'needs_edit'; reason: string }> }>({
+            system:
+              'You review WhatsApp chatbot FAQ entries for a small business. ' +
+              'Decide if each FAQ is complete and ready to use (approve) or needs editing (needs_edit). ' +
+              'Flag needs_edit if: answer is vague/generic, clearly unfinished, or looks like a template not filled in. ' +
+              'Approve if: the answer gives real, useful information a customer could act on. ' +
+              'Be lenient — if it looks like genuine business content, approve it. ' +
+              'Respond ONLY with JSON: {"results":[{"index":1,"decision":"approve","reason":"..."},...]}',
+            user: `Review these ${needsAi.length} FAQ(s):\n\n${numbered}`,
+            maxTokens: 600,
+            model: 'claude-haiku-4-5-20251001',
+          });
+
+          if (aiResult?.results) {
+            for (const r of aiResult.results) {
+              const faq = needsAi[r.index - 1];
+              if (faq) {
+                results.push({ id: faq.id, question: faq.question, decision: r.decision, reason: r.reason });
+              }
+            }
+          } else {
+            // AI unavailable — approve everything that passed the regex check
+            for (const faq of needsAi) {
+              results.push({ id: faq.id, question: faq.question, decision: 'approve', reason: 'Passed basic checks' });
+            }
+          }
+        } else {
+          // No AI configured — approve everything that passed regex
+          for (const faq of needsAi) {
+            results.push({ id: faq.id, question: faq.question, decision: 'approve', reason: 'Passed basic checks' });
+          }
+        }
+
+        // ── Phase 3: apply approvals (dry-run flag optional) ──────────
+        const { apply } = request.query as { apply?: string };
+        if (apply === '1') {
+          const toApprove = results.filter((r) => r.decision === 'approve').map((r) => r.id);
+          if (toApprove.length > 0) {
+            await db.faqItem.updateMany({
+              where: { id: { in: toApprove }, salonId: user.salonId },
+              data: { status: 'APPROVED' },
+            });
+          }
+        }
+
+        const approveCount = results.filter((r) => r.decision === 'approve').length;
+        const needsEditCount = results.filter((r) => r.decision === 'needs_edit').length;
+        return {
+          results,
+          summary: { total: results.length, approve: approveCount, needsEdit: needsEditCount },
+          applied: apply === '1',
+        };
       });
     },
   );
