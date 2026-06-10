@@ -482,7 +482,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       {/* Business Hours */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold">Business Hours</h3>
+          <h3 className="text-base font-semibold">Business hours</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Controls after-hours auto-replies and hours shown to customers on WhatsApp.
           </p>
@@ -538,7 +538,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={savingHours || !hoursDirty}>
-              {savingHours ? 'Saving…' : hoursDirty ? 'Save business hours' : 'No changes'}
+              {savingHours ? 'Saving…' : 'Save business hours'}
             </Button>
             {hoursDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
@@ -552,7 +552,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       {/* WhatsApp Bot Messages */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold">WhatsApp Bot Messages</h3>
+          <h3 className="text-base font-semibold">WhatsApp bot messages</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Customise automated replies. Leave blank to use smart defaults.
           </p>
@@ -608,7 +608,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
                 size="sm"
                 disabled={savingMessages || !messagesDirty || welcomeOver || afterHoursOver}
               >
-                {savingMessages ? 'Saving…' : messagesDirty ? 'Save bot messages' : 'No changes'}
+                {savingMessages ? 'Saving…' : 'Save bot messages'}
               </Button>
               {messagesDirty && (
                 <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
@@ -695,7 +695,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           </div>
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={savingBot || !botDirty}>
-              {savingBot ? 'Saving…' : botDirty ? 'Save bot behaviour' : 'No changes'}
+              {savingBot ? 'Saving…' : 'Save bot behaviour'}
             </Button>
             {botDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
@@ -762,7 +762,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           ))}
           <div className="flex items-center gap-3 pt-1">
             <Button type="submit" size="sm" disabled={savingBotBehaviour || !botBehaviourDirty}>
-              {savingBotBehaviour ? 'Saving…' : botBehaviourDirty ? 'Save flow settings' : 'No changes'}
+              {savingBotBehaviour ? 'Saving…' : 'Save flow settings'}
             </Button>
             {botBehaviourDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
@@ -866,7 +866,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
 
           <div className="flex items-center gap-3">
             <Button type="submit" size="sm" disabled={savingInactivity || !inactivityDirty}>
-              {savingInactivity ? 'Saving…' : inactivityDirty ? 'Save messages' : 'No changes'}
+              {savingInactivity ? 'Saving…' : 'Save messages'}
             </Button>
             {inactivityDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>

@@ -88,7 +88,7 @@ export default async function AnalyticsPage() {
 
           {/* Bookings Trend */}
           <section>
-            <h2 className="text-lg font-semibold mb-3">Daily Bookings (Last 30 Days)</h2>
+            <h2 className="text-base font-semibold mb-3">Daily bookings (last 30 days)</h2>
             <div className="border rounded-lg p-4">
               <div className="flex items-end gap-1 h-32">
                 {data.dailyBookings.slice(-30).map((d, i) => {
@@ -114,7 +114,7 @@ export default async function AnalyticsPage() {
 
           {/* Revenue Trend */}
           <section>
-            <h2 className="text-lg font-semibold mb-3">Monthly Revenue</h2>
+            <h2 className="text-base font-semibold mb-3">Monthly revenue</h2>
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
@@ -143,7 +143,7 @@ export default async function AnalyticsPage() {
 
           {/* Staff Performance */}
           <section>
-            <h2 className="text-lg font-semibold mb-3">Staff Performance (This Month)</h2>
+            <h2 className="text-base font-semibold mb-3">Staff performance (this month)</h2>
             {data.staffPerformance.length === 0 ? (
               <p className="text-sm text-muted-foreground">No data yet.</p>
             ) : (
@@ -176,7 +176,7 @@ export default async function AnalyticsPage() {
 
           {/* Retention */}
           <section>
-            <h2 className="text-lg font-semibold mb-3">Customer Retention</h2>
+            <h2 className="text-base font-semibold mb-3">Customer retention</h2>
             <div className="border rounded-lg overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">

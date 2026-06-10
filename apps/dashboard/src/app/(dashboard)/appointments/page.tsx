@@ -35,8 +35,8 @@ export default async function AppointmentsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Appointments</h2>
-        <p className="text-muted-foreground">View and manage all bookings</p>
+        <h1 className="text-2xl font-bold tracking-tight">Appointments</h1>
+        <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
