@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -240,9 +240,7 @@ export function RosterClient({ token }: Props) {
         <Card>
           <CardContent className="pt-8 pb-8 text-center space-y-2">
             <p className="text-muted-foreground">No staff members yet.</p>
-            <Button asChild size="sm">
-              <Link href="/staff">Add staff</Link>
-            </Button>
+            <Link href="/staff" className={buttonVariants({ size: 'sm' })}>Add staff</Link>
           </CardContent>
         </Card>
       )}
