@@ -16,6 +16,15 @@ export interface SalonSettings {
   status: string;
   botActive: boolean;
   botName: string;
+  botAskMarketingConsent: boolean;
+  botAllowStaffPick: boolean;
+  botLoyaltyEnabled: boolean;
+  botRequireDepositStep: boolean;
+  inactivityMessage1: string | null;
+  inactivityMessage1DelayMin: number;
+  inactivityMessage2: string | null;
+  inactivityMessage2DelayMin: number;
+  closingMessage: string | null;
   addressLine: string | null;
   phoneDisplay: string | null;
   contactEmail: string | null;
