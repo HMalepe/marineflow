@@ -308,6 +308,22 @@ export function ConversationsClient({ token, staffName }: Props) {
     }
   }
 
+  async function handleQueryComplete() {
+    if (!selectedId) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      await apiFetch(`/conversations/${selectedId}/query-complete`, { method: 'POST' }, token);
+      setSelectedStep('HANDOFF_RATING' as typeof selectedStep);
+      await loadConversations();
+      await loadMessages(selectedId, true);
+    } catch (e) {
+      showError(e instanceof ApiError ? e.message : 'Could not complete query');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function handleSendReply(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedId || !replyText.trim()) return;
@@ -583,7 +599,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                 ) : (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      You&apos;re in control — the bot is silent until you hand back.
+                      You&apos;re in control — the bot is silent. Reply to the customer, then click <strong>Query Completed</strong> when done.
                     </p>
                     <form onSubmit={handleSendReply} className="flex gap-2">
                       <Input
@@ -599,12 +615,20 @@ export function ConversationsClient({ token, staffName }: Props) {
                       </Button>
                     </form>
                     <Button
-                      variant="outline"
+                      onClick={handleQueryComplete}
+                      disabled={actionLoading}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {actionLoading ? 'Completing…' : '✓ Query Completed'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={handleHandBack}
                       disabled={actionLoading}
-                      className="w-full"
+                      className="w-full text-muted-foreground text-xs"
                     >
-                      {actionLoading ? 'Releasing…' : 'Hand Back to Bot'}
+                      Hand back to bot without rating
                     </Button>
                   </div>
                 )}

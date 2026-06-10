@@ -1,6 +1,7 @@
 -- Add new ConversationStep enum values
 ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'RATE_EXPERIENCE';
 ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'OTHER_QUERY';
+ALTER TYPE "ConversationStep" ADD VALUE IF NOT EXISTS 'HANDOFF_RATING';
 
 -- Add contact email and maps URL to Salon
 ALTER TABLE "Salon" ADD COLUMN IF NOT EXISTS "contactEmail" TEXT;

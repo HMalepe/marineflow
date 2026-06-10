@@ -2029,7 +2029,84 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     releaseConversationHandler,
   );
 
-  // ── Marketing campaigns (WhatsApp newsletter) ───────────────
+  /**
+   * Staff marks a human-handled query as resolved.
+   * Bot sends a thank-you + 1-10 satisfaction rating request to the customer,
+   * then moves the conversation to HANDOFF_RATING step.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/conversations/:id/query-complete',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const conv = await db.conversation.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+          include: { customer: true, salon: true },
+        });
+        if (!conv) {
+          reply.code(404);
+          return { error: 'conversation_not_found' };
+        }
+
+        const salonName = conv.salon.tradingName?.trim() || conv.salon.name;
+        const ratingMsg =
+          `Thanks for chatting with us at ${salonName}! 🙏\n\n` +
+          `On a scale of 1–10, how satisfied were you with the help you received today?\n` +
+          `(1 = Very unsatisfied, 10 = Completely satisfied)`;
+
+        // Send the message via WhatsApp
+        let providerSid: string | null = null;
+        try {
+          const { result } = await sendWithFallback({
+            salonId: conv.salonId,
+            to: conv.customer.waId,
+            body: ratingMsg,
+          });
+          providerSid = result.providerMessageId ?? null;
+        } catch {
+          // Continue even if send fails — still update the step
+        }
+
+        // Record the outbound message
+        await db.message.create({
+          data: {
+            conversationId: conv.id,
+            customerId: conv.customerId,
+            direction: MessageDirection.OUTBOUND,
+            body: ratingMsg,
+            providerSid,
+          },
+        });
+
+        // Clear handoff context, move to HANDOFF_RATING
+        const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
+        const nextCtx = { ...currentCtx };
+        delete nextCtx.handoffByStaff;
+        delete nextCtx.errorCount;
+
+        await db.conversation.update({
+          where: { id: conv.id },
+          data: {
+            step: ConversationStep.HANDOFF_RATING,
+            context: nextCtx as object,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'conversation_query_complete',
+            entity: 'Conversation',
+            entityId: conv.id,
+          },
+        });
+
+        return { ok: true, step: 'HANDOFF_RATING' };
+      });
+    },
+  );
 
   app.get('/campaigns', async (request, reply) => {
     return withUserTenant(request, reply, async () => {

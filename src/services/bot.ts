@@ -601,6 +601,9 @@ async function routeConversation(
     case ConversationStep.OTHER_QUERY:
       await handleOtherQuery(conv, t);
       break;
+    case ConversationStep.HANDOFF_RATING:
+      await handleHandoffRating(conv, t);
+      break;
     case ConversationStep.FAQ:
       await handleFaq(conv, t);
       break;
@@ -1493,6 +1496,72 @@ async function handleOtherQuery(
   // AI couldn't answer — offer human
   await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
   await reply(conv, "I'm not sure I have the answer to that one. Would you like me to pass this on to a team member? Reply YES or NO.");
+}
+
+// ─── Post-Handoff Satisfaction Rating ──────────────────────────────────
+// Triggered when staff clicks "Query Completed". Bot asked customer to rate 1–10.
+async function handleHandoffRating(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const rating = parseInt(text.trim(), 10);
+
+  if (isNaN(rating) || rating < 1 || rating > 10) {
+    await reply(conv, 'Please reply with a number from 1 to 10.');
+    return;
+  }
+
+  // Record as analytics event
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: null,
+      type: 'handoff_rating',
+      payload: { rating, timestamp: new Date().toISOString() },
+    },
+  });
+
+  // Open a ticket for low scores so owner is notified
+  if (rating <= 5) {
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        status: 'OPEN',
+        subject: `Low support satisfaction (${rating}/10)`,
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: `Customer rated their support experience ${rating}/10.`,
+          },
+        },
+      },
+    });
+  }
+
+  const salonName = conv.salon.tradingName?.trim() || conv.salon.name;
+
+  let closing: string;
+  if (rating >= 9) {
+    closing = `${rating}/10 — that's amazing, thank you! 🌟 We're so glad we could help. See you next time at ${salonName}!`;
+  } else if (rating >= 7) {
+    closing = `${rating}/10 — thanks for the feedback! We'll keep working to make every experience great. 😊`;
+  } else if (rating >= 5) {
+    closing = `${rating}/10 — thank you for being honest. We'll use this to improve. If there's anything specific we can do better, feel free to let us know.`;
+  } else {
+    closing = `${rating}/10 — we're really sorry we didn't meet your expectations. Our team will review this and follow up with you. Thank you for letting us know. 🙏`;
+  }
+
+  await reply(conv, closing);
+
+  // Move to IDLE — bot stays quiet until customer sends something, then menu restarts
+  await saveCtx(conv.id, {
+    handoffByStaff: undefined,
+    errorCount: undefined,
+    otherQueryAnswered: undefined,
+    otherQueryText: undefined,
+  }, ConversationStep.IDLE);
 }
 
 // ─── Rate My Experience ─────────────────────────────────────────────────
