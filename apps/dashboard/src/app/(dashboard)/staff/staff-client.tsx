@@ -45,7 +45,7 @@ export interface StaffMember {
   isBookable: boolean;
   sortOrder: number;
   workingHours: WorkingHour[];
-  timeOff: TimeOff[];
+  timeOff?: TimeOff[];
   _count?: { appointments: number };
 }
 
@@ -90,7 +90,7 @@ function scheduleToPayload(schedule: ScheduleDay[]) {
 
 function isOnTimeOff(member: StaffMember): boolean {
   const now = new Date();
-  return member.timeOff.some((t) => new Date(t.start) <= now && new Date(t.end) >= now);
+  return (member.timeOff ?? []).some((t) => new Date(t.start) <= now && new Date(t.end) >= now);
 }
 
 function formatDate(iso: string) {
