@@ -8,7 +8,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveLocation, saveGoogleReviewUrl, type SalonSettings } from './actions';
+import {
+  saveDisplayName,
+  saveHours,
+  saveMessages,
+  saveBotActive,
+  saveLocation,
+  saveBotName,
+  saveBotBehaviour,
+  saveInactivityMessages,
+  saveGoogleReviewUrl,
+  type SalonSettings,
+} from './actions';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -198,6 +209,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setWelcomeMessage(s.welcomeMessage ?? '');
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
+    setBotNameVal(s.botName ?? 'Ava');
+    setBotAskMarketingConsent(s.botAskMarketingConsent ?? true);
+    setBotAllowStaffPick(s.botAllowStaffPick ?? true);
+    setBotLoyaltyEnabled(s.botLoyaltyEnabled ?? true);
+    setBotRequireDepositStep(s.botRequireDepositStep ?? true);
+    setInactivityMsg1(s.inactivityMessage1 ?? '');
+    setInactivityDelay1(s.inactivityMessage1DelayMin ?? 10);
+    setInactivityMsg2(s.inactivityMessage2 ?? '');
+    setInactivityDelay2(s.inactivityMessage2DelayMin ?? 30);
+    setClosingMsg(s.closingMessage ?? '');
     setAddressLine(s.addressLine ?? '');
     setPhoneDisplay(s.phoneDisplay ?? '');
     setContactEmail(s.contactEmail ?? '');
