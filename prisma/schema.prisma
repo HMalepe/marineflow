@@ -120,13 +120,13 @@ enum ConversationStep {
   MANAGE_BOOKING
   RESCHEDULE
   COMPLAINT
+  RATE_EXPERIENCE
   FAQ
   LOYALTY
   CSAT
   IDLE
   HANDOFF
   CLOSED
-  MARKETING_CONSENT
 }
 
 model Salon {
@@ -150,6 +150,8 @@ model Salon {
   parkingNotes   String?
   accessibility  String?
   phoneDisplay   String?
+  contactEmail   String?
+  mapsUrl        String?      @db.Text
   /// Default daily open/close for bot after-hours messaging (HH:MM, salon timezone)
   openTime       String?      @default("09:00")
   closeTime      String?      @default("17:00")
@@ -158,6 +160,18 @@ model Salon {
   logoUrl        String?      @db.Text
   botName        String       @default("Ava")
   botVoiceBrief  String?      @db.Text
+  /// Bot behaviour toggles — owner-controlled from Settings
+  botAskMarketingConsent Boolean @default(true)
+  botAllowStaffPick      Boolean @default(true)
+  botLoyaltyEnabled      Boolean @default(true)
+  botRequireDepositStep  Boolean @default(true)
+  /// Inactivity follow-up: sent after N minutes of silence
+  inactivityMessage1         String?  @db.Text
+  inactivityMessage1DelayMin Int      @default(10)
+  inactivityMessage2         String?  @db.Text
+  inactivityMessage2DelayMin Int      @default(30)
+  /// Closing message sent when conversation closes
+  closingMessage             String?  @db.Text
   toneFormality  Int          @default(50)
   toneWarmth     Int          @default(70)
   tonePlayfulness Int         @default(40)
@@ -810,7 +824,7 @@ model Campaign {
   templateName  String
   templateLang  String         @default("en")
   /** Public HTTPS URL for WhatsApp image/video attachment */
-  mediaUrl      String?
+  mediaUrl      String?        @db.Text
   /** image | video */
   mediaType     String?
   audienceFilter Json          @default("{}")
@@ -820,8 +834,6 @@ model Campaign {
   totalRecipients Int          @default(0)
   delivered     Int            @default(0)
   failed        Int            @default(0)
-  mediaUrl      String?        @db.Text
-  mediaType     String?
   createdBy     String?
   createdAt     DateTime       @default(now())
   updatedAt   DateTime @default(now()) @updatedAt

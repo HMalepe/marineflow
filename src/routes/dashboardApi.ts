@@ -185,6 +185,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage: true,
           status: true,
           botName: true,
+          addressLine: true,
+          phoneDisplay: true,
+          contactEmail: true,
+          mapsUrl: true,
+          parkingNotes: true,
         },
       });
       return {
@@ -207,6 +212,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       logoUrl?: string | null;
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
+      addressLine?: string | null;
+      phoneDisplay?: string | null;
+      contactEmail?: string | null;
+      mapsUrl?: string | null;
+      parkingNotes?: string | null;
     };
   }>(
     '/settings',
@@ -224,6 +234,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage,
           botActive,
           status,
+          addressLine,
+          phoneDisplay,
+          contactEmail,
+          mapsUrl,
+          parkingNotes,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -280,6 +295,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
               status: nextStatus,
               statusChangedAt: new Date(),
             }),
+            ...(addressLine !== undefined && { addressLine: addressLine?.trim() || null }),
+            ...(phoneDisplay !== undefined && { phoneDisplay: phoneDisplay?.trim() || null }),
+            ...(contactEmail !== undefined && { contactEmail: contactEmail?.trim() || null }),
+            ...(mapsUrl !== undefined && { mapsUrl: mapsUrl?.trim() || null }),
+            ...(parkingNotes !== undefined && { parkingNotes: parkingNotes?.trim() || null }),
           },
           select: {
             id: true,
@@ -292,6 +312,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             welcomeMessage: true,
             afterHoursMessage: true,
             status: true,
+            addressLine: true,
+            phoneDisplay: true,
+            contactEmail: true,
+            mapsUrl: true,
+            parkingNotes: true,
             botName: true,
           },
         });

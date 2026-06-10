@@ -16,6 +16,31 @@ export interface SalonSettings {
   status: string;
   botActive: boolean;
   botName: string;
+  addressLine: string | null;
+  phoneDisplay: string | null;
+  contactEmail: string | null;
+  mapsUrl: string | null;
+  parkingNotes: string | null;
+}
+
+export async function saveLocation(
+  addressLine: string | null,
+  phoneDisplay: string | null,
+  contactEmail: string | null,
+  mapsUrl: string | null,
+  parkingNotes: string | null,
+): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ addressLine, phoneDisplay, contactEmail, mapsUrl, parkingNotes }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
 }
 
 export async function updateEmail(email: string): Promise<{ error?: string }> {
