@@ -18,7 +18,7 @@ import { whatsappCloudMessaging, verifyWebhookRawBuffer } from './lib/integratio
 import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
 import { resolveTenantForInbound } from './lib/tenant.js';
-import { handleStripeWebhook } from './services/payments.js';
+import { handlePayfastAppointmentWebhook } from './services/payments.js';
 import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
 import { payfastAdapter } from './lib/integrations/payments/payfast.js';
 import { serve } from 'inngest/fastify';
@@ -252,27 +252,16 @@ export async function buildApp() {
     });
   });
 
-  await app.register(async function stripeRawBody(f) {
-    f.addContentTypeParser(
-      'application/json',
-      { parseAs: 'buffer', bodyLimit: 2 * 1024 * 1024 },
-      (_req, body, done) => {
-        done(null, body);
-      },
-    );
-
-    f.post('/stripe', async (request, reply) => {
-      const sig = request.headers['stripe-signature'];
-      const buf = request.body as Buffer;
-      try {
-        await handleStripeWebhook(buf, typeof sig === 'string' ? sig : undefined);
-      } catch (e) {
-        logger.error(e);
-        return reply.code(400).send({ error: 'stripe_webhook_error' });
-      }
-      return reply.send({ received: true });
-    });
-  }, { prefix: '/webhooks' });
+  // PayFast ITN for appointment payments
+  app.post('/webhooks/payfast/appointment', async (request, reply) => {
+    const body = request.body as Record<string, string>;
+    try {
+      await handlePayfastAppointmentWebhook(body);
+    } catch (err) {
+      logger.error({ err }, 'payfast_appointment_itn_error');
+    }
+    return reply.send('OK');
+  });
 
   app.post('/webhooks/payfast/subscription', async (request, reply) => {
     const body = request.body as Record<string, string>;
