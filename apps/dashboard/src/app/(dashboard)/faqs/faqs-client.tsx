@@ -401,6 +401,7 @@ export function FaqsClient({ token }: Props) {
   }
 
   async function handleSave(e: React.FormEvent) {
+    const andClose = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name') === 'addAndClose';
     e.preventDefault();
     if (!form.question.trim() || !form.answer.trim()) {
       showToast('Question and answer are required', 'error');
@@ -424,15 +425,19 @@ export function FaqsClient({ token }: Props) {
           body: JSON.stringify(payload),
         }, token);
         showToast('FAQ updated', 'success');
+        closeSheet();
       } else {
         await apiFetch('/faqs', {
           method: 'POST',
           body: JSON.stringify({ ...payload, sortOrder: faqs.length }),
         }, token);
-        showToast('FAQ added — approve it to show in WhatsApp', 'success');
+        showToast('FAQ added ✓ — keep going or click Done', 'success');
+        // Stay open for rapid-fire adding — just reset the form
+        setForm(emptyForm);
+        setTemplateStep(false);
+        if (andClose) closeSheet();
       }
 
-      closeSheet();
       await loadFaqs(true);
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
@@ -788,12 +793,23 @@ export function FaqsClient({ token }: Props) {
                     </p>
                   )}
                 </div>
-                <SheetFooter className="px-0">
+                <SheetFooter className="px-0 flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={closeSheet}>
-                    Cancel
+                    {editingId ? 'Cancel' : 'Done'}
                   </Button>
+                  {!editingId && (
+                    <Button
+                      type="submit"
+                      variant="secondary"
+                      disabled={saving || answerOverLimit}
+                      name="addAndClose"
+                      value="1"
+                    >
+                      {saving ? 'Saving…' : 'Add & close'}
+                    </Button>
+                  )}
                   <Button type="submit" disabled={saving || answerOverLimit}>
-                    {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add FAQ'}
+                    {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add FAQ →'}
                   </Button>
                 </SheetFooter>
               </form>
