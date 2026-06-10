@@ -1317,15 +1317,22 @@ async function handleBookingRating(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  const upper = text.trim().toUpperCase();
+  if (upper === 'BACK' || upper === 'MENU' || upper === '0') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
   const rating = parseInt(text.trim(), 10);
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
-    await reply(conv, 'Please reply with a number between 1 and 5.');
+    await reply(conv, 'Please reply with a number between 1 and 5.\n(or type MENU to go back)');
     return;
   }
   const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
   await getTenantDb().analyticsEvent.create({
     data: {
       salonId: conv.salonId,
+      customerId: conv.customerId,
       type: 'booking_process_rating',
       payload: { rating, appointmentId },
     },

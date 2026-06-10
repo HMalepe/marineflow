@@ -502,10 +502,15 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'body_required' };
         }
-        await sendWithFallback({ salonId: user.salonId, to: ticket.customer.waId, body });
+        // Save message first — WhatsApp send is best-effort
         const message = await db.ticketMessage.create({
           data: { ticketId: ticket.id, direction: 'out', body },
         });
+        try {
+          await sendWithFallback({ salonId: user.salonId, to: ticket.customer.waId, body });
+        } catch {
+          // message already persisted; WhatsApp failure is non-fatal
+        }
         // Create a Message in the customer's active conversation if one exists
         const conversation = await db.conversation.findFirst({
           where: { customerId: ticket.customerId, salonId: user.salonId },
@@ -540,12 +545,19 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(404);
           return { error: 'not_found' };
         }
+        if (ticket.status === 'RESOLVED') {
+          return { ok: true }; // idempotent
+        }
         await db.ticket.update({ where: { id: ticket.id }, data: { status: 'RESOLVED' } });
-        await sendWithFallback({
-          salonId: user.salonId,
-          to: ticket.customer.waId,
-          body: 'Your query has been resolved. Feel free to message us anytime! 😊',
-        });
+        try {
+          await sendWithFallback({
+            salonId: user.salonId,
+            to: ticket.customer.waId,
+            body: 'Your query has been resolved. Feel free to message us anytime! 😊',
+          });
+        } catch {
+          // best-effort — ticket already marked resolved
+        }
         return { ok: true };
       });
     },
