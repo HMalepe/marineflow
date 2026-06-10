@@ -228,8 +228,11 @@ export function ServicesClient({ token }: Props) {
     setTemplateStep(false);
   }
 
-  async function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent, andClose = false) {
     e.preventDefault();
+    const submitter = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name');
+    const shouldClose = andClose || submitter === 'addAndClose' || !!editingId;
+
     if (!form.name.trim()) {
       showToast('Name is required', 'error');
       return;
@@ -254,8 +257,9 @@ export function ServicesClient({ token }: Props) {
 
     setSaving(true);
     try {
+      const savedName = form.name.trim();
       const payload = {
-        name: form.name.trim(),
+        name: savedName,
         description: form.description.trim() || undefined,
         priceCents,
         durationMin,
@@ -267,17 +271,24 @@ export function ServicesClient({ token }: Props) {
           method: 'PATCH',
           body: JSON.stringify(payload),
         }, token);
-        showToast(`${form.name.trim()} updated`, 'success');
+        showToast(`${savedName} updated`, 'success');
       } else {
         await apiFetch('/services', {
           method: 'POST',
           body: JSON.stringify({ ...payload, active: true }),
         }, token);
-        showToast(`${form.name.trim()} created`, 'success');
+        showToast(`${savedName} added`, 'success');
       }
 
-      closeSheet();
-      await loadServices(true);
+      void loadServices(true);
+
+      if (shouldClose) {
+        closeSheet();
+      } else {
+        // Stay open — reset form for next service
+        setForm(emptyForm);
+        setTemplateStep(false);
+      }
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
     } finally {
@@ -605,13 +616,29 @@ export function ServicesClient({ token }: Props) {
                     </p>
                   )}
                 </div>
-                <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={saving}>
-                    {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create service'}
-                  </Button>
+                <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2 flex-wrap">
+                  {editingId ? (
+                    <>
+                      <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={saving}>
+                        {saving ? 'Saving…' : 'Save changes'}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button type="button" variant="ghost" size="sm" onClick={closeSheet} disabled={saving}>
+                        Done
+                      </Button>
+                      <Button type="submit" name="addAndClose" variant="outline" size="sm" disabled={saving}>
+                        Add &amp; close
+                      </Button>
+                      <Button type="submit" name="addMore" size="sm" disabled={saving}>
+                        {saving ? 'Saving…' : 'Add service →'}
+                      </Button>
+                    </>
+                  )}
                 </SheetFooter>
               </form>
             </>
