@@ -129,6 +129,7 @@ enum ConversationStep {
   IDLE
   HANDOFF
   CLOSED
+  BOOKING_RATING
 }
 
 model Salon {

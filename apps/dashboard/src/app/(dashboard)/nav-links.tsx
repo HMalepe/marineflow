@@ -44,6 +44,7 @@ export function NavLinks({ isAdmin, isOwner }: NavLinksProps) {
       <Link href="/customers" className={cls('/customers')}>Customers</Link>
       <Link href="/campaigns" className={cls('/campaigns')}>Newsletter</Link>
       <Link href="/conversations" className={cls('/conversations')}>Conversations</Link>
+      <Link href="/tickets" className={cls('/tickets')}>Tickets</Link>
       <Link href="/analytics" className={cls('/analytics')}>Analytics</Link>
       <Link href="/staff" className={cls('/staff')}>Staff</Link>
       <Link href="/services" className={cls('/services')}>Services</Link>

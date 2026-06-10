@@ -613,6 +613,9 @@ async function routeConversation(
     case ConversationStep.CSAT:
       await handleCsat(conv, t);
       break;
+    case ConversationStep.BOOKING_RATING:
+      await handleBookingRating(conv, t);
+      break;
     case ConversationStep.HANDOFF:
     case ConversationStep.CLOSED:
       if (ctx(conv).handoffByStaff) {
@@ -1302,12 +1305,57 @@ async function handleConfirm(
       `Booked! Reference: ${appointment.id.slice(0, 8)}`,
       `${sanitize(service.name)} with ${sanitize(staff.name)}`,
       DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
-      '',
-      mainMenu(conv.salon),
     ]
       .filter(Boolean)
       .join('\n'),
   );
+  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
+  await reply(conv, 'How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)');
+}
+
+async function handleBookingRating(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const rating = parseInt(text.trim(), 10);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    await reply(conv, 'Please reply with a number between 1 and 5.');
+    return;
+  }
+  const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      type: 'booking_process_rating',
+      payload: { rating, appointmentId },
+    },
+  });
+  let thankYou: string;
+  if (rating === 5) {
+    thankYou = 'Amazing! 🌟 So glad it was easy. See you soon!';
+  } else if (rating === 4) {
+    thankYou = 'Thanks! 😊 Glad that was smooth.';
+  } else if (rating === 3) {
+    thankYou = 'Thanks for the feedback — we\'ll keep improving.';
+  } else {
+    thankYou = 'Sorry it wasn\'t easier — we\'ll work on that.';
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        status: 'OPEN',
+        subject: `Poor booking experience (${rating}/5)`,
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: `Customer rated the booking process ${rating}/5.${appointmentId ? ` Appointment ID: ${appointmentId}` : ''}`,
+          },
+        },
+      },
+    });
+  }
+  await reply(conv, thankYou);
+  await saveCtx(conv.id, {}, ConversationStep.IDLE);
 }
 
 async function handleManageBooking(

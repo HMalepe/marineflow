@@ -185,6 +185,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
           <div className="grid grid-cols-2 gap-2 py-2">
             {!isAdmin && (
               <>
+                <MoreNavItem href="/tickets" label="Tickets" onClick={() => setMoreOpen(false)} />
                 <MoreNavItem href="/faqs" label="Bot FAQs" onClick={() => setMoreOpen(false)} />
                 <MoreNavItem href="/customers" label="Customers" onClick={() => setMoreOpen(false)} />
                 <MoreNavItem href="/analytics" label="Analytics" onClick={() => setMoreOpen(false)} />

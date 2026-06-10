@@ -471,16 +471,85 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/tickets', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const tickets = await db.ticket.findMany({
-        include: { customer: true, messages: { take: 1, orderBy: { createdAt: 'desc' } } },
+        where: { salonId: user.salonId },
+        include: { customer: true, messages: { orderBy: { createdAt: 'asc' } } },
         orderBy: { updatedAt: 'desc' },
         take: 100,
       });
       return { tickets };
     });
   });
+
+  app.post<{ Params: { id: string }; Body: { body: string } }>(
+    '/tickets/:id/reply',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const ticket = await db.ticket.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+          include: { customer: true },
+        });
+        if (!ticket) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        const body = request.body.body?.trim();
+        if (!body) {
+          reply.code(400);
+          return { error: 'body_required' };
+        }
+        await sendWithFallback({ salonId: user.salonId, to: ticket.customer.waId, body });
+        const message = await db.ticketMessage.create({
+          data: { ticketId: ticket.id, direction: 'out', body },
+        });
+        // Create a Message in the customer's active conversation if one exists
+        const conversation = await db.conversation.findFirst({
+          where: { customerId: ticket.customerId, salonId: user.salonId },
+          orderBy: { updatedAt: 'desc' },
+        });
+        if (conversation) {
+          await db.message.create({
+            data: {
+              conversationId: conversation.id,
+              customerId: ticket.customerId,
+              direction: 'OUTBOUND',
+              body,
+            },
+          });
+        }
+        return { ok: true, message: { id: message.id, body: message.body, createdAt: message.createdAt, direction: message.direction } };
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/tickets/:id/resolve',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const ticket = await db.ticket.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+          include: { customer: true },
+        });
+        if (!ticket) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        await db.ticket.update({ where: { id: ticket.id }, data: { status: 'RESOLVED' } });
+        await sendWithFallback({
+          salonId: user.salonId,
+          to: ticket.customer.waId,
+          body: 'Your query has been resolved. Feel free to message us anytime! 😊',
+        });
+        return { ok: true };
+      });
+    },
+  );
 
   app.patch<{ Params: { id: string }; Body: { status?: string; assigneeStaffUserId?: string | null } }>(
     '/tickets/:id',
