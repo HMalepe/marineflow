@@ -777,6 +777,121 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  // ─── Roster ──────────────────────────────────────────────────────────────
+
+  app.get('/roster', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const q = request.query as { from?: string; to?: string };
+      const from = q.from ? new Date(q.from) : new Date();
+      const to = q.to ? new Date(q.to) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const staff = await db.staff.findMany({
+        where: { deletedAt: null },
+        include: {
+          workingHours: true,
+          timeOff: {
+            where: {
+              start: { lte: to },
+              end:   { gte: from },
+            },
+          },
+        },
+        orderBy: { sortOrder: 'asc' },
+      });
+
+      return {
+        staff: staff.map((s) => ({
+          id: s.id,
+          name: s.name,
+          displayName: s.displayName,
+          avatarUrl: s.avatarUrl,
+          active: s.active,
+          isBookable: s.isBookable,
+          workingHours: s.workingHours.map((wh) => ({
+            id: wh.id,
+            weekday: wh.weekday,
+            startTime: wh.startTime,
+            endTime: wh.endTime,
+          })),
+          timeOff: s.timeOff.map((t) => ({
+            id: t.id,
+            start: t.start.toISOString().slice(0, 10),
+            end: t.end.toISOString().slice(0, 10),
+            reason: t.reason ?? null,
+          })),
+        })),
+      };
+    });
+  });
+
+  app.post<{ Params: { id: string }; Body: { start: string; end: string; reason?: string } }>(
+    '/staff/:id/time-off',
+    async (request, reply) => {
+      return withUserTenant(request, reply, async () => {
+        const db = getTenantDb();
+        const { id } = request.params;
+        const { start, end, reason } = request.body;
+
+        const startDate = new Date(start);
+        const endDate = new Date(end);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          reply.code(400);
+          return { error: 'invalid_dates', message: 'Invalid date format. Use YYYY-MM-DD.' };
+        }
+        if (startDate > endDate) {
+          reply.code(400);
+          return { error: 'invalid_range', message: 'Start date must be on or before end date.' };
+        }
+        const diffDays = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+        if (diffDays > 180) {
+          reply.code(400);
+          return { error: 'range_too_large', message: 'Time-off range cannot exceed 180 days.' };
+        }
+
+        const staff = await db.staff.findFirst({ where: { id, deletedAt: null } });
+        if (!staff) {
+          reply.code(404);
+          return { error: 'not_found', message: 'Staff member not found.' };
+        }
+
+        const timeOff = await db.timeOff.create({
+          data: { staffId: id, start: startDate, end: endDate, reason: reason ?? null },
+        });
+
+        return {
+          timeOff: {
+            id: timeOff.id,
+            start: timeOff.start.toISOString().slice(0, 10),
+            end: timeOff.end.toISOString().slice(0, 10),
+            reason: timeOff.reason ?? null,
+          },
+        };
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string; timeOffId: string } }>(
+    '/staff/:id/time-off/:timeOffId',
+    async (request, reply) => {
+      return withUserTenant(request, reply, async () => {
+        const db = getTenantDb();
+        const { id, timeOffId } = request.params;
+
+        const existing = await db.timeOff.findFirst({ where: { id: timeOffId, staffId: id } });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found', message: 'Time-off record not found.' };
+        }
+
+        await db.timeOff.delete({ where: { id: timeOffId } });
+        reply.code(204);
+        return null;
+      });
+    },
+  );
+
   app.get('/working-hours', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
