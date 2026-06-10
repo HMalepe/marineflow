@@ -1896,7 +1896,7 @@ async function handleOtherQuery(
   const answered = c.otherQueryAnswered as boolean | undefined;
 
   if (text.toUpperCase() === 'BACK' || text.toUpperCase() === 'MENU') {
-    await saveCtx(conv.id, { otherQueryAnswered: undefined }, ConversationStep.MENU);
+    await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
     await reply(conv, mainMenu(conv.salon));
     return;
   }
@@ -1905,7 +1905,7 @@ async function handleOtherQuery(
   if (answered) {
     const upper = text.toUpperCase();
     if (upper === 'YES' || upper === 'Y') {
-      await saveCtx(conv.id, { otherQueryAnswered: undefined }, ConversationStep.MENU);
+      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
       await reply(conv, `Great! 😊 Anything else I can help with?\n\n${mainMenu(conv.salon)}`);
       return;
     }
