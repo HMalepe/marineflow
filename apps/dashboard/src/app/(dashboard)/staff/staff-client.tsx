@@ -52,7 +52,7 @@ export interface StaffMember {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MAX_AVATAR_BYTES = 450_000;
+const MAX_AVATAR_BYTES = 5_242_880; // 5 MB
 
 const DEFAULT_SCHEDULE: ScheduleDay[] = [
   { weekday: 0, enabled: false, startTime: '09:00', endTime: '17:00' },
@@ -215,7 +215,7 @@ function AvatarUploader({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { setError('Please select an image file'); return; }
-    if (file.size > MAX_AVATAR_BYTES) { setError('Image must be under 450 KB'); return; }
+    if (file.size > MAX_AVATAR_BYTES) { setError('Image must be under 5 MB'); return; }
     const reader = new FileReader();
     reader.onload = (ev) => {
       const url = ev.target?.result as string;
