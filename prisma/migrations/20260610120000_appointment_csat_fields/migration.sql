@@ -1,0 +1,2 @@
+ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "csatSentAt" TIMESTAMP(3);
+ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "csatScore" INT;

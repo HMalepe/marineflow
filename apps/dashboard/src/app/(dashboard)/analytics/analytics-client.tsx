@@ -35,11 +35,31 @@ interface StaffMetric {
   revenue_cents: number;
 }
 
+interface StaffRating {
+  staffId: string;
+  staffName: string;
+  avg_rating: number;
+  rating_count: number;
+}
+
+interface RecentRating {
+  appointmentId: string;
+  csatScore: number;
+  start: string;
+  firstName: string | null;
+  lastName: string | null;
+  waId: string;
+  staffName: string | null;
+  serviceName: string | null;
+}
+
 interface AnalyticsData {
   dailyBookings: DailyBooking[];
   revenue: RevenueSummary[];
   retention: RetentionSummary[];
   staffPerformance: StaffMetric[];
+  staffRatings: StaffRating[];
+  recentRatings: RecentRating[];
 }
 
 interface Props {
@@ -232,6 +252,38 @@ export function AnalyticsClient({ token }: Props) {
             )}
           </section>
 
+          {/* Staff ratings */}
+          <section>
+            <h2 className="text-base font-semibold mb-3">Staff ratings — last 3 months</h2>
+            {!data.staffRatings || data.staffRatings.length === 0 ? (
+              <EmptySection label="No ratings yet — they'll appear after customers complete the post-visit survey." />
+            ) : (
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-sm min-w-[400px]">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left p-3 font-medium">Staff member</th>
+                      <th className="text-right p-3 font-medium">Avg rating</th>
+                      <th className="text-right p-3 font-medium">No. of ratings</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {data.staffRatings.map((s) => (
+                      <tr key={s.staffId} className="hover:bg-muted/30">
+                        <td className="p-3 font-medium">{s.staffName ?? '—'}</td>
+                        <td className="p-3 text-right">
+                          <span className="tabular-nums mr-1">{s.avg_rating.toFixed(1)}</span>
+                          <StarDisplay score={Math.round(s.avg_rating)} />
+                        </td>
+                        <td className="p-3 text-right tabular-nums">{s.rating_count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           {/* Retention */}
           <section>
             <h2 className="text-base font-semibold mb-3">Customer retention</h2>
@@ -269,6 +321,31 @@ export function AnalyticsClient({ token }: Props) {
               </div>
             )}
           </section>
+
+          {/* Recent reviews */}
+          <section>
+            <h2 className="text-base font-semibold mb-3">Recent reviews</h2>
+            {!data.recentRatings || data.recentRatings.length === 0 ? (
+              <EmptySection label="No reviews yet." />
+            ) : (
+              <div className="border rounded-lg divide-y overflow-x-auto">
+                {data.recentRatings.map((r) => {
+                  const name = r.firstName
+                    ? `${r.firstName} ${r.lastName ? r.lastName.charAt(0) + '.' : ''}`.trim()
+                    : r.waId;
+                  return (
+                    <div key={r.appointmentId} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm hover:bg-muted/30">
+                      <StarDisplay score={r.csatScore} />
+                      <span className="font-medium min-w-[100px]">{name}</span>
+                      {r.serviceName && <span className="text-muted-foreground">{r.serviceName}</span>}
+                      {r.staffName && <span className="text-muted-foreground">· {r.staffName}</span>}
+                      <span className="ml-auto text-muted-foreground tabular-nums">{formatDate(r.start)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         </>
       )}
     </div>
@@ -288,6 +365,19 @@ function EmptySection({ label }: { label: string }) {
   return (
     <p className="text-sm text-muted-foreground border rounded-lg px-4 py-6 text-center">{label}</p>
   );
+}
+
+function StarDisplay({ score }: { score: number }) {
+  const filled = Math.max(0, Math.min(5, Math.round(score)));
+  return (
+    <span className="text-yellow-500 leading-none" aria-label={`${filled} out of 5 stars`}>
+      {'★'.repeat(filled)}{'☆'.repeat(5 - filled)}
+    </span>
+  );
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatCurrency(cents: number): string {

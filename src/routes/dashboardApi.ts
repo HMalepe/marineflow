@@ -50,6 +50,7 @@ import {
   type AudienceFilter,
 } from '../services/campaigns.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
+import { inngest } from '../lib/inngest/client.js';
 
 type FaqApiStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -440,7 +441,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const db = getTenantDb();
         const appt = await db.appointment.findFirst({
           where: { id: request.params.id },
-          include: { service: true },
+          include: { service: true, customer: { select: { waId: true } } },
         });
         if (!appt) {
           reply.code(404);
@@ -482,6 +483,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: appt.id,
           },
         });
+
+        // Fire post-appointment rating event (best-effort — don't fail the complete action)
+        await inngest.send({
+          name: 'whatsapp/appointment.completed',
+          data: {
+            appointmentId: appt.id,
+            salonId: appt.salonId,
+            customerId: appt.customerId,
+            customerWaId: appt.customer.waId,
+          },
+        }).catch(() => {});
 
         return { ok: true };
       });
@@ -1735,7 +1747,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
       };
 
-      const [dailyBookings, revenue, retention, staffPerformance] = await Promise.all([
+      const [dailyBookings, revenue, retention, staffPerformance, staffRatings, recentRatings] = await Promise.all([
         safeQuery<{ booking_date: string; total_bookings: number; completed: number; cancelled: number; no_shows: number }>(
           `SELECT booking_date::text, total_bookings::int, completed::int, cancelled::int, no_shows::int
            FROM mv_daily_bookings WHERE "salonId" = $1 ORDER BY booking_date DESC LIMIT 90`,
@@ -1761,6 +1773,32 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
            ORDER BY sp.revenue_cents DESC`,
           salonId,
         ),
+        safeQuery<{ staffId: string; staffName: string; avg_rating: number; rating_count: number }>(
+          `SELECT a."staffId", s.name as "staffName",
+                  ROUND(AVG(a."csatScore")::numeric, 1)::float as avg_rating,
+                  COUNT(a."csatScore")::int as rating_count
+           FROM "Appointment" a
+           LEFT JOIN "Staff" s ON s.id = a."staffId"
+           WHERE a."salonId" = $1
+             AND a."csatScore" IS NOT NULL
+             AND a.start >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '3 months'
+           GROUP BY a."staffId", s.name
+           ORDER BY avg_rating DESC`,
+          salonId,
+        ),
+        safeQuery<{ appointmentId: string; csatScore: number; start: string; firstName: string | null; lastName: string | null; waId: string; staffName: string | null; serviceName: string | null }>(
+          `SELECT a.id as "appointmentId", a."csatScore", a.start::text,
+                  c."firstName", c."lastName", c."waId",
+                  s.name as "staffName", svc.name as "serviceName"
+           FROM "Appointment" a
+           LEFT JOIN "Customer" c ON c.id = a."customerId"
+           LEFT JOIN "Staff" s ON s.id = a."staffId"
+           LEFT JOIN "Service" svc ON svc.id = a."serviceId"
+           WHERE a."salonId" = $1 AND a."csatScore" IS NOT NULL
+           ORDER BY a.start DESC
+           LIMIT 20`,
+          salonId,
+        ),
       ]);
 
       return {
@@ -1768,6 +1806,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         revenue: revenue.reverse(),
         retention: retention.reverse(),
         staffPerformance,
+        staffRatings,
+        recentRatings,
       };
     });
   });

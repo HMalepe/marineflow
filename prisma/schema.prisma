@@ -497,6 +497,8 @@ model Appointment {
   noShowMarkedAt      DateTime?
   confirmedAt         DateTime?
   reminderSentAt      DateTime?
+  csatSentAt          DateTime?
+  csatScore           Int?               /// 1–5, null until customer replies
   createdAt           DateTime           @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 

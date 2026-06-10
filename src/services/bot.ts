@@ -1463,6 +1463,14 @@ async function handleCsat(
     },
   });
 
+  // Persist the rating score on the appointment for easy querying
+  if (appointmentId) {
+    await getTenantDb().appointment.update({
+      where: { id: appointmentId },
+      data: { csatScore: rating },
+    });
+  }
+
   const messages: Record<number, string> = {
     1: 'We\'re sorry to hear that. We\'ll work to improve. Thank you for the feedback.',
     2: 'Thank you for letting us know. We\'ll do better next time.',
