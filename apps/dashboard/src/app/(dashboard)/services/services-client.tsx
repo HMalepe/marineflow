@@ -718,26 +718,58 @@ function TemplatePicker({
         autoFocus
       />
 
-      {/* Level 1 — Industry group */}
+      {/* Level 1 — Industry group (drill-down: selecting one hides the rest) */}
       <div>
-        <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Industry</p>
+        {group ? (
+          <div className="flex items-center gap-2 mb-1.5">
+            <button
+              type="button"
+              onClick={() => { onGroup(''); }}
+              className="text-xs text-primary hover:underline"
+            >
+              ← All industries
+            </button>
+            <span className="text-xs font-semibold">{group}</span>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Industry</p>
+        )}
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" onClick={() => onGroup('')} className={chipClass(!group)}>All</button>
-          {SERVICE_INDUSTRY_GROUPS.map((g) => (
-            <button key={g} type="button" onClick={() => onGroup(g)} className={chipClass(group === g)}>{g}</button>
-          ))}
+          {group ? (
+            <button type="button" className={chipClass(true)}>{group}</button>
+          ) : (
+            SERVICE_INDUSTRY_GROUPS.map((g) => (
+              <button key={g} type="button" onClick={() => onGroup(g)} className={chipClass(false)}>{g}</button>
+            ))
+          )}
         </div>
       </div>
 
-      {/* Level 2 — Business type (only shown when a group is selected) */}
+      {/* Level 2 — Business type (drill-down: selecting one hides the rest) */}
       {group && bizTypesInGroup.length > 0 && (
         <div>
-          <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Business type</p>
+          {bizType ? (
+            <div className="flex items-center gap-2 mb-1.5">
+              <button
+                type="button"
+                onClick={() => onBizType('')}
+                className="text-xs text-primary hover:underline"
+              >
+                ← All {group} types
+              </button>
+              <span className="text-xs font-semibold">{bizType}</span>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground mb-1.5 font-medium uppercase tracking-wide">Business type</p>
+          )}
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={() => onBizType('')} className={chipClass(!bizType)}>All</button>
-            {bizTypesInGroup.map((bt) => (
-              <button key={bt} type="button" onClick={() => onBizType(bt)} className={chipClass(bizType === bt)}>{bt}</button>
-            ))}
+            {bizType ? (
+              <button type="button" className={chipClass(true)}>{bizType}</button>
+            ) : (
+              bizTypesInGroup.map((bt) => (
+                <button key={bt} type="button" onClick={() => onBizType(bt)} className={chipClass(false)}>{bt}</button>
+              ))
+            )}
           </div>
         </div>
       )}
