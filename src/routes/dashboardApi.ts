@@ -779,22 +779,31 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   // ─── Roster ──────────────────────────────────────────────────────────────
 
-  app.get('/roster', async (request, reply) => {
+  app.get('/roster', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string };
-      const from = q.from ? new Date(q.from) : new Date();
-      const to = q.to ? new Date(q.to) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      // Validate and clamp date range — bad/missing params fall back to current week
+      const parseDate = (s: string | undefined, fallback: Date): Date => {
+        if (!s) return fallback;
+        const d = new Date(s);
+        return isNaN(d.getTime()) ? fallback : d;
+      };
+      const now  = new Date();
+      const from = parseDate(q.from, now);
+      const to   = parseDate(q.to, new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000));
+
+      // Hard cap: never return more than 31 days in one call
+      const maxTo = new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const clampedTo = to > maxTo ? maxTo : to;
 
       const staff = await db.staff.findMany({
         where: { deletedAt: null },
         include: {
           workingHours: true,
           timeOff: {
-            where: {
-              start: { lte: to },
-              end:   { gte: from },
-            },
+            where: { start: { lte: clampedTo }, end: { gte: from } },
           },
         },
         orderBy: { sortOrder: 'asc' },
@@ -814,10 +823,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             startTime: wh.startTime,
             endTime: wh.endTime,
           })),
+          // Return YYYY-MM-DD using UTC date parts — dates stored as midnight UTC in DB
           timeOff: s.timeOff.map((t) => ({
             id: t.id,
             start: t.start.toISOString().slice(0, 10),
-            end: t.end.toISOString().slice(0, 10),
+            end:   t.end.toISOString().slice(0, 10),
             reason: t.reason ?? null,
           })),
         })),
@@ -827,44 +837,59 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string }; Body: { start: string; end: string; reason?: string } }>(
     '/staff/:id/time-off',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
-      return withUserTenant(request, reply, async () => {
+      return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const { id } = request.params;
         const { start, end, reason } = request.body;
 
-        const startDate = new Date(start);
-        const endDate = new Date(end);
+        if (!start || !end) {
+          reply.code(400);
+          return { error: 'missing_fields', message: 'start and end are required.' };
+        }
+
+        const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+        if (!ISO_RE.test(start) || !ISO_RE.test(end)) {
+          reply.code(400);
+          return { error: 'invalid_dates', message: 'Use YYYY-MM-DD format.' };
+        }
+
+        const startDate = new Date(`${start}T00:00:00.000Z`);
+        const endDate   = new Date(`${end}T00:00:00.000Z`);
 
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
           reply.code(400);
-          return { error: 'invalid_dates', message: 'Invalid date format. Use YYYY-MM-DD.' };
+          return { error: 'invalid_dates', message: 'Invalid date value.' };
         }
         if (startDate > endDate) {
           reply.code(400);
           return { error: 'invalid_range', message: 'Start date must be on or before end date.' };
         }
-        const diffDays = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+        const diffDays = (endDate.getTime() - startDate.getTime()) / 86_400_000;
         if (diffDays > 180) {
           reply.code(400);
           return { error: 'range_too_large', message: 'Time-off range cannot exceed 180 days.' };
         }
 
-        const staff = await db.staff.findFirst({ where: { id, deletedAt: null } });
+        // Confirm staff belongs to this salon
+        const staff = await db.staff.findFirst({
+          where: { id, salonId: user.salonId, deletedAt: null },
+        });
         if (!staff) {
           reply.code(404);
           return { error: 'not_found', message: 'Staff member not found.' };
         }
 
         const timeOff = await db.timeOff.create({
-          data: { staffId: id, start: startDate, end: endDate, reason: reason ?? null },
+          data: { staffId: id, start: startDate, end: endDate, reason: reason?.trim() || null },
         });
 
         return {
           timeOff: {
-            id: timeOff.id,
-            start: timeOff.start.toISOString().slice(0, 10),
-            end: timeOff.end.toISOString().slice(0, 10),
+            id:     timeOff.id,
+            start:  timeOff.start.toISOString().slice(0, 10),
+            end:    timeOff.end.toISOString().slice(0, 10),
             reason: timeOff.reason ?? null,
           },
         };
@@ -874,20 +899,23 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string; timeOffId: string } }>(
     '/staff/:id/time-off/:timeOffId',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
-      return withUserTenant(request, reply, async () => {
+      return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const { id, timeOffId } = request.params;
 
-        const existing = await db.timeOff.findFirst({ where: { id: timeOffId, staffId: id } });
+        // Join on salonId so one tenant can't delete another's records
+        const existing = await db.timeOff.findFirst({
+          where: { id: timeOffId, staffId: id, staff: { salonId: user.salonId } },
+        });
         if (!existing) {
           reply.code(404);
           return { error: 'not_found', message: 'Time-off record not found.' };
         }
 
         await db.timeOff.delete({ where: { id: timeOffId } });
-        reply.code(204);
-        return null;
+        return { ok: true };
       });
     },
   );
