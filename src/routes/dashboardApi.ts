@@ -206,15 +206,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage: true,
           status: true,
           botName: true,
-          botAskMarketingConsent: true,
-          botAllowStaffPick: true,
-          botLoyaltyEnabled: true,
-          botRequireDepositStep: true,
-          inactivityMessage1: true,
-          inactivityMessage1DelayMin: true,
-          inactivityMessage2: true,
-          inactivityMessage2DelayMin: true,
-          closingMessage: true,
+          addressLine: true,
+          phoneDisplay: true,
+          contactEmail: true,
+          mapsUrl: true,
+          parkingNotes: true,
         },
       });
       return {
@@ -237,16 +233,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       logoUrl?: string | null;
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
-      botName?: string;
-      botAskMarketingConsent?: boolean;
-      botAllowStaffPick?: boolean;
-      botLoyaltyEnabled?: boolean;
-      botRequireDepositStep?: boolean;
-      inactivityMessage1?: string | null;
-      inactivityMessage1DelayMin?: number;
-      inactivityMessage2?: string | null;
-      inactivityMessage2DelayMin?: number;
-      closingMessage?: string | null;
+      addressLine?: string | null;
+      phoneDisplay?: string | null;
+      contactEmail?: string | null;
+      mapsUrl?: string | null;
+      parkingNotes?: string | null;
     };
   }>(
     '/settings',
@@ -264,16 +255,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage,
           botActive,
           status,
-          botName,
-          botAskMarketingConsent,
-          botAllowStaffPick,
-          botLoyaltyEnabled,
-          botRequireDepositStep,
-          inactivityMessage1,
-          inactivityMessage1DelayMin,
-          inactivityMessage2,
-          inactivityMessage2DelayMin,
-          closingMessage,
+          addressLine,
+          phoneDisplay,
+          contactEmail,
+          mapsUrl,
+          parkingNotes,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -347,6 +333,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
               status: nextStatus,
               statusChangedAt: new Date(),
             }),
+            ...(addressLine !== undefined && { addressLine: addressLine?.trim() || null }),
+            ...(phoneDisplay !== undefined && { phoneDisplay: phoneDisplay?.trim() || null }),
+            ...(contactEmail !== undefined && { contactEmail: contactEmail?.trim() || null }),
+            ...(mapsUrl !== undefined && { mapsUrl: mapsUrl?.trim() || null }),
+            ...(parkingNotes !== undefined && { parkingNotes: parkingNotes?.trim() || null }),
           },
           select: {
             id: true,
@@ -359,6 +350,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             welcomeMessage: true,
             afterHoursMessage: true,
             status: true,
+            addressLine: true,
+            phoneDisplay: true,
+            contactEmail: true,
+            mapsUrl: true,
+            parkingNotes: true,
             botName: true,
             botAskMarketingConsent: true,
             botAllowStaffPick: true,
@@ -533,16 +529,101 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/tickets', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const tickets = await db.ticket.findMany({
-        include: { customer: true, messages: { take: 1, orderBy: { createdAt: 'desc' } } },
+        where: { salonId: user.salonId },
+        include: { customer: true, messages: { orderBy: { createdAt: 'asc' } } },
         orderBy: { updatedAt: 'desc' },
         take: 100,
       });
       return { tickets };
     });
   });
+
+  app.post<{ Params: { id: string }; Body: { body: string } }>(
+    '/tickets/:id/reply',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const ticket = await db.ticket.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+          include: { customer: true },
+        });
+        if (!ticket) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        const body = request.body.body?.trim();
+        if (!body) {
+          reply.code(400);
+          return { error: 'body_required' };
+        }
+        // Save message first — WhatsApp send is best-effort
+        const message = await db.ticketMessage.create({ data: { ticketId: ticket.id, direction: 'out', body } });
+        // Bump ticket updatedAt so it floats to top of the sorted list
+        await db.ticket.update({ where: { id: ticket.id }, data: { updatedAt: new Date() } });
+        try {
+          await sendWithFallback({ salonId: user.salonId, to: ticket.customer.waId, body });
+        } catch {
+          // message already persisted; WhatsApp failure is non-fatal
+        }
+        // Create a Message in the customer's active conversation if one exists
+        const conversation = await db.conversation.findFirst({
+          where: { customerId: ticket.customerId, salonId: user.salonId },
+          orderBy: { updatedAt: 'desc' },
+        });
+        if (conversation) {
+          await db.message.create({
+            data: {
+              conversationId: conversation.id,
+              customerId: ticket.customerId,
+              direction: 'OUTBOUND',
+              body,
+            },
+          });
+        }
+        return { ok: true, message: { id: message.id, body: message.body, createdAt: message.createdAt, direction: message.direction } };
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/tickets/:id/resolve',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const ticket = await db.ticket.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+          include: { customer: true },
+        });
+        if (!ticket) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        // Atomic update — guards against concurrent resolve requests both sending WhatsApp
+        const updated = await db.ticket.updateMany({
+          where: { id: ticket.id, status: { not: 'RESOLVED' } },
+          data: { status: 'RESOLVED' },
+        });
+        if (updated.count === 0) {
+          return { ok: true }; // already resolved (race or double-click)
+        }
+        try {
+          await sendWithFallback({
+            salonId: user.salonId,
+            to: ticket.customer.waId,
+            body: 'Your query has been resolved. Feel free to message us anytime! 😊',
+          });
+        } catch {
+          // best-effort — ticket already marked resolved
+        }
+        return { ok: true };
+      });
+    },
+  );
 
   app.patch<{ Params: { id: string }; Body: { status?: string; assigneeStaffUserId?: string | null } }>(
     '/tickets/:id',
@@ -2358,7 +2439,84 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     releaseConversationHandler,
   );
 
-  // ── Marketing campaigns (WhatsApp newsletter) ───────────────
+  /**
+   * Staff marks a human-handled query as resolved.
+   * Bot sends a thank-you + 1-10 satisfaction rating request to the customer,
+   * then moves the conversation to HANDOFF_RATING step.
+   */
+  app.post<{ Params: { id: string } }>(
+    '/conversations/:id/query-complete',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const conv = await db.conversation.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+          include: { customer: true, salon: true },
+        });
+        if (!conv) {
+          reply.code(404);
+          return { error: 'conversation_not_found' };
+        }
+
+        const salonName = conv.salon.tradingName?.trim() || conv.salon.name;
+        const ratingMsg =
+          `Thanks for chatting with us at ${salonName}! 🙏\n\n` +
+          `On a scale of 1–10, how satisfied were you with the help you received today?\n` +
+          `(1 = Very unsatisfied, 10 = Completely satisfied)`;
+
+        // Send the message via WhatsApp
+        let providerSid: string | null = null;
+        try {
+          const { result } = await sendWithFallback({
+            salonId: conv.salonId,
+            to: conv.customer.waId,
+            body: ratingMsg,
+          });
+          providerSid = result.providerMessageId ?? null;
+        } catch {
+          // Continue even if send fails — still update the step
+        }
+
+        // Record the outbound message
+        await db.message.create({
+          data: {
+            conversationId: conv.id,
+            customerId: conv.customerId,
+            direction: MessageDirection.OUTBOUND,
+            body: ratingMsg,
+            providerSid,
+          },
+        });
+
+        // Clear handoff context, move to HANDOFF_RATING
+        const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
+        const nextCtx = { ...currentCtx };
+        delete nextCtx.handoffByStaff;
+        delete nextCtx.errorCount;
+
+        await db.conversation.update({
+          where: { id: conv.id },
+          data: {
+            step: ConversationStep.HANDOFF_RATING,
+            context: nextCtx as object,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'conversation_query_complete',
+            entity: 'Conversation',
+            entityId: conv.id,
+          },
+        });
+
+        return { ok: true, step: 'HANDOFF_RATING' };
+      });
+    },
+  );
 
   app.get('/campaigns', async (request, reply) => {
     return withUserTenant(request, reply, async () => {

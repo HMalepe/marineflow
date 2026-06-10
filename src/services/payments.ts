@@ -1,11 +1,15 @@
-import Stripe from 'stripe';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
+import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
+import { sendWithFallback } from './channelRouter.js';
+import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
+import { DateTime } from 'luxon';
 
-function getStripe(): Stripe | null {
-  if (!env.STRIPE_SECRET_KEY) return null;
-  return new Stripe(env.STRIPE_SECRET_KEY);
+const PAYFAST_NOTIFY_PATH = '/webhooks/payfast/appointment';
+
+function appointmentPaymentReference(appointmentId: string): string {
+  return `appt_${appointmentId}`;
 }
 
 export async function createDepositCheckoutSession(input: {
@@ -15,45 +19,27 @@ export async function createDepositCheckoutSession(input: {
   service: Service;
   mode: 'deposit' | 'full';
 }): Promise<string | null> {
-  const stripe = getStripe();
-  if (!stripe) return null;
+  if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY) return null;
 
-  const amount =
+  const amountCents =
     input.mode === 'full'
       ? input.service.priceCents
       : (input.service.depositCents ?? input.service.priceCents);
-  if (amount <= 0) return null;
+  if (amountCents <= 0) return null;
 
-  const appointment = await prisma.appointment.findUniqueOrThrow({
-    where: { id: input.appointmentId },
-    include: { customer: true },
-  });
+  const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+  const reference = appointmentPaymentReference(input.appointmentId);
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'payment',
-    success_url: `${env.PUBLIC_BASE_URL}/pay/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${env.PUBLIC_BASE_URL}/pay/cancel`,
-    metadata: {
-      salonId: input.salonId,
-      appointmentId: input.appointmentId,
-      customerId: input.customerId,
-      kind: input.mode,
-    },
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: 'usd',
-          unit_amount: amount,
-          product_data: {
-            name: `${input.service.name} (${input.mode})`,
-          },
-        },
-      },
-    ],
-    customer_email: appointment.customer.displayName?.includes('@')
-      ? appointment.customer.displayName
-      : undefined,
+  const result = await payfastAdapter.createCheckout({
+    salonId: input.salonId,
+    customerId: input.customerId,
+    amountCents,
+    currency: 'ZAR',
+    reference,
+    description: `${input.service.name} (${input.mode})`,
+    returnUrl: `${baseUrl}/pay/success?ref=${reference}`,
+    cancelUrl: `${baseUrl}/pay/cancel?ref=${reference}`,
+    notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
   });
 
   await prisma.payment.create({
@@ -62,75 +48,106 @@ export async function createDepositCheckoutSession(input: {
       appointmentId: input.appointmentId,
       customerId: input.customerId,
       status: 'PENDING',
-      amountCents: amount,
-      stripeSessionId: session.id,
-      metadata: { mode: input.mode },
+      amountCents,
+      currency: 'ZAR',
+      metadata: { mode: input.mode, reference, provider: 'payfast' },
     },
   });
 
-  return session.url;
+  return result.redirectUrl;
 }
 
-export async function handleStripeWebhook(rawBody: Buffer, signature: string | undefined) {
-  const stripe = getStripe();
-  if (!stripe || !env.STRIPE_WEBHOOK_SECRET) {
-    throw new Error('stripe_not_configured');
-  }
-  if (!signature) {
-    throw new Error('missing_stripe_signature');
-  }
-  const event = stripe.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET);
+export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
+  const verified = payfastAdapter.verifyWebhook(body, {});
+  if (!verified.valid || verified.status !== 'success') return;
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const appointmentId = session.metadata?.appointmentId;
-    if (!appointmentId) return;
+  const reference = verified.reference;
+  if (!reference?.startsWith('appt_')) return;
+  const appointmentId = reference.replace('appt_', '');
 
-    await prisma.$transaction(async (tx) => {
-      await tx.payment.updateMany({
-        where: { stripeSessionId: session.id },
+  await prisma.$transaction(async (tx) => {
+    const appt = await tx.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { service: true, staff: true, customer: true, salon: true },
+    });
+    if (!appt || appt.status === 'CONFIRMED_PAID') return;
+
+    await tx.payment.updateMany({
+      where: { appointmentId, status: 'PENDING' },
+      data: {
+        status: 'SUCCEEDED',
+        payfastPaymentId: verified.transactionId ?? null,
+      },
+    });
+
+    await tx.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'CONFIRMED_PAID', confirmedAt: new Date() },
+    });
+
+    const waId = appt.customer.waId;
+    if (!waId) return;
+
+    const salonName = appt.salon.tradingName?.trim() || appt.salon.name;
+    const tz = appt.salon.timezone;
+    const dateStr = DateTime.fromJSDate(appt.start).setZone(tz).toFormat('cccc dd LLL yyyy HH:mm');
+
+    const confirmMsg =
+      `✅ Payment received! Your booking is confirmed.\n\n` +
+      `${appt.service.name} with ${appt.staff.name}\n` +
+      `${dateStr}\n\n` +
+      `Reference: ${appointmentId.slice(0, 8)}\n\n` +
+      `See you at ${salonName}! 💈`;
+
+    const ratingMsg = `How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)`;
+
+    const conv = await tx.conversation.findFirst({
+      where: { salonId: appt.salonId, customerId: appt.customerId },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    // Send confirmation message
+    let confirmSid: string | null = null;
+    try {
+      const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: confirmMsg });
+      confirmSid = result.providerMessageId ?? null;
+    } catch { /* best-effort */ }
+
+    if (conv) {
+      await tx.message.create({
+        data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
+      });
+
+      // Send rating prompt and move to BOOKING_RATING
+      let ratingSid: string | null = null;
+      try {
+        const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: ratingMsg });
+        ratingSid = result.providerMessageId ?? null;
+      } catch { /* best-effort */ }
+
+      await tx.message.create({
+        data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: ratingMsg, providerSid: ratingSid },
+      });
+
+      const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
+      await tx.conversation.update({
+        where: { id: conv.id },
         data: {
-          status: 'SUCCEEDED',
-          stripePaymentIntentId:
-            typeof session.payment_intent === 'string'
-              ? session.payment_intent
-              : session.payment_intent?.id,
+          step: ConversationStep.BOOKING_RATING,
+          context: { ...currentCtx, pendingAppointmentId: appointmentId } as object,
         },
       });
-      await tx.appointment.update({
-        where: { id: appointmentId },
-        data: { status: 'CONFIRMED_PAID' },
-      });
-    });
-  }
-
-  if (event.type === 'charge.refunded') {
-    const charge = event.data.object as Stripe.Charge;
-    const pi = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
-    if (!pi) return;
-    await prisma.payment.updateMany({
-      where: { stripePaymentIntentId: pi },
-      data: { status: 'REFUNDED', stripeRefundId: charge.id },
-    });
-  }
+    }
+  });
 }
 
-export async function refundPaymentStaff(input: {
+export async function refundPayfastPayment(input: {
   paymentId: string;
   actorUserId: string;
   reason: string;
 }): Promise<void> {
-  const stripe = getStripe();
-  if (!stripe) throw new Error('stripe_not_configured');
-
-  const payment = await prisma.payment.findUniqueOrThrow({
-    where: { id: input.paymentId },
-  });
-  if (!payment.stripePaymentIntentId) throw new Error('no_payment_intent');
-
-  await stripe.refunds.create({
-    payment_intent: payment.stripePaymentIntentId,
-  });
+  const payment = await prisma.payment.findUniqueOrThrow({ where: { id: input.paymentId } });
+  if (!payment.payfastPaymentId) throw new Error('no_payfast_payment_id');
 
   await prisma.$transaction([
     prisma.payment.update({
@@ -144,8 +161,11 @@ export async function refundPaymentStaff(input: {
         action: 'payment_refund',
         entity: 'Payment',
         entityId: payment.id,
-        payload: { reason: input.reason },
+        payload: { reason: input.reason, provider: 'payfast' },
       },
     }),
   ]);
 }
+
+// Alias — keeps dashboardApi import working
+export const refundPaymentStaff = refundPayfastPayment;

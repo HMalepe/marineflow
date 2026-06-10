@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveBotName, saveBotBehaviour, saveInactivityMessages, type SalonSettings } from './actions';
+import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveLocation, type SalonSettings } from './actions';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -163,10 +163,17 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [botNameVal, setBotNameVal] = useState(initialSettings.botName ?? 'Ava');
   const [savingBotName, setSavingBotName] = useState(false);
 
+  const [addressLine, setAddressLine] = useState(initialSettings.addressLine ?? '');
+  const [phoneDisplay, setPhoneDisplay] = useState(initialSettings.phoneDisplay ?? '');
+  const [contactEmail, setContactEmail] = useState(initialSettings.contactEmail ?? '');
+  const [mapsUrl, setMapsUrl] = useState(initialSettings.mapsUrl ?? '');
+  const [parkingNotes, setParkingNotes] = useState(initialSettings.parkingNotes ?? '');
+
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingHours, setSavingHours] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -188,16 +195,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setWelcomeMessage(s.welcomeMessage ?? '');
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
-    setBotAskMarketingConsent(s.botAskMarketingConsent ?? true);
-    setBotAllowStaffPick(s.botAllowStaffPick ?? true);
-    setBotLoyaltyEnabled(s.botLoyaltyEnabled ?? true);
-    setBotRequireDepositStep(s.botRequireDepositStep ?? true);
-    setInactivityMsg1(s.inactivityMessage1 ?? '');
-    setInactivityDelay1(s.inactivityMessage1DelayMin ?? 10);
-    setInactivityMsg2(s.inactivityMessage2 ?? '');
-    setInactivityDelay2(s.inactivityMessage2DelayMin ?? 30);
-    setClosingMsg(s.closingMessage ?? '');
-    setBotNameVal(s.botName ?? 'Ava');
+    setAddressLine(s.addressLine ?? '');
+    setPhoneDisplay(s.phoneDisplay ?? '');
+    setContactEmail(s.contactEmail ?? '');
+    setMapsUrl(s.mapsUrl ?? '');
+    setParkingNotes(s.parkingNotes ?? '');
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -233,6 +235,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     botRequireDepositStep !== (saved.botRequireDepositStep ?? true),
   [saved, botAskMarketingConsent, botAllowStaffPick, botLoyaltyEnabled, botRequireDepositStep]);
   const botNameDirty = useMemo(() => botNameVal !== (saved.botName ?? 'Ava'), [saved, botNameVal]);
+
+  const locationDirty = useMemo(() => {
+    return (
+      addressLine !== (saved.addressLine ?? '') ||
+      phoneDisplay !== (saved.phoneDisplay ?? '') ||
+      contactEmail !== (saved.contactEmail ?? '') ||
+      mapsUrl !== (saved.mapsUrl ?? '') ||
+      parkingNotes !== (saved.parkingNotes ?? '')
+    );
+  }, [saved, addressLine, phoneDisplay, contactEmail, mapsUrl, parkingNotes]);
 
   const timezoneLabel =
     TIMEZONE_OPTIONS.find((t) => t.value === timezone)?.label ?? timezone;
@@ -396,6 +408,36 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       showToast('Save failed — please try again', 'error');
     } finally {
       setSavingBotName(false);
+    }
+  }
+
+  async function handleSaveLocation(e: React.FormEvent) {
+    e.preventDefault();
+    if (contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      showToast('Enter a valid email address', 'error');
+      return;
+    }
+    if (mapsUrl.trim() && !/^https?:\/\//.test(mapsUrl.trim())) {
+      showToast('Maps link must start with https://', 'error');
+      return;
+    }
+    setSavingLocation(true);
+    try {
+      const result = await saveLocation(
+        addressLine.trim() || null,
+        phoneDisplay.trim() || null,
+        contactEmail.trim() || null,
+        mapsUrl.trim() || null,
+        parkingNotes.trim() || null,
+      );
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Location & contact details saved', 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } finally {
+      setSavingLocation(false);
     }
   }
 
@@ -643,6 +685,82 @@ export function SalonSettingsForm({ initialSettings }: Props) {
                 ? 'Preview uses your welcome text plus the numbered menu on the bot.'
                 : 'Preview of the reply when someone asks for a human outside your opening hours.'}
             </p>
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Location & Contact */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Location &amp; Contact</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Shown to customers when they select &quot;Find us&quot; or &quot;Contact us&quot; on WhatsApp.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveLocation(e)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="address-line">Street address</Label>
+            <Input
+              id="address-line"
+              value={addressLine}
+              onChange={(e) => setAddressLine(e.target.value)}
+              placeholder="123 Main Street, Sandton, 2196"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone-display">Phone number</Label>
+              <Input
+                id="phone-display"
+                value={phoneDisplay}
+                onChange={(e) => setPhoneDisplay(e.target.value)}
+                placeholder="+27 11 123 4567"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="contact-email">Business email</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                placeholder="hello@yoursalon.co.za"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="maps-url">
+              Maps / directions link
+              <span className="text-xs font-normal text-muted-foreground ml-2">Google Maps, Waze, etc.</span>
+            </Label>
+            <Input
+              id="maps-url"
+              value={mapsUrl}
+              onChange={(e) => setMapsUrl(e.target.value)}
+              placeholder="https://maps.google.com/?q=..."
+            />
+            <p className="text-xs text-muted-foreground">
+              Paste the share link from Google Maps or Waze — customers tap it to open directions.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="parking-notes">Parking notes <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
+            <Input
+              id="parking-notes"
+              value={parkingNotes}
+              onChange={(e) => setParkingNotes(e.target.value)}
+              placeholder="Free parking at rear, entrance on Smith St"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" size="sm" disabled={savingLocation || !locationDirty}>
+              {savingLocation ? 'Saving…' : locationDirty ? 'Save location & contact' : 'No changes'}
+            </Button>
+            {locationDirty && (
+              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+            )}
           </div>
         </form>
       </section>

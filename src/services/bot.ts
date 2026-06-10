@@ -59,6 +59,16 @@ export type BotContext = Record<string, unknown> & {
   handoffByStaff?: boolean;
   /** AI-suggested quick book slots (A/B/C). */
   quickPickOptions?: QuickPickOption[];
+  /** True once the AI has given its first answer in the OTHER_QUERY flow */
+  otherQueryAnswered?: boolean;
+  /** Original question text saved for the ticket if customer says NO */
+  otherQueryText?: string;
+  /** Rate-my-experience sub-step: which part of the flow we're collecting */
+  ratingSubStep?: 'stars' | 'comment' | 'nps' | 'nps_reason';
+  /** Collected rating fields during RATE_EXPERIENCE flow */
+  ratingStars?: number;
+  ratingComment?: string;
+  ratingNps?: number;
 };
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
@@ -133,9 +143,11 @@ function mainMenu(salon: Salon): string {
     '2 — My bookings',
     ...(salon.botLoyaltyEnabled ? ['3 — My rewards / loyalty'] : []),
     '4 — FAQs',
-    '5 — File a complaint',
-    '6 — Hours & address',
-    '0 — Talk to a human (we will reply soon)',
+    '5 — Rate my experience',
+    '6 — Contact us',
+    '7 — Business hours',
+    '8 — Find us (address & directions)',
+    '0 — Something else',
   ];
   return [welcome, ...items].join('\n');
 }
@@ -176,7 +188,8 @@ function afterHoursHumanReply(salon: Salon): string {
 
 function isHumanHandoffRequest(text: string): boolean {
   const lower = text.toLowerCase();
-  return lower.includes('human') || lower.includes('talk to') || text.trim() === '0';
+  // '0' now routes to OTHER_QUERY (AI-first), so only explicit "talk to human" triggers direct handoff
+  return lower.includes('human') || lower.includes('talk to');
 }
 
 export async function handleInboundWhatsApp(input: {
@@ -353,6 +366,18 @@ async function processInboundWhatsApp(
   }
 
   if (isHumanHandoffRequest(text)) {
+    if (!isWithinBusinessHours(salon)) {
+      // After hours — don't escalate yet; offer AI help first
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      await reply(
+        conv,
+        afterHoursHumanReply(salon) +
+          '\n\nIs there anything our AI assistant can try to help with in the meantime? Reply YES to continue or NO to wait for a human.',
+      );
+      return;
+    }
+
+    // Within hours — open a ticket and hand off
     await getTenantDb().ticket.create({
       data: {
         salonId: salon.id,
@@ -367,12 +392,6 @@ async function processInboundWhatsApp(
         },
       },
     });
-
-    if (!isWithinBusinessHours(salon)) {
-      await saveCtx(conv.id, {}, ConversationStep.MENU);
-      await reply(conv, `${afterHoursHumanReply(salon)}\n\n${mainMenu(salon)}`);
-      return;
-    }
 
     await reply(
       conv,
@@ -579,6 +598,15 @@ async function routeConversation(
     case ConversationStep.COMPLAINT:
       await handleComplaint(conv, t);
       break;
+    case ConversationStep.RATE_EXPERIENCE:
+      await handleRateExperience(conv, t);
+      break;
+    case ConversationStep.OTHER_QUERY:
+      await handleOtherQuery(conv, t);
+      break;
+    case ConversationStep.HANDOFF_RATING:
+      await handleHandoffRating(conv, t);
+      break;
     case ConversationStep.FAQ:
       await handleFaq(conv, t);
       break;
@@ -587,6 +615,9 @@ async function routeConversation(
       break;
     case ConversationStep.CSAT:
       await handleCsat(conv, t);
+      break;
+    case ConversationStep.BOOKING_RATING:
+      await handleBookingRating(conv, t);
       break;
     case ConversationStep.HANDOFF:
     case ConversationStep.CLOSED:
@@ -662,53 +693,118 @@ async function handleMenu(
   }
 
   if (choice === '2') {
-    // EC-02: only show active future bookings; EC-08: show up to 8
-    const upcoming = await getTenantDb().appointment.findMany({
-      where: {
-        customerId: conv.customerId,
-        salonId: salon.id,
-        start: { gte: new Date() },
-        status: { in: ['CONFIRMED', 'HELD', 'PENDING_PAYMENT', 'CONFIRMED_PAID'] },
-      },
-      orderBy: { start: 'asc' },
-      include: { service: true, staff: true },
-      take: 8,
-    });
-    if (upcoming.length === 0) {
-      await reply(conv, `No upcoming bookings found.\n\n${mainMenu(salon)}`);
+    const now = new Date();
+    const [upcoming, past] = await Promise.all([
+      getTenantDb().appointment.findMany({
+        where: {
+          customerId: conv.customerId,
+          salonId: salon.id,
+          start: { gte: now },
+          status: { in: ['CONFIRMED', 'HELD', 'PENDING_PAYMENT', 'CONFIRMED_PAID'] },
+        },
+        orderBy: { start: 'asc' },
+        include: { service: true, staff: true },
+        take: 10,
+      }),
+      getTenantDb().appointment.findMany({
+        where: {
+          customerId: conv.customerId,
+          salonId: salon.id,
+          start: { lt: now },
+          status: { in: ['COMPLETED', 'CONFIRMED', 'CONFIRMED_PAID'] },
+        },
+        orderBy: { start: 'desc' },
+        include: { service: true, staff: true },
+        take: 20,
+      }),
+    ]);
+
+    const fmtAppt = (a: typeof upcoming[0], i: number) =>
+      `${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`;
+
+    const lines: string[] = [];
+
+    if (upcoming.length > 0) {
+      lines.push('📅 *Upcoming appointments:*');
+      upcoming.forEach((a, i) => lines.push(fmtAppt(a, i + 1)));
+    } else {
+      lines.push('No upcoming appointments.');
+    }
+
+    if (past.length > 0) {
+      lines.push('', '📋 *Past bookings:*');
+      past.forEach((a, i) => {
+        lines.push(`${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`);
+      });
+    }
+
+    if (upcoming.length === 0 && past.length === 0) {
+      await reply(conv, `No bookings found yet.\n\n${mainMenu(salon)}`);
       return;
     }
-    const lines = upcoming.map((a, i) =>
-      [
-        `${i + 1}. ${a.service.name}`,
-        `   ${fmtDt(a.start, salon.timezone)} with ${a.staff.name}`,
-        `   Status: ${a.status} id:${a.id.slice(0, 8)}`,
-      ].join('\n'),
-    );
-    await saveCtx(conv.id, { manageList: upcoming.map((a) => a.id) }, ConversationStep.MANAGE_BOOKING);
-    await reply(
-      conv,
-      [
-        'Your bookings:',
-        ...lines,
-        '',
-        'Reply CANCEL 1 to cancel or RESCHEDULE 1 to reschedule (use the booking number), or BACK.',
-      ].join('\n'),
-    );
+
+    if (upcoming.length > 0) {
+      lines.push('', 'Reply CANCEL 1 or RESCHEDULE 1 to manage (use the upcoming number), or BACK.');
+      await saveCtx(conv.id, { manageList: upcoming.map((a) => a.id) }, ConversationStep.MANAGE_BOOKING);
+    } else {
+      lines.push('', 'Reply BACK for menu.');
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+    }
+
+    await reply(conv, lines.join('\n'));
     return;
   }
 
   if (choice === '3' && salon.botLoyaltyEnabled) {
     await ensureLoyaltyProgram(salon.id);
     const bal = await getStampBalance(salon.id, conv.customerId);
+    const stampsPerReward = bal.stampsPerReward ?? 10;
+    const stamps = bal.stamps ?? 0;
+    const remaining = Math.max(0, stampsPerReward - (stamps % stampsPerReward));
+
+    // Predict date of next reward based on average booking frequency
+    const recentBookings = await getTenantDb().appointment.findMany({
+      where: {
+        customerId: conv.customerId,
+        salonId: salon.id,
+        status: { in: ['COMPLETED', 'CONFIRMED', 'CONFIRMED_PAID'] },
+      },
+      orderBy: { start: 'desc' },
+      take: stampsPerReward + 2,
+    });
+
+    let predictionLine = '';
+    if (recentBookings.length >= 2 && remaining > 0) {
+      const intervals: number[] = [];
+      for (let i = 0; i < recentBookings.length - 1; i++) {
+        const msApart = recentBookings[i]!.start.getTime() - recentBookings[i + 1]!.start.getTime();
+        if (msApart > 0) intervals.push(msApart);
+      }
+      if (intervals.length > 0) {
+        const avgIntervalMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const predictedMs = Date.now() + remaining * avgIntervalMs;
+        const predictedDate = new Date(predictedMs);
+        predictionLine = `\nAt your current pace, your free cut is estimated around ${fmtDate(predictedDate, salon.timezone)}. 🎉`;
+      }
+    }
+
+    const redeemable = stamps >= stampsPerReward;
+    const progressBar = buildStampBar(stamps % stampsPerReward || (redeemable ? stampsPerReward : 0), stampsPerReward);
+
+    const lines = [
+      `⭐ *Your loyalty card* — ${salon.name}`,
+      '',
+      `Stamps: ${stamps} total`,
+      progressBar,
+      redeemable
+        ? `\n🎊 You've earned a FREE cut! Reply REDEEM to use it on your next booking.`
+        : `${remaining} more cut${remaining === 1 ? '' : 's'} until your FREE one!${predictionLine}`,
+      '',
+      'Reply BACK for menu.',
+    ];
+
     await saveCtx(conv.id, {}, ConversationStep.LOYALTY);
-    await reply(
-      conv,
-      [
-        `Your loyalty stamps: ${bal.stamps} (earn ${bal.stampsPerReward} for a reward).`,
-        'Reply BACK for menu.',
-      ].join('\n'),
-    );
+    await reply(conv, lines.join('\n'));
     return;
   }
 
@@ -729,20 +825,62 @@ async function handleMenu(
   }
 
   if (choice === '5') {
-    await saveCtx(conv.id, {}, ConversationStep.COMPLAINT);
-    await reply(conv, 'Please describe your complaint in one message. Our team will follow up.');
+    await saveCtx(
+      conv.id,
+      { ratingSubStep: 'stars', ratingStars: undefined, ratingComment: undefined, ratingNps: undefined },
+      ConversationStep.RATE_EXPERIENCE,
+    );
+    await reply(conv, '⭐ *Rate your experience*\n\nHow would you rate your last visit?\nReply with a number:\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent');
     return;
   }
 
   if (choice === '6') {
-    const lines = [
-      salon.addressLine ?? 'Address not on file.',
-      salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : '',
-      salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : '',
-      salon.accessibility ? `Accessibility: ${salon.accessibility}` : '',
+    const parts = [
+      `📞 *Contact ${salon.name}*`,
+      salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : null,
+      (salon as unknown as { contactEmail?: string }).contactEmail ? `Email: ${(salon as unknown as { contactEmail?: string }).contactEmail}` : null,
     ].filter(Boolean);
-    await reply(conv, [`${salon.name}`, ...lines].join('\n'));
+    if (parts.length === 1) parts.push('No contact details on file yet.');
+    await reply(conv, parts.join('\n'));
     await reply(conv, mainMenu(salon));
+    return;
+  }
+
+  if (choice === '7') {
+    const open = salon.openTime ?? '09:00';
+    const close = salon.closeTime ?? '17:00';
+    const isOpen = isWithinBusinessHours(salon);
+    await reply(conv, `🕐 *Business hours*\n\nMon–Sat: ${open} – ${close}\n\nWe are currently ${isOpen ? '✅ open' : '🔴 closed'}.`);
+    await reply(conv, mainMenu(salon));
+    return;
+  }
+
+  if (choice === '8') {
+    const address = salon.addressLine ?? 'Address not on file.';
+    const mapsUrl = (salon as unknown as { mapsUrl?: string }).mapsUrl;
+    const lines = [
+      `📍 *Find us*`,
+      address,
+      salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : null,
+      salon.accessibility ? `♿ ${salon.accessibility}` : null,
+    ].filter(Boolean);
+
+    if (mapsUrl) {
+      lines.push('', `📌 Open in maps:\n${mapsUrl}`);
+    } else {
+      // Generate a Google Maps search link from the address
+      const query = encodeURIComponent(`${salon.name} ${address}`);
+      lines.push('', `📌 Google Maps: https://maps.google.com/?q=${query}`);
+    }
+
+    await reply(conv, lines.join('\n'));
+    await reply(conv, mainMenu(salon));
+    return;
+  }
+
+  if (choice === '0') {
+    await saveCtx(conv.id, { otherQueryAnswered: false }, ConversationStep.OTHER_QUERY);
+    await reply(conv, "What can I help you with? Go ahead and ask — I'll do my best to answer. 😊");
     return;
   }
 
@@ -1184,17 +1322,72 @@ async function handleConfirm(
     return;
   }
 
-  const confirmLines = [
-    redeem.redeemed && redeem.note ? `${redeem.note}\n` : '',
-    `Booked! Reference: ${appointment.id.slice(0, 8)}`,
-    `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-    DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
-    '',
-    mainMenu(conv.salon),
-  ].filter(Boolean).join('\n');
+  await reply(
+    conv,
+    [
+      redeem.redeemed && redeem.note ? `${redeem.note}\n` : '',
+      `Booked! Reference: ${appointment.id.slice(0, 8)}`,
+      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+      DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  );
+  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
+  await reply(conv, 'How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)');
+}
 
-  const closing = conv.salon.closingMessage?.trim();
-  await reply(conv, closing ? `${confirmLines}\n\n${closing}` : confirmLines);
+async function handleBookingRating(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const upper = text.trim().toUpperCase();
+  if (upper === 'BACK' || upper === 'MENU' || upper === '0') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+  const rating = parseInt(text.trim(), 10);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    await reply(conv, 'Please reply with a number between 1 and 5.\n(or type MENU to go back)');
+    return;
+  }
+  const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: appointmentId ?? null,
+      type: 'booking_process_rating',
+      payload: { rating, appointmentId },
+    },
+  });
+  let thankYou: string;
+  if (rating === 5) {
+    thankYou = 'Amazing! 🌟 So glad it was easy. See you soon!';
+  } else if (rating === 4) {
+    thankYou = 'Thanks! 😊 Glad that was smooth.';
+  } else if (rating === 3) {
+    thankYou = 'Thanks for the feedback — we\'ll keep improving.';
+  } else {
+    thankYou = 'Sorry it wasn\'t easier — we\'ll work on that.';
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        status: 'OPEN',
+        subject: `Poor booking experience (${rating}/5)`,
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: `Customer rated the booking process ${rating}/5.${appointmentId ? ` Appointment ID: ${appointmentId}` : ''}`,
+          },
+        },
+      },
+    });
+  }
+  await reply(conv, thankYou);
+  await saveCtx(conv.id, {}, ConversationStep.IDLE);
 }
 
 async function handleManageBooking(
@@ -1315,6 +1508,266 @@ async function handleComplaint(
   await reply(conv, `Thanks — we logged your complaint and will respond shortly.\n\n${mainMenu(conv.salon)}`);
 }
 
+// ─── Other / Something Else ────────────────────────────────────────────
+// Flow: customer asks anything → AI answers → "Did that help? YES / NO"
+//   YES → menu  |  NO → open ticket + IDLE (human picks up)
+async function handleOtherQuery(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const c = ctx(conv);
+  const answered = c.otherQueryAnswered as boolean | undefined;
+
+  if (text.toUpperCase() === 'BACK' || text.toUpperCase() === 'MENU') {
+    await saveCtx(conv.id, { otherQueryAnswered: undefined }, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  // If we already gave an answer and are waiting for YES/NO
+  if (answered) {
+    const upper = text.toUpperCase();
+    if (upper === 'YES' || upper === 'Y') {
+      await saveCtx(conv.id, { otherQueryAnswered: undefined }, ConversationStep.MENU);
+      await reply(conv, `Great! 😊 Anything else I can help with?\n\n${mainMenu(conv.salon)}`);
+      return;
+    }
+    if (upper === 'NO' || upper === 'N') {
+      // Escalate to human
+      const isOpen = isWithinBusinessHours(conv.salon);
+      await getTenantDb().ticket.create({
+        data: {
+          salonId: conv.salonId,
+          customerId: conv.customerId,
+          status: 'OPEN',
+          subject: 'Customer needs human help',
+          messages: {
+            create: {
+              direction: MessageDirection.INBOUND,
+              body: `Customer was not satisfied with AI answer.\nOriginal query: ${(c.otherQueryText as string | undefined) ?? text}`,
+            },
+          },
+        },
+      });
+      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.IDLE);
+      if (isOpen) {
+        await reply(conv, "No problem — I've flagged this for a team member who will be with you shortly. 🙏");
+      } else {
+        await reply(conv, `${afterHoursHumanReply(conv.salon)}\n\nI've noted your question and a team member will follow up when we open.`);
+      }
+      return;
+    }
+    // They sent something new — treat it as a follow-up question
+  }
+
+  // Try AI assist
+  try {
+    const aiResult = await tryAiAssist(conv, text, mainMenu(conv.salon));
+    if (aiResult.handled && aiResult.reply) {
+      await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
+      await reply(conv, aiResult.reply);
+      await reply(conv, 'Did that answer your question? Reply YES or NO.');
+      return;
+    }
+  } catch {
+    // AI unavailable — fall through to escalation prompt
+  }
+
+  // AI couldn't answer — offer human
+  await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
+  await reply(conv, "I'm not sure I have the answer to that one. Would you like me to pass this on to a team member? Reply YES or NO.");
+}
+
+// ─── Post-Handoff Satisfaction Rating ──────────────────────────────────
+// Triggered when staff clicks "Query Completed". Bot asked customer to rate 1–10.
+async function handleHandoffRating(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const upper = text.trim().toUpperCase();
+  if (upper === 'BACK' || upper === 'MENU' || upper === '0') {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+  const rating = parseInt(text.trim(), 10);
+
+  if (isNaN(rating) || rating < 1 || rating > 10) {
+    await reply(conv, 'Please reply with a number from 1 to 10.\n(or type MENU to return)');
+    return;
+  }
+
+  // Record as analytics event
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: null,
+      type: 'handoff_rating',
+      payload: { rating, timestamp: new Date().toISOString() },
+    },
+  });
+
+  // Open a ticket for low scores so owner is notified
+  if (rating <= 5) {
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        status: 'OPEN',
+        subject: `Low support satisfaction (${rating}/10)`,
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: `Customer rated their support experience ${rating}/10.`,
+          },
+        },
+      },
+    });
+  }
+
+  const salonName = conv.salon.tradingName?.trim() || conv.salon.name;
+
+  let closing: string;
+  if (rating >= 9) {
+    closing = `${rating}/10 — that's amazing, thank you! 🌟 We're so glad we could help. See you next time at ${salonName}!`;
+  } else if (rating >= 7) {
+    closing = `${rating}/10 — thanks for the feedback! We'll keep working to make every experience great. 😊`;
+  } else if (rating >= 5) {
+    closing = `${rating}/10 — thank you for being honest. We'll use this to improve. If there's anything specific we can do better, feel free to let us know.`;
+  } else {
+    closing = `${rating}/10 — we're really sorry we didn't meet your expectations. Our team will review this and follow up with you. Thank you for letting us know. 🙏`;
+  }
+
+  await reply(conv, closing);
+
+  // Move to IDLE — bot stays quiet until customer sends something, then menu restarts
+  await saveCtx(conv.id, {
+    handoffByStaff: undefined,
+    errorCount: undefined,
+    otherQueryAnswered: undefined,
+    otherQueryText: undefined,
+  }, ConversationStep.IDLE);
+}
+
+// ─── Rate My Experience ─────────────────────────────────────────────────
+// Multi-step: stars → comment → NPS (1–10) → NPS reason → done
+async function handleRateExperience(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const c = ctx(conv);
+  const subStep = (c.ratingSubStep ?? 'stars') as 'stars' | 'comment' | 'nps' | 'nps_reason';
+
+  if (text.toUpperCase() === 'BACK' || text.toUpperCase() === 'SKIP') {
+    await saveCtx(conv.id, { ratingSubStep: undefined, ratingStars: undefined, ratingComment: undefined, ratingNps: undefined }, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  if (subStep === 'stars') {
+    const stars = parseInt(text.trim(), 10);
+    if (isNaN(stars) || stars < 1 || stars > 5) {
+      await reply(conv, 'Please reply with a number from 1 to 5 (1 = Poor, 5 = Excellent), or BACK to cancel.');
+      return;
+    }
+    await saveCtx(conv.id, { ratingStars: stars, ratingSubStep: 'comment' });
+    const prompt = stars <= 2
+      ? `We're sorry to hear that! 😔 What went wrong? Please leave a comment so we can improve:`
+      : `Thanks! 😊 Would you like to leave a comment about your experience? (Or reply SKIP to continue)`;
+    await reply(conv, prompt);
+    return;
+  }
+
+  if (subStep === 'comment') {
+    const comment = text.toUpperCase() === 'SKIP' ? '' : text.trim();
+    await saveCtx(conv.id, { ratingComment: comment, ratingSubStep: 'nps' });
+    await reply(conv, 'On a scale of 1–10, how likely are you to recommend us to a friend?\n(1 = Not at all, 10 = Definitely!)');
+    return;
+  }
+
+  if (subStep === 'nps') {
+    const nps = parseInt(text.trim(), 10);
+    if (isNaN(nps) || nps < 1 || nps > 10) {
+      await reply(conv, 'Please reply with a number from 1 to 10.');
+      return;
+    }
+    await saveCtx(conv.id, { ratingNps: nps, ratingSubStep: 'nps_reason' });
+    const prompt = nps <= 6
+      ? `What's the main reason for your score? We really want to improve:`
+      : `That means a lot! 🙏 What's the main reason for your high score? (Or reply SKIP)`;
+    await reply(conv, prompt);
+    return;
+  }
+
+  // nps_reason — final step, save everything
+  if (subStep === 'nps_reason') {
+    const reason = text.toUpperCase() === 'SKIP' ? '' : text.trim();
+    const stars = (c.ratingStars ?? 0) as number;
+    const comment = (c.ratingComment ?? '') as string;
+    const nps = (c.ratingNps ?? 0) as number;
+
+    // Persist as analytics event
+    await getTenantDb().analyticsEvent.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: null,
+        type: 'experience_rating',
+        payload: { stars, comment, nps, npsReason: reason, timestamp: new Date().toISOString() },
+      },
+    });
+
+    // Open a ticket for bad ratings (stars ≤ 2 or NPS ≤ 6) so owner is notified
+    const isBadRating = stars <= 2 || nps <= 6;
+    if (isBadRating) {
+      const subject = stars <= 2
+        ? `Low rating (${stars}★) from customer`
+        : `Low NPS (${nps}/10) from customer`;
+      const body = [
+        `Stars: ${stars}/5`,
+        `NPS: ${nps}/10`,
+        comment ? `Comment: ${comment}` : null,
+        reason ? `NPS reason: ${reason}` : null,
+      ].filter(Boolean).join('\n');
+
+      await getTenantDb().ticket.create({
+        data: {
+          salonId: conv.salonId,
+          customerId: conv.customerId,
+          status: 'OPEN',
+          subject,
+          messages: { create: { direction: MessageDirection.INBOUND, body } },
+        },
+      });
+    }
+
+    // Friendly closing message
+    let closing: string;
+    if (stars === 5 && nps >= 9) {
+      closing = `Thank you so much! 🌟 Your kind words mean the world to us. See you next time!`;
+    } else if (isBadRating) {
+      closing = `Thank you for your honest feedback — it helps us get better. Our team will be in touch shortly to make it right. 🙏`;
+    } else {
+      closing = `Thank you for the feedback! We're always working to improve and hope to see you again soon. 😊`;
+    }
+
+    await saveCtx(conv.id, {
+      ratingSubStep: undefined,
+      ratingStars: undefined,
+      ratingComment: undefined,
+      ratingNps: undefined,
+    }, ConversationStep.MENU);
+    await reply(conv, closing);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  // Fallback — reset
+  await saveCtx(conv.id, { ratingSubStep: 'stars' }, ConversationStep.RATE_EXPERIENCE);
+  await reply(conv, '⭐ How would you rate your last visit? (1–5)');
+}
+
 async function handleFaq(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -1356,8 +1809,14 @@ async function handleFaq(
 
 async function handleLoyalty(
   conv: Conversation & { customer: Customer; salon: Salon },
-  _text: string,
+  text: string,
 ) {
+  if (text.toUpperCase() === 'REDEEM') {
+    // Redemption requires a booking context — direct customer to book instead
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(conv, `🎊 To use your free cut, simply book your next appointment (option 1) and it will be applied automatically!\n\n${mainMenu(conv.salon)}`);
+    return;
+  }
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await reply(conv, mainMenu(conv.salon));
 }
@@ -1495,4 +1954,14 @@ function sanitize(s: string): string {
 
 function fmtDt(d: Date, zone: string): string {
   return DateTime.fromJSDate(d).setZone(zone).toFormat('ccc dd LLL yyyy HH:mm');
+}
+
+function fmtDate(d: Date, zone: string): string {
+  return DateTime.fromJSDate(d).setZone(zone).toFormat('dd LLL yyyy');
+}
+
+function buildStampBar(earned: number, total: number): string {
+  const filled = Math.min(earned, total);
+  const empty = total - filled;
+  return `[${'★'.repeat(filled)}${'☆'.repeat(empty)}] ${filled}/${total}`;
 }

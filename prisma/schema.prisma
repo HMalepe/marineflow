@@ -120,12 +120,16 @@ enum ConversationStep {
   MANAGE_BOOKING
   RESCHEDULE
   COMPLAINT
+  RATE_EXPERIENCE
+  OTHER_QUERY
+  HANDOFF_RATING
   FAQ
   LOYALTY
   CSAT
   IDLE
   HANDOFF
   CLOSED
+  BOOKING_RATING
 }
 
 model Salon {
@@ -149,6 +153,8 @@ model Salon {
   parkingNotes   String?
   accessibility  String?
   phoneDisplay   String?
+  contactEmail   String?
+  mapsUrl        String?      @db.Text
   /// Default daily open/close for bot after-hours messaging (HH:MM, salon timezone)
   openTime       String?      @default("09:00")
   closeTime      String?      @default("17:00")
@@ -823,7 +829,7 @@ model Campaign {
   templateName  String
   templateLang  String         @default("en")
   /** Public HTTPS URL for WhatsApp image/video attachment */
-  mediaUrl      String?
+  mediaUrl      String?        @db.Text
   /** image | video */
   mediaType     String?
   audienceFilter Json          @default("{}")
