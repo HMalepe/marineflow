@@ -258,28 +258,46 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       return;
     }
     setSavingDisplayName(true);
-    const result = await saveDisplayName(trimmed);
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast('Business display name saved', 'success');
-      router.refresh();
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    try {
+      const result = await saveDisplayName(trimmed);
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Business display name saved', 'success');
+        router.refresh();
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingDisplayName(false);
     }
-    setSavingDisplayName(false);
   }
 
   async function handleSaveHours(e: React.FormEvent) {
     e.preventDefault();
-    setSavingHours(true);
-    const result = await saveHours(openTime, closeTime, timezone);
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast('Business hours saved', 'success');
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    if (!openTime || !closeTime) {
+      showToast('Enter both open and close times', 'error');
+      return;
     }
-    setSavingHours(false);
+    if (openTime >= closeTime) {
+      showToast('Close time must be after open time', 'error');
+      return;
+    }
+    setSavingHours(true);
+    try {
+      const result = await saveHours(openTime, closeTime, timezone);
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Business hours saved', 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingHours(false);
+    }
   }
 
   async function handleSaveMessages(e: React.FormEvent) {
@@ -289,54 +307,73 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       return;
     }
     setSavingMessages(true);
-    const result = await saveMessages(
-      welcomeMessage.trim() || null,
-      afterHoursMessage.trim() || null,
-    );
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast('Bot messages saved', 'success');
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    try {
+      const result = await saveMessages(
+        welcomeMessage.trim() || null,
+        afterHoursMessage.trim() || null,
+      );
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Bot messages saved', 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingMessages(false);
     }
-    setSavingMessages(false);
   }
 
   async function handleSaveInactivity(e: React.FormEvent) {
     e.preventDefault();
-    setSavingInactivity(true);
-    const result = await saveInactivityMessages({
-      inactivityMessage1: inactivityMsg1 || null,
-      inactivityMessage1DelayMin: inactivityDelay1,
-      inactivityMessage2: inactivityMsg2 || null,
-      inactivityMessage2DelayMin: inactivityDelay2,
-      closingMessage: closingMsg || null,
-    });
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast('Follow-up messages saved', 'success');
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    if (inactivityDelay2 <= inactivityDelay1) {
+      showToast('Second follow-up must be sent later than the first', 'error');
+      return;
     }
-    setSavingInactivity(false);
+    setSavingInactivity(true);
+    try {
+      const result = await saveInactivityMessages({
+        inactivityMessage1: inactivityMsg1.trim() || null,
+        inactivityMessage1DelayMin: inactivityDelay1,
+        inactivityMessage2: inactivityMsg2.trim() || null,
+        inactivityMessage2DelayMin: inactivityDelay2,
+        closingMessage: closingMsg.trim() || null,
+      });
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Follow-up messages saved', 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingInactivity(false);
+    }
   }
 
   async function handleSaveBotBehaviour(e: React.FormEvent) {
     e.preventDefault();
     setSavingBotBehaviour(true);
-    const result = await saveBotBehaviour({
-      botAskMarketingConsent,
-      botAllowStaffPick,
-      botLoyaltyEnabled,
-      botRequireDepositStep,
-    });
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast('Bot flow settings saved', 'success');
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    try {
+      const result = await saveBotBehaviour({
+        botAskMarketingConsent,
+        botAllowStaffPick,
+        botLoyaltyEnabled,
+        botRequireDepositStep,
+      });
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast('Conversation flow settings saved', 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingBotBehaviour(false);
     }
-    setSavingBotBehaviour(false);
   }
 
   async function handleSaveBotName(e: React.FormEvent) {
@@ -347,30 +384,40 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       return;
     }
     setSavingBotName(true);
-    const result = await saveBotName(trimmed);
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast(`Bot name updated to "${trimmed}"`, 'success');
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    try {
+      const result = await saveBotName(trimmed);
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast(`Bot name updated to "${trimmed}"`, 'success');
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingBotName(false);
     }
-    setSavingBotName(false);
   }
 
   async function handleSaveBot(e: React.FormEvent) {
     e.preventDefault();
     setSavingBot(true);
-    const result = await saveBotActive(botActive);
-    if (result.salon) {
-      applySalon(result.salon);
-      showToast(
-        botActive ? 'Bot is live on WhatsApp' : 'Bot paused — team will handle all messages',
-        'success',
-      );
-    } else {
-      showToast(result.error ?? 'Save failed', 'error');
+    try {
+      const result = await saveBotActive(botActive);
+      if (result.salon) {
+        applySalon(result.salon);
+        showToast(
+          botActive ? 'Bot is live on WhatsApp' : 'Bot paused — team will handle all messages',
+          'success',
+        );
+      } else {
+        showToast(result.error ?? 'Save failed', 'error');
+      }
+    } catch {
+      showToast('Save failed — please try again', 'error');
+    } finally {
+      setSavingBot(false);
     }
-    setSavingBot(false);
   }
 
   return (
@@ -744,7 +791,15 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               <select
                 id="inactivityDelay1"
                 value={inactivityDelay1}
-                onChange={(e) => setInactivityDelay1(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setInactivityDelay1(v);
+                  // bump delay2 if it's no longer strictly greater
+                  if (inactivityDelay2 <= v) {
+                    const next = [15, 20, 30, 45, 60].find((m) => m > v);
+                    if (next) setInactivityDelay2(next);
+                  }
+                }}
                 className="h-8 rounded-md border border-input bg-background px-2 text-sm"
               >
                 {[5, 10, 15, 20, 30].map((m) => (
@@ -775,10 +830,13 @@ export function SalonSettingsForm({ initialSettings }: Props) {
                 onChange={(e) => setInactivityDelay2(Number(e.target.value))}
                 className="h-8 rounded-md border border-input bg-background px-2 text-sm"
               >
-                {[15, 20, 30, 45, 60].map((m) => (
+                {[15, 20, 30, 45, 60].filter((m) => m > inactivityDelay1).map((m) => (
                   <option key={m} value={m}>{m} minutes of silence</option>
                 ))}
               </select>
+              {inactivityDelay2 <= inactivityDelay1 && (
+                <p className="text-xs text-destructive">Must be later than the first follow-up ({inactivityDelay1} min)</p>
+              )}
             </div>
             <textarea
               value={inactivityMsg2}

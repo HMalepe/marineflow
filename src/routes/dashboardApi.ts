@@ -276,7 +276,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
-          const maxBytes = 600_000; // ~450KB base64 → ~340KB image — enough for any logo
+          const maxBytes = 600_000; // ~600KB base64 → ~450KB image — enough for any logo
           if (logoUrl.length > maxBytes) {
             reply.code(400);
             return { error: 'logo_too_large' };
