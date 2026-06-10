@@ -1725,45 +1725,33 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const db = getTenantDb();
       const salonId = user.salonId;
 
+      // Each query is wrapped individually — if a materialized view doesn't exist yet
+      // (e.g. migration pending) we return an empty array rather than 500-ing the page.
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try {
+          return await db.$queryRawUnsafe<T[]>(sql, ...args);
+        } catch {
+          return [];
+        }
+      };
+
       const [dailyBookings, revenue, retention, staffPerformance] = await Promise.all([
-        db.$queryRawUnsafe<Array<{
-          booking_date: string;
-          total_bookings: number;
-          completed: number;
-          cancelled: number;
-          no_shows: number;
-        }>>(
+        safeQuery<{ booking_date: string; total_bookings: number; completed: number; cancelled: number; no_shows: number }>(
           `SELECT booking_date::text, total_bookings::int, completed::int, cancelled::int, no_shows::int
            FROM mv_daily_bookings WHERE "salonId" = $1 ORDER BY booking_date DESC LIMIT 90`,
           salonId,
         ),
-        db.$queryRawUnsafe<Array<{
-          month: string;
-          total_revenue_cents: number;
-          unique_customers: number;
-          invoice_count: number;
-        }>>(
+        safeQuery<{ month: string; total_revenue_cents: number; unique_customers: number; invoice_count: number }>(
           `SELECT month::text, total_revenue_cents::int, unique_customers::int, invoice_count::int
            FROM mv_revenue_summary WHERE "salonId" = $1 ORDER BY month DESC LIMIT 12`,
           salonId,
         ),
-        db.$queryRawUnsafe<Array<{
-          month: string;
-          unique_customers: number;
-          returning_customers: number;
-        }>>(
+        safeQuery<{ month: string; unique_customers: number; returning_customers: number }>(
           `SELECT month::text, unique_customers::int, returning_customers::int
            FROM mv_customer_retention WHERE "salonId" = $1 ORDER BY month DESC LIMIT 12`,
           salonId,
         ),
-        db.$queryRawUnsafe<Array<{
-          staffId: string;
-          staffName: string;
-          total_appointments: number;
-          completed: number;
-          no_shows: number;
-          revenue_cents: number;
-        }>>(
+        safeQuery<{ staffId: string; staffName: string; total_appointments: number; completed: number; no_shows: number; revenue_cents: number }>(
           `SELECT sp."staffId", s.name as "staffName",
                   sp.total_appointments::int, sp.completed::int, sp.no_shows::int, sp.revenue_cents::int
            FROM mv_staff_performance sp
