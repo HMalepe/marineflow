@@ -59,6 +59,10 @@ export type BotContext = Record<string, unknown> & {
   handoffByStaff?: boolean;
   /** AI-suggested quick book slots (A/B/C). */
   quickPickOptions?: QuickPickOption[];
+  /** True once the AI has given its first answer in the OTHER_QUERY flow */
+  otherQueryAnswered?: boolean;
+  /** Original question text saved for the ticket if customer says NO */
+  otherQueryText?: string;
   /** Rate-my-experience sub-step: which part of the flow we're collecting */
   ratingSubStep?: 'stars' | 'comment' | 'nps' | 'nps_reason';
   /** Collected rating fields during RATE_EXPERIENCE flow */
@@ -143,7 +147,7 @@ function mainMenu(salon: Salon): string {
     '6 — Contact us',
     '7 — Business hours',
     '8 — Find us (address & directions)',
-    '0 — Talk to a human',
+    '0 — Something else',
   ];
   return [welcome, ...items].join('\n');
 }
@@ -184,7 +188,8 @@ function afterHoursHumanReply(salon: Salon): string {
 
 function isHumanHandoffRequest(text: string): boolean {
   const lower = text.toLowerCase();
-  return lower.includes('human') || lower.includes('talk to') || text.trim() === '0';
+  // '0' now routes to OTHER_QUERY (AI-first), so only explicit "talk to human" triggers direct handoff
+  return lower.includes('human') || lower.includes('talk to');
 }
 
 export async function handleInboundWhatsApp(input: {
@@ -593,6 +598,9 @@ async function routeConversation(
     case ConversationStep.RATE_EXPERIENCE:
       await handleRateExperience(conv, t);
       break;
+    case ConversationStep.OTHER_QUERY:
+      await handleOtherQuery(conv, t);
+      break;
     case ConversationStep.FAQ:
       await handleFaq(conv, t);
       break;
@@ -858,6 +866,12 @@ async function handleMenu(
 
     await reply(conv, lines.join('\n'));
     await reply(conv, mainMenu(salon));
+    return;
+  }
+
+  if (choice === '0') {
+    await saveCtx(conv.id, { otherQueryAnswered: false }, ConversationStep.OTHER_QUERY);
+    await reply(conv, "What can I help you with? Go ahead and ask — I'll do my best to answer. 😊");
     return;
   }
 
@@ -1409,6 +1423,76 @@ async function handleComplaint(
   });
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await reply(conv, `Thanks — we logged your complaint and will respond shortly.\n\n${mainMenu(conv.salon)}`);
+}
+
+// ─── Other / Something Else ────────────────────────────────────────────
+// Flow: customer asks anything → AI answers → "Did that help? YES / NO"
+//   YES → menu  |  NO → open ticket + IDLE (human picks up)
+async function handleOtherQuery(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const c = ctx(conv);
+  const answered = c.otherQueryAnswered as boolean | undefined;
+
+  if (text.toUpperCase() === 'BACK' || text.toUpperCase() === 'MENU') {
+    await saveCtx(conv.id, { otherQueryAnswered: undefined }, ConversationStep.MENU);
+    await reply(conv, mainMenu(conv.salon));
+    return;
+  }
+
+  // If we already gave an answer and are waiting for YES/NO
+  if (answered) {
+    const upper = text.toUpperCase();
+    if (upper === 'YES' || upper === 'Y') {
+      await saveCtx(conv.id, { otherQueryAnswered: undefined }, ConversationStep.MENU);
+      await reply(conv, `Great! 😊 Anything else I can help with?\n\n${mainMenu(conv.salon)}`);
+      return;
+    }
+    if (upper === 'NO' || upper === 'N') {
+      // Escalate to human
+      const isOpen = isWithinBusinessHours(conv.salon);
+      await getTenantDb().ticket.create({
+        data: {
+          salonId: conv.salonId,
+          customerId: conv.customerId,
+          status: 'OPEN',
+          subject: 'Customer needs human help',
+          messages: {
+            create: {
+              direction: MessageDirection.INBOUND,
+              body: `Customer was not satisfied with AI answer.\nOriginal query: ${(c.otherQueryText as string | undefined) ?? text}`,
+            },
+          },
+        },
+      });
+      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.IDLE);
+      if (isOpen) {
+        await reply(conv, "No problem — I've flagged this for a team member who will be with you shortly. 🙏");
+      } else {
+        await reply(conv, `${afterHoursHumanReply(conv.salon)}\n\nI've noted your question and a team member will follow up when we open.`);
+      }
+      return;
+    }
+    // They sent something new — treat it as a follow-up question
+  }
+
+  // Try AI assist
+  try {
+    const aiResult = await tryAiAssist(conv, text, mainMenu(conv.salon));
+    if (aiResult.handled && aiResult.reply) {
+      await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
+      await reply(conv, aiResult.reply);
+      await reply(conv, 'Did that answer your question? Reply YES or NO.');
+      return;
+    }
+  } catch {
+    // AI unavailable — fall through to escalation prompt
+  }
+
+  // AI couldn't answer — offer human
+  await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
+  await reply(conv, "I'm not sure I have the answer to that one. Would you like me to pass this on to a team member? Reply YES or NO.");
 }
 
 // ─── Rate My Experience ─────────────────────────────────────────────────
