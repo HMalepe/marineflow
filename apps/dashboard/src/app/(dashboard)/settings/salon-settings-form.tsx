@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveBotName, saveBotBehaviour, type SalonSettings } from './actions';
+import { saveDisplayName, saveHours, saveMessages, saveBotActive, saveBotName, saveBotBehaviour, saveInactivityMessages, type SalonSettings } from './actions';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -152,6 +152,14 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [botLoyaltyEnabled, setBotLoyaltyEnabled] = useState(initialSettings.botLoyaltyEnabled ?? true);
   const [botRequireDepositStep, setBotRequireDepositStep] = useState(initialSettings.botRequireDepositStep ?? true);
   const [savingBotBehaviour, setSavingBotBehaviour] = useState(false);
+
+  const [inactivityMsg1, setInactivityMsg1] = useState(initialSettings.inactivityMessage1 ?? '');
+  const [inactivityDelay1, setInactivityDelay1] = useState(initialSettings.inactivityMessage1DelayMin ?? 10);
+  const [inactivityMsg2, setInactivityMsg2] = useState(initialSettings.inactivityMessage2 ?? '');
+  const [inactivityDelay2, setInactivityDelay2] = useState(initialSettings.inactivityMessage2DelayMin ?? 30);
+  const [closingMsg, setClosingMsg] = useState(initialSettings.closingMessage ?? '');
+  const [savingInactivity, setSavingInactivity] = useState(false);
+
   const [botNameVal, setBotNameVal] = useState(initialSettings.botName ?? 'Ava');
   const [savingBotName, setSavingBotName] = useState(false);
 
@@ -184,6 +192,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setBotAllowStaffPick(s.botAllowStaffPick ?? true);
     setBotLoyaltyEnabled(s.botLoyaltyEnabled ?? true);
     setBotRequireDepositStep(s.botRequireDepositStep ?? true);
+    setInactivityMsg1(s.inactivityMessage1 ?? '');
+    setInactivityDelay1(s.inactivityMessage1DelayMin ?? 10);
+    setInactivityMsg2(s.inactivityMessage2 ?? '');
+    setInactivityDelay2(s.inactivityMessage2DelayMin ?? 30);
+    setClosingMsg(s.closingMessage ?? '');
     setBotNameVal(s.botName ?? 'Ava');
   }, []);
 
@@ -205,6 +218,14 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   }, [saved, welcomeMessage, afterHoursMessage]);
 
   const botDirty = useMemo(() => botActive !== saved.botActive, [saved, botActive]);
+  const inactivityDirty = useMemo(() =>
+    inactivityMsg1 !== (saved.inactivityMessage1 ?? '') ||
+    inactivityDelay1 !== (saved.inactivityMessage1DelayMin ?? 10) ||
+    inactivityMsg2 !== (saved.inactivityMessage2 ?? '') ||
+    inactivityDelay2 !== (saved.inactivityMessage2DelayMin ?? 30) ||
+    closingMsg !== (saved.closingMessage ?? ''),
+  [saved, inactivityMsg1, inactivityDelay1, inactivityMsg2, inactivityDelay2, closingMsg]);
+
   const botBehaviourDirty = useMemo(() =>
     botAskMarketingConsent !== (saved.botAskMarketingConsent ?? true) ||
     botAllowStaffPick !== (saved.botAllowStaffPick ?? true) ||
@@ -279,6 +300,25 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       showToast(result.error ?? 'Save failed', 'error');
     }
     setSavingMessages(false);
+  }
+
+  async function handleSaveInactivity(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingInactivity(true);
+    const result = await saveInactivityMessages({
+      inactivityMessage1: inactivityMsg1 || null,
+      inactivityMessage1DelayMin: inactivityDelay1,
+      inactivityMessage2: inactivityMsg2 || null,
+      inactivityMessage2DelayMin: inactivityDelay2,
+      closingMessage: closingMsg || null,
+    });
+    if (result.salon) {
+      applySalon(result.salon);
+      showToast('Follow-up messages saved', 'success');
+    } else {
+      showToast(result.error ?? 'Save failed', 'error');
+    }
+    setSavingInactivity(false);
   }
 
   async function handleSaveBotBehaviour(e: React.FormEvent) {
@@ -678,6 +718,99 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               {savingBotBehaviour ? 'Saving…' : botBehaviourDirty ? 'Save flow settings' : 'No changes'}
             </Button>
             {botBehaviourDirty && (
+              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+            )}
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Inactivity & closing messages */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Follow-up &amp; closing messages</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Automatically re-engage customers who go quiet, and leave them with a warm sign-off when the conversation closes.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveInactivity(e)} className="space-y-6 max-w-lg">
+          {/* First follow-up */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <p className="text-sm font-medium">First follow-up</p>
+            <p className="text-xs text-muted-foreground">Sent when a customer stops replying. Leave blank to skip.</p>
+            <div className="flex items-center gap-3">
+              <Label htmlFor="inactivityDelay1" className="text-xs whitespace-nowrap">Send after</Label>
+              <select
+                id="inactivityDelay1"
+                value={inactivityDelay1}
+                onChange={(e) => setInactivityDelay1(Number(e.target.value))}
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {[5, 10, 15, 20, 30].map((m) => (
+                  <option key={m} value={m}>{m} minutes of silence</option>
+                ))}
+              </select>
+            </div>
+            <textarea
+              value={inactivityMsg1}
+              onChange={(e) => setInactivityMsg1(e.target.value)}
+              placeholder={`Hi! Still there? Just reply when you're ready and we'll pick up right where we left off 😊`}
+              rows={3}
+              maxLength={500}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground text-right">{inactivityMsg1.length} / 500</p>
+          </div>
+
+          {/* Second follow-up */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <p className="text-sm font-medium">Second follow-up</p>
+            <p className="text-xs text-muted-foreground">A final nudge before the conversation goes idle. Leave blank to skip.</p>
+            <div className="flex items-center gap-3">
+              <Label htmlFor="inactivityDelay2" className="text-xs whitespace-nowrap">Send after</Label>
+              <select
+                id="inactivityDelay2"
+                value={inactivityDelay2}
+                onChange={(e) => setInactivityDelay2(Number(e.target.value))}
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {[15, 20, 30, 45, 60].map((m) => (
+                  <option key={m} value={m}>{m} minutes of silence</option>
+                ))}
+              </select>
+            </div>
+            <textarea
+              value={inactivityMsg2}
+              onChange={(e) => setInactivityMsg2(e.target.value)}
+              placeholder={`No worries — we'll be here whenever you're ready. You can always start fresh by messaging us again 💚`}
+              rows={3}
+              maxLength={500}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground text-right">{inactivityMsg2.length} / 500</p>
+          </div>
+
+          {/* Closing message */}
+          <div className="space-y-3 rounded-lg border p-4">
+            <p className="text-sm font-medium">Closing message</p>
+            <p className="text-xs text-muted-foreground">Sent when a booking is confirmed or the conversation wraps up. Leave blank to skip.</p>
+            <textarea
+              value={closingMsg}
+              onChange={(e) => setClosingMsg(e.target.value)}
+              placeholder={`Thank you for contacting ${salon.tradingName ?? salon.name}! We appreciate your support. Remember — just send us a text and we'll respond faster than you can say "${salon.tradingName ?? salon.name}" 😄`}
+              rows={4}
+              maxLength={500}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground text-right">{closingMsg.length} / 500</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" size="sm" disabled={savingInactivity || !inactivityDirty}>
+              {savingInactivity ? 'Saving…' : inactivityDirty ? 'Save messages' : 'No changes'}
+            </Button>
+            {inactivityDirty && (
               <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
             )}
           </div>

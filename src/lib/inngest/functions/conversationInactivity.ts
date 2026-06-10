@@ -30,20 +30,22 @@ async function hasInboundSince(conversationId: string, activityAt: string): Prom
   return newer !== null;
 }
 
-function buildMainMenu(salon: { name: string; welcomeMessage: string | null }): string {
-  const welcome =
-    salon.welcomeMessage?.trim() ||
-    `Welcome to ${salon.name}! Reply with a number:`;
-  return [
-    welcome,
-    '1 — Book an appointment',
-    '2 — My bookings',
-    '3 — My rewards / loyalty',
-    '4 — FAQs',
-    '5 — File a complaint',
-    '6 — Hours & address',
-    '0 — Talk to a human (we will reply soon)',
-  ].join('\n');
+async function sendAndRecord(opts: {
+  conversationId: string;
+  customerId: string;
+  salonId: string;
+  to: string;
+  body: string;
+}) {
+  await sendWithFallback({ salonId: opts.salonId, to: opts.to, body: opts.body });
+  await prisma.message.create({
+    data: {
+      conversationId: opts.conversationId,
+      customerId: opts.customerId,
+      direction: MessageDirection.OUTBOUND,
+      body: opts.body,
+    },
+  });
 }
 
 export const conversationInactivity = inngest.createFunction(
@@ -56,57 +58,84 @@ export const conversationInactivity = inngest.createFunction(
     const { conversationId, salonId, customerWaId, activityAt } =
       event.data as ConversationActivityEvent['data'];
 
-    await step.sleep('wait-5m', '5m');
+    // Load salon to get owner-configured delays and messages
+    const salon = await step.run('load-salon', () =>
+      withJobTenant(salonId, () =>
+        prisma.salon.findUniqueOrThrow({
+          where: { id: salonId },
+          select: {
+            name: true,
+            tradingName: true,
+            welcomeMessage: true,
+            botLoyaltyEnabled: true,
+            inactivityMessage1: true,
+            inactivityMessage1DelayMin: true,
+            inactivityMessage2: true,
+            inactivityMessage2DelayMin: true,
+          },
+        }),
+      ),
+    );
 
-    await step.run('nudge-if-idle-5m', async () =>
+    const delay1Min = salon.inactivityMessage1DelayMin ?? 10;
+    const delay2Min = salon.inactivityMessage2DelayMin ?? 30;
+
+    // First follow-up
+    await step.sleep('wait-followup-1', `${delay1Min}m`);
+
+    await step.run('followup-1', async () =>
       withJobTenant(salonId, async () => {
         const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
         if (!conv) return;
         if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
         if (await hasInboundSince(conversationId, activityAt)) return;
 
-        const body = `Hi — are you still there? Just reply when you're ready, or type BACK for the main menu.`;
-        await sendWithFallback({ salonId, to: customerWaId, body });
-        await prisma.message.create({
-          data: {
-            conversationId,
-            customerId: conv.customerId,
-            direction: MessageDirection.OUTBOUND,
-            body,
-          },
-        });
+        const body =
+          salon.inactivityMessage1?.trim() ||
+          `Hi — still there? Just reply when you're ready, or type BACK for the main menu 😊`;
+
+        await sendAndRecord({ conversationId, customerId: conv.customerId, salonId, to: customerWaId, body });
       }),
     );
 
-    await step.sleep('wait-25m', '25m');
+    // Second follow-up (waits the *additional* time beyond the first)
+    const additionalWait = Math.max(1, delay2Min - delay1Min);
+    await step.sleep('wait-followup-2', `${additionalWait}m`);
 
-    await step.run('reset-menu-if-idle-30m', async () =>
+    await step.run('followup-2-and-reset', async () =>
       withJobTenant(salonId, async () => {
-        const conv = await prisma.conversation.findUnique({
-          where: { id: conversationId },
-          include: { salon: true },
-        });
+        const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
         if (!conv) return;
         if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
         if (await hasInboundSince(conversationId, activityAt)) return;
 
-        const menu = buildMainMenu(conv.salon);
-        const body = `I'll take you back to the main menu — pick up whenever you're ready.\n\n${menu}`;
+        // Build the menu (respects loyalty toggle)
+        const salonName = salon.tradingName ?? salon.name;
+        const menuWelcome =
+          salon.welcomeMessage?.trim() ||
+          `Welcome to ${salonName}! Reply with a number:`;
+        const menuItems = [
+          '1 — Book an appointment',
+          '2 — My bookings',
+          ...(salon.botLoyaltyEnabled ? ['3 — My rewards / loyalty'] : []),
+          '4 — FAQs',
+          '5 — File a complaint',
+          '6 — Hours & address',
+          '0 — Talk to a human (we will reply soon)',
+        ];
+        const menu = [menuWelcome, ...menuItems].join('\n');
+
+        const nudge =
+          salon.inactivityMessage2?.trim() ||
+          `No worries — we'll be here whenever you're ready 💚`;
+        const body = `${nudge}\n\nI'll take you back to the main menu:\n\n${menu}`;
 
         await prisma.conversation.update({
           where: { id: conversationId },
           data: { step: ConversationStep.MENU, context: {}, lastMessageAt: new Date() },
         });
 
-        await sendWithFallback({ salonId, to: customerWaId, body });
-        await prisma.message.create({
-          data: {
-            conversationId,
-            customerId: conv.customerId,
-            direction: MessageDirection.OUTBOUND,
-            body,
-          },
-        });
+        await sendAndRecord({ conversationId, customerId: conv.customerId, salonId, to: customerWaId, body });
       }),
     );
   },

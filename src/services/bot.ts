@@ -1177,19 +1177,17 @@ async function handleConfirm(
     return;
   }
 
-  await reply(
-    conv,
-    [
-      redeem.redeemed && redeem.note ? `${redeem.note}\n` : '',
-      `Booked! Reference: ${appointment.id.slice(0, 8)}`,
-      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-      DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
-      '',
-      mainMenu(conv.salon),
-    ]
-      .filter(Boolean)
-      .join('\n'),
-  );
+  const confirmLines = [
+    redeem.redeemed && redeem.note ? `${redeem.note}\n` : '',
+    `Booked! Reference: ${appointment.id.slice(0, 8)}`,
+    `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+    DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
+    '',
+    mainMenu(conv.salon),
+  ].filter(Boolean).join('\n');
+
+  const closing = conv.salon.closingMessage?.trim();
+  await reply(conv, closing ? `${confirmLines}\n\n${closing}` : confirmLines);
 }
 
 async function handleManageBooking(

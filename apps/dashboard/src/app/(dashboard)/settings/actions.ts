@@ -20,6 +20,11 @@ export interface SalonSettings {
   botAllowStaffPick: boolean;
   botLoyaltyEnabled: boolean;
   botRequireDepositStep: boolean;
+  inactivityMessage1: string | null;
+  inactivityMessage1DelayMin: number;
+  inactivityMessage2: string | null;
+  inactivityMessage2DelayMin: number;
+  closingMessage: string | null;
 }
 
 export async function updateEmail(email: string): Promise<{ error?: string }> {
@@ -167,6 +172,26 @@ export async function saveBotActive(botActive: boolean): Promise<{ salon?: Salon
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
       body: JSON.stringify({ botActive }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
+export async function saveInactivityMessages(payload: {
+  inactivityMessage1: string | null;
+  inactivityMessage1DelayMin: number;
+  inactivityMessage2: string | null;
+  inactivityMessage2DelayMin: number;
+  closingMessage: string | null;
+}): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
     }, token);
     return { salon: data.salon };
   } catch (e) {

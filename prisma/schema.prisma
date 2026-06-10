@@ -162,6 +162,13 @@ model Salon {
   botAllowStaffPick      Boolean @default(true)
   botLoyaltyEnabled      Boolean @default(true)
   botRequireDepositStep  Boolean @default(true)
+  /// Inactivity follow-up: sent after N minutes of silence
+  inactivityMessage1         String?  @db.Text
+  inactivityMessage1DelayMin Int      @default(10)
+  inactivityMessage2         String?  @db.Text
+  inactivityMessage2DelayMin Int      @default(30)
+  /// Closing message sent when conversation closes
+  closingMessage             String?  @db.Text
   toneFormality  Int          @default(50)
   toneWarmth     Int          @default(70)
   tonePlayfulness Int         @default(40)

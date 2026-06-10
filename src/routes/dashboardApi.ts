@@ -208,6 +208,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botAllowStaffPick: true,
           botLoyaltyEnabled: true,
           botRequireDepositStep: true,
+          inactivityMessage1: true,
+          inactivityMessage1DelayMin: true,
+          inactivityMessage2: true,
+          inactivityMessage2DelayMin: true,
+          closingMessage: true,
         },
       });
       return {
@@ -235,6 +240,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       botAllowStaffPick?: boolean;
       botLoyaltyEnabled?: boolean;
       botRequireDepositStep?: boolean;
+      inactivityMessage1?: string | null;
+      inactivityMessage1DelayMin?: number;
+      inactivityMessage2?: string | null;
+      inactivityMessage2DelayMin?: number;
+      closingMessage?: string | null;
     };
   }>(
     '/settings',
@@ -257,6 +267,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botAllowStaffPick,
           botLoyaltyEnabled,
           botRequireDepositStep,
+          inactivityMessage1,
+          inactivityMessage1DelayMin,
+          inactivityMessage2,
+          inactivityMessage2DelayMin,
+          closingMessage,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -321,6 +336,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(botAllowStaffPick !== undefined && { botAllowStaffPick }),
             ...(botLoyaltyEnabled !== undefined && { botLoyaltyEnabled }),
             ...(botRequireDepositStep !== undefined && { botRequireDepositStep }),
+            ...(inactivityMessage1 !== undefined && { inactivityMessage1: inactivityMessage1?.trim() || null }),
+            ...(inactivityMessage1DelayMin !== undefined && { inactivityMessage1DelayMin }),
+            ...(inactivityMessage2 !== undefined && { inactivityMessage2: inactivityMessage2?.trim() || null }),
+            ...(inactivityMessage2DelayMin !== undefined && { inactivityMessage2DelayMin }),
+            ...(closingMessage !== undefined && { closingMessage: closingMessage?.trim() || null }),
             ...(nextStatus !== undefined && {
               status: nextStatus,
               statusChangedAt: new Date(),
@@ -342,6 +362,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             botAllowStaffPick: true,
             botLoyaltyEnabled: true,
             botRequireDepositStep: true,
+            inactivityMessage1: true,
+            inactivityMessage1DelayMin: true,
+            inactivityMessage2: true,
+            inactivityMessage2DelayMin: true,
+            closingMessage: true,
           },
         });
 
