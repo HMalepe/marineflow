@@ -652,7 +652,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       {/* Bot Behaviour */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold">Bot Behaviour</h3>
+          <h3 className="text-base font-semibold">Bot behaviour</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Pause automation during holidays or when you want every message handled manually.
           </p>

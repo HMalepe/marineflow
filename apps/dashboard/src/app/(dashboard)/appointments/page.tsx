@@ -88,7 +88,7 @@ function AppointmentRow({ appt }: { appt: Appointment }) {
     PENDING_PAYMENT: 'secondary',
     CANCELLED: 'destructive',
     NO_SHOW: 'destructive',
-    COMPLETED: 'outline',
+    COMPLETED: 'secondary',
   };
 
   return (

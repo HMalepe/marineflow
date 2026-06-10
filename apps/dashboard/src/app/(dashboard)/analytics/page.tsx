@@ -52,7 +52,7 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Business performance at a glance. Data refreshes every 15 minutes.
         </p>
@@ -115,8 +115,8 @@ export default async function AnalyticsPage() {
           {/* Revenue Trend */}
           <section>
             <h2 className="text-base font-semibold mb-3">Monthly revenue</h2>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="border rounded-lg overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="text-left p-3 font-medium">Month</th>
@@ -177,8 +177,8 @@ export default async function AnalyticsPage() {
           {/* Retention */}
           <section>
             <h2 className="text-base font-semibold mb-3">Customer retention</h2>
-            <div className="border rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="border rounded-lg overflow-hidden overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="text-left p-3 font-medium">Month</th>

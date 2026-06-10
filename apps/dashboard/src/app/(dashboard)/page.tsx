@@ -94,7 +94,7 @@ async function SuperAdminView({ token }: { token: string | null }) {
     (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0 || alerts.overQuota.length > 0);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Overview</h1>
@@ -277,11 +277,9 @@ async function AppointmentView({ token }: { token: string | null }) {
 function StatCard({ title, value }: { title: string; value: number }) {
   return (
     <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold">{value}</p>
+      <CardContent className="pt-4 pb-4">
+        <p className="text-xs text-muted-foreground">{title}</p>
+        <p className="text-2xl font-bold mt-1">{value}</p>
       </CardContent>
     </Card>
   );
