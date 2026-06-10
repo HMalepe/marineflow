@@ -654,24 +654,37 @@ export function FaqsClient({ token }: Props) {
 
                 {/* Business type filter */}
                 <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                  {(['', ...FAQ_BUSINESS_TYPES] as string[]).map((biz) => (
-                    <button
-                      key={biz || '__all__'}
-                      type="button"
-                      onClick={() => setTemplateBizType(biz)}
-                      className={cn(
-                        'shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
-                        templateBizType === biz
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                      )}
-                    >
-                      {biz || 'All businesses'}
-                    </button>
-                  ))}
+                  {templateBizType ? (
+                    // Drilled in — show only the active pill + a clear button
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setTemplateBizType(''); setTemplateCategory('All'); }}
+                        className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap"
+                      >
+                        ← All businesses
+                      </button>
+                      <span className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border bg-primary text-primary-foreground border-primary whitespace-nowrap">
+                        {templateBizType}
+                      </span>
+                    </>
+                  ) : (
+                    // Show all business type pills
+                    FAQ_BUSINESS_TYPES.map((biz) => (
+                      <button
+                        key={biz}
+                        type="button"
+                        onClick={() => setTemplateBizType(biz)}
+                        className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap"
+                      >
+                        {biz}
+                      </button>
+                    ))
+                  )}
                 </div>
 
-                {/* Category filter */}
+                {/* Category filter — only visible when a business type is selected */}
+                {templateBizType && (
                 <div className="flex flex-wrap gap-1.5">
                   {FAQ_CATEGORIES.map((cat) => (
                     <button
@@ -689,6 +702,7 @@ export function FaqsClient({ token }: Props) {
                     </button>
                   ))}
                 </div>
+                )}
 
                 {(() => {
                   const q = templateSearch.trim().toLowerCase();
