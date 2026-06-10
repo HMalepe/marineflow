@@ -332,7 +332,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           }
         }
         if (googleReviewUrl !== undefined && googleReviewUrl !== null) {
-          if (!googleReviewUrl.startsWith('https://')) {
+          const trimmedReviewUrl = googleReviewUrl.trim().replace(/[\r\n\t]/g, '');
+          if (trimmedReviewUrl.length > 2048) {
+            reply.code(400);
+            return { error: 'invalid_google_review_url', message: 'Google Review URL must be 2048 characters or fewer' };
+          }
+          if (trimmedReviewUrl && !trimmedReviewUrl.startsWith('https://')) {
             reply.code(400);
             return { error: 'invalid_google_review_url', message: 'Google Review URL must start with https://' };
           }
@@ -376,7 +381,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(contactEmail !== undefined && { contactEmail: contactEmail?.trim() || null }),
             ...(mapsUrl !== undefined && { mapsUrl: mapsUrl?.trim() || null }),
             ...(parkingNotes !== undefined && { parkingNotes: parkingNotes?.trim() || null }),
-            ...(googleReviewUrl !== undefined && { googleReviewUrl: googleReviewUrl?.trim() || null }),
+            ...(googleReviewUrl !== undefined && {
+              googleReviewUrl: googleReviewUrl?.trim().replace(/[\r\n\t]/g, '') || null,
+            }),
           },
           select: {
             id: true,

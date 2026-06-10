@@ -453,6 +453,10 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   async function handleSaveGoogleReviewUrl(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = googleReviewUrl.trim();
+    if (trimmed.length > 2048) {
+      showToast('Google Review URL is too long (max 2048 characters)', 'error');
+      return;
+    }
     if (trimmed && !trimmed.startsWith('https://')) {
       showToast('Google Review URL must start with https://', 'error');
       return;
@@ -940,6 +944,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               value={googleReviewUrl}
               onChange={(e) => setGoogleReviewUrl(e.target.value)}
               placeholder="https://g.page/r/YOUR_REVIEW_LINK/review"
+              maxLength={2048}
             />
             <p className="text-xs text-muted-foreground">
               Paste your Google Business review link. Find it in Google Business Profile → &quot;Get more reviews&quot;. Leave blank to disable.

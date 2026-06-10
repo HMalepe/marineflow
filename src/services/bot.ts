@@ -2209,9 +2209,11 @@ async function handleCsat(
     },
   });
 
-  // Persist the rating score on the appointment for easy querying
+  // Persist the rating score on the appointment for easy querying.
+  // Use updateMany so no error is thrown if the appointment was deleted between
+  // the CSAT request being sent and the customer replying.
   if (appointmentId) {
-    await getTenantDb().appointment.update({
+    await getTenantDb().appointment.updateMany({
       where: { id: appointmentId },
       data: { csatScore: rating },
     });
@@ -2229,10 +2231,12 @@ async function handleCsat(
 
   // §6.1 — send a Google review nudge immediately after a 5-star rating.
   if (rating === 5 && conv.salon.googleReviewUrl) {
+    // sanitize strips WhatsApp markdown injection chars (*_~`[]) from the admin-supplied URL
+    const safeUrl = sanitize(conv.salon.googleReviewUrl);
     await reply(
       conv,
-      "We'd love it if you shared your experience on Google — it helps other customers find us! 🌟\n\n" +
-        conv.salon.googleReviewUrl,
+      "We'd love it if you shared your experience on Google — it helps other customers find us!\n\n" +
+        safeUrl,
     );
   }
 
