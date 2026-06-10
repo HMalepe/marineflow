@@ -233,6 +233,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       logoUrl?: string | null;
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
+      botName?: string;
+      botAskMarketingConsent?: boolean;
+      botAllowStaffPick?: boolean;
+      botLoyaltyEnabled?: boolean;
+      botRequireDepositStep?: boolean;
+      inactivityMessage1?: string | null;
+      inactivityMessage1DelayMin?: number;
+      inactivityMessage2?: string | null;
+      inactivityMessage2DelayMin?: number;
+      closingMessage?: string | null;
       addressLine?: string | null;
       phoneDisplay?: string | null;
       contactEmail?: string | null;
@@ -255,6 +265,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage,
           botActive,
           status,
+          botName,
+          botAskMarketingConsent,
+          botAllowStaffPick,
+          botLoyaltyEnabled,
+          botRequireDepositStep,
+          inactivityMessage1,
+          inactivityMessage1DelayMin,
+          inactivityMessage2,
+          inactivityMessage2DelayMin,
+          closingMessage,
           addressLine,
           phoneDisplay,
           contactEmail,
