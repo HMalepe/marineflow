@@ -1,4 +1,5 @@
 // MarineFlow — multi-tenant via Salon + Postgres RLS (salonId = spec tenant_id)
+// schema-version: 2026-06-11 (bust Docker prisma generate cache)
 
 generator client {
   provider = "prisma-client-js"
