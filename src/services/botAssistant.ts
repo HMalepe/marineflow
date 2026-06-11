@@ -12,6 +12,13 @@ export interface QuickPickOption {
   slotStartIso: string;
   localDateStr: string;
   label: string;
+  /**
+   * True when the customer explicitly named this stylist (AI resolved a staff
+   * mention), false when the staff was auto-assigned. Drives whether booking
+   * confirmation records a §6.1 staff preference. Options serialized before
+   * this field existed deserialize as undefined → treated as auto-assigned.
+   */
+  explicitStaff?: boolean;
 }
 
 export interface AiAssistResult {
@@ -51,9 +58,11 @@ export async function buildQuickPickOptions(input: {
   const staffList = await getStaffForService(input.salonId, input.serviceId);
   if (staffList.length === 0) return [];
 
-  const staff = input.staffId
-    ? staffList.find((s) => s.id === input.staffId) ?? staffList[0]!
-    : staffList[0]!;
+  const explicitMatch = input.staffId
+    ? staffList.find((s) => s.id === input.staffId)
+    : undefined;
+  const staff = explicitMatch ?? staffList[0]!;
+  const explicitStaff = Boolean(explicitMatch);
 
   const dates = await suggestBookingDates(input.salonId, 14);
   const options: QuickPickOption[] = [];
@@ -79,6 +88,7 @@ export async function buildQuickPickOptions(input: {
         slotStartIso: slot.start.toISOString(),
         localDateStr,
         label: `${key}) ${dt.toFormat('ccc dd LLL HH:mm')} — ${service.name} with ${staff.name} (${fmtMoney(service.priceCents)})`,
+        explicitStaff,
       });
       if (options.length >= max) break;
     }

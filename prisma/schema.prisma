@@ -279,7 +279,7 @@ model Customer {
   marketingConsentStatus  MarketingConsentStatus  @default(PENDING)
   marketingConsentAt      DateTime?
   preferredStaffId    String?
-  preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id])
+  preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id], onDelete: SetNull)
   passwordHash        String?
   loyaltyStampsCached Int?
   lastInteractionAt   DateTime?

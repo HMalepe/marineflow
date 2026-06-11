@@ -1215,7 +1215,24 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const data: Record<string, unknown> = {};
         if (request.body.tags !== undefined) data.tags = request.body.tags;
         if (request.body.notes !== undefined) data.notes = request.body.notes;
-        if (request.body.preferredStaffId !== undefined) data.preferredStaffId = request.body.preferredStaffId;
+        if (request.body.preferredStaffId !== undefined) {
+          // Must reference a non-deleted staff member of THIS salon — otherwise
+          // a bad/cross-tenant id would 500 on the FK or leak a foreign reference.
+          if (request.body.preferredStaffId !== null) {
+            const staffExists = await db.staff.findFirst({
+              where: { id: request.body.preferredStaffId, salonId: user.salonId, deletedAt: null },
+              select: { id: true },
+            });
+            if (!staffExists) {
+              reply.code(400);
+              return {
+                error: 'invalid_preferred_staff',
+                message: 'preferredStaffId must reference an existing staff member of this salon.',
+              };
+            }
+          }
+          data.preferredStaffId = request.body.preferredStaffId;
+        }
 
         if (request.body.marketingConsentStatus !== undefined) {
           const status = parseMarketingConsentStatus(request.body.marketingConsentStatus);

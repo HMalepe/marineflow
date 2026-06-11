@@ -5,6 +5,7 @@ import {
   type Conversation,
   type Customer,
   type Salon,
+  type Staff,
 } from '@prisma/client';
 import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
 import {
@@ -61,6 +62,13 @@ export type BotContext = Record<string, unknown> & {
   negativeSentimentEscalated?: boolean;
   /** AI-suggested quick book slots (A/B/C). */
   quickPickOptions?: QuickPickOption[];
+  /**
+   * Staff ids in the exact order last rendered in the PICK_STAFF menu.
+   * Replies are parsed against this snapshot so the number the customer saw
+   * always maps to the stylist they meant, even if the roster (or their
+   * preferred stylist) changes between menu render and reply.
+   */
+  staffOrderIds?: string[];
   /** True once the AI has given its first answer in the OTHER_QUERY flow */
   otherQueryAnswered?: boolean;
   /** Original question text saved for the ticket if customer says NO */
@@ -1048,6 +1056,7 @@ async function handleMenu(
       slotStartIso: undefined,
       anyStaff: undefined,
       managingAppointmentId: undefined,
+      staffOrderIds: undefined,
       ...PENDING_PROFILE_CLEAR,
     });
 
@@ -1264,6 +1273,46 @@ async function handleMenu(
   await reply(conv, mainMenu(salon));
 }
 
+/**
+ * §6.1 — Preferred staff memory.
+ * Returns the bookable staff for a service with the customer's preferred stylist
+ * (the one they last explicitly booked) moved to index 0, deduped.
+ * `preferredId` is non-null only when that stylist is still in the list
+ * (i.e. still active, bookable, not deleted, and performs this service).
+ * Both the menu rendering and the reply parsing use this same ordering, so
+ * numbering stays consistent without any offset bookkeeping.
+ */
+async function getStaffListWithPreference(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  serviceId: string,
+): Promise<{ staffList: Staff[]; preferredId: string | null }> {
+  const staffList = await getStaffForService(conv.salonId, serviceId);
+  // Re-read from DB — conv.customer may be stale within a long conversation.
+  const fresh = await getTenantDb().customer.findUnique({
+    where: { id: conv.customerId },
+    select: { preferredStaffId: true },
+  });
+  const preferredId = fresh?.preferredStaffId ?? null;
+  if (!preferredId) return { staffList, preferredId: null };
+
+  const idx = staffList.findIndex((s) => s.id === preferredId);
+  if (idx < 0) return { staffList, preferredId: null }; // no longer offered — plain list
+  if (idx === 0) return { staffList, preferredId };
+  return {
+    staffList: [staffList[idx]!, ...staffList.slice(0, idx), ...staffList.slice(idx + 1)],
+    preferredId,
+  };
+}
+
+function staffMenuLines(staffList: Staff[], preferredId: string | null): string[] {
+  return [
+    ...staffList.map(
+      (s, i) => `${i + 1}. ${sanitize(s.name)}${s.id === preferredId ? ' (your last stylist)' : ''}`,
+    ),
+    `${staffList.length + 1}. Any available`,
+  ];
+}
+
 async function handlePickService(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -1280,9 +1329,10 @@ async function handlePickService(
   }
   const service = services[n - 1]!;
 
-  // If owner disabled staff selection, auto-assign first available staff
+  // If owner disabled staff selection, auto-assign — preferring the customer's
+  // last stylist when they still offer this service (§6.1).
   if (!conv.salon.botAllowStaffPick) {
-    const availableStaff = await getStaffForService(conv.salonId, service.id);
+    const { staffList: availableStaff } = await getStaffListWithPreference(conv, service.id);
     if (availableStaff.length === 0) {
       await reply(conv, `No staff available for this service yet.\n\n${mainMenu(conv.salon)}`);
       await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -1298,22 +1348,23 @@ async function handlePickService(
     return;
   }
 
-  await saveCtx(
-    conv.id,
-    { selectedServiceId: service.id },
-    ConversationStep.PICK_STAFF,
-  );
-  const staff = await getStaffForService(conv.salonId, service.id);
+  const { staffList: staff, preferredId } = await getStaffListWithPreference(conv, service.id);
   if (staff.length === 0) {
-    await reply(conv, 'No staff available for this service yet.');
+    await reply(conv, `No staff available for this service yet.\n\n${mainMenu(conv.salon)}`);
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     return;
   }
-  const lines = [
-    ...staff.map((s, i) => `${i + 1}. ${sanitize(s.name)}`),
-    `${staff.length + 1}. Any available`,
-  ];
-  await reply(conv, ['Choose stylist:', ...lines, '', 'BACK'].join('\n'));
+  // Snapshot the rendered order so handlePickStaff parses replies against the
+  // exact menu the customer saw (roster may change between render and reply).
+  await saveCtx(
+    conv.id,
+    { selectedServiceId: service.id, staffOrderIds: staff.map((s) => s.id) },
+    ConversationStep.PICK_STAFF,
+  );
+  const header = preferredId
+    ? `Last time you booked with ${sanitize(staff[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
+    : 'Choose stylist:';
+  await reply(conv, [header, ...staffMenuLines(staff, preferredId), '', 'BACK'].join('\n'));
 }
 
 async function handlePickStaff(
@@ -1328,7 +1379,9 @@ async function handlePickStaff(
     return;
   }
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
-  const staffList = await getStaffForService(conv.salonId, service.id);
+  // §6.1 — same preferred-first ordering as the menu the customer was shown,
+  // so the number they reply with maps to the stylist they saw at that position.
+  const { staffList, preferredId } = await getStaffListWithPreference(conv, service.id);
   // Guard: staff may have been deactivated since service step
   if (staffList.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -1336,16 +1389,39 @@ async function handlePickStaff(
     return;
   }
 
+  // Parse against the order the customer was actually shown; fall back to the
+  // fresh list for conversations created before staffOrderIds existed.
+  const savedOrder = c.staffOrderIds as string[] | undefined;
+  const renderedIds =
+    Array.isArray(savedOrder) && savedOrder.length > 0 ? savedOrder : staffList.map((s) => s.id);
+
+  const rerenderMenu = async (prefix: string) => {
+    await saveCtx(conv.id, { staffOrderIds: staffList.map((s) => s.id) });
+    await reply(
+      conv,
+      [prefix, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK for menu.'].join('\n'),
+    );
+  };
+
   const n = parseInt(text, 10);
-  const anyIdx = staffList.length + 1;
+  const anyIdx = renderedIds.length + 1;
   if (!Number.isFinite(n) || n < 1 || n > anyIdx) {
-    await reply(conv, `Invalid choice. Reply with a number from 1 to ${anyIdx}, or BACK.`);
+    await rerenderMenu(`Invalid choice. Pick a number (1–${staffList.length + 1}):`);
     return;
   }
 
   const isAny = n === anyIdx;
   let staffId: string;
-  if (isAny) {
+  if (!isAny) {
+    const chosen = staffList.find((s) => s.id === renderedIds[n - 1]);
+    if (!chosen) {
+      // That stylist became unavailable between menu render and reply —
+      // never silently book whoever shifted into their slot number.
+      await rerenderMenu('Sorry, that stylist just became unavailable. Here are the current options:');
+      return;
+    }
+    staffId = chosen.id;
+  } else {
     // EC-06: Load-balance by selecting staff with the fewest upcoming appointments
     const counts = await Promise.all(
       staffList.map(async (s) => {
@@ -1361,8 +1437,6 @@ async function handlePickStaff(
     );
     counts.sort((a, b) => a.count - b.count);
     staffId = counts[0]!.id;
-  } else {
-    staffId = staffList[n - 1]!.id;
   }
 
   const dates = await suggestBookingDates(conv.salonId, 14);
@@ -1372,7 +1446,11 @@ async function handlePickStaff(
     return;
   }
 
-  await saveCtx(conv.id, { selectedStaffId: staffId, anyStaff: isAny }, ConversationStep.PICK_DATE);
+  await saveCtx(
+    conv.id,
+    { selectedStaffId: staffId, anyStaff: isAny, staffOrderIds: undefined },
+    ConversationStep.PICK_DATE,
+  );
   const lines = dates.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
   await reply(
     conv,
@@ -1471,6 +1549,9 @@ async function handlePickSlot(
         localDateStr: quickPick.localDateStr,
         slotStartIso: quickPick.slotStartIso,
         quickPickOptions: undefined,
+        // §6.1 — quick-pick staff is auto-assigned unless the customer named
+        // them; anyStaff=true suppresses the preference write in handleConfirm.
+        anyStaff: !quickPick.explicitStaff,
       },
       ConversationStep.CONFIRM_BOOKING,
     );
@@ -1661,6 +1742,28 @@ async function handleConfirm(
       payload: { serviceId: service.id },
     },
   });
+
+  // §6.1 — remember the stylist for next booking, but only when the customer
+  // explicitly chose them this booking. Skipped for:
+  //  - "Any available" / auto-assigned staff (anyStaff)
+  //  - reschedules, which silently reuse the original appointment's staff —
+  //    if that staff was explicitly chosen the preference is already stored.
+  // Awaited with try/catch rather than fire-and-forget: getTenantDb() is a
+  // transaction client, so a dangling promise could outlive the transaction.
+  // A failure here must never fail the booking itself.
+  if (!c.anyStaff && !reschedulingId) {
+    try {
+      await tx.customer.update({
+        where: { id: conv.customerId },
+        data: { preferredStaffId: staff.id },
+      });
+    } catch (err) {
+      logger.warn(
+        { err, convId: conv.id, customerId: conv.customerId, staffId: staff.id },
+        'preferred_staff_update_failed',
+      );
+    }
+  }
 
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
 
