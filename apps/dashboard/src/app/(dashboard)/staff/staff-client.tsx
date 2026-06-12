@@ -15,13 +15,15 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { StaffCalendarSheet } from './staff-calendar-sheet';
+import type { ScheduleDay as CalendarScheduleDay } from './staff-calendar-sheet';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface WorkingHour {
   id: string;
-  weekday: number; // 0=Sun … 6=Sat
-  startTime: string; // HH:MM
+  weekday: number;
+  startTime: string;
   endTime: string;
 }
 
@@ -399,15 +401,13 @@ function ScheduleEditor({ schedule, onChange }: { schedule: ScheduleDay[]; onCha
 function StaffCard({
   member,
   onEdit,
-  onSchedule,
-  onTimeOff,
+  onCalendar,
   onToggleActive,
   busy,
 }: {
   member: StaffMember;
   onEdit: (m: StaffMember) => void;
-  onSchedule: (m: StaffMember) => void;
-  onTimeOff: (m: StaffMember) => void;
+  onCalendar: (m: StaffMember) => void;
   onToggleActive: (m: StaffMember) => void;
   busy: boolean;
 }) {
@@ -497,11 +497,8 @@ function StaffCard({
             <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onEdit(member)}>
               Edit
             </Button>
-            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onSchedule(member)}>
+            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onCalendar(member)}>
               Schedule
-            </Button>
-            <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => onTimeOff(member)}>
-              Time off
             </Button>
             <Button
               type="button" size="sm" variant="ghost" disabled={busy}
@@ -528,7 +525,7 @@ interface Props {
   token: string;
 }
 
-type SheetMode = 'edit' | 'schedule' | 'timeoff' | null;
+type SheetMode = 'edit' | 'calendar' | null;
 
 export function StaffClient({ initialStaff, token }: Props) {
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
@@ -544,18 +541,6 @@ export function StaffClient({ initialStaff, token }: Props) {
   const [editForm, setEditForm] = useState({
     name: '', displayName: '', bio: '', specialties: '', isBookable: true, avatarUrl: null as string | null,
   });
-
-  const [schedule, setSchedule] = useState<ScheduleDay[]>(DEFAULT_SCHEDULE);
-  const [savingSchedule, setSavingSchedule] = useState(false);
-
-  const [timeOffs, setTimeOffs] = useState<TimeOff[]>([]);
-  const [loadingTimeOff, setLoadingTimeOff] = useState(false);
-  const [newTimeOff, setNewTimeOff] = useState({
-    start: localDateStr(new Date()),
-    end: localDateStr(new Date(Date.now() + 86400000)),
-    reason: '',
-  });
-  const [addingTimeOff, setAddingTimeOff] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -602,24 +587,9 @@ export function StaffClient({ initialStaff, token }: Props) {
     setSheetMode('edit');
   }
 
-  function openSchedule(member: StaffMember) {
+  function openCalendar(member: StaffMember) {
     setSelected(member);
-    setSchedule(workingHoursToSchedule(member.workingHours));
-    setSheetMode('schedule');
-  }
-
-  async function openTimeOff(member: StaffMember) {
-    setSelected(member);
-    setSheetMode('timeoff');
-    setLoadingTimeOff(true);
-    try {
-      const data = await apiFetch<{ timeOff: TimeOff[] }>(`/staff/${member.id}/time-off`, {}, token);
-      setTimeOffs(data.timeOff ?? []);
-    } catch {
-      setTimeOffs(member.timeOff ?? []);
-    } finally {
-      setLoadingTimeOff(false);
-    }
+    setSheetMode('calendar');
   }
 
   function closeSheet() {
@@ -710,73 +680,15 @@ export function StaffClient({ initialStaff, token }: Props) {
     }
   }
 
-  async function handleSaveSchedule() {
-    if (!selected) return;
-    const invalid = schedule.find((d) => d.enabled && d.startTime >= d.endTime);
-    if (invalid) {
-      showToast(`End time must be after start time (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][invalid.weekday]})`, 'error');
-      return;
-    }
-    setSavingSchedule(true);
+  async function undoScheduleSave(staffId: string, prevSchedule: CalendarScheduleDay[]) {
+    setToast(null);
     try {
-      const hours = scheduleToPayload(schedule);
-      await apiFetch(
-        `/staff/${selected.id}/working-hours`,
-        { method: 'PUT', body: JSON.stringify({ hours }) },
-        token,
-      );
-      showToast('Schedule saved', 'success');
-      closeSheet();
+      const hours = prevSchedule.filter((d) => d.enabled).map(({ weekday, startTime, endTime }) => ({ weekday, startTime, endTime }));
+      await apiFetch(`/staff/${staffId}/working-hours`, { method: 'PUT', body: JSON.stringify({ hours }) }, token);
       await reload();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
-    } finally {
-      setSavingSchedule(false);
-    }
-  }
-
-  async function handleAddTimeOff(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selected) return;
-    setAddingTimeOff(true);
-    try {
-      const payload = {
-        // Use UTC midnight / end-of-day so date boundaries never drift with timezone
-        start: dateToUtcStart(newTimeOff.start),
-        end: dateToUtcEnd(newTimeOff.end),
-        reason: newTimeOff.reason.trim() || null,
-      };
-      const data = await apiFetch<{ timeOff: TimeOff }>(
-        `/staff/${selected.id}/time-off`,
-        { method: 'POST', body: JSON.stringify(payload) },
-        token,
-      );
-      setTimeOffs((prev) =>
-        [...prev, data.timeOff].sort((a, b) => a.start.localeCompare(b.start)),
-      );
-      setNewTimeOff({
-        start: localDateStr(new Date()),
-        end: localDateStr(new Date(Date.now() + 86400000)),
-        reason: '',
-      });
-      showToast('Time off added', 'success');
-      await reload();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : 'Failed to add time off', 'error');
-    } finally {
-      setAddingTimeOff(false);
-    }
-  }
-
-  async function handleDeleteTimeOff(timeOffId: string) {
-    if (!selected) return;
-    try {
-      await apiFetch(`/staff/${selected.id}/time-off/${timeOffId}`, { method: 'DELETE' }, token);
-      setTimeOffs((prev) => prev.filter((t) => t.id !== timeOffId));
-      showToast('Time off removed', 'success');
-      await reload();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : 'Failed to remove', 'error');
+      showToast('Schedule undone', 'success');
+    } catch {
+      showToast('Undo failed', 'error');
     }
   }
 
@@ -852,8 +764,7 @@ export function StaffClient({ initialStaff, token }: Props) {
                 key={m.id}
                 member={m}
                 onEdit={openEdit}
-                onSchedule={openSchedule}
-                onTimeOff={(mem) => void openTimeOff(mem)}
+                onCalendar={openCalendar}
                 onToggleActive={(mem) => void handleToggleActive(mem)}
                 busy={busyId === m.id}
               />
@@ -874,8 +785,7 @@ export function StaffClient({ initialStaff, token }: Props) {
                 key={m.id}
                 member={m}
                 onEdit={openEdit}
-                onSchedule={openSchedule}
-                onTimeOff={(mem) => void openTimeOff(mem)}
+                onCalendar={openCalendar}
                 onToggleActive={(mem) => void handleToggleActive(mem)}
                 busy={busyId === m.id}
               />
@@ -1020,160 +930,20 @@ export function StaffClient({ initialStaff, token }: Props) {
         </SheetContent>
       </Sheet>
 
-      {/* ══ Schedule Sheet ══ */}
-      <Sheet open={sheetMode === 'schedule'} onOpenChange={(open) => !open && closeSheet()}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Weekly schedule</SheetTitle>
-            <SheetDescription>
-              Set which days and hours {selected?.displayName || selected?.name} is available for bookings.
-              The bot will only offer slots during these hours.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-col gap-5 px-4 pb-4">
-            {selected && (
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border">
-                <Avatar member={selected} size="sm" />
-                <div>
-                  <p className="text-sm font-semibold">{selected.displayName || selected.name}</p>
-                  {selected.bio && <p className="text-xs text-muted-foreground">{selected.bio}</p>}
-                </div>
-              </div>
-            )}
-
-            <ScheduleEditor schedule={schedule} onChange={setSchedule} />
-
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Days toggled off will show as unavailable in the WhatsApp booking flow. Use the <strong>Time off</strong> sheet for temporary absence like sick days or leave.
-            </p>
-
-            <SheetFooter className="px-0">
-              <Button type="button" variant="outline" onClick={closeSheet}>Cancel</Button>
-              <Button type="button" disabled={savingSchedule} onClick={() => void handleSaveSchedule()}>
-                {savingSchedule ? 'Saving…' : 'Save schedule'}
-              </Button>
-            </SheetFooter>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* ══ Time Off Sheet ══ */}
-      <Sheet open={sheetMode === 'timeoff'} onOpenChange={(open) => !open && closeSheet()}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Time off &amp; leave</SheetTitle>
-            <SheetDescription>
-              Schedule leave, sick days, or holidays for{' '}
-              <strong>{selected?.displayName || selected?.name}</strong>.
-              The card greys out and the slot becomes unavailable to customers on these dates.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-col gap-5 px-4 pb-4">
-            {selected && (
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/40 border">
-                <Avatar member={selected} size="sm" />
-                <p className="text-sm font-semibold">{selected.displayName || selected.name}</p>
-              </div>
-            )}
-
-            {/* Add form */}
-            <form onSubmit={(e) => void handleAddTimeOff(e)} className="rounded-xl border p-4 space-y-3 bg-muted/20">
-              <p className="text-sm font-semibold">Add time off</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="to-start" className="text-xs">From</Label>
-                  <input
-                    id="to-start"
-                    type="date"
-                    value={newTimeOff.start}
-                    onChange={(e) => setNewTimeOff((s) => ({ ...s, start: e.target.value }))}
-                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="to-end" className="text-xs">To</Label>
-                  <input
-                    id="to-end"
-                    type="date"
-                    value={newTimeOff.end}
-                    min={newTimeOff.start}
-                    onChange={(e) => setNewTimeOff((s) => ({ ...s, end: e.target.value }))}
-                    className="w-full rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="to-reason" className="text-xs">Reason (optional)</Label>
-                <Input
-                  id="to-reason"
-                  value={newTimeOff.reason}
-                  onChange={(e) => setNewTimeOff((s) => ({ ...s, reason: e.target.value }))}
-                  placeholder="e.g. Annual leave, Sick day, Personal"
-                />
-              </div>
-              <Button type="submit" size="sm" disabled={addingTimeOff} className="w-full">
-                {addingTimeOff ? 'Adding…' : 'Add time off'}
-              </Button>
-            </form>
-
-            {/* Existing list */}
-            <div>
-              <p className="text-sm font-semibold mb-2">Upcoming &amp; current</p>
-              {loadingTimeOff && (
-                <p className="text-xs text-muted-foreground py-3">Loading…</p>
-              )}
-              {!loadingTimeOff && timeOffs.length === 0 && (
-                <p className="text-xs text-muted-foreground py-3">No time off scheduled.</p>
-              )}
-              <div className="space-y-2">
-                {timeOffs.map((t) => {
-                  const now = new Date();
-                  const isNow = new Date(t.start) <= now && new Date(t.end) >= now;
-                  const isPast = new Date(t.end) < now;
-                  return (
-                    <div
-                      key={t.id}
-                      className={cn(
-                        'flex items-start justify-between gap-3 rounded-xl border p-3',
-                        isNow && 'border-amber-500/40 bg-amber-500/5',
-                        isPast && 'opacity-50',
-                      )}
-                    >
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="text-sm font-medium leading-tight">
-                          {formatDate(t.start)} – {formatDate(t.end)}
-                        </p>
-                        {t.reason && <p className="text-xs text-muted-foreground">{t.reason}</p>}
-                        <div className="flex gap-1 pt-0.5">
-                          {isNow && (
-                            <Badge className="text-[10px] bg-amber-500/15 text-amber-700 border-amber-500/30">Active now</Badge>
-                          )}
-                          {isPast && (
-                            <Badge variant="outline" className="text-[10px]">Past</Badge>
-                          )}
-                        </div>
-                      </div>
-                      <Button
-                        type="button" size="sm" variant="ghost"
-                        className="text-destructive hover:text-destructive shrink-0"
-                        onClick={() => void handleDeleteTimeOff(t.id)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <SheetFooter className="px-0">
-              <Button type="button" variant="outline" onClick={closeSheet}>Done</Button>
-            </SheetFooter>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* ══ Calendar Sheet ══ */}
+      {sheetMode === 'calendar' && selected && (
+        <StaffCalendarSheet
+          member={selected}
+          token={token}
+          open={sheetMode === 'calendar'}
+          onClose={closeSheet}
+          onSaved={(message, prevSchedule) => {
+            void reload();
+            showToast(message, 'success', () => void undoScheduleSave(selected.id, prevSchedule));
+          }}
+          onError={(msg) => showToast(msg, 'error')}
+        />
+      )}
 
       {toast && <Toast message={toast.message} type={toast.type} onUndo={toast.onUndo} onDismiss={() => setToast(null)} />}
     </div>
