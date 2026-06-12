@@ -5,6 +5,18 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+interface MonthlyReport {
+  month: string;
+  totalBookings: number;
+  completedBookings: number;
+  revenueCents: number;
+  topService: string | null;
+  noShowPct: number;
+  newCustomerPct: number;
+  returningCustomerPct: number;
+  bestDay: string | null;
+}
+
 interface DailyBooking {
   booking_date: string;
   total_bookings: number;
@@ -70,14 +82,21 @@ export function AnalyticsClient({ token }: Props) {
   const [data, setData]       = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [report, setReport]   = useState<MonthlyReport | null>(null);
+  const [sendingReport, setSendingReport] = useState(false);
+  const [sendStatus, setSendStatus] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const result = await apiFetch<AnalyticsData>('/analytics/overview', {}, token);
-      setData(result);
+      const [overview, monthlyReport] = await Promise.all([
+        apiFetch<AnalyticsData>('/analytics/overview', {}, token),
+        apiFetch<MonthlyReport>('/analytics/monthly-report', {}, token).catch(() => null),
+      ]);
+      setData(overview);
+      setReport(monthlyReport);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load analytics');
     } finally {
@@ -86,6 +105,19 @@ export function AnalyticsClient({ token }: Props) {
   }, [token]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const sendReportToWhatsApp = async () => {
+    setSendingReport(true);
+    setSendStatus(null);
+    try {
+      await apiFetch('/analytics/monthly-report/send', { method: 'POST' }, token);
+      setSendStatus('Report sent to your WhatsApp!');
+    } catch (e) {
+      setSendStatus(e instanceof ApiError ? e.message : 'Failed to send report');
+    } finally {
+      setSendingReport(false);
+    }
+  };
 
   const hasAnyData = data && (
     data.dailyBookings.length > 0 ||
@@ -150,6 +182,46 @@ export function AnalyticsClient({ token }: Props) {
             </p>
           </div>
         </div>
+      )}
+
+      {/* Monthly Report Card */}
+      {!loading && report && (
+        <section className="border rounded-lg p-5 space-y-4 bg-muted/20">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-base font-semibold">
+                Monthly report — {formatMonth(report.month)}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">6 key metrics at a glance</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {sendStatus && (
+                <span className={`text-xs ${sendStatus.includes('sent') ? 'text-green-700 dark:text-green-400' : 'text-destructive'}`}>
+                  {sendStatus}
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void sendReportToWhatsApp()}
+                disabled={sendingReport}
+              >
+                {sendingReport ? 'Sending…' : '📱 Send to my WhatsApp'}
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <KpiCard label="Total bookings" value={report.totalBookings} />
+            <KpiCard label="Revenue" value={formatCurrency(report.revenueCents)} />
+            <KpiCard label="Top service" value={report.topService ?? '—'} />
+            <KpiCard label="No-show rate" value={`${report.noShowPct}%`} />
+            <KpiCard
+              label="New customers"
+              value={`${report.newCustomerPct}% new · ${report.returningCustomerPct}% returning`}
+            />
+            <KpiCard label="Busiest day" value={report.bestDay ?? '—'} />
+          </div>
+        </section>
       )}
 
       {/* Data */}

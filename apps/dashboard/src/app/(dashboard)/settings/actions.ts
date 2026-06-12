@@ -35,6 +35,7 @@ export interface SalonSettings {
   mapsUrl: string | null;
   parkingNotes: string | null;
   googleReviewUrl: string | null;
+  currentSpecial: string | null;
   automations?: {
     googleReview?: {
       incentiveEnabled?: boolean;
@@ -69,6 +70,22 @@ export async function saveGoogleReviewSettings(
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
       body: JSON.stringify(body),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
+export async function saveCurrentSpecial(
+  currentSpecial: string | null,
+): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ currentSpecial }),
     }, token);
     return { salon: data.salon };
   } catch (e) {

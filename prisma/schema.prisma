@@ -558,6 +558,7 @@ model Appointment {
   penaltyWaivedAt     DateTime?
   penaltyWaivedBy     String?            /// StaffUser id
   cancellationPenaltyApplied Boolean     @default(false)
+  depositForfeited    Boolean            @default(false)
   addonServiceIds     String[]           @default([])
   csatSentAt          DateTime?
   csatScore           Int?               /// 1–5, null until customer replies

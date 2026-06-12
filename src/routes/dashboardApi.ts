@@ -288,6 +288,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
       const flow = parseBotFlowSettingsFromMetadata(salon.metadata);
       const automations = parseAutomationsFromMetadata(salon.metadata);
+      const meta = typeof salon.metadata === 'object' && salon.metadata ? (salon.metadata as Record<string, unknown>) : {};
       return {
         salon: {
           ...salon,
@@ -295,6 +296,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botFlowOrder: flow.order,
           botCustomFlows: flow.customFlows,
           automations,
+          currentSpecial: typeof meta.currentSpecial === 'string' ? meta.currentSpecial : null,
         },
       };
     });
@@ -375,6 +377,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       mapsUrl?: string | null;
       parkingNotes?: string | null;
       googleReviewUrl?: string | null;
+      currentSpecial?: string | null;
     };
   }>(
     '/settings',
@@ -413,6 +416,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           mapsUrl,
           parkingNotes,
           googleReviewUrl,
+          currentSpecial,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -526,7 +530,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         let metadataPatch: ReturnType<typeof mergeBotFlowIntoMetadata> | undefined;
         const needsMetadata =
-          botFlowOrder !== undefined || botCustomFlows !== undefined || automations !== undefined;
+          botFlowOrder !== undefined || botCustomFlows !== undefined || automations !== undefined || currentSpecial !== undefined;
         if (needsMetadata) {
           const existing = await db.salon.findUniqueOrThrow({
             where: { id: user.salonId },
@@ -551,6 +555,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
               return { error: 'invalid_automations', message: validatedAuto.error };
             }
             meta = mergeAutomationsIntoMetadata(meta, validatedAuto);
+          }
+
+          if (currentSpecial !== undefined) {
+            const specialTrimmed = currentSpecial?.trim() ?? '';
+            if (specialTrimmed.length > 160) {
+              reply.code(400);
+              return { error: 'special_too_long', message: 'Current special must be 160 characters or fewer.' };
+            }
+            meta = {
+              ...(typeof meta === 'object' && meta !== null ? meta : {}),
+              currentSpecial: specialTrimmed || null,
+            };
           }
 
           metadataPatch = meta as ReturnType<typeof mergeBotFlowIntoMetadata>;
@@ -645,6 +661,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         const flow = parseBotFlowSettingsFromMetadata(updated.metadata);
         const autoSettings = parseAutomationsFromMetadata(updated.metadata);
+        const updatedMeta = typeof updated.metadata === 'object' && updated.metadata ? (updated.metadata as Record<string, unknown>) : {};
         await db.auditLog.create({
           data: {
             salonId: user.salonId,
@@ -662,6 +679,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             botFlowOrder: flow.order,
             botCustomFlows: flow.customFlows,
             automations: autoSettings,
+            currentSpecial: typeof updatedMeta.currentSpecial === 'string' ? updatedMeta.currentSpecial : null,
           },
         };
       });
@@ -842,6 +860,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const db = getTenantDb();
         const appt = await db.appointment.findFirst({
           where: { id: request.params.id },
+          include: { payments: { where: { status: 'SUCCEEDED' }, select: { id: true } } },
         });
         if (!appt) {
           reply.code(404);
@@ -865,9 +884,15 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'customer_unavailable', message: 'Customer record is not available.' };
         }
 
+        // Forfeit deposit if one was paid
+        const depositWasPaid = appt.status === 'CONFIRMED_PAID' || appt.payments.length > 0;
         await db.appointment.update({
           where: { id: appt.id },
-          data: { status: 'NO_SHOW', noShowMarkedAt: new Date() },
+          data: {
+            status: 'NO_SHOW',
+            noShowMarkedAt: new Date(),
+            ...(depositWasPaid ? { depositForfeited: true } : {}),
+          },
         });
 
         const noShowRisk = await recordCustomerNoShow(appt.customerId, db);
@@ -879,7 +904,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             appointmentId: appt.id,
             staffId: appt.staffId,
             type: 'no_show',
-            payload: { source: 'dashboard', noShowRisk },
+            payload: { source: 'dashboard', noShowRisk, depositForfeited: depositWasPaid },
           },
         });
 
@@ -907,7 +932,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           }).catch(() => {});
         }
 
-        return { ok: true, noShowRisk };
+        return { ok: true, noShowRisk, depositForfeited: depositWasPaid };
       });
     },
   );
@@ -944,6 +969,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             action: 'penalty_waived',
             entity: 'Appointment',
             entityId: appt.id,
+          },
+        });
+
+        // Item 13: track penalty waiver in analytics for reporting
+        await db.analyticsEvent.create({
+          data: {
+            salonId: user.salonId,
+            customerId: appt.customerId,
+            appointmentId: appt.id,
+            type: 'penalty_waived',
+            payload: { waivedBy: user.sub },
           },
         });
 
@@ -2883,6 +2919,166 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+
+  // ─── Monthly Report Card (Items 14 & 15) ─────────────────────────────
+  app.get('/analytics/monthly-report', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salonId = user.salonId;
+      const q = request.query as { month?: string };
+
+      // Accept YYYY-MM param; default to current month
+      let monthStart: Date;
+      if (q.month && /^\d{4}-\d{2}$/.test(q.month)) {
+        monthStart = new Date(`${q.month}-01T00:00:00.000Z`);
+      } else {
+        const now = new Date();
+        monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      }
+      const monthEnd = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+
+      const [bookingRows, revenueRows, topServiceRows, noShowRows, newCustomerRows, dayRows] = await Promise.all([
+        // total & completed bookings
+        safeQuery<{ total: number; completed: number }>(
+          `SELECT COUNT(*)::int as total,
+                  COUNT(*) FILTER (WHERE status = 'COMPLETED')::int as completed
+           FROM "Appointment"
+           WHERE "salonId" = $1 AND start >= $2 AND start < $3`,
+          salonId, monthStart, monthEnd,
+        ),
+        // revenue from invoices
+        safeQuery<{ revenue_cents: number }>(
+          `SELECT COALESCE(SUM(i."totalCents"), 0)::int as revenue_cents
+           FROM "Invoice" i
+           WHERE i."salonId" = $1 AND i."createdAt" >= $2 AND i."createdAt" < $3 AND i."status" = 'PAID'`,
+          salonId, monthStart, monthEnd,
+        ),
+        // top service by booking count
+        safeQuery<{ service_name: string; cnt: number }>(
+          `SELECT svc.name as service_name, COUNT(*)::int as cnt
+           FROM "Appointment" a
+           JOIN "Service" svc ON svc.id = a."serviceId"
+           WHERE a."salonId" = $1 AND a.start >= $2 AND a.start < $3
+             AND a.status NOT IN ('CANCELLED','RESCHEDULED')
+           GROUP BY svc.name ORDER BY cnt DESC LIMIT 1`,
+          salonId, monthStart, monthEnd,
+        ),
+        // no-show count
+        safeQuery<{ no_shows: number }>(
+          `SELECT COUNT(*) FILTER (WHERE status = 'NO_SHOW')::int as no_shows
+           FROM "Appointment"
+           WHERE "salonId" = $1 AND start >= $2 AND start < $3`,
+          salonId, monthStart, monthEnd,
+        ),
+        // new vs returning customers
+        safeQuery<{ customer_id: string; is_first: boolean }>(
+          `SELECT a."customerId" as customer_id,
+                  (MIN(a2.start) >= $2) as is_first
+           FROM "Appointment" a
+           JOIN "Appointment" a2 ON a2."customerId" = a."customerId" AND a2."salonId" = $1
+           WHERE a."salonId" = $1 AND a.start >= $2 AND a.start < $3
+             AND a.status NOT IN ('CANCELLED','RESCHEDULED')
+           GROUP BY a."customerId"`,
+          salonId, monthStart, monthEnd,
+        ),
+        // best day of week
+        safeQuery<{ dow: string; cnt: number }>(
+          `SELECT TO_CHAR(start AT TIME ZONE 'UTC', 'Day') as dow, COUNT(*)::int as cnt
+           FROM "Appointment"
+           WHERE "salonId" = $1 AND start >= $2 AND start < $3
+             AND status NOT IN ('CANCELLED','RESCHEDULED')
+           GROUP BY dow ORDER BY cnt DESC LIMIT 1`,
+          salonId, monthStart, monthEnd,
+        ),
+      ]);
+
+      const totalBookings = bookingRows[0]?.total ?? 0;
+      const completedBookings = bookingRows[0]?.completed ?? 0;
+      const revenueCents = revenueRows[0]?.revenue_cents ?? 0;
+      const topService = topServiceRows[0]?.service_name ?? null;
+      const noShows = noShowRows[0]?.no_shows ?? 0;
+      const noShowPct = totalBookings > 0 ? Math.round((noShows / totalBookings) * 100) : 0;
+      const newCount = newCustomerRows.filter((r) => r.is_first).length;
+      const totalUnique = newCustomerRows.length;
+      const newCustomerPct = totalUnique > 0 ? Math.round((newCount / totalUnique) * 100) : 0;
+      const bestDay = dayRows[0]?.dow?.trim() ?? null;
+
+      return {
+        month: monthStart.toISOString().slice(0, 7),
+        totalBookings,
+        completedBookings,
+        revenueCents,
+        topService,
+        noShowPct,
+        newCustomerPct,
+        returningCustomerPct: 100 - newCustomerPct,
+        bestDay,
+      };
+    });
+  });
+
+  app.post('/analytics/monthly-report/send', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salonId = user.salonId;
+
+      // Find owner phone to send the report to
+      const owner = await db.staffUser.findFirst({
+        where: { salonId, role: 'OWNER', active: true },
+        select: { phone: true, name: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      const phone = owner?.phone?.trim();
+      if (!phone) {
+        reply.code(422);
+        return { error: 'no_owner_phone', message: 'No owner phone number configured. Please add your phone number in Account settings.' };
+      }
+
+      // Build this month's report
+      const now = new Date();
+      const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+      const monthLabel = monthStart.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+
+      const [bookingRows, revenueRows, topServiceRows, noShowRows] = await Promise.all([
+        safeQuery<{ total: number }>(`SELECT COUNT(*)::int as total FROM "Appointment" WHERE "salonId" = $1 AND start >= $2 AND start < $3`, salonId, monthStart, monthEnd),
+        safeQuery<{ revenue_cents: number }>(`SELECT COALESCE(SUM(i."totalCents"), 0)::int as revenue_cents FROM "Invoice" i WHERE i."salonId" = $1 AND i."createdAt" >= $2 AND i."createdAt" < $3 AND i."status" = 'PAID'`, salonId, monthStart, monthEnd),
+        safeQuery<{ service_name: string; cnt: number }>(`SELECT svc.name as service_name, COUNT(*)::int as cnt FROM "Appointment" a JOIN "Service" svc ON svc.id = a."serviceId" WHERE a."salonId" = $1 AND a.start >= $2 AND a.start < $3 AND a.status NOT IN ('CANCELLED','RESCHEDULED') GROUP BY svc.name ORDER BY cnt DESC LIMIT 1`, salonId, monthStart, monthEnd),
+        safeQuery<{ no_shows: number }>(`SELECT COUNT(*) FILTER (WHERE status = 'NO_SHOW')::int as no_shows FROM "Appointment" WHERE "salonId" = $1 AND start >= $2 AND start < $3`, salonId, monthStart, monthEnd),
+      ]);
+
+      const total = bookingRows[0]?.total ?? 0;
+      const revenue = revenueRows[0]?.revenue_cents ?? 0;
+      const topService = topServiceRows[0]?.service_name;
+      const noShows = noShowRows[0]?.no_shows ?? 0;
+
+      const salon = await db.salon.findUniqueOrThrow({ where: { id: salonId }, select: { name: true, tradingName: true } });
+      const salonName = salon.tradingName ?? salon.name;
+
+      const body = [
+        `📊 *${salonName} — ${monthLabel} Report*`,
+        '',
+        `📅 Bookings: ${total}`,
+        `💰 Revenue: R${(revenue / 100).toLocaleString('en-ZA', { minimumFractionDigits: 2 })}`,
+        `🏆 Top service: ${topService ?? '—'}`,
+        `❌ No-shows: ${noShows}${total > 0 ? ` (${Math.round((noShows / total) * 100)}%)` : ''}`,
+        '',
+        'Sent from your MarineFlow dashboard.',
+      ].join('\n');
+
+      await sendWithFallback({ salonId, to: phone, body });
+
+      return { ok: true };
+    });
+  });
 
   // ─── Subscription & Billing ──────────────────────────────────────────
   app.get('/subscription/plans', async () => {

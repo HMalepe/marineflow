@@ -309,7 +309,10 @@ function mainMenu(salon: Salon): string {
     ...buildExtraMenuLines(salon),
     '0 — Something else',
   ];
-  return [welcome, ...items].join('\n');
+  const meta = typeof salon.metadata === 'object' && salon.metadata ? (salon.metadata as Record<string, unknown>) : {};
+  const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
+  const specialLine = special ? `\n🌟 *Special:* ${special}` : '';
+  return [welcome, ...items].join('\n') + specialLine;
 }
 
 function parseHmToMin(hm: string): number {
@@ -348,8 +351,18 @@ function afterHoursHumanReply(salon: Salon): string {
 
 function isHumanHandoffRequest(text: string): boolean {
   const lower = text.toLowerCase();
-  // '0' now routes to OTHER_QUERY (AI-first), so only explicit "talk to human" triggers direct handoff
-  return lower.includes('human') || lower.includes('talk to');
+  return (
+    lower.includes('human') ||
+    lower.includes('talk to') ||
+    lower.includes('speak to') ||
+    lower.includes('real person') ||
+    lower.includes('live agent') ||
+    lower.includes('speak with') ||
+    lower.includes('talk with') ||
+    lower.includes('customer service') ||
+    lower.includes('staff member') ||
+    lower.includes('someone there')
+  );
 }
 
 export async function handleInboundWhatsApp(input: {
@@ -615,6 +628,28 @@ async function processInboundWhatsApp(
         },
       },
     });
+
+    // Notify owner — best-effort, never blocks handoff
+    void (async () => {
+      try {
+        const ownerUser = await getTenantDb().staffUser.findFirst({
+          where: { salonId: salon.id, role: 'OWNER', active: true },
+          select: { phone: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        const ownerPhone = ownerUser?.phone?.trim();
+        if (ownerPhone) {
+          const customerName = customer.displayName ?? customer.firstName ?? customer.waId;
+          await sendWithFallback({
+            salonId: salon.id,
+            to: ownerPhone,
+            body: `🙋 ${sanitize(customerName)} is asking to speak to a person. Check the dashboard to respond.`,
+          });
+        }
+      } catch {
+        // never let notification fail the handoff
+      }
+    })();
 
     await reply(
       conv,
@@ -2082,6 +2117,34 @@ async function handleConfirm(
   } catch (err) {
     logger.warn({ err, customerId: conv.customerId }, 'booking_count_increment_failed');
   }
+
+  // Item 16: Notify owner on new booking — best-effort, never blocks booking
+  void (async () => {
+    try {
+      const ownerUser = await getTenantDb().staffUser.findFirst({
+        where: { salonId: conv.salonId, role: 'OWNER', active: true },
+        select: { phone: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      const ownerPhone = ownerUser?.phone?.trim();
+      if (ownerPhone) {
+        const dt = DateTime.fromJSDate(start).setZone(conv.salon.timezone);
+        const customerName = conv.customer.displayName ?? conv.customer.firstName ?? conv.customer.waId;
+        await sendWithFallback({
+          salonId: conv.salonId,
+          to: ownerPhone,
+          body: [
+            `📅 New booking (${appointment.id.slice(0, 8)})`,
+            `Customer: ${sanitize(customerName)}`,
+            `Service: ${sanitize(service.name)} with ${sanitize(staff.name)}`,
+            dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+          ].join('\n'),
+        });
+      }
+    } catch {
+      // never let owner notification fail the booking flow
+    }
+  })();
 
   // §6.1 — remember the stylist for next booking, but only when the customer
   // explicitly chose them this booking. Skipped for:

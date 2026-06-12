@@ -18,6 +18,7 @@ import {
   saveBotName,
   saveInactivityMessages,
   saveGoogleReviewSettings,
+  saveCurrentSpecial,
   type SalonSettings,
 } from './actions';
 import { ConversationFlowSection } from './conversation-flow-section';
@@ -143,6 +144,9 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   );
   const [savingGoogleReviewUrl, setSavingGoogleReviewUrl] = useState(false);
 
+  const [currentSpecial, setCurrentSpecial] = useState(initialSettings.currentSpecial ?? '');
+  const [savingSpecial, setSavingSpecial] = useState(false);
+
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
@@ -171,6 +175,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setGoogleReviewUrl(s.googleReviewUrl ?? '');
     setReviewIncentiveEnabled(s.automations?.googleReview?.incentiveEnabled ?? true);
     setReviewIncentiveRands(String((s.automations?.googleReview?.incentiveCents ?? 5000) / 100));
+    setCurrentSpecial(s.currentSpecial ?? '');
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -215,6 +220,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       reviewIncentiveRands !==
         String((saved.automations?.googleReview?.incentiveCents ?? 5000) / 100),
     [saved, googleReviewUrl, reviewIncentiveEnabled, reviewIncentiveRands],
+  );
+
+  const currentSpecialDirty = useMemo(
+    () => currentSpecial !== (saved.currentSpecial ?? ''),
+    [saved, currentSpecial],
   );
 
   const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
@@ -421,6 +431,28 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     }
   }
 
+  async function handleSaveCurrentSpecial(e: React.FormEvent) {
+    e.preventDefault();
+    if (currentSpecial.trim().length > 160) {
+      reportError('currentSpecial', 'Special must be 160 characters or fewer');
+      return;
+    }
+    setSavingSpecial(true);
+    try {
+      const result = await saveCurrentSpecial(currentSpecial.trim() || null);
+      if (result.salon) {
+        applySalon(result.salon);
+        reportSuccess('currentSpecial', 'Current special saved');
+      } else {
+        reportError('currentSpecial', result.error ?? 'Save failed');
+      }
+    } catch {
+      reportError('currentSpecial', 'Save failed — please try again');
+    } finally {
+      setSavingSpecial(false);
+    }
+  }
+
   async function handleSaveBot(e: React.FormEvent) {
     e.preventDefault();
     setSavingBot(true);
@@ -607,6 +639,50 @@ export function SalonSettingsForm({ initialSettings }: Props) {
                 ? 'Preview uses your welcome text plus the numbered menu on the bot.'
                 : 'Preview of the reply when someone asks for a human outside your opening hours.'}
             </p>
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Current Special */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Current Special</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Shown at the bottom of the WhatsApp welcome menu. Clear it to remove. Max 160 characters.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveCurrentSpecial(e)} className="space-y-3">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="current-special">Active special / promotion</Label>
+              <span className={`text-xs tabular-nums ${currentSpecial.length > 160 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                {currentSpecial.length} / 160
+              </span>
+            </div>
+            <Input
+              id="current-special"
+              value={currentSpecial}
+              onChange={(e) => setCurrentSpecial(e.target.value)}
+              placeholder="e.g. 20% off all colour services this week — reply 1 to book"
+              maxLength={200}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              {currentSpecialDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+              <SectionSaveFeedback feedback={getSection('currentSpecial')} />
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={savingSpecial || !currentSpecialDirty}
+            >
+              {savingSpecial ? 'Saving…' : 'Save special'}
+            </Button>
           </div>
         </form>
       </section>
