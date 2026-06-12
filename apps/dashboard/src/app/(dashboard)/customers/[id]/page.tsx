@@ -16,6 +16,7 @@ interface CustomerDetail {
   noShowRisk: 'LOW' | 'MEDIUM' | 'HIGH';
   createdAt: string;
   loyaltyStamps: number;
+  lifetimeValueCents: number;
   appointments: {
     id: string;
     start: string;

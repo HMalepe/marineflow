@@ -2026,7 +2026,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         return { error: 'not_found' };
       }
 
-      const [appointments, messages, loyaltySum] = await Promise.all([
+      const [appointments, messages, loyaltySum, clvAgg] = await Promise.all([
         db.appointment.findMany({
           where: { customerId: customer.id },
           take: 20,
@@ -2041,6 +2041,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         db.loyaltyLedger.aggregate({
           where: { customerId: customer.id },
           _sum: { delta: true },
+        }),
+        // Item 28: CLV = total paid across all invoices
+        db.invoice.aggregate({
+          where: { customerId: customer.id, status: 'PAID' },
+          _sum: { totalCents: true },
         }),
       ]);
 
@@ -2059,6 +2064,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         noShowRisk: normalizeNoShowRisk(customer.noShowRisk),
         createdAt: customer.createdAt,
         loyaltyStamps: loyaltySum._sum.delta ?? 0,
+        lifetimeValueCents: clvAgg._sum.totalCents ?? 0,
         appointments: appointments.map((a) => ({
           id: a.id,
           start: a.start,
@@ -3077,6 +3083,192 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       await sendWithFallback({ salonId, to: phone, body });
 
       return { ok: true };
+    });
+  });
+
+  // ─── Loyalty KPIs (Item 25) ───────────────────────────────────────────
+  app.get('/analytics/loyalty', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salonId = user.salonId;
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+
+      const prog = await db.loyaltyProgram.findFirst({ where: { salonId }, select: { id: true, stampsPerReward: true } });
+      if (!prog) return { stampsEarned: 0, stampsRedeemed: 0, activeCustomers: 0, redemptionRate: 0, stampsPerReward: 10 };
+
+      const [earnRows, redeemRows, activeRows] = await Promise.all([
+        safeQuery<{ total: number }>(
+          `SELECT COALESCE(SUM(delta),0)::int as total FROM "LoyaltyLedger" WHERE "programId" = $1 AND delta > 0`,
+          prog.id,
+        ),
+        safeQuery<{ total: number }>(
+          `SELECT COALESCE(SUM(ABS(delta)),0)::int as total FROM "LoyaltyLedger" WHERE "programId" = $1 AND delta < 0`,
+          prog.id,
+        ),
+        safeQuery<{ cnt: number }>(
+          `SELECT COUNT(DISTINCT "customerId")::int as cnt FROM "LoyaltyLedger" WHERE "programId" = $1 AND delta > 0`,
+          prog.id,
+        ),
+      ]);
+
+      const stampsEarned = earnRows[0]?.total ?? 0;
+      const stampsRedeemed = redeemRows[0]?.total ?? 0;
+      const activeCustomers = activeRows[0]?.cnt ?? 0;
+      const redemptionRate = stampsEarned > 0 ? Math.round((stampsRedeemed / stampsEarned) * 100) : 0;
+
+      return { stampsEarned, stampsRedeemed, activeCustomers, redemptionRate, stampsPerReward: prog.stampsPerReward };
+    });
+  });
+
+  // ─── No-show by staff/service (Item 27) ───────────────────────────────
+  app.get('/analytics/no-show-patterns', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salonId = user.salonId;
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+
+      const [byStaff, byService] = await Promise.all([
+        safeQuery<{ staffName: string; total: number; no_shows: number; rate: number }>(
+          `SELECT s.name as "staffName",
+                  COUNT(*)::int as total,
+                  COUNT(*) FILTER (WHERE a.status = 'NO_SHOW')::int as no_shows,
+                  ROUND(COUNT(*) FILTER (WHERE a.status = 'NO_SHOW') * 100.0 / NULLIF(COUNT(*),0), 1)::float as rate
+           FROM "Appointment" a
+           LEFT JOIN "Staff" s ON s.id = a."staffId"
+           WHERE a."salonId" = $1
+             AND a.start >= NOW() - INTERVAL '90 days'
+           GROUP BY s.name
+           HAVING COUNT(*) >= 3
+           ORDER BY rate DESC NULLS LAST
+           LIMIT 10`,
+          salonId,
+        ),
+        safeQuery<{ serviceName: string; total: number; no_shows: number; rate: number }>(
+          `SELECT svc.name as "serviceName",
+                  COUNT(*)::int as total,
+                  COUNT(*) FILTER (WHERE a.status = 'NO_SHOW')::int as no_shows,
+                  ROUND(COUNT(*) FILTER (WHERE a.status = 'NO_SHOW') * 100.0 / NULLIF(COUNT(*),0), 1)::float as rate
+           FROM "Appointment" a
+           LEFT JOIN "Service" svc ON svc.id = a."serviceId"
+           WHERE a."salonId" = $1
+             AND a.start >= NOW() - INTERVAL '90 days'
+           GROUP BY svc.name
+           HAVING COUNT(*) >= 3
+           ORDER BY rate DESC NULLS LAST
+           LIMIT 10`,
+          salonId,
+        ),
+      ]);
+
+      return { byStaff, byService };
+    });
+  });
+
+  // ─── Conversation abandonment funnel (Item 29) ────────────────────────
+  app.get('/analytics/funnel', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salonId = user.salonId;
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+
+      const [serviceRow, slotRow, bookingRow, completedRow] = await Promise.all([
+        safeQuery<{ cnt: number }>(
+          `SELECT COUNT(DISTINCT "customerId")::int as cnt FROM "AnalyticsEvent" WHERE "salonId" = $1 AND type = 'funnel_pick_service' AND "createdAt" >= NOW() - INTERVAL '30 days'`,
+          salonId,
+        ),
+        safeQuery<{ cnt: number }>(
+          `SELECT COUNT(DISTINCT "customerId")::int as cnt FROM "AnalyticsEvent" WHERE "salonId" = $1 AND type = 'funnel_pick_slot' AND "createdAt" >= NOW() - INTERVAL '30 days'`,
+          salonId,
+        ),
+        safeQuery<{ cnt: number }>(
+          `SELECT COUNT(DISTINCT "customerId")::int as cnt FROM "AnalyticsEvent" WHERE "salonId" = $1 AND type = 'booking_complete' AND "createdAt" >= NOW() - INTERVAL '30 days'`,
+          salonId,
+        ),
+        safeQuery<{ cnt: number }>(
+          `SELECT COUNT(DISTINCT "customerId")::int as cnt FROM "AnalyticsEvent" WHERE "salonId" = $1 AND type = 'appointment_completed_dashboard' AND "createdAt" >= NOW() - INTERVAL '30 days'`,
+          salonId,
+        ),
+      ]);
+
+      return {
+        period: '30 days',
+        steps: [
+          { label: 'Started browsing', count: serviceRow[0]?.cnt ?? 0 },
+          { label: 'Reached slot picker', count: slotRow[0]?.cnt ?? 0 },
+          { label: 'Booking confirmed', count: bookingRow[0]?.cnt ?? 0 },
+          { label: 'Visit completed', count: completedRow[0]?.cnt ?? 0 },
+        ],
+      };
+    });
+  });
+
+  // ─── Campaign opt-outs (Item 30) ─────────────────────────────────────
+  app.get('/analytics/opt-outs', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+      const rows = await safeQuery<{ month: string; cnt: number }>(
+        `SELECT TO_CHAR("createdAt", 'YYYY-MM') as month, COUNT(*)::int as cnt
+         FROM "AnalyticsEvent"
+         WHERE "salonId" = $1 AND type = 'marketing_opt_out'
+         GROUP BY month ORDER BY month DESC LIMIT 12`,
+        user.salonId,
+      );
+      const total = await db.customer.count({
+        where: { salonId: user.salonId, marketingConsentStatus: 'DECLINED', deletedAt: null },
+      });
+      return { byMonth: rows, totalOptedOut: total };
+    });
+  });
+
+  // ─── Waitlist (Item 22) ───────────────────────────────────────────────
+  app.get('/waitlist', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const entries = await db.waitlistEntry.findMany({
+        where: {
+          salonId: user.salonId,
+          notified: false,
+          expiresAt: { gte: new Date() },
+        },
+        include: {
+          customer: { select: { displayName: true, waId: true, firstName: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: 100,
+      });
+
+      const serviceIds = [...new Set(entries.map((e) => e.serviceId))];
+      const staffIds = [...new Set(entries.map((e) => e.staffId).filter(Boolean) as string[])];
+
+      const [services, staff] = await Promise.all([
+        db.service.findMany({ where: { id: { in: serviceIds } }, select: { id: true, name: true } }),
+        staffIds.length ? db.staff.findMany({ where: { id: { in: staffIds } }, select: { id: true, name: true, displayName: true } }) : Promise.resolve([]),
+      ]);
+
+      const svcMap = new Map(services.map((s) => [s.id, s.name]));
+      const staffMap = new Map(staff.map((s) => [s.id, s.displayName ?? s.name]));
+
+      return {
+        entries: entries.map((e) => ({
+          id: e.id,
+          customerId: e.customerId,
+          customerName: e.customer.displayName ?? e.customer.firstName ?? e.customer.waId,
+          serviceName: svcMap.get(e.serviceId) ?? e.serviceId,
+          staffName: e.staffId ? (staffMap.get(e.staffId) ?? null) : null,
+          preferredDate: e.preferredDate,
+          expiresAt: e.expiresAt?.toISOString() ?? null,
+          createdAt: e.createdAt.toISOString(),
+        })),
+      };
     });
   });
 

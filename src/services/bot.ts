@@ -947,6 +947,15 @@ async function handleMarketingConsentFlow(
         choice: 'decline',
         source: 'whatsapp_stop',
       });
+      // Item 30: track opt-out as analytics event for campaign metrics
+      void getTenantDb().analyticsEvent.create({
+        data: {
+          salonId: salon.id,
+          customerId: conv.customerId,
+          type: 'marketing_opt_out',
+          payload: { source: 'whatsapp_stop' },
+        },
+      }).catch(() => {});
     }
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyWithMenu(conv, buildConsentStopMessage());
@@ -1128,6 +1137,10 @@ async function startBookingFlow(
   }
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
   await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
+  // Item 29: funnel entry tracking
+  void getTenantDb().analyticsEvent.create({
+    data: { salonId: salon.id, customerId: conv.customerId, type: 'funnel_pick_service' },
+  }).catch(() => {});
   await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
 
@@ -1830,6 +1843,10 @@ async function handlePickDate(
   }
 
   await saveCtx(conv.id, { localDateStr }, ConversationStep.PICK_SLOT);
+  // Item 29: funnel progression tracking
+  void getTenantDb().analyticsEvent.create({
+    data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
+  }).catch(() => {});
   const lines = slots.slice(0, 8).map((s, i) => {
     const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
     return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;

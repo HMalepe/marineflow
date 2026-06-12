@@ -1,9 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { WaivePenaltyButton } from './waive-penalty-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { apiFetch } from '@/lib/api';
+
+interface WaitlistEntry {
+  id: string;
+  serviceName: string | null;
+  staffName: string | null;
+  customerName: string;
+  createdAt: string;
+  expiresAt: string | null;
+}
 
 type NoShowRisk = 'LOW' | 'MEDIUM' | 'HIGH';
 type DepositFilter = 'all' | 'pending' | 'paid';
@@ -67,6 +77,19 @@ export function AppointmentsClient({
   token: string;
 }) {
   const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+
+  const loadWaitlist = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ entries: WaitlistEntry[] }>('/waitlist', {}, token);
+      setWaitlist(data.entries ?? []);
+    } catch {
+      // non-critical — silently ignore
+    }
+  }, [token]);
+
+  useEffect(() => { void loadWaitlist(); }, [loadWaitlist]);
 
   function applyFilter(list: AppointmentData[]): AppointmentData[] {
     if (depositFilter === 'all') return list;
@@ -137,6 +160,42 @@ export function AppointmentsClient({
                   Showing 20 of {filteredPast.length} past appointments
                 </p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {waitlist.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Waitlist ({waitlist.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-3">
+              Customers waiting for an opening — they will be notified automatically when a slot becomes available.
+            </p>
+            <div className="space-y-2">
+              {waitlist.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between p-3 rounded-lg border gap-3 text-sm">
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="font-medium truncate">{entry.customerName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {entry.serviceName ?? 'Any service'}
+                      {entry.staffName ? ` · ${entry.staffName}` : ''}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 space-y-0.5">
+                    <p className="text-xs text-muted-foreground">
+                      Since {new Date(entry.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                    </p>
+                    {entry.expiresAt && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Expires {new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

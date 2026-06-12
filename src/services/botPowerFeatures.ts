@@ -14,6 +14,7 @@ import { notifyWaitlistOnCancel } from './waitlist.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { validateSlotAvailable } from './slots.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { logger } from '../lib/logger.js';
 
 export function getSalonAutomations(salon: Pick<Salon, 'metadata'>) {
   return parseAutomationsFromMetadata(salon.metadata);
@@ -198,6 +199,18 @@ export async function handleAddonPhase(
     selectedAddonIds: addonIds,
     addonExtraCents: addonTotal,
   });
+
+  // Item 24: track when customer skips add-ons (best-effort analytics)
+  if (selected.length === 0 && addons.length > 0) {
+    void getTenantDb().analyticsEvent.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        type: 'addon_skipped',
+        payload: { serviceId, addonCount: addons.length },
+      },
+    }).catch((err) => logger.warn({ err }, 'addon_skip_analytics_failed'));
+  }
 
   if (selected.length) {
     await helpers.reply(

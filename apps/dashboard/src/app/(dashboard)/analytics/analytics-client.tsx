@@ -74,6 +74,31 @@ interface AnalyticsData {
   recentRatings: RecentRating[];
 }
 
+interface LoyaltyKpi {
+  stampsEarned: number;
+  stampsRedeemed: number;
+  activeCustomers: number;
+  redemptionRate: number;
+}
+
+interface NoShowRow {
+  staffName?: string;
+  serviceName?: string;
+  total: number;
+  no_shows: number;
+  rate: number;
+}
+
+interface FunnelStep {
+  label: string;
+  count: number;
+}
+
+interface OptOutData {
+  byMonth: { month: string; cnt: number }[];
+  totalOptedOut: number;
+}
+
 interface Props {
   token: string;
 }
@@ -85,18 +110,32 @@ export function AnalyticsClient({ token }: Props) {
   const [report, setReport]   = useState<MonthlyReport | null>(null);
   const [sendingReport, setSendingReport] = useState(false);
   const [sendStatus, setSendStatus] = useState<string | null>(null);
+  const [loyalty, setLoyalty]   = useState<LoyaltyKpi | null>(null);
+  const [noShowByStaff, setNoShowByStaff] = useState<NoShowRow[]>([]);
+  const [noShowByService, setNoShowByService] = useState<NoShowRow[]>([]);
+  const [funnel, setFunnel]     = useState<FunnelStep[]>([]);
+  const [optOuts, setOptOuts]   = useState<OptOutData | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const [overview, monthlyReport] = await Promise.all([
+      const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData] = await Promise.all([
         apiFetch<AnalyticsData>('/analytics/overview', {}, token),
         apiFetch<MonthlyReport>('/analytics/monthly-report', {}, token).catch(() => null),
+        apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
+        apiFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>('/analytics/no-show-patterns', {}, token).catch(() => null),
+        apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
+        apiFetch<OptOutData>('/analytics/opt-outs', {}, token).catch(() => null),
       ]);
       setData(overview);
       setReport(monthlyReport);
+      setLoyalty(loyaltyData);
+      setNoShowByStaff(noShowData?.byStaff ?? []);
+      setNoShowByService(noShowData?.byService ?? []);
+      setFunnel(funnelData?.steps ?? []);
+      setOptOuts(optOutData);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load analytics');
     } finally {
@@ -418,6 +457,150 @@ export function AnalyticsClient({ token }: Props) {
               </div>
             )}
           </section>
+
+          {/* Loyalty KPIs */}
+          {loyalty && (
+            <section>
+              <h2 className="text-base font-semibold mb-3">Loyalty programme — last 30 days</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <KpiCard label="Stamps earned" value={loyalty.stampsEarned} />
+                <KpiCard label="Stamps redeemed" value={loyalty.stampsRedeemed} />
+                <KpiCard label="Active members" value={loyalty.activeCustomers} />
+                <KpiCard
+                  label="Redemption rate"
+                  value={loyalty.stampsEarned > 0 ? `${loyalty.redemptionRate}%` : '—'}
+                />
+              </div>
+            </section>
+          )}
+
+          {/* No-show patterns */}
+          {(noShowByStaff.length > 0 || noShowByService.length > 0) && (
+            <section>
+              <h2 className="text-base font-semibold mb-3">No-show patterns — last 90 days</h2>
+              <p className="text-xs text-muted-foreground mb-3">Rows with ≥ 3 appointments only.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {noShowByStaff.length > 0 && (
+                  <div className="border rounded-lg overflow-x-auto">
+                    <p className="text-xs font-medium text-muted-foreground px-3 pt-3">By staff</p>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-3 font-medium">Staff</th>
+                          <th className="text-right p-3 font-medium">Appts</th>
+                          <th className="text-right p-3 font-medium">No-show</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {noShowByStaff.map((p, i) => (
+                          <tr key={i} className="hover:bg-muted/30">
+                            <td className="p-3 font-medium">{p.staffName ?? '—'}</td>
+                            <td className="p-3 text-right tabular-nums">{p.total}</td>
+                            <td className={cn(
+                              'p-3 text-right font-medium tabular-nums',
+                              p.rate >= 30 ? 'text-destructive' : p.rate >= 15 ? 'text-yellow-700 dark:text-yellow-400' : '',
+                            )}>
+                              {p.rate}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {noShowByService.length > 0 && (
+                  <div className="border rounded-lg overflow-x-auto">
+                    <p className="text-xs font-medium text-muted-foreground px-3 pt-3">By service</p>
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left p-3 font-medium">Service</th>
+                          <th className="text-right p-3 font-medium">Appts</th>
+                          <th className="text-right p-3 font-medium">No-show</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {noShowByService.map((p, i) => (
+                          <tr key={i} className="hover:bg-muted/30">
+                            <td className="p-3 font-medium">{p.serviceName ?? '—'}</td>
+                            <td className="p-3 text-right tabular-nums">{p.total}</td>
+                            <td className={cn(
+                              'p-3 text-right font-medium tabular-nums',
+                              p.rate >= 30 ? 'text-destructive' : p.rate >= 15 ? 'text-yellow-700 dark:text-yellow-400' : '',
+                            )}>
+                              {p.rate}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* Booking funnel */}
+          {funnel.length > 0 && (
+            <section>
+              <h2 className="text-base font-semibold mb-3">Booking funnel — last 30 days</h2>
+              <div className="border rounded-lg divide-y">
+                {funnel.map((step, i) => {
+                  const prev = i > 0 ? funnel[i - 1]!.count : null;
+                  const dropPct = prev !== null && prev > 0 ? Math.round(((prev - step.count) / prev) * 100) : null;
+                  return (
+                    <div key={step.label} className="flex items-center gap-4 px-4 py-3">
+                      <span className="size-6 flex items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{step.label}</p>
+                        {dropPct !== null && dropPct > 0 && (
+                          <p className="text-xs text-muted-foreground">↓ {dropPct}% drop from previous step</p>
+                        )}
+                      </div>
+                      <span className="text-lg font-bold tabular-nums">{step.count.toLocaleString()}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* Marketing opt-outs */}
+          {optOuts && (
+            <section>
+              <h2 className="text-base font-semibold mb-3">Marketing opt-outs</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <KpiCard label="Total opted out" value={optOuts.totalOptedOut} />
+                {optOuts.byMonth.length > 0 && (
+                  <div className="border rounded-lg p-4">
+                    <p className="text-xs text-muted-foreground mb-3">Monthly opt-outs (last 6 months)</p>
+                    <div className="flex items-end gap-1 h-16">
+                      {optOuts.byMonth.slice(0, 6).reverse().map((m) => {
+                        const max = Math.max(...optOuts.byMonth.slice(0, 6).map((x) => x.cnt), 1);
+                        return (
+                          <div key={m.month} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                            <div
+                              className="w-full bg-destructive/50 rounded-t-sm min-h-[2px] transition-colors group-hover:bg-destructive"
+                              style={{ height: `${Math.max((m.cnt / max) * 100, 4)}%` }}
+                            />
+                            <span className="absolute -top-6 left-1/2 -translate-x-1/2 hidden group-hover:block text-[10px] bg-popover border rounded px-1.5 py-0.5 whitespace-nowrap z-10 shadow-sm pointer-events-none">
+                              {formatMonth(m.month)}: {m.cnt}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                      <span>{optOuts.byMonth.slice(0, 6).reverse()[0] ? formatMonth(optOuts.byMonth.slice(0, 6).reverse()[0]!.month) : ''}</span>
+                      <span>This month</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

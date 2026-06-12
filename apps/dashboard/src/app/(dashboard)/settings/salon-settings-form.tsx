@@ -19,6 +19,7 @@ import {
   saveInactivityMessages,
   saveGoogleReviewSettings,
   saveCurrentSpecial,
+  saveReminderSettings,
   type SalonSettings,
 } from './actions';
 import { ConversationFlowSection } from './conversation-flow-section';
@@ -147,6 +148,15 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [currentSpecial, setCurrentSpecial] = useState(initialSettings.currentSpecial ?? '');
   const [savingSpecial, setSavingSpecial] = useState(false);
 
+  const DEFAULT_REMINDER_HOURS = [24, 2];
+  const [reminderEnabled, setReminderEnabled] = useState(
+    initialSettings.automations?.reminders?.enabled ?? true,
+  );
+  const [reminderHours, setReminderHours] = useState<number[]>(
+    initialSettings.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS,
+  );
+  const [savingReminders, setSavingReminders] = useState(false);
+
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
@@ -176,6 +186,8 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setReviewIncentiveEnabled(s.automations?.googleReview?.incentiveEnabled ?? true);
     setReviewIncentiveRands(String((s.automations?.googleReview?.incentiveCents ?? 5000) / 100));
     setCurrentSpecial(s.currentSpecial ?? '');
+    setReminderEnabled(s.automations?.reminders?.enabled ?? true);
+    setReminderHours(s.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS);
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -226,6 +238,17 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     () => currentSpecial !== (saved.currentSpecial ?? ''),
     [saved, currentSpecial],
   );
+
+  const remindersDirty = useMemo(() => {
+    const savedEnabled = saved.automations?.reminders?.enabled ?? true;
+    const savedHours = saved.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS;
+    return (
+      reminderEnabled !== savedEnabled ||
+      JSON.stringify([...reminderHours].sort((a, b) => b - a)) !==
+        JSON.stringify([...savedHours].sort((a, b) => b - a))
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saved, reminderEnabled, reminderHours]);
 
   const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
   const defaultAfterHours =
@@ -450,6 +473,29 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       reportError('currentSpecial', 'Save failed — please try again');
     } finally {
       setSavingSpecial(false);
+    }
+  }
+
+  async function handleSaveReminders(e: React.FormEvent) {
+    e.preventDefault();
+    const unique = [...new Set(reminderHours.filter((h) => h > 0 && h <= 168))].sort((a, b) => b - a);
+    if (reminderEnabled && unique.length === 0) {
+      reportError('reminders', 'Add at least one reminder time');
+      return;
+    }
+    setSavingReminders(true);
+    try {
+      const result = await saveReminderSettings(reminderEnabled, unique);
+      if (result.salon) {
+        applySalon(result.salon);
+        reportSuccess('reminders', 'Reminder settings saved');
+      } else {
+        reportError('reminders', result.error ?? 'Save failed');
+      }
+    } catch {
+      reportError('reminders', 'Save failed — please try again');
+    } finally {
+      setSavingReminders(false);
     }
   }
 
@@ -898,6 +944,88 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               )}
             </div>
             <SectionSaveFeedback feedback={getSection('googleReview')} />
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Appointment reminders */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Appointment reminders</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            WhatsApp reminders sent automatically before each confirmed appointment. Helps reduce no-shows.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveReminders(e)} className="space-y-4 max-w-lg">
+          <div
+            className={cn(
+              'rounded-lg border p-4 transition-colors',
+              reminderEnabled ? 'border-green-600/25 bg-green-600/5' : 'border-muted bg-muted/20',
+            )}
+          >
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reminderEnabled}
+                onChange={(e) => setReminderEnabled(e.target.checked)}
+                className="mt-1 size-4 rounded border-input accent-primary"
+              />
+              <div>
+                <p className="text-sm font-medium">Reminders enabled</p>
+                <p className="text-xs text-muted-foreground">
+                  {reminderEnabled
+                    ? 'Customers receive a WhatsApp message before each appointment.'
+                    : 'No reminders will be sent.'}
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {reminderEnabled && (
+            <div className="space-y-3">
+              <Label>Send reminder at</Label>
+              <div className="flex flex-wrap gap-2">
+                {[48, 24, 12, 4, 2, 1].map((h) => {
+                  const active = reminderHours.includes(h);
+                  return (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() =>
+                        setReminderHours((prev) =>
+                          active ? prev.filter((x) => x !== h) : [...prev, h],
+                        )
+                      }
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-sm border transition-colors',
+                        active
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background border-input hover:border-ring',
+                      )}
+                    >
+                      {h === 1 ? '1 hour' : `${h} hours`} before
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Toggle the times you want. At least one must be selected.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingReminders || !remindersDirty}>
+                {savingReminders ? 'Saving…' : 'Save reminder settings'}
+              </Button>
+              {remindersDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('reminders')} />
           </div>
         </form>
       </section>

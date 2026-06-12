@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  DollarSign,
   Mail,
   MessageSquare,
   Phone,
@@ -46,6 +47,7 @@ interface CustomerDetail {
   noShowRisk: 'LOW' | 'MEDIUM' | 'HIGH';
   createdAt: string;
   loyaltyStamps: number;
+  lifetimeValueCents: number;
   appointments: AppointmentSummary[];
   messages: MessageSummary[];
 }
@@ -297,6 +299,13 @@ export function CustomerDetailClient({ customer }: { customer: CustomerDetail })
               : '—'
           }
         />
+        {customer.lifetimeValueCents > 0 && (
+          <StatPill
+            icon={DollarSign}
+            label="Lifetime value"
+            value={`R${Math.round(customer.lifetimeValueCents / 100).toLocaleString('en-ZA')}`}
+          />
+        )}
       </div>
 
       {/* Tabs */}
