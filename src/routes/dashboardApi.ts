@@ -32,6 +32,7 @@ import {
   setMarketingConsent,
   parseMarketingConsentStatus,
 } from '../services/marketingConsent.js';
+import { recordCustomerNoShow, normalizeNoShowRisk } from '../services/noShowRisk.js';
 
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
 import {
@@ -458,7 +459,21 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           start: { gte: start, lt: end },
           status: { not: 'CANCELLED' },
         },
-        include: { service: true, staff: true, customer: true },
+        include: {
+          service: true,
+          staff: true,
+          customer: {
+            select: {
+              displayName: true,
+              waId: true,
+              firstName: true,
+              lastName: true,
+              noShowRisk: true,
+              noShowCount: true,
+              bookingCount: true,
+            },
+          },
+        },
         orderBy: { start: 'asc' },
       });
       return { appointments: rows };
@@ -478,7 +493,21 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: {
           start: { gte: from, lte: to },
         },
-        include: { service: true, staff: true, customer: true },
+        include: {
+          service: true,
+          staff: true,
+          customer: {
+            select: {
+              displayName: true,
+              waId: true,
+              firstName: true,
+              lastName: true,
+              noShowRisk: true,
+              noShowCount: true,
+              bookingCount: true,
+            },
+          },
+        },
         orderBy: { start: 'asc' },
         take: 500,
       });
@@ -549,6 +578,70 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }).catch(() => {});
 
         return { ok: true };
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/no-show',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const appt = await db.appointment.findFirst({
+          where: { id: request.params.id },
+        });
+        if (!appt) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        if (appt.status === 'NO_SHOW') {
+          reply.code(409);
+          return { error: 'already_no_show', message: 'Appointment is already marked as a no-show.' };
+        }
+        if (appt.status === 'CANCELLED' || appt.status === 'COMPLETED' || appt.status === 'RESCHEDULED') {
+          reply.code(409);
+          return { error: 'invalid_status', message: `Cannot mark ${appt.status} appointment as no-show.` };
+        }
+
+        const customer = await db.customer.findFirst({
+          where: { id: appt.customerId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!customer) {
+          reply.code(409);
+          return { error: 'customer_unavailable', message: 'Customer record is not available.' };
+        }
+
+        await db.appointment.update({
+          where: { id: appt.id },
+          data: { status: 'NO_SHOW', noShowMarkedAt: new Date() },
+        });
+
+        const noShowRisk = await recordCustomerNoShow(appt.customerId, db);
+
+        await db.analyticsEvent.create({
+          data: {
+            salonId: appt.salonId,
+            customerId: appt.customerId,
+            appointmentId: appt.id,
+            staffId: appt.staffId,
+            type: 'no_show',
+            payload: { source: 'dashboard', noShowRisk },
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'appointment_no_show',
+            entity: 'Appointment',
+            entityId: appt.id,
+          },
+        });
+
+        return { ok: true, noShowRisk };
       });
     },
   );
@@ -1180,6 +1273,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         marketingConsent: customer.marketingConsent,
         marketingConsentStatus: customer.marketingConsentStatus,
         marketingConsentAt: customer.marketingConsentAt?.toISOString() ?? null,
+        noShowCount: customer.noShowCount,
+        bookingCount: customer.bookingCount,
+        noShowRisk: normalizeNoShowRisk(customer.noShowRisk),
         createdAt: customer.createdAt,
         loyaltyStamps: loyaltySum._sum.delta ?? 0,
         appointments: appointments.map((a) => ({

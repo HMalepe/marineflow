@@ -45,6 +45,7 @@ import {
   BIRTHDAY_TREAT_TAG,
   isWithinBirthdayWindow,
 } from './outboundCampaigns.js';
+import { incrementCustomerBookingCount } from './noShowRisk.js';
 
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
@@ -1860,6 +1861,13 @@ async function handleConfirm(
       payload: { serviceId: service.id },
     },
   });
+
+  // Track booking count for no-show risk scoring (best-effort — must not fail booking)
+  try {
+    await incrementCustomerBookingCount(conv.customerId, tx);
+  } catch (err) {
+    logger.warn({ err, customerId: conv.customerId }, 'booking_count_increment_failed');
+  }
 
   // §6.1 — remember the stylist for next booking, but only when the customer
   // explicitly chose them this booking. Skipped for:

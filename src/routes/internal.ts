@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
+import { incrementCustomerBookingCount } from '../services/noShowRisk.js';
 
 export async function internalRoutes(app: FastifyInstance) {
   app.post<{
@@ -54,6 +55,8 @@ export async function internalRoutes(app: FastifyInstance) {
         status: 'CONFIRMED',
       },
     });
+
+    await incrementCustomerBookingCount(customer.id, prisma).catch(() => {});
 
     return { appointmentId: appt.id };
   });

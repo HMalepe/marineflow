@@ -3,6 +3,16 @@ import { Badge } from '@/components/ui/badge';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
+type NoShowRisk = 'LOW' | 'MEDIUM' | 'HIGH';
+
+/** Mirror of backend ACTIONABLE_APPOINTMENT_STATUSES — badge only on live bookings. */
+const ACTIONABLE_STATUSES = new Set([
+  'CONFIRMED',
+  'CONFIRMED_PAID',
+  'HELD',
+  'PENDING_PAYMENT',
+]);
+
 interface Appointment {
   id: string;
   start: string;
@@ -10,7 +20,25 @@ interface Appointment {
   status: string;
   service: { name: string };
   staff: { name: string };
-  customer: { displayName: string | null; waId: string };
+  customer: {
+    displayName: string | null;
+    waId: string;
+    noShowRisk?: NoShowRisk;
+    noShowCount?: number;
+    bookingCount?: number;
+  };
+}
+
+function shouldShowRiskBadge(appt: Appointment): boolean {
+  const risk = appt.customer.noShowRisk ?? 'LOW';
+  return (
+    (risk === 'MEDIUM' || risk === 'HIGH') &&
+    ACTIONABLE_STATUSES.has(appt.status)
+  );
+}
+
+function riskSummary(noShowCount: number, bookingCount: number): string {
+  return `Based on ${noShowCount} no-show${noShowCount === 1 ? '' : 's'} from ${bookingCount} booking${bookingCount === 1 ? '' : 's'}`;
 }
 
 export default async function AppointmentsPage() {
@@ -29,8 +57,11 @@ export default async function AppointmentsPage() {
     error = e instanceof Error ? e.message : 'Failed to load';
   }
 
-  const upcoming = appointments.filter((a) => new Date(a.start) >= new Date());
-  const past = appointments.filter((a) => new Date(a.start) < new Date());
+  const now = Date.now();
+  const upcoming = appointments.filter(
+    (a) => new Date(a.start).getTime() >= now && a.status !== 'CANCELLED' && a.status !== 'RESCHEDULED',
+  );
+  const past = appointments.filter((a) => new Date(a.start).getTime() < now);
 
   return (
     <div className="space-y-6">
@@ -51,7 +82,7 @@ export default async function AppointmentsPage() {
           )}
           <div className="space-y-3">
             {upcoming.map((appt) => (
-              <AppointmentRow key={appt.id} appt={appt} />
+              <AppointmentRow key={appt.id} appt={appt} showRisk />
             ))}
           </div>
         </CardContent>
@@ -80,7 +111,36 @@ export default async function AppointmentsPage() {
   );
 }
 
-function AppointmentRow({ appt }: { appt: Appointment }) {
+function NoShowRiskBadge({
+  risk,
+  noShowCount,
+  bookingCount,
+}: {
+  risk: NoShowRisk;
+  noShowCount: number;
+  bookingCount: number;
+}) {
+  const label = risk === 'HIGH' ? 'High risk' : 'Confirm?';
+  const className =
+    risk === 'HIGH'
+      ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200 dark:border-red-900'
+      : 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-200 dark:border-yellow-900';
+
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <span
+        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${className}`}
+      >
+        {label}
+      </span>
+      <p className="text-[10px] text-muted-foreground leading-tight text-right max-w-[160px]">
+        {riskSummary(noShowCount, bookingCount)}
+      </p>
+    </div>
+  );
+}
+
+function AppointmentRow({ appt, showRisk = false }: { appt: Appointment; showRisk?: boolean }) {
   const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     CONFIRMED: 'default',
     CONFIRMED_PAID: 'default',
@@ -89,20 +149,26 @@ function AppointmentRow({ appt }: { appt: Appointment }) {
     CANCELLED: 'destructive',
     NO_SHOW: 'destructive',
     COMPLETED: 'secondary',
+    RESCHEDULED: 'outline',
   };
+
+  const risk = appt.customer.noShowRisk ?? 'LOW';
+  const noShowCount = appt.customer.noShowCount ?? 0;
+  const bookingCount = appt.customer.bookingCount ?? 0;
+  const showBadge = showRisk && shouldShowRiskBadge(appt);
 
   return (
     <div className="flex items-center justify-between p-3 rounded-lg border">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">
+      <div className="space-y-1 min-w-0 pr-3">
+        <p className="text-sm font-medium truncate">
           {appt.customer.displayName ?? appt.customer.waId}
         </p>
         <p className="text-xs text-muted-foreground">
           {appt.service.name} with {appt.staff.name}
         </p>
       </div>
-      <div className="text-right space-y-1">
-        <p className="text-sm">
+      <div className="text-right space-y-1 shrink-0">
+        <p className="text-sm whitespace-nowrap">
           {new Date(appt.start).toLocaleDateString('en-ZA', {
             day: 'numeric',
             month: 'short',
@@ -112,9 +178,14 @@ function AppointmentRow({ appt }: { appt: Appointment }) {
             minute: '2-digit',
           })}
         </p>
-        <Badge variant={statusColors[appt.status] ?? 'secondary'}>
-          {appt.status.toLowerCase().replace(/_/g, ' ')}
-        </Badge>
+        <div className="flex flex-col items-end gap-1">
+          {showBadge && (
+            <NoShowRiskBadge risk={risk} noShowCount={noShowCount} bookingCount={bookingCount} />
+          )}
+          <Badge variant={statusColors[appt.status] ?? 'secondary'}>
+            {appt.status.toLowerCase().replace(/_/g, ' ')}
+          </Badge>
+        </div>
       </div>
     </div>
   );

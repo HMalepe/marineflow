@@ -288,6 +288,10 @@ model Customer {
   passwordHash        String?
   loyaltyStampsCached Int?
   lastInteractionAt   DateTime?
+  /// No-show risk scoring for staff confirmation prompts
+  noShowCount         Int       @default(0)
+  bookingCount        Int       @default(0)
+  noShowRisk          String    @default("LOW") // LOW | MEDIUM | HIGH
   deletedAt           DateTime?
   createdAt           DateTime  @default(now())
   updatedAt   DateTime @default(now()) @updatedAt

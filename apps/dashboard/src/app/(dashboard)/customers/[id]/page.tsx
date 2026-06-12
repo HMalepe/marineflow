@@ -11,6 +11,9 @@ interface CustomerDetail {
   waId: string | null;
   marketingConsentStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED';
   marketingConsentAt: string | null;
+  noShowCount: number;
+  bookingCount: number;
+  noShowRisk: 'LOW' | 'MEDIUM' | 'HIGH';
   createdAt: string;
   loyaltyStamps: number;
   appointments: AppointmentSummary[];
@@ -77,6 +80,13 @@ export default async function CustomerDetailPage({
 
   const consent = consentLabel(customer.marketingConsentStatus);
 
+  const riskBadge =
+    customer.noShowRisk === 'HIGH'
+      ? { text: 'High no-show risk', className: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200' }
+      : customer.noShowRisk === 'MEDIUM'
+        ? { text: 'Confirm before visit', className: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-200' }
+        : null;
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -93,6 +103,11 @@ export default async function CustomerDetailPage({
             <Badge variant="outline" className={consent.className}>
               {consent.text}
             </Badge>
+            {riskBadge && (
+              <Badge variant="outline" className={riskBadge.className}>
+                {riskBadge.text}
+              </Badge>
+            )}
             {customer.marketingConsentAt && (
               <span className="text-xs text-muted-foreground">
                 Updated {new Date(customer.marketingConsentAt).toLocaleDateString('en-ZA')}
@@ -107,10 +122,15 @@ export default async function CustomerDetailPage({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Total Visits"
           value={customer.appointments.filter((a) => a.status === 'COMPLETED').length}
+        />
+        <StatCard
+          label="No-Shows"
+          value={customer.noShowCount}
+          hint={`from ${customer.bookingCount} booking${customer.bookingCount === 1 ? '' : 's'}`}
         />
         <StatCard label="Loyalty Stamps" value={customer.loyaltyStamps} />
         <StatCard
@@ -181,11 +201,20 @@ export default async function CustomerDetailPage({
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string | number }) {
+function StatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+}) {
   return (
     <div className="border rounded-lg p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-2xl font-bold mt-1">{value}</p>
+      {hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}
     </div>
   );
 }
