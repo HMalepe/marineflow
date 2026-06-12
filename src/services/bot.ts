@@ -32,6 +32,20 @@ import { createDepositCheckoutSession } from './payments.js';
 import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import {
+  buildExtraMenuLines,
+  resolveExtendedMenuActions,
+  afterServiceSelected,
+  handleAddonPhase,
+  handleReferralMenuItem,
+  handleMembershipMenuItem,
+  tryCancelWithRules,
+  afterAppointmentCancelled,
+  onBookingConfirmed,
+  tryHandleWaitlistReply,
+  computeAppointmentEnd,
+} from './botPowerFeatures.js';
+import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
+import {
   applyMarketingConsentChoice,
   buildConsentAcceptedMessage,
   buildConsentDeclinedMessage,
@@ -283,6 +297,7 @@ function mainMenu(salon: Salon): string {
     '6 — Contact us',
     '7 — Business hours',
     '8 — Find us (address & directions)',
+    ...buildExtraMenuLines(salon),
     '0 — Something else',
   ];
   return [welcome, ...items].join('\n');
@@ -467,6 +482,16 @@ async function processInboundWhatsApp(
     activityAt: inboundAt,
   }).catch(() => {});
 
+  const isFirstEverMessage = conv.messageCount === 0;
+  if (isFirstEverMessage) {
+    void sendWelcomeJourneyIfNeeded({
+      salonId: salon.id,
+      customerId: customer.id,
+      isFirstInteraction: customer.bookingCount === 0,
+      send: (body) => reply(conv, body),
+    }).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
+  }
+
   if (salon.status !== 'ACTIVE' && salon.status !== 'TRIAL') {
     await getTenantDb().ticket.create({
       data: {
@@ -532,6 +557,14 @@ async function processInboundWhatsApp(
     await replyMenu(conv);
     return;
   }
+
+  const waitlistHandled = await tryHandleWaitlistReply(conv, text, {
+    reply: (body) => reply(conv, body),
+    saveContext: (patch, step) =>
+      saveCtx(conv.id, patch, step as ConversationStep | undefined),
+    startBooking: () => startBookingFlow(conv),
+  });
+  if (waitlistHandled) return;
 
   // Birthday-campaign treat claim — the outbound message says "reply BIRTHDAY"
   if (lower === 'birthday') {
@@ -1223,9 +1256,26 @@ async function handleMenu(
   text: string,
 ) {
   const salon = conv.salon;
-  const choice = text.trim();
+  const choiceNum = text.trim();
+  const choice = choiceNum.toUpperCase();
+  const menuExtras = resolveExtendedMenuActions(salon);
 
-  if (choice === '1') {
+  if (menuExtras.referral != null && choiceNum === String(menuExtras.referral)) {
+    await handleReferralMenuItem(conv, (body) => reply(conv, body));
+    return;
+  }
+
+  if (menuExtras.membership != null && choiceNum === String(menuExtras.membership)) {
+    await handleMembershipMenuItem(conv, (body) => reply(conv, body));
+    return;
+  }
+
+  if (choice === 'REFERRAL') {
+    await handleReferralMenuItem(conv, (body) => reply(conv, body));
+    return;
+  }
+
+  if (choiceNum === '1') {
     // EC-09/EC-18: Wipe stale booking fields before starting a fresh flow
     await saveCtx(conv.id, {
       selectedServiceId: undefined,
@@ -1502,6 +1552,16 @@ async function handlePickService(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  const c = ctx(conv);
+  if (c.addonPhase) {
+    const handled = await handleAddonPhase(conv, text, {
+      reply: (body) => reply(conv, body),
+      saveContext: (patch) => saveCtx(conv.id, patch),
+      continueToStaff: () => continueAfterServicePick(conv, (ctx(conv).selectedServiceId as string) ?? ''),
+    });
+    if (handled) return;
+  }
+
   const n = parseInt(text, 10);
   const services = await getTenantDb().service.findMany({
     where: { salonId: conv.salonId, active: true },
@@ -1514,8 +1574,19 @@ async function handlePickService(
   }
   const service = services[n - 1]!;
 
-  // If owner disabled staff selection, auto-assign — preferring the customer's
-  // last stylist when they still offer this service (§6.1).
+  await afterServiceSelected(conv, service.id, {
+    reply: (body) => reply(conv, body),
+    saveContext: (patch) => saveCtx(conv.id, patch),
+    continueToStaff: () => continueAfterServicePick(conv, service.id),
+  });
+}
+
+async function continueAfterServicePick(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  serviceId: string,
+) {
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+
   if (!conv.salon.botAllowStaffPick) {
     const { staffList: availableStaff } = await getStaffListWithPreference(conv, service.id);
     if (availableStaff.length === 0) {
@@ -1539,8 +1610,6 @@ async function handlePickService(
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     return;
   }
-  // Snapshot the rendered order so handlePickStaff parses replies against the
-  // exact menu the customer saw (roster may change between render and reply).
   await saveCtx(
     conv.id,
     { selectedServiceId: service.id, staffOrderIds: staff.map((s) => s.id) },
@@ -1836,9 +1905,15 @@ async function handleConfirm(
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
   const start = new Date(slotIso);
-  const end = new Date(
-    start.getTime() + (service.durationMin + service.bufferMin + staff.breakMin) * 60_000,
-  );
+  const addonIds = (c.selectedAddonIds as string[] | undefined) ?? [];
+  const end = await computeAppointmentEnd({
+    start,
+    serviceDurationMin: service.durationMin,
+    serviceBufferMin: service.bufferMin,
+    staffBreakMin: staff.breakMin,
+    addonServiceIds: addonIds,
+    salonId: conv.salonId,
+  });
 
   // EC-01: Advisory lock to serialise concurrent bookings for the same staff/time slot
   await getTenantDb().$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${staff.id + ':' + start.toISOString()}))`;
@@ -1886,6 +1961,7 @@ async function handleConfirm(
       staffId: staff.id,
       start,
       end,
+      addonServiceIds: (c.selectedAddonIds as string[] | undefined) ?? [],
       status: redeem.redeemed
         ? 'CONFIRMED'
         : (conv.salon.botRequireDepositStep && (service.depositCents || service.fullPay))
@@ -2011,6 +2087,13 @@ async function handleConfirm(
       .filter(Boolean)
       .join('\n'),
   );
+  void onBookingConfirmed({
+    id: appointment.id,
+    salonId: conv.salonId,
+    start,
+    status: appointment.status,
+    salon: conv.salon,
+  }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
   if (isFirstBooking) {
     await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
   }
@@ -2104,6 +2187,16 @@ async function handleManageBooking(
       await reply(conv, 'Booking not found.');
       return;
     }
+
+    const cancelCheck = await tryCancelWithRules({
+      salon: conv.salon,
+      appointment: appt,
+    });
+    if (!cancelCheck.ok) {
+      await reply(conv, cancelCheck.message);
+      return;
+    }
+
     await getTenantDb().appointment.update({
       where: { id: appt.id },
       data: {
@@ -2112,6 +2205,14 @@ async function handleManageBooking(
         cancelledAt: new Date(),
         cancelledBy: 'customer',
       },
+    });
+
+    await afterAppointmentCancelled({
+      salonId: conv.salonId,
+      salon: conv.salon,
+      serviceId: appt.serviceId,
+      staffId: appt.staffId,
+      start: appt.start,
     });
     await getTenantDb().analyticsEvent.create({
       data: {
@@ -2140,6 +2241,17 @@ async function handleManageBooking(
     });
     if (!appt) {
       await reply(conv, 'Booking not found or cannot be rescheduled.');
+      return;
+    }
+
+    const { checkCancellationAllowed } = await import('./cancellationRules.js');
+    const rescheduleCheck = checkCancellationAllowed({
+      salon: conv.salon,
+      appointment: appt,
+      action: 'reschedule',
+    });
+    if (!rescheduleCheck.allowed) {
+      await reply(conv, rescheduleCheck.message);
       return;
     }
 

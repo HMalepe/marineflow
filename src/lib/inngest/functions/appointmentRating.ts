@@ -1,15 +1,11 @@
-// Fires after every appointment is marked COMPLETED.
-// Waits 4 hours, then sends a WhatsApp rating request IF:
-//   - No csatSentAt already set (prevent double-send)
-//   - Appointment is still COMPLETED (not cancelled/rescheduled after)
-//   - Customer has a waId
-// Sets csatSentAt on the appointment.
-// Also sets conversation step to CSAT with csatAppointmentId in context.
+// Sends Google review request after completed visit (configurable delay).
+// Separate from CSAT rating — focuses on public Google reviews.
 
 import { ConversationStep, MessageDirection } from '@prisma/client';
 import { inngest } from '../client.js';
 import { prisma } from '../../prisma.js';
 import { sendWithFallback } from '../../../services/channelRouter.js';
+import { parseAutomationsFromMetadata } from '../../automationSettings.js';
 
 export type AppointmentCompletedEvent = {
   data: {
@@ -25,6 +21,95 @@ async function withJobTenant<T>(salonId: string, fn: () => Promise<T>): Promise<
   return fn();
 }
 
+export const googleReviewRequest = inngest.createFunction(
+  {
+    id: 'google-review-request',
+    retries: 2,
+    triggers: [{ event: 'whatsapp/appointment.completed' }],
+  },
+  async ({ event, step }) => {
+    const { appointmentId, salonId, customerId, customerWaId } =
+      event.data as AppointmentCompletedEvent['data'];
+
+    const config = await step.run('load-config', async () =>
+      withJobTenant(salonId, async () => {
+        const salon = await prisma.salon.findUnique({
+          where: { id: salonId },
+          select: { metadata: true, googleReviewUrl: true, name: true, tradingName: true },
+        });
+        if (!salon) return null;
+        const automations = parseAutomationsFromMetadata(salon.metadata);
+        return {
+          automations,
+          googleReviewUrl: salon.googleReviewUrl,
+          salonName: salon.tradingName ?? salon.name,
+        };
+      }),
+    );
+
+    if (!config?.automations.googleReview.enabled || !config.googleReviewUrl) {
+      return { skipped: true, reason: 'disabled_or_no_url' };
+    }
+
+    const sleepHours = config.automations.googleReview.hoursAfterVisit;
+    await step.sleep('wait-before-review', `${sleepHours}h`);
+
+    await step.run('send-review-request', async () =>
+      withJobTenant(salonId, async () => {
+        const appt = await prisma.appointment.findUnique({
+          where: { id: appointmentId },
+          select: { status: true, reviewRequestSentAt: true },
+        });
+        if (!appt || appt.status !== 'COMPLETED' || appt.reviewRequestSentAt) return;
+        if (!customerWaId) return;
+
+        const customer = await prisma.customer.findUnique({
+          where: { id: customerId },
+          select: { firstName: true, marketingConsentStatus: true },
+        });
+        if (customer?.marketingConsentStatus !== 'ACCEPTED') return;
+
+        const body =
+          `Hi ${customer?.firstName ?? 'there'}! Thanks for visiting ${config.salonName} 😊\n\n` +
+          `We'd love your feedback on Google — it helps other customers find us:\n${config.googleReviewUrl}\n\n` +
+          `Thank you for supporting us!`;
+
+        await sendWithFallback({ salonId, to: customerWaId, body });
+
+        await prisma.appointment.update({
+          where: { id: appointmentId },
+          data: { reviewRequestSentAt: new Date() },
+        });
+
+        const conv = await prisma.conversation.findUnique({
+          where: { salonId_customerId: { salonId, customerId } },
+        });
+        if (conv) {
+          await prisma.message.create({
+            data: {
+              conversationId: conv.id,
+              customerId,
+              direction: MessageDirection.OUTBOUND,
+              body,
+            },
+          });
+        }
+
+        await prisma.analyticsEvent.create({
+          data: {
+            salonId,
+            customerId,
+            appointmentId,
+            type: 'google_review_request_sent',
+          },
+        });
+      }),
+    );
+
+    return { sent: true, appointmentId };
+  },
+);
+
 export const appointmentRating = inngest.createFunction(
   {
     id: 'appointment-rating',
@@ -35,12 +120,10 @@ export const appointmentRating = inngest.createFunction(
     const { appointmentId, salonId, customerId, customerWaId } =
       event.data as AppointmentCompletedEvent['data'];
 
-    // Wait 4 hours before sending the rating request
     await step.sleep('wait-4h', '4h');
 
     await step.run('send-rating-request', async () =>
       withJobTenant(salonId, async () => {
-        // Load appointment — check csatSentAt and status
         const appt = await prisma.appointment.findUnique({
           where: { id: appointmentId },
           select: {
@@ -53,12 +136,10 @@ export const appointmentRating = inngest.createFunction(
         });
 
         if (!appt) return;
-        if (appt.csatSentAt !== null) return; // already sent
-        if (appt.status !== 'COMPLETED') return; // cancelled / rescheduled since
-
+        if (appt.csatSentAt !== null) return;
+        if (appt.status !== 'COMPLETED') return;
         if (!customerWaId) return;
 
-        // Load customer first name + salon name
         const [customer, salon] = await Promise.all([
           prisma.customer.findUnique({
             where: { id: customerId },
@@ -66,14 +147,14 @@ export const appointmentRating = inngest.createFunction(
           }),
           prisma.salon.findUnique({
             where: { id: salonId },
-            select: { name: true, tradingName: true },
+            select: { name: true, tradingName: true, googleReviewUrl: true },
           }),
         ]);
 
         const firstName = customer?.firstName ?? 'there';
         const salonName = salon?.tradingName ?? salon?.name ?? 'us';
 
-        const body =
+        let body =
           `Hi ${firstName}! We hope you enjoyed your visit to ${salonName} 😊\n\n` +
           `How would you rate your experience?\n\n` +
           `⭐ 1 – Poor\n` +
@@ -85,16 +166,14 @@ export const appointmentRating = inngest.createFunction(
 
         await sendWithFallback({ salonId, to: customerWaId, body });
 
-        // Mark csatSentAt on the appointment
         await prisma.appointment.update({
           where: { id: appointmentId },
           data: { csatSentAt: new Date() },
         });
 
-        // Find the open conversation for this customer+salon and set step to CSAT
         const conv = await prisma.conversation.findUnique({
           where: { salonId_customerId: { salonId, customerId } },
-          select: { id: true, customerId: true, context: true },
+          select: { id: true, context: true },
         });
 
         if (conv) {
@@ -109,7 +188,6 @@ export const appointmentRating = inngest.createFunction(
             },
           });
 
-          // Record outbound message
           await prisma.message.create({
             data: {
               conversationId: conv.id,

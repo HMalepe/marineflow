@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { WaivePenaltyButton } from './waive-penalty-button';
 import { Badge } from '@/components/ui/badge';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
@@ -82,7 +82,7 @@ export default async function AppointmentsPage() {
           )}
           <div className="space-y-3">
             {upcoming.map((appt) => (
-              <AppointmentRow key={appt.id} appt={appt} showRisk />
+              <AppointmentRow key={appt.id} appt={appt} showRisk token={token ?? ''} />
             ))}
           </div>
         </CardContent>
@@ -140,7 +140,15 @@ function NoShowRiskBadge({
   );
 }
 
-function AppointmentRow({ appt, showRisk = false }: { appt: Appointment; showRisk?: boolean }) {
+function AppointmentRow({
+  appt,
+  showRisk = false,
+  token = '',
+}: {
+  appt: Appointment;
+  showRisk?: boolean;
+  token?: string;
+}) {
   const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     CONFIRMED: 'default',
     CONFIRMED_PAID: 'default',
@@ -179,6 +187,9 @@ function AppointmentRow({ appt, showRisk = false }: { appt: Appointment; showRis
           })}
         </p>
         <div className="flex flex-col items-end gap-1">
+          {showRisk && token && ACTIONABLE_STATUSES.has(appt.status) && (
+            <WaivePenaltyButton appointmentId={appt.id} token={token} />
+          )}
           {showBadge && (
             <NoShowRiskBadge risk={risk} noShowCount={noShowCount} bookingCount={bookingCount} />
           )}

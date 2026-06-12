@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
 import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
 import { sendWithFallback } from './channelRouter.js';
+import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
@@ -157,6 +158,20 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       });
     }
   });
+
+  const confirmed = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { id: true, salonId: true, start: true, status: true, salon: { select: { metadata: true, timezone: true } } },
+  });
+  if (confirmed) {
+    void scheduleAppointmentReminders({
+      id: confirmed.id,
+      salonId: confirmed.salonId,
+      start: confirmed.start,
+      status: confirmed.status,
+      salon: confirmed.salon,
+    }).catch(() => undefined);
+  }
 }
 
 export async function refundPayfastPayment(input: {

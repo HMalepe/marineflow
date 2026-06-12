@@ -3,6 +3,7 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { inngest } from '../lib/inngest/client.js';
 import { sendWithFallback } from './channelRouter.js';
 import { logger } from '../lib/logger.js';
+import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 
 export type AudienceFilterType = 'all' | 'tags' | 'inactive';
 
@@ -122,6 +123,29 @@ export function resolveCampaignScheduleAfterPatch(
   return existingScheduledAt;
 }
 
+export async function assertScheduledCampaignCapacity(
+  salonId: string,
+  excludeCampaignId?: string,
+): Promise<string | null> {
+  const db = getTenantDb();
+  const salon = await db.salon.findUnique({
+    where: { id: salonId },
+    select: { metadata: true },
+  });
+  const max = parseAutomationsFromMetadata(salon?.metadata).seasonalCampaigns.maxScheduled;
+  const count = await db.campaign.count({
+    where: {
+      salonId,
+      status: 'SCHEDULED',
+      ...(excludeCampaignId ? { NOT: { id: excludeCampaignId } } : {}),
+    },
+  });
+  if (count >= max) {
+    return `You can schedule up to ${max} campaigns at a time. Cancel or send one before scheduling another.`;
+  }
+  return null;
+}
+
 /**
  * Create a campaign in DRAFT or SCHEDULED status.
  */
@@ -137,6 +161,10 @@ export async function createCampaign(params: {
   createdBy?: string;
 }) {
   const db = getTenantDb();
+  if (params.scheduledAt) {
+    const capError = await assertScheduledCampaignCapacity(params.salonId);
+    if (capError) throw new Error(capError);
+  }
   const status: CampaignStatus = params.scheduledAt ? 'SCHEDULED' : 'DRAFT';
 
   return db.campaign.create({
@@ -181,6 +209,10 @@ export async function updateCampaign(
     data.audienceFilter = normalizeAudienceFilter(params.audienceFilter) as object;
   }
   if (params.scheduledAt !== undefined) {
+    if (params.scheduledAt && existing.status !== 'SCHEDULED') {
+      const capError = await assertScheduledCampaignCapacity(existing.salonId, campaignId);
+      if (capError) throw new Error(capError);
+    }
     data.scheduledAt = params.scheduledAt;
     data.status = params.scheduledAt ? 'SCHEDULED' : 'DRAFT';
   }

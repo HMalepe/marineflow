@@ -230,6 +230,9 @@ model Salon {
   loyaltyTiers   LoyaltyTier[]
   campaigns      Campaign[]
   waitlistEntries WaitlistEntry[]
+  serviceAddons  ServiceAddon[]
+  membershipPlans MembershipPlan[]
+  customerMemberships CustomerMembership[]
   webhookSubscriptions WebhookSubscription[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
@@ -304,6 +307,7 @@ model Customer {
   pushTokens      PushToken[]
   referralCodes   ReferralCode[]
   waitlistEntries WaitlistEntry[]
+  memberships     CustomerMembership[]
   tickets         Ticket[]
   payments        Payment[]
 
@@ -393,9 +397,30 @@ model Service {
 
   staffLinks   StaffService[]
   appointments Appointment[]
+  addonLinks   ServiceAddon[]       @relation("ParentService")
+  addonOf      ServiceAddon[]       @relation("AddonService")
 
   @@index([salonId])
   @@index([categoryId])
+}
+
+/// Upsell add-ons linked to a parent service (e.g. deep conditioning with a haircut).
+model ServiceAddon {
+  id             String   @id @default(cuid())
+  salonId        String
+  salon          Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  serviceId      String
+  service        Service  @relation("ParentService", fields: [serviceId], references: [id], onDelete: Cascade)
+  addonServiceId String
+  addonService   Service  @relation("AddonService", fields: [addonServiceId], references: [id], onDelete: Cascade)
+  pitchMessage   String?  @db.Text
+  sortOrder      Int      @default(0)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@unique([serviceId, addonServiceId])
+  @@index([salonId])
+  @@index([serviceId])
 }
 
 model Staff {
@@ -520,7 +545,14 @@ model Appointment {
   rescheduledTo       Appointment?       @relation("RescheduleChain")
   noShowMarkedAt      DateTime?
   confirmedAt         DateTime?
-  reminderSentAt      DateTime?
+  reminderSentAt      DateTime?          /// @deprecated use reminder24hSentAt
+  reminder24hSentAt   DateTime?
+  reminder2hSentAt    DateTime?
+  reviewRequestSentAt DateTime?
+  penaltyWaivedAt     DateTime?
+  penaltyWaivedBy     String?            /// StaffUser id
+  cancellationPenaltyApplied Boolean     @default(false)
+  addonServiceIds     String[]           @default([])
   csatSentAt          DateTime?
   csatScore           Int?               /// 1–5, null until customer replies
   createdAt           DateTime           @default(now())
@@ -795,6 +827,7 @@ model ReferralCode {
   usageCount   Int       @default(0)
   maxUses      Int       @default(0)
   rewardStamps Int       @default(1)
+  rewardCents  Int       @default(5000)
   active       Boolean   @default(true)
   createdAt    DateTime  @default(now())
 
@@ -827,6 +860,45 @@ model LoyaltyTier {
 
   @@index([salonId])
   @@unique([salonId, name])
+}
+
+// ─── VIP Membership ─────────────────────────────────────────────────
+
+model MembershipPlan {
+  id              String   @id @default(cuid())
+  salonId         String
+  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?  @db.Text
+  priceCents      Int
+  visitsPerMonth  Int      @default(4)
+  savingsCents    Int      @default(0)
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  memberships     CustomerMembership[]
+
+  @@index([salonId])
+}
+
+model CustomerMembership {
+  id              String   @id @default(cuid())
+  salonId         String
+  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  planId          String
+  plan            MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  visitsRemaining Int
+  renewsAt        DateTime
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@index([salonId, customerId])
+  @@index([salonId, active])
 }
 
 // ─── Marketing Campaigns ──────────────────────────────────────────────

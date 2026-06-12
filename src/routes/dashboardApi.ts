@@ -53,7 +53,14 @@ import {
   validateWeeklyHoursSettings,
   type WeeklyHoursSettings,
 } from '../lib/businessHours.js';
-import { DEFAULT_BUSINESS_HOURS } from '../lib/salonDefaults.js';
+import {
+  mergeAutomationsIntoMetadata,
+  parseAutomationsFromMetadata,
+  validateAutomationsPayload,
+  type SalonAutomations,
+} from '../lib/automationSettings.js';
+import { SEASONAL_CAMPAIGN_TEMPLATES } from '../lib/campaignTemplates.js';
+import { maybeSendReferralPrompt } from '../services/referralProgram.js';
 
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
 import {
@@ -260,12 +267,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         },
       });
       const flow = parseBotFlowSettingsFromMetadata(salon.metadata);
+      const automations = parseAutomationsFromMetadata(salon.metadata);
       return {
         salon: {
           ...salon,
           botActive: salon.status === 'ACTIVE',
           botFlowOrder: flow.order,
           botCustomFlows: flow.customFlows,
+          automations,
         },
       };
     });
@@ -334,6 +343,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       botBirthdayEnabled?: boolean;
       botFlowOrder?: string[];
       botCustomFlows?: CustomBotFlow[];
+      automations?: Partial<SalonAutomations>;
       inactivityMessage1?: string | null;
       inactivityMessage1DelayMin?: number;
       inactivityMessage2?: string | null;
@@ -371,6 +381,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botBirthdayEnabled,
           botFlowOrder,
           botCustomFlows,
+          automations,
           inactivityMessage1,
           inactivityMessage1DelayMin,
           inactivityMessage2,
@@ -439,21 +450,35 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         let metadataPatch: ReturnType<typeof mergeBotFlowIntoMetadata> | undefined;
-        if (botFlowOrder !== undefined || botCustomFlows !== undefined) {
+        const needsMetadata =
+          botFlowOrder !== undefined || botCustomFlows !== undefined || automations !== undefined;
+        if (needsMetadata) {
           const existing = await db.salon.findUniqueOrThrow({
             where: { id: user.salonId },
             select: { metadata: true },
           });
-          const validated = validateBotFlowPayload(botFlowOrder, botCustomFlows);
-          if ('error' in validated) {
-            reply.code(400);
-            return { error: 'invalid_bot_flow', message: validated.error };
+          let meta: unknown = existing.metadata;
+
+          if (botFlowOrder !== undefined || botCustomFlows !== undefined) {
+            const validated = validateBotFlowPayload(botFlowOrder, botCustomFlows);
+            if ('error' in validated) {
+              reply.code(400);
+              return { error: 'invalid_bot_flow', message: validated.error };
+            }
+            meta = mergeBotFlowIntoMetadata(meta, validated.order, validated.customFlows);
           }
-          metadataPatch = mergeBotFlowIntoMetadata(
-            existing.metadata,
-            validated.order,
-            validated.customFlows,
-          );
+
+          if (automations !== undefined) {
+            const current = parseAutomationsFromMetadata(meta);
+            const validatedAuto = validateAutomationsPayload(automations, current);
+            if ('error' in validatedAuto) {
+              reply.code(400);
+              return { error: 'invalid_automations', message: validatedAuto.error };
+            }
+            meta = mergeAutomationsIntoMetadata(meta, validatedAuto);
+          }
+
+          metadataPatch = meta as ReturnType<typeof mergeBotFlowIntoMetadata>;
         }
 
         const updated = await db.salon.update({
@@ -530,6 +555,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         });
 
         const flow = parseBotFlowSettingsFromMetadata(updated.metadata);
+        const autoSettings = parseAutomationsFromMetadata(updated.metadata);
         await db.auditLog.create({
           data: {
             salonId: user.salonId,
@@ -546,11 +572,28 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             botActive: updated.status === 'ACTIVE',
             botFlowOrder: flow.order,
             botCustomFlows: flow.customFlows,
+            automations: autoSettings,
           },
         };
       });
     },
   );
+
+  app.get('/settings/automations', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const salon = await getTenantDb().salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: { metadata: true },
+      });
+      return { automations: parseAutomationsFromMetadata(salon.metadata) };
+    });
+  });
+
+  app.get('/campaigns/templates', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      return { templates: SEASONAL_CAMPAIGN_TEMPLATES };
+    });
+  });
 
   app.get('/appointments/today', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
@@ -683,6 +726,15 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           },
         }).catch(() => {});
 
+        const completedCount = await db.appointment.count({
+          where: { salonId: appt.salonId, customerId: appt.customerId, status: 'COMPLETED' },
+        });
+        void maybeSendReferralPrompt({
+          salonId: appt.salonId,
+          customerId: appt.customerId,
+          completedVisits: completedCount,
+        }).catch(() => {});
+
         return { ok: true };
       });
     },
@@ -748,6 +800,218 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         });
 
         return { ok: true, noShowRisk };
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/waive-penalty',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const appt = await db.appointment.findFirst({ where: { id: request.params.id } });
+        if (!appt) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        await db.appointment.update({
+          where: { id: appt.id },
+          data: {
+            penaltyWaivedAt: new Date(),
+            penaltyWaivedBy: user.sub,
+            cancellationPenaltyApplied: false,
+          },
+        });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'penalty_waived',
+            entity: 'Appointment',
+            entityId: appt.id,
+          },
+        });
+        return { ok: true };
+      });
+    },
+  );
+
+  app.get('/analytics/stylist-leaderboard', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: { metadata: true },
+      });
+      const automations = parseAutomationsFromMetadata(salon.metadata);
+
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try {
+          return await db.$queryRawUnsafe<T[]>(sql, ...args);
+        } catch {
+          return [];
+        }
+      };
+
+      const [performance, ratings, rebooking] = await Promise.all([
+        safeQuery<{
+          staffId: string;
+          staffName: string;
+          completed: number;
+          revenue_cents: number;
+          no_shows: number;
+        }>(
+          `SELECT sp."staffId", s.name as "staffName",
+                  sp.completed::int, sp.revenue_cents::int, sp.no_shows::int
+           FROM mv_staff_performance sp
+           JOIN "Staff" s ON s.id = sp."staffId"
+           WHERE sp."salonId" = $1
+             AND sp.month = DATE_TRUNC('month', NOW())
+           ORDER BY sp.revenue_cents DESC`,
+          user.salonId,
+        ),
+        safeQuery<{ staffId: string; avg_rating: number; rating_count: number }>(
+          `SELECT a."staffId",
+                  ROUND(AVG(a."csatScore")::numeric, 2)::float as avg_rating,
+                  COUNT(*)::int as rating_count
+           FROM "Appointment" a
+           WHERE a."salonId" = $1 AND a."csatScore" IS NOT NULL
+             AND a."start" >= NOW() - INTERVAL '90 days'
+           GROUP BY a."staffId"`,
+          user.salonId,
+        ),
+        safeQuery<{ staffId: string; rebooking_rate: number }>(
+          `SELECT a."staffId",
+                  ROUND(
+                    100.0 * COUNT(DISTINCT CASE WHEN c."bookingCount" > 1 THEN a."customerId" END)
+                    / NULLIF(COUNT(DISTINCT a."customerId"), 0),
+                    1
+                  )::float as rebooking_rate
+           FROM "Appointment" a
+           JOIN "Customer" c ON c.id = a."customerId"
+           WHERE a."salonId" = $1 AND a.status = 'COMPLETED'
+             AND a."start" >= NOW() - INTERVAL '90 days'
+           GROUP BY a."staffId"`,
+          user.salonId,
+        ),
+      ]);
+
+      const ratingMap = new Map(ratings.map((r) => [r.staffId, r]));
+      const rebookMap = new Map(rebooking.map((r) => [r.staffId, r]));
+
+      const leaderboard = performance.map((p, index) => {
+        const rating = ratingMap.get(p.staffId);
+        const rebook = rebookMap.get(p.staffId);
+        const incentiveCents = automations.stylistPerformance.incentiveEnabled
+          ? Math.round(
+              p.revenue_cents * (automations.stylistPerformance.incentivePercentPerCut / 100),
+            )
+          : 0;
+        return {
+          rank: index + 1,
+          staffId: p.staffId,
+          staffName: p.staffName,
+          completed: p.completed,
+          revenueCents: p.revenue_cents,
+          noShows: p.no_shows,
+          avgRating: rating?.avg_rating ?? null,
+          ratingCount: rating?.rating_count ?? 0,
+          rebookingRate: rebook?.rebooking_rate ?? null,
+          incentiveCents,
+          stars: rating?.avg_rating ? Math.round(rating.avg_rating) : 0,
+        };
+      });
+
+      return {
+        enabled: automations.stylistPerformance.enabled,
+        incentiveEnabled: automations.stylistPerformance.incentiveEnabled,
+        incentivePercentPerCut: automations.stylistPerformance.incentivePercentPerCut,
+        leaderboard,
+      };
+    });
+  });
+
+  app.get('/membership/plans', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const plans = await getTenantDb().membershipPlan.findMany({
+        where: { salonId: user.salonId },
+        orderBy: { sortOrder: 'asc' },
+      });
+      return { plans };
+    });
+  });
+
+  app.post<{ Body: { name: string; description?: string; priceCents: number; visitsPerMonth?: number; savingsCents?: number } }>(
+    '/membership/plans',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { name, description, priceCents, visitsPerMonth, savingsCents } = request.body ?? {};
+        if (!name?.trim() || !Number.isFinite(priceCents) || priceCents <= 0) {
+          reply.code(400);
+          return { error: 'invalid_plan' };
+        }
+        const plan = await getTenantDb().membershipPlan.create({
+          data: {
+            salonId: user.salonId,
+            name: name.trim(),
+            description: description?.trim() || null,
+            priceCents,
+            visitsPerMonth: visitsPerMonth ?? 4,
+            savingsCents: savingsCents ?? 0,
+          },
+        });
+        return { plan };
+      });
+    },
+  );
+
+  app.get<{ Params: { serviceId: string } }>('/services/:serviceId/addons', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const addons = await getTenantDb().serviceAddon.findMany({
+        where: { salonId: user.salonId, serviceId: request.params.serviceId },
+        include: { addonService: { select: { id: true, name: true, priceCents: true, durationMin: true } } },
+        orderBy: { sortOrder: 'asc' },
+      });
+      return { addons };
+    });
+  });
+
+  app.post<{ Params: { serviceId: string }; Body: { addonServiceId: string; pitchMessage?: string; sortOrder?: number } }>(
+    '/services/:serviceId/addons',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { addonServiceId, pitchMessage, sortOrder } = request.body ?? {};
+        if (!addonServiceId) {
+          reply.code(400);
+          return { error: 'addon_service_required' };
+        }
+        const addon = await getTenantDb().serviceAddon.create({
+          data: {
+            salonId: user.salonId,
+            serviceId: request.params.serviceId,
+            addonServiceId,
+            pitchMessage: pitchMessage?.trim() || null,
+            sortOrder: sortOrder ?? 0,
+          },
+          include: { addonService: { select: { id: true, name: true, priceCents: true } } },
+        });
+        return { addon };
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/service-addons/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        await getTenantDb().serviceAddon.deleteMany({
+          where: { id: request.params.id, salonId: user.salonId },
+        });
+        return { ok: true };
       });
     },
   );

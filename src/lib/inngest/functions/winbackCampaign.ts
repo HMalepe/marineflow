@@ -20,6 +20,7 @@ import {
   buildWinbackBody,
   isOutboundDelivered,
 } from '../../../services/outboundCampaigns.js';
+import { parseAutomationsFromMetadata } from '../../automationSettings.js';
 
 const DAY_MS = 86_400_000;
 
@@ -27,6 +28,7 @@ interface SalonTarget {
   id: string;
   name: string;
   tradingName: string | null;
+  metadata: unknown;
 }
 
 interface WinbackCandidate {
@@ -47,7 +49,7 @@ export const winbackCampaign = inngest.createFunction(
     try {
       salons = await prisma.salon.findMany({
         where: { status: { in: ['ACTIVE', 'TRIAL'] }, botWinbackEnabled: true, deletedAt: null },
-        select: { id: true, name: true, tradingName: true },
+        select: { id: true, name: true, tradingName: true, metadata: true },
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2022') {
@@ -70,6 +72,13 @@ export const winbackCampaign = inngest.createFunction(
 );
 
 async function runWinbackForSalon(salon: SalonTarget): Promise<number> {
+  const automations = parseAutomationsFromMetadata(salon.metadata);
+  // Avoid double-messaging: reactivation campaign handles configurable inactive tiers.
+  if (automations.reactivation.enabled) {
+    logger.info({ salonId: salon.id }, 'winback_skipped_reactivation_enabled');
+    return 0;
+  }
+
   const now = Date.now();
 
   const candidates = await withTenantContext(salon.id, async () => {
