@@ -2,8 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { Film, ImageIcon, Loader2, Upload, X } from 'lucide-react';
-import { apiFetch, ApiError } from '@/lib/api';
+import { apiUploadFile, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { SaveErrorFeedback, SaveSuccessFeedback } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
+import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 
 export type CampaignMediaType = 'image' | 'video';
@@ -29,22 +32,22 @@ interface Props {
 export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disabled }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
+  const { success, error, clear, reportSuccess, reportError } = useSaveFeedback();
 
   const preview = localPreview ?? mediaUrl;
 
   async function handleFile(file: File) {
-    setError(null);
+    clear();
     const type = mimeToMediaType(file.type);
     if (!type) {
-      setError('Use JPEG, PNG, WebP, GIF, or MP4 video.');
+      reportError('Use JPEG, PNG, WebP, GIF, or MP4 video.');
       return;
     }
     const isGif = file.type === 'image/gif';
     const max = type === 'video' ? VIDEO_MAX : isGif ? GIF_MAX : IMAGE_MAX;
     if (file.size > max) {
-      setError(type === 'video' ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.');
+      reportError(type === 'video' ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.');
       return;
     }
 
@@ -53,60 +56,32 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
     setLocalPreview(blobUrl);
 
     try {
-      const presign = await apiFetch<{
-        uploadUrl: string;
-        fileKey: string;
-        publicUrl: string;
-      }>(
-        '/uploads/presign',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            filename: file.name,
-            mimeType: file.type,
-            purpose: 'campaign',
-          }),
-        },
-        token,
-      );
-
-      const putRes = await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-
-      if (!putRes.ok) {
-        throw new Error('Upload failed — check storage configuration (S3).');
-      }
-
-      await apiFetch(
-        '/uploads/confirm',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            fileKey: presign.fileKey,
-            filename: file.name,
-            mimeType: file.type,
-            sizeBytes: file.size,
-            purpose: 'campaign',
-          }),
-        },
-        token,
-      );
-
-      onChange({ mediaUrl: presign.publicUrl, mediaType: type });
+      const { publicUrl } = await apiUploadFile(file, 'campaign', token);
+      URL.revokeObjectURL(blobUrl);
+      setLocalPreview(null);
+      onChange({ mediaUrl: publicUrl, mediaType: type });
+      reportSuccess(SAVE_MESSAGES.mediaUploaded);
     } catch (err) {
       setLocalPreview(null);
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Upload failed');
+      URL.revokeObjectURL(blobUrl);
+      reportError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : 'Upload failed — check your connection and try again.',
+      );
     } finally {
       setUploading(false);
     }
   }
 
   function clearMedia() {
+    if (localPreview && localPreview.startsWith('blob:')) {
+      URL.revokeObjectURL(localPreview);
+    }
     setLocalPreview(null);
-    setError(null);
+    clear();
     onChange({ mediaUrl: null, mediaType: null });
     if (inputRef.current) inputRef.current.value = '';
   }
@@ -123,7 +98,7 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
           )}
           <div className="absolute top-2 right-2 flex gap-1">
             <BadgePill type={mediaType ?? 'image'} />
-            {!disabled && (
+            {!disabled && !uploading && (
               <button
                 type="button"
                 onClick={clearMedia}
@@ -176,11 +151,8 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
         </Button>
       )}
 
-      {error && (
-        <p role="alert" className="text-xs text-destructive">
-          {error}
-        </p>
-      )}
+      <SaveSuccessFeedback message={success} className="text-xs" />
+      <SaveErrorFeedback message={error} className="text-xs" />
 
       <input
         ref={inputRef}
@@ -190,6 +162,7 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) void handleFile(file);
+          if (inputRef.current) inputRef.current.value = '';
         }}
       />
     </div>

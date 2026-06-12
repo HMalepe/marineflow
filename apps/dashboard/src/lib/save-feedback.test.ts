@@ -9,6 +9,7 @@ const STANDARD_SAVE_MESSAGES = [
   SAVE_MESSAGES.draftSaved,
   SAVE_MESSAGES.logoSaved,
   SAVE_MESSAGES.logoRemoved,
+  SAVE_MESSAGES.mediaUploaded,
   'Business hours saved',
   'FAQ added — keep going or click Done',
   'Bot messages saved',

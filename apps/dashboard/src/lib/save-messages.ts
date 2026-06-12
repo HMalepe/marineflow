@@ -5,6 +5,7 @@ export const SAVE_MESSAGES = {
   draftSaved: 'Draft saved',
   logoSaved: 'Logo saved',
   logoRemoved: 'Logo removed',
+  mediaUploaded: 'Media uploaded',
 } as const;
 
 export type SaveMessageKey = keyof typeof SAVE_MESSAGES;

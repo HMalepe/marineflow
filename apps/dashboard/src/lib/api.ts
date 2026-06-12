@@ -61,3 +61,32 @@ export async function apiFetch<T>(
 
   return res.json() as Promise<T>;
 }
+
+/** Upload a file through the API (server-side S3 PUT — no browser CORS). */
+export async function apiUploadFile(
+  file: File,
+  purpose: string,
+  token: string,
+): Promise<{ publicUrl: string; fileKey: string }> {
+  const res = await fetch(`${API_URL}/api/uploads/file`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/octet-stream',
+      'X-Mime-Type': file.type,
+      'X-Filename': encodeURIComponent(file.name),
+      'X-Purpose': purpose,
+    },
+    body: file,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ title: 'Upload failed' }));
+    throw new ApiError(
+      res.status,
+      body.message ?? body.title ?? body.error ?? 'Upload failed',
+    );
+  }
+
+  return res.json() as Promise<{ publicUrl: string; fileKey: string }>;
+}

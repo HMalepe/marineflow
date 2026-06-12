@@ -23,6 +23,9 @@ import {
   confirmUpload,
   listUploads,
   deleteUpload,
+  uploadBuffer,
+  CAMPAIGN_MEDIA_MIMES,
+  UploadError,
 } from '../services/uploads.js';
 import { exportCustomerData, eraseCustomerData } from '../services/compliance.js';
 import { generateWebhookSecret } from '../services/webhookDelivery.js';
@@ -89,6 +92,15 @@ function serializeFaq(item: {
 }
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
+  const UPLOAD_BODY_LIMIT = 17 * 1024 * 1024;
+
+  app.addContentTypeParser(
+    'application/octet-stream',
+    { parseAs: 'buffer', bodyLimit: UPLOAD_BODY_LIMIT },
+    (_req, body, done) => {
+      done(null, body);
+    },
+  );
   app.addHook('preHandler', async (request, reply) => {
     await requireAuth(request, reply);
   });
@@ -2476,18 +2488,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
       const purposeValue = purpose ?? 'general';
       if (purposeValue === 'campaign') {
-        const allowed = [
-          'image/jpeg',
-          'image/png',
-          'image/webp',
-          'video/mp4',
-          'video/quicktime',
-        ];
-        if (!allowed.includes(mimeType)) {
+        if (!CAMPAIGN_MEDIA_MIMES.includes(mimeType as (typeof CAMPAIGN_MEDIA_MIMES)[number])) {
           reply.code(400);
           return {
             error: 'invalid_campaign_media',
-            message: 'Newsletter media must be JPEG, PNG, WebP, or MP4 video.',
+            message: 'Newsletter media must be JPEG, PNG, WebP, GIF, or MP4 video.',
           };
         }
       }
@@ -2529,6 +2534,38 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       );
 
       return { file };
+    });
+  });
+
+  app.post('/uploads/file', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const filename = decodeURIComponent(String(request.headers['x-filename'] ?? 'upload.bin'));
+      const mimeType = String(request.headers['x-mime-type'] ?? 'application/octet-stream');
+      const purpose = String(request.headers['x-purpose'] ?? 'general');
+      const buffer = request.body as Buffer;
+
+      if (!Buffer.isBuffer(buffer) || buffer.length === 0) {
+        reply.code(400);
+        return { error: 'empty_body', message: 'No file data received.' };
+      }
+
+      try {
+        const result = await uploadBuffer(
+          user.salonId,
+          filename,
+          mimeType,
+          purpose,
+          buffer,
+          user.sub,
+        );
+        return { publicUrl: result.publicUrl, fileKey: result.fileKey, file: result.file };
+      } catch (err) {
+        if (err instanceof UploadError) {
+          reply.code(400);
+          return { error: 'upload_failed', message: err.message };
+        }
+        throw err;
+      }
     });
   });
 

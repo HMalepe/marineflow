@@ -8,10 +8,48 @@ const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY ?? '';
 const S3_SECRET_KEY = process.env.S3_SECRET_KEY ?? '';
 const S3_PUBLIC_URL = process.env.S3_PUBLIC_URL ?? '';
 
+export const CAMPAIGN_MEDIA_MIMES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/quicktime',
+] as const;
+
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const VIDEO_MAX_BYTES = 16 * 1024 * 1024;
+
+export class UploadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UploadError';
+  }
+}
+
 interface PresignedUploadResult {
   uploadUrl: string;
   fileKey: string;
   publicUrl: string;
+}
+
+export function validateUploadPurpose(
+  purpose: string,
+  mimeType: string,
+  sizeBytes: number,
+): void {
+  if (purpose === 'campaign') {
+    if (!CAMPAIGN_MEDIA_MIMES.includes(mimeType as (typeof CAMPAIGN_MEDIA_MIMES)[number])) {
+      throw new UploadError('Newsletter media must be JPEG, PNG, WebP, GIF, or MP4 video.');
+    }
+    const isVideo = mimeType.startsWith('video/');
+    const max = isVideo ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES;
+    if (sizeBytes > max) {
+      throw new UploadError(
+        isVideo ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.',
+      );
+    }
+  }
 }
 
 export async function generatePresignedUpload(
@@ -30,6 +68,55 @@ export async function generatePresignedUpload(
   return { uploadUrl, fileKey, publicUrl };
 }
 
+/** Upload via API (server-side PUT) — avoids browser CORS issues with S3/R2. */
+export async function uploadBuffer(
+  salonId: string,
+  filename: string,
+  mimeType: string,
+  purpose: string,
+  buffer: Buffer,
+  uploadedBy?: string,
+): Promise<{ publicUrl: string; fileKey: string; file: Awaited<ReturnType<typeof confirmUpload>> }> {
+  validateUploadPurpose(purpose, mimeType, buffer.length);
+
+  const { uploadUrl, fileKey, publicUrl: defaultPublicUrl } = await generatePresignedUpload(
+    salonId,
+    filename,
+    mimeType,
+    purpose,
+  );
+
+  let publicUrl = defaultPublicUrl;
+
+  if (S3_ENDPOINT && S3_ACCESS_KEY && S3_SECRET_KEY) {
+    const putRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': mimeType },
+      body: buffer,
+    });
+    if (!putRes.ok) {
+      throw new UploadError('Storage upload failed — check S3 configuration.');
+    }
+  } else if (purpose === 'campaign' && mimeType.startsWith('image/') && buffer.length <= IMAGE_MAX_BYTES) {
+    publicUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+  } else {
+    throw new UploadError('File storage is not configured on the server.');
+  }
+
+  const file = await confirmUpload(
+    salonId,
+    fileKey,
+    filename,
+    mimeType,
+    buffer.length,
+    purpose,
+    uploadedBy,
+    publicUrl,
+  );
+
+  return { publicUrl, fileKey, file };
+}
+
 export async function confirmUpload(
   salonId: string,
   fileKey: string,
@@ -38,9 +125,12 @@ export async function confirmUpload(
   sizeBytes: number,
   purpose: string,
   uploadedBy?: string,
+  urlOverride?: string,
 ) {
   const db = getTenantDb();
-  const publicUrl = S3_PUBLIC_URL ? `${S3_PUBLIC_URL}/${fileKey}` : `${S3_ENDPOINT}/${S3_BUCKET}/${fileKey}`;
+  const publicUrl =
+    urlOverride ??
+    (S3_PUBLIC_URL ? `${S3_PUBLIC_URL}/${fileKey}` : `${S3_ENDPOINT}/${S3_BUCKET}/${fileKey}`);
 
   return db.uploadedFile.create({
     data: {
