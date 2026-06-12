@@ -12,7 +12,6 @@ import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import {
   saveDisplayName,
-  saveHours,
   saveMessages,
   saveBotActive,
   saveLocation,
@@ -22,23 +21,11 @@ import {
   saveGoogleReviewUrl,
   type SalonSettings,
 } from './actions';
+import { BusinessHoursSection } from './business-hours-section';
 
 const WHATSAPP_LIMIT = 4096;
 
 export type { SalonSettings };
-
-const TIMEZONE_OPTIONS = [
-  { value: 'Africa/Johannesburg', label: 'Africa/Johannesburg (SAST)' },
-  { value: 'Africa/Harare', label: 'Africa/Harare (CAT)' },
-  { value: 'Africa/Lagos', label: 'Africa/Lagos (WAT)' },
-  { value: 'Africa/Cairo', label: 'Africa/Cairo (EET)' },
-  { value: 'Europe/London', label: 'Europe/London (GMT/BST)' },
-  { value: 'Europe/Paris', label: 'Europe/Paris (CET)' },
-  { value: 'America/New_York', label: 'America/New_York (ET)' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (PT)' },
-  { value: 'Asia/Dubai', label: 'Asia/Dubai (GST)' },
-  { value: 'Australia/Sydney', label: 'Australia/Sydney (AEST)' },
-];
 
 type PreviewMode = 'welcome' | 'afterHours';
 
@@ -111,7 +98,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('welcome');
 
   const [tradingName, setTradingName] = useState(initialSettings.tradingName ?? '');
-  const [timezone, setTimezone] = useState(initialSettings.timezone || 'Africa/Johannesburg');
   const [openTime, setOpenTime] = useState(initialSettings.openTime ?? '09:00');
   const [closeTime, setCloseTime] = useState(initialSettings.closeTime ?? '17:00');
   const [welcomeMessage, setWelcomeMessage] = useState(initialSettings.welcomeMessage ?? '');
@@ -145,7 +131,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [savingGoogleReviewUrl, setSavingGoogleReviewUrl] = useState(false);
 
   const [savingDisplayName, setSavingDisplayName] = useState(false);
-  const [savingHours, setSavingHours] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
@@ -154,7 +139,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setSalon(s);
     setSaved(s);
     setTradingName(s.tradingName ?? '');
-    setTimezone(s.timezone || 'Africa/Johannesburg');
     setOpenTime(s.openTime ?? '09:00');
     setCloseTime(s.closeTime ?? '17:00');
     setWelcomeMessage(s.welcomeMessage ?? '');
@@ -182,13 +166,10 @@ export function SalonSettingsForm({ initialSettings }: Props) {
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
 
-  const hoursDirty = useMemo(() => {
-    return (
-      timezone !== (saved.timezone || 'Africa/Johannesburg') ||
-      openTime !== (saved.openTime ?? '09:00') ||
-      closeTime !== (saved.closeTime ?? '17:00')
-    );
-  }, [saved, timezone, openTime, closeTime]);
+  const handleWeekdayHoursChange = useCallback((open: string, close: string) => {
+    setOpenTime(open);
+    setCloseTime(close);
+  }, []);
 
   const messagesDirty = useMemo(() => {
     return (
@@ -231,9 +212,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     [saved, googleReviewUrl],
   );
 
-  const timezoneLabel =
-    TIMEZONE_OPTIONS.find((t) => t.value === timezone)?.label ?? timezone;
-
   const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
   const defaultAfterHours =
     `We're closed for live support right now (our hours are ${openTime}–${closeTime}). ` +
@@ -268,32 +246,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       reportError('displayName', 'Save failed — please try again');
     } finally {
       setSavingDisplayName(false);
-    }
-  }
-
-  async function handleSaveHours(e: React.FormEvent) {
-    e.preventDefault();
-    if (!openTime || !closeTime) {
-      reportError('hours', 'Enter both open and close times');
-      return;
-    }
-    if (openTime >= closeTime) {
-      reportError('hours', 'Close time must be after open time');
-      return;
-    }
-    setSavingHours(true);
-    try {
-      const result = await saveHours(openTime, closeTime, timezone);
-      if (result.salon) {
-        applySalon(result.salon);
-        reportSuccess('hours', 'Business hours saved');
-      } else {
-        reportError('hours', result.error ?? 'Save failed');
-      }
-    } catch {
-      reportError('hours', 'Save failed — please try again');
-    } finally {
-      setSavingHours(false);
     }
   }
 
@@ -539,76 +491,10 @@ export function SalonSettingsForm({ initialSettings }: Props) {
 
       <Separator />
 
-      {/* Business Hours */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Business hours</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Controls after-hours auto-replies and hours shown to customers on WhatsApp.
-          </p>
-        </div>
-
-        <div className="rounded-lg bg-muted/40 border px-4 py-3 text-sm">
-          <span className="text-muted-foreground">Currently set to </span>
-          <span className="font-medium">{openTime} – {closeTime}</span>
-          <span className="text-muted-foreground"> · </span>
-          <span className="font-medium">{timezoneLabel}</span>
-        </div>
-
-        <form onSubmit={(e) => void handleSaveHours(e)} className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="open-time">Opens</Label>
-              <Input
-                id="open-time"
-                type="time"
-                value={openTime}
-                onChange={(e) => setOpenTime(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="close-time">Closes</Label>
-              <Input
-                id="close-time"
-                type="time"
-                value={closeTime}
-                onChange={(e) => setCloseTime(e.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <div className="space-y-2 max-w-md">
-            <Label htmlFor="timezone">Timezone</Label>
-            <select
-              id="timezone"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              className={cn(
-                'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none',
-                'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30',
-              )}
-            >
-              {TIMEZONE_OPTIONS.map((tz) => (
-                <option key={tz.value} value={tz.value}>
-                  {tz.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" disabled={savingHours || !hoursDirty}>
-                {savingHours ? 'Saving…' : 'Save business hours'}
-              </Button>
-              {hoursDirty && (
-                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-              )}
-            </div>
-            <SectionSaveFeedback feedback={getSection('hours')} />
-          </div>
-        </form>
-      </section>
+      <BusinessHoursSection
+        fallbackTimezone={initialSettings.timezone || 'Africa/Johannesburg'}
+        onWeekdayHoursChange={handleWeekdayHoursChange}
+      />
 
       <Separator />
 

@@ -82,6 +82,7 @@ export function parseCampaignMediaType(value: unknown): CampaignMediaType | null
 
 /** WhatsApp requires a publicly reachable HTTPS URL for media attachments. */
 export function validateCampaignMediaUrl(url: string): string | null {
+  if (url.startsWith('data:image/') || url.startsWith('data:video/')) return null;
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') return 'Media URL must use HTTPS.';
@@ -101,6 +102,24 @@ export function validateCampaignMedia(
   if (mediaType && !mediaUrl) return 'Upload media or remove the attachment type.';
   if (mediaUrl) return validateCampaignMediaUrl(mediaUrl);
   return null;
+}
+
+/** Recipients must exist before send-now or scheduled delivery — not for drafts. */
+export function campaignRequiresAudience(params: {
+  sendNow?: boolean;
+  scheduledAt?: Date | null;
+}): boolean {
+  if (params.sendNow) return true;
+  return params.scheduledAt != null;
+}
+
+/** Effective schedule after PATCH (undefined patch field = keep existing). */
+export function resolveCampaignScheduleAfterPatch(
+  existingScheduledAt: Date | null,
+  scheduledAtPatch: Date | null | undefined,
+): Date | null {
+  if (scheduledAtPatch !== undefined) return scheduledAtPatch;
+  return existingScheduledAt;
 }
 
 /**

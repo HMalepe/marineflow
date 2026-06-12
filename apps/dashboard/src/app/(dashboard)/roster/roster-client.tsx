@@ -13,6 +13,7 @@ import {
   getMonday,
   inRange,
   scheduleToPayload,
+  shiftForWeekday,
   SHIFT_PRESETS,
   toIso,
   weekdaysMonFri,
@@ -66,6 +67,7 @@ export function RosterClient({ token }: Props) {
   const [view, setView] = useState<ViewTab>('calendar');
   const [weekStart, setWeekStart] = useState<Date>(() => getMonday(today));
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [salonDefaults, setSalonDefaults] = useState<ScheduleDay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
@@ -91,12 +93,13 @@ export function RosterClient({ token }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const data = await apiFetch<{ staff: StaffMember[] }>(
+        const data = await apiFetch<{ staff: StaffMember[]; salonScheduleDefaults?: ScheduleDay[] }>(
           `/roster?from=${toIso(from)}&to=${toIso(to)}`,
           {},
           token,
         );
         setStaff(data.staff ?? []);
+        setSalonDefaults(data.salonScheduleDefaults ?? []);
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'Failed to load roster');
       } finally {
@@ -120,7 +123,8 @@ export function RosterClient({ token }: Props) {
     const bookable = staff.filter((s) => s.active && s.isBookable);
     const working = bookable.filter((s) => {
       if (s.timeOff.some((t) => inRange(dateStr, t.start, t.end))) return false;
-      return s.workingHours.some((wh) => wh.weekday === wd);
+      if (s.workingHours.some((wh) => wh.weekday === wd)) return true;
+      return salonDefaults.some((d) => d.weekday === wd && d.enabled);
     });
     return { working: working.length, total: bookable.length };
   }
@@ -138,7 +142,7 @@ export function RosterClient({ token }: Props) {
   }
 
   async function pasteShift(member: StaffMember, weekday: number, shift: ShiftClipboard) {
-    const schedule = workingHoursToSchedule(member.workingHours);
+    const schedule = workingHoursToSchedule(member.workingHours, salonDefaults);
     const next = applyShiftToWeekdays(schedule, [weekday], shift);
     try {
       await apiFetch(
@@ -155,12 +159,7 @@ export function RosterClient({ token }: Props) {
 
   function copyFromCell(member: StaffMember, date: Date) {
     const wd = date.getDay();
-    const wh = member.workingHours.find((w) => w.weekday === wd);
-    setClipboard(
-      wh
-        ? { enabled: true, startTime: wh.startTime, endTime: wh.endTime }
-        : { enabled: false, startTime: '09:00', endTime: '17:00' },
-    );
+    setClipboard(shiftForWeekday(member.workingHours, wd, salonDefaults));
     showToast('Shift copied — tap cells to paste', 'success');
   }
 
@@ -170,7 +169,7 @@ export function RosterClient({ token }: Props) {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Staff Roster</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Schedule in seconds — tap a cell, set hours, copy across days. Up to 26 weeks ahead.
+            Shifts follow Settings → Business hours by default. Tap a cell to customise, or copy across days.
           </p>
         </div>
         <div className="flex rounded-xl border p-0.5 bg-muted/40">
@@ -324,8 +323,14 @@ export function RosterClient({ token }: Props) {
                               const isPast = date.getTime() < today.getTime();
                               const timeOffs = member.timeOff.filter((t) => inRange(dateStr, t.start, t.end));
                               const wh = member.workingHours.find((w) => w.weekday === wd);
+                              const defaultDay = salonDefaults.find((d) => d.weekday === wd);
                               const onLeave = timeOffs.length > 0;
                               const isPasteTarget = clipboard && !isPast;
+                              const displayShift = wh
+                                ? { start: wh.startTime, end: wh.endTime, fromDefault: false }
+                                : defaultDay?.enabled
+                                  ? { start: defaultDay.startTime, end: defaultDay.endTime, fromDefault: true }
+                                  : null;
 
                               return (
                                 <td
@@ -343,9 +348,16 @@ export function RosterClient({ token }: Props) {
                                 >
                                   {onLeave ? (
                                     <Badge variant="destructive" className="text-xs px-1.5 py-0 font-normal">Leave</Badge>
-                                  ) : wh ? (
-                                    <Badge className="text-xs px-1.5 py-0 bg-green-600 hover:bg-green-600 font-normal whitespace-nowrap">
-                                      {wh.startTime}–{wh.endTime}
+                                  ) : displayShift ? (
+                                    <Badge
+                                      className={cn(
+                                        'text-xs px-1.5 py-0 font-normal whitespace-nowrap',
+                                        displayShift.fromDefault
+                                          ? 'bg-muted text-foreground hover:bg-muted border border-dashed border-muted-foreground/40'
+                                          : 'bg-green-600 hover:bg-green-600',
+                                      )}
+                                    >
+                                      {displayShift.start}–{displayShift.end}
                                     </Badge>
                                   ) : (
                                     <span className="text-muted-foreground text-xs">Off</span>
@@ -374,6 +386,7 @@ export function RosterClient({ token }: Props) {
           date={sheetDate}
           today={today}
           weekDates={weekDates}
+          salonDefaults={salonDefaults}
           onClose={() => setSelectedCell(null)}
           onRefresh={() => fetchRoster(weekStart, weekEnd)}
           onCopy={(shift) => {
@@ -403,6 +416,7 @@ function ScheduleCellSheet({
   date,
   today,
   weekDates,
+  salonDefaults,
   onClose,
   onRefresh,
   onCopy,
@@ -413,6 +427,7 @@ function ScheduleCellSheet({
   date: Date;
   today: Date;
   weekDates: Date[];
+  salonDefaults: ScheduleDay[];
   onClose: () => void;
   onRefresh: () => void;
   onCopy: (shift: ShiftClipboard) => void;
@@ -421,11 +436,12 @@ function ScheduleCellSheet({
   const dateStr = toIso(date);
   const wd = date.getDay();
   const recurringHour = staff.workingHours.find((wh) => wh.weekday === wd);
+  const defaultShift = shiftForWeekday(staff.workingHours, wd, salonDefaults);
   const overlappingTimeOff = staff.timeOff.filter((t) => inRange(dateStr, t.start, t.end));
 
-  const [enabled, setEnabled] = useState(!!recurringHour);
-  const [startTime, setStartTime] = useState(recurringHour?.startTime ?? '08:00');
-  const [endTime, setEndTime] = useState(recurringHour?.endTime ?? '18:00');
+  const [enabled, setEnabled] = useState(recurringHour ? true : defaultShift.enabled);
+  const [startTime, setStartTime] = useState(recurringHour?.startTime ?? defaultShift.startTime);
+  const [endTime, setEndTime] = useState(recurringHour?.endTime ?? defaultShift.endTime);
   const [applyScope, setApplyScope] = useState<ApplyScope>('day');
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -441,7 +457,7 @@ function ScheduleCellSheet({
     setSaving(true);
     setFormError(null);
     try {
-      const base = workingHoursToSchedule(staff.workingHours);
+      const base = workingHoursToSchedule(staff.workingHours, salonDefaults);
       const shift: ShiftClipboard = { enabled, startTime, endTime };
       let weekdays: number[];
       switch (applyScope) {

@@ -89,13 +89,31 @@ export function inRange(dateStr: string, start: string, end: string): boolean {
   return dateStr >= start && dateStr <= end;
 }
 
-export function workingHoursToSchedule(hours: WorkingHour[]): ScheduleDay[] {
-  return DEFAULT_SCHEDULE.map((d) => {
+export function workingHoursToSchedule(
+  hours: WorkingHour[],
+  defaults: ScheduleDay[] = DEFAULT_SCHEDULE,
+): ScheduleDay[] {
+  return defaults.map((d) => {
     const match = hours.find((h) => h.weekday === d.weekday);
     return match
       ? { weekday: d.weekday, enabled: true, startTime: match.startTime, endTime: match.endTime }
-      : { ...d, enabled: false };
+      : { ...d };
   });
+}
+
+export function shiftForWeekday(
+  hours: WorkingHour[],
+  weekday: number,
+  defaults: ScheduleDay[] = DEFAULT_SCHEDULE,
+): ShiftClipboard {
+  const match = hours.find((h) => h.weekday === weekday);
+  if (match) {
+    return { enabled: true, startTime: match.startTime, endTime: match.endTime };
+  }
+  const def = defaults.find((d) => d.weekday === weekday);
+  return def
+    ? { enabled: def.enabled, startTime: def.startTime, endTime: def.endTime }
+    : { enabled: false, startTime: '09:00', endTime: '17:00' };
 }
 
 export function scheduleToPayload(schedule: ScheduleDay[]) {

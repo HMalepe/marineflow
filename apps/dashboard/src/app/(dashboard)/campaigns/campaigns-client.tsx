@@ -617,8 +617,15 @@ export function CampaignsClient({ token }: Props) {
       reportError('Choose when this campaign should send');
       return false;
     }
+    if (
+      (form.deliveryMode === 'now' || form.deliveryMode === 'schedule') &&
+      audienceLoading
+    ) {
+      reportError('Still calculating audience — try again in a moment');
+      return false;
+    }
     if (audienceCount === 0 && (form.deliveryMode === 'now' || form.deliveryMode === 'schedule')) {
-      reportError('No customers match this audience — adjust targeting first, or save as a draft');
+      reportError('No customers match this audience — adjust targeting or save as a draft first');
       return false;
     }
     clearSaveFeedback();
@@ -1223,9 +1230,13 @@ export function CampaignsClient({ token }: Props) {
               <div
                 className={cn(
                   'flex items-center gap-2 rounded-xl px-3.5 py-3 text-sm ring-1',
-                  audienceCount === 0 && audienceCount !== null
+                  audienceCount === 0 &&
+                    audienceCount !== null &&
+                    form.deliveryMode !== 'draft'
                     ? 'bg-destructive/5 ring-destructive/20 text-destructive'
-                    : 'bg-muted/50 ring-border/60',
+                    : audienceCount === 0 && audienceCount !== null && form.deliveryMode === 'draft'
+                      ? 'bg-amber-500/5 ring-amber-500/20 text-amber-900 dark:text-amber-200'
+                      : 'bg-muted/50 ring-border/60',
                 )}
               >
                 <Users className="size-4 shrink-0 opacity-70" />
@@ -1235,7 +1246,11 @@ export function CampaignsClient({ token }: Props) {
                     Calculating reach…
                   </span>
                 ) : audienceCount === 0 ? (
-                  <span>No customers match — widen your audience or check consent</span>
+                  <span>
+                    {form.deliveryMode === 'draft'
+                      ? 'No customers match yet — you can still save as draft and send later'
+                      : 'No customers match — widen your audience or check consent'}
+                  </span>
                 ) : audienceCount !== null ? (
                   <span>
                     <strong className="tabular-nums font-semibold">{audienceCount}</strong>{' '}
@@ -1324,7 +1339,13 @@ export function CampaignsClient({ token }: Props) {
               <Button
                 className="w-full h-11 bg-[#128c7e] hover:bg-[#0d6b5f] text-white font-medium shadow-sm"
                 onClick={() => void handleSave()}
-                disabled={saving || (audienceCount === 0 && form.deliveryMode !== 'draft') || (!form.message.trim() && !form.mediaUrl)}
+                disabled={
+                  saving ||
+                  audienceLoading ||
+                  (audienceCount === 0 &&
+                    (form.deliveryMode === 'now' || form.deliveryMode === 'schedule')) ||
+                  (!form.message.trim() && !form.mediaUrl)
+                }
               >
                 {saving ? (
                   <Loader2 className="size-4 animate-spin mr-2" />

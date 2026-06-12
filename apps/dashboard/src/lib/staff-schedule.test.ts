@@ -56,10 +56,18 @@ describe('staff roster scheduling (user edge cases)', () => {
     expect(next.find((d) => d.weekday === 0)?.enabled).toBe(false);
   });
 
-  it('shows all days off for brand-new staff with no saved hours', () => {
-    const schedule = workingHoursToSchedule([]);
+  it('uses salon defaults when staff has no saved hours', () => {
+    const salonDefaults = DEFAULT_SCHEDULE.map((d) => ({ ...d }));
+    const schedule = workingHoursToSchedule([], salonDefaults);
+    expect(schedule.filter((d) => d.enabled)).toHaveLength(5);
+    expect(scheduleToPayload(schedule)).toHaveLength(5);
+    expect(schedule).toHaveLength(DEFAULT_SCHEDULE.length);
+  });
+
+  it('shows all days off when salon defaults are closed', () => {
+    const closedDefaults = DEFAULT_SCHEDULE.map((d) => ({ ...d, enabled: false }));
+    const schedule = workingHoursToSchedule([], closedDefaults);
     expect(schedule.every((d) => !d.enabled)).toBe(true);
     expect(scheduleToPayload(schedule)).toEqual([]);
-    expect(schedule).toHaveLength(DEFAULT_SCHEDULE.length);
   });
 });

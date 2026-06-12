@@ -37,6 +37,17 @@ import {
 } from '../services/marketingConsent.js';
 import { recordCustomerNoShow, normalizeNoShowRisk } from '../services/noShowRisk.js';
 import { clampRosterEnd, parseRosterDate } from '../lib/rosterRange.js';
+import {
+  loadWeeklyHoursSettings,
+  saveWeeklyHoursSettings,
+  seedStaffWorkingHoursFromBusiness,
+} from '../services/businessHoursSettings.js';
+import {
+  businessRowsToScheduleDefaults,
+  validateWeeklyHoursSettings,
+  type WeeklyHoursSettings,
+} from '../lib/businessHours.js';
+import { DEFAULT_BUSINESS_HOURS } from '../lib/salonDefaults.js';
 
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
 import {
@@ -53,6 +64,8 @@ import {
   validateCampaignMedia,
   updateCampaign,
   type AudienceFilter,
+  campaignRequiresAudience,
+  resolveCampaignScheduleAfterPatch,
 } from '../services/campaigns.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
@@ -247,6 +260,49 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       };
     });
   });
+
+  app.get('/settings/business-hours', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const hours = await loadWeeklyHoursSettings(user.salonId);
+      return { hours };
+    });
+  });
+
+  app.put<{ Body: WeeklyHoursSettings }>(
+    '/settings/business-hours',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const body = request.body ?? ({} as WeeklyHoursSettings);
+        const settings: WeeklyHoursSettings = {
+          weekdayOpen: body.weekdayOpen ?? '09:00',
+          weekdayClose: body.weekdayClose ?? '17:00',
+          saturday: body.saturday ?? { closed: false, open: '09:00', close: '17:00' },
+          sunday: body.sunday ?? { closed: true, open: '09:00', close: '17:00' },
+          timezone: body.timezone ?? 'Africa/Johannesburg',
+          holidayOverrides: body.holidayOverrides ?? {},
+        };
+
+        const validationError = validateWeeklyHoursSettings(settings);
+        if (validationError) {
+          reply.code(400);
+          return { error: 'invalid_hours', message: validationError };
+        }
+
+        const hours = await saveWeeklyHoursSettings(user.salonId, settings, { syncRoster: true });
+        await getTenantDb().auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'business_hours_update',
+            entity: 'Salon',
+            entityId: user.salonId,
+          },
+        });
+        return { hours };
+      });
+    },
+  );
 
   app.patch<{
     Body: {
@@ -1095,7 +1151,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           entityId: staff.id,
         },
       });
-      return { staff };
+      await seedStaffWorkingHoursFromBusiness(user.salonId, staff.id);
+      const withHours = await db.staff.findUniqueOrThrow({
+        where: { id: staff.id },
+        include: { workingHours: true },
+      });
+      return { staff: withHours };
     });
   });
 
@@ -1294,7 +1355,21 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         orderBy: { sortOrder: 'asc' },
       });
 
+      const businessRows = await db.businessHour.findMany({
+        orderBy: { dayOfWeek: 'asc' },
+      });
+      const salonScheduleDefaults = businessRowsToScheduleDefaults(
+        businessRows.length > 0
+          ? businessRows.map((h) => ({
+              dayOfWeek: h.dayOfWeek,
+              openMin: h.openMin,
+              closeMin: h.closeMin,
+            }))
+          : DEFAULT_BUSINESS_HOURS.map((h) => ({ ...h })),
+      );
+
       return {
+        salonScheduleDefaults,
         staff: staff.map((s) => ({
           id: s.id,
           name: s.name,
@@ -3131,7 +3206,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         const audience = audienceFilter ?? { type: 'all' as const };
         const recipientCount = await countAudience(user.salonId, audience);
-        if (recipientCount === 0) {
+        if (campaignRequiresAudience({ sendNow: !!sendNow, scheduledAt: scheduleDate }) && recipientCount === 0) {
           reply.code(400);
           return { error: 'empty_audience', message: 'No customers match this audience with marketing consent.' };
         }
@@ -3247,11 +3322,19 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           }
         }
 
-        if (audienceFilter) {
-          const count = await countAudience(user.salonId, audienceFilter);
+        const nextSchedule = resolveCampaignScheduleAfterPatch(existing.scheduledAt, scheduleDate);
+        const nextFilter = (audienceFilter ??
+          (existing.audienceFilter as AudienceFilter) ??
+          { type: 'all' }) as AudienceFilter;
+
+        if (campaignRequiresAudience({ scheduledAt: nextSchedule })) {
+          const count = await countAudience(user.salonId, nextFilter);
           if (count === 0) {
             reply.code(400);
-            return { error: 'empty_audience', message: 'No customers match this audience with marketing consent.' };
+            return {
+              error: 'empty_audience',
+              message: 'No customers match this audience with marketing consent.',
+            };
           }
         }
 
@@ -3299,6 +3382,29 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         try {
+          const filter = (existing.audienceFilter ?? { type: 'all' }) as AudienceFilter;
+          const recipientCount = await countAudience(user.salonId, filter);
+          if (recipientCount === 0) {
+            reply.code(400);
+            return {
+              error: 'empty_audience',
+              message: 'No customers match this audience with marketing consent.',
+            };
+          }
+
+          const contentError = validateCampaignMedia(existing.mediaUrl, parseCampaignMediaType(existing.mediaType));
+          if (contentError) {
+            reply.code(400);
+            return { error: 'invalid_media', message: contentError };
+          }
+          if (!existing.templateName?.trim() && !existing.mediaUrl) {
+            reply.code(400);
+            return {
+              error: 'content_required',
+              message: 'Add a message, photo, or video before sending.',
+            };
+          }
+
           await queueCampaignSend(request.params.id, user.salonId);
           await getTenantDb().auditLog.create({
             data: {

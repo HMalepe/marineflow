@@ -148,17 +148,41 @@ export async function saveDisplayName(tradingName: string): Promise<{ salon?: Sa
   }
 }
 
-export async function saveHours(openTime: string, closeTime: string, timezone: string): Promise<{ salon?: SalonSettings; error?: string }> {
+export async function fetchBusinessHours(): Promise<{ hours?: BusinessHoursSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };
   try {
-    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
-      method: 'PATCH',
-      body: JSON.stringify({ openTime, closeTime, timezone }),
-    }, token);
-    return { salon: data.salon };
+    const data = await apiFetch<{ hours: BusinessHoursSettings }>('/settings/business-hours', {}, token);
+    return { hours: data.hours };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Save failed' };
+    return { error: e instanceof ApiError ? e.message : 'Failed to load business hours' };
+  }
+}
+
+export interface BusinessHoursSettings {
+  weekdayOpen: string;
+  weekdayClose: string;
+  saturday: { closed: boolean; open: string; close: string };
+  sunday: { closed: boolean; open: string; close: string };
+  timezone: string;
+  holidayOverrides: Partial<
+    Record<'publicHoliday' | 'christmas' | 'newYearsEve' | 'newYearsDay', { closed: boolean; open?: string; close?: string }>
+  >;
+}
+
+export async function saveBusinessHours(
+  hours: BusinessHoursSettings,
+): Promise<{ hours?: BusinessHoursSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ hours: BusinessHoursSettings }>('/settings/business-hours', {
+      method: 'PUT',
+      body: JSON.stringify(hours),
+    }, token);
+    return { hours: data.hours };
+  } catch (e) {
+    return { error: e instanceof ApiError ? e.message : 'Save failed' };
   }
 }
 
