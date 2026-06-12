@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { DashboardToast } from '@/components/dashboard-toast';
 
 interface Customer {
   id: string;
@@ -123,28 +124,6 @@ function consentDot(status: Customer['marketingConsentStatus']) {
   if (status === 'ACCEPTED') return <span className="size-2 rounded-full bg-green-500 shrink-0" title="Marketing accepted" />;
   if (status === 'DECLINED') return <span className="size-2 rounded-full bg-slate-400 shrink-0" title="Marketing declined" />;
   return <span className="size-2 rounded-full bg-amber-400 shrink-0" title="Awaiting POPIA consent" />;
-}
-
-function Toast({ message, type, onDismiss }: { message: string; type: 'success' | 'error'; onDismiss: () => void }) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-xl animate-in slide-in-from-bottom-4 max-w-sm backdrop-blur-sm',
-        type === 'success' ? 'bg-card/95 border-green-600/30' : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      {type === 'success' ? (
-        <CheckCircle2 className="size-4 text-green-600 shrink-0 mt-0.5" />
-      ) : (
-        <XCircle className="size-4 shrink-0 mt-0.5" />
-      )}
-      <span className="flex-1 leading-snug">{message}</span>
-      <button type="button" onClick={onDismiss} className="text-muted-foreground hover:text-foreground text-xs shrink-0">
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
 }
 
 export function CustomersClient({ token }: Props) {
@@ -396,7 +375,7 @@ export function CustomersClient({ token }: Props) {
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+      {toast && <DashboardToast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

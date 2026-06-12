@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ImageCropModal } from '@/components/image-crop-modal';
 import { cn } from '@/lib/utils';
+import { SaveErrorFeedback, SaveSuccessFeedback } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
+import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { saveLogo } from './actions';
 
 const MAX_BYTES = 10_000_000; // 10 MB before crop (canvas output will be smaller)
@@ -21,7 +24,7 @@ export function LogoUpload({ current, salonName }: Props) {
   const [pending, setPending] = useState<string | null>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { success, error, clear, reportSuccess, reportError } = useSaveFeedback();
 
   const initials = salonName
     .split(/\s+/)
@@ -30,17 +33,17 @@ export function LogoUpload({ current, salonName }: Props) {
     .join('');
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    setError(null);
+    clear();
     const file = e.target.files?.[0];
     if (!file) return;
     if (inputRef.current) inputRef.current.value = '';
 
     if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (PNG, JPG, SVG, WebP)');
+      reportError('Please select an image file (PNG, JPG, SVG, WebP)');
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError('Image must be under 10 MB.');
+      reportError('Image must be under 10 MB.');
       return;
     }
 
@@ -64,28 +67,30 @@ export function LogoUpload({ current, salonName }: Props) {
   async function handleSave() {
     if (!pending) return;
     setSaving(true);
-    setError(null);
+    clear();
     const result = await saveLogo(pending);
     setSaving(false);
     if (result.error) {
-      setError(result.error);
+      reportError(result.error);
     } else {
       setPreview(pending);
       setPending(null);
+      reportSuccess(SAVE_MESSAGES.logoSaved);
       router.refresh();
     }
   }
 
   async function handleRemove() {
     setSaving(true);
-    setError(null);
+    clear();
     const result = await saveLogo(null);
     setSaving(false);
     if (result.error) {
-      setError(result.error);
+      reportError(result.error);
     } else {
       setPreview(null);
       setPending(null);
+      reportSuccess(SAVE_MESSAGES.logoRemoved);
       router.refresh();
     }
   }
@@ -195,11 +200,8 @@ export function LogoUpload({ current, salonName }: Props) {
           </div>
         )}
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+        {error && <SaveErrorFeedback message={error} />}
+        {success && <SaveSuccessFeedback message={success} />}
 
         <input
           ref={inputRef}

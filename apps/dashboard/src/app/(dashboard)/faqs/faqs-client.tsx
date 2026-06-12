@@ -33,6 +33,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { DashboardToast } from '@/components/dashboard-toast';
+import { SaveFormFooter } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
+import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
@@ -124,36 +128,7 @@ function Toast({
   type: 'success' | 'error';
   onDismiss: () => void;
 }) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-lg animate-in slide-in-from-bottom-4 max-w-sm',
-        type === 'success'
-          ? 'bg-card border-green-600/30 text-foreground'
-          : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      {type === 'success' ? (
-        <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 border-0 shrink-0">
-          Saved
-        </Badge>
-      ) : (
-        <Badge variant="destructive" className="shrink-0">
-          Error
-        </Badge>
-      )}
-      <span className="flex-1">{message}</span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="text-muted-foreground hover:text-foreground text-xs ml-1"
-        aria-label="Dismiss"
-      >
-        ✕
-      </button>
-    </div>
-  );
+  return <DashboardToast message={message} type={type} onDismiss={onDismiss} />;
 }
 
 function SortableFaqCard({
@@ -298,6 +273,7 @@ export function FaqsClient({ token }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback();
   const [templateStep, setTemplateStep] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateCategory, setTemplateCategory] = useState<string>('All');
@@ -387,6 +363,7 @@ export function FaqsClient({ token }: Props) {
   const answerOverLimit = answerLen > WHATSAPP_ANSWER_LIMIT;
 
   function openCreate() {
+    clearSaveFeedback();
     setEditingId(null);
     setForm(emptyForm);
     setTemplateStep(true);
@@ -397,6 +374,7 @@ export function FaqsClient({ token }: Props) {
   }
 
   function openEdit(faq: Faq) {
+    clearSaveFeedback();
     setEditingId(faq.id);
     setForm({ question: faq.question, answer: faq.answer });
     setTemplateStep(false);
@@ -404,6 +382,7 @@ export function FaqsClient({ token }: Props) {
   }
 
   function closeSheet() {
+    clearSaveFeedback();
     setSheetOpen(false);
     setEditingId(null);
     setForm(emptyForm);
@@ -422,11 +401,11 @@ export function FaqsClient({ token }: Props) {
     const andClose = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name') === 'addAndClose';
     e.preventDefault();
     if (!form.question.trim() || !form.answer.trim()) {
-      showToast('Question and answer are required', 'error');
+      reportError('Question and answer are required');
       return;
     }
     if (answerOverLimit) {
-      showToast(`Answer must be under ${WHATSAPP_ANSWER_LIMIT} characters for WhatsApp`, 'error');
+      reportError(`Answer must be under ${WHATSAPP_ANSWER_LIMIT} characters for WhatsApp`);
       return;
     }
 
@@ -442,23 +421,26 @@ export function FaqsClient({ token }: Props) {
           method: 'PATCH',
           body: JSON.stringify(payload),
         }, token);
-        showToast('FAQ updated', 'success');
+        showToast(SAVE_MESSAGES.changesSaved, 'success');
         closeSheet();
       } else {
         await apiFetch('/faqs', {
           method: 'POST',
           body: JSON.stringify({ ...payload, sortOrder: faqs.length }),
         }, token);
-        showToast('FAQ added ✓ — keep going or click Done', 'success');
-        // Stay open for rapid-fire adding — just reset the form
-        setForm(emptyForm);
-        setTemplateStep(false);
-        if (andClose) closeSheet();
+        if (andClose) {
+          showToast('FAQ added', 'success');
+          closeSheet();
+        } else {
+          reportSuccess('FAQ added — keep going or click Done');
+          setForm(emptyForm);
+          setTemplateStep(false);
+        }
       }
 
       await loadFaqs(true);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
+      reportError(e instanceof ApiError ? e.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -883,7 +865,9 @@ export function FaqsClient({ token }: Props) {
                     </p>
                   )}
                 </div>
-                <SheetFooter className="px-0 flex-wrap gap-2">
+                <SheetFooter className="px-0 flex-col items-stretch gap-2">
+                  <SaveFormFooter success={saveSuccess} error={saveError}>
+                  <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={closeSheet}>
                     {editingId ? 'Cancel' : 'Done'}
                   </Button>
@@ -901,6 +885,8 @@ export function FaqsClient({ token }: Props) {
                   <Button type="submit" disabled={saving || answerOverLimit}>
                     {saving ? 'Saving…' : editingId ? 'Save changes' : 'Add FAQ →'}
                   </Button>
+                  </div>
+                  </SaveFormFooter>
                 </SheetFooter>
               </form>
             </>

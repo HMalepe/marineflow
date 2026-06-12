@@ -25,6 +25,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { DashboardToast } from '@/components/dashboard-toast';
+import { SaveFormFooter } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
+import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 
 interface Service {
@@ -89,36 +93,7 @@ function Toast({
   type: 'success' | 'error';
   onDismiss: () => void;
 }) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-lg animate-in slide-in-from-bottom-4 max-w-sm',
-        type === 'success'
-          ? 'bg-card border-green-600/30 text-foreground'
-          : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      {type === 'success' ? (
-        <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 border-0 shrink-0">
-          Saved
-        </Badge>
-      ) : (
-        <Badge variant="destructive" className="shrink-0">
-          Error
-        </Badge>
-      )}
-      <span className="flex-1">{message}</span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="text-muted-foreground hover:text-foreground text-xs ml-1"
-        aria-label="Dismiss"
-      >
-        ✕
-      </button>
-    </div>
-  );
+  return <DashboardToast message={message} type={type} onDismiss={onDismiss} />;
 }
 
 export function ServicesClient({ token }: Props) {
@@ -140,6 +115,7 @@ export function ServicesClient({ token }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback();
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -191,6 +167,7 @@ export function ServicesClient({ token }: Props) {
     (parseInt(form.durationMin, 10) || 0) + (parseInt(form.bufferMin, 10) || 0);
 
   function openCreate() {
+    clearSaveFeedback();
     setEditingId(null);
     setForm(emptyForm);
     setTemplateStep(true);
@@ -201,6 +178,7 @@ export function ServicesClient({ token }: Props) {
   }
 
   function openEdit(service: Service) {
+    clearSaveFeedback();
     setEditingId(service.id);
     setForm(serviceToForm(service));
     setTemplateStep(false);
@@ -208,6 +186,7 @@ export function ServicesClient({ token }: Props) {
   }
 
   function closeSheet() {
+    clearSaveFeedback();
     setSheetOpen(false);
     setEditingId(null);
     setForm(emptyForm);
@@ -234,7 +213,7 @@ export function ServicesClient({ token }: Props) {
     const shouldClose = andClose || submitter === 'addAndClose' || !!editingId;
 
     if (!form.name.trim()) {
-      showToast('Name is required', 'error');
+      reportError('Name is required');
       return;
     }
 
@@ -243,15 +222,15 @@ export function ServicesClient({ token }: Props) {
     const bufferMin = parseInt(form.bufferMin, 10) || 0;
 
     if (!Number.isFinite(priceCents) || priceCents < 0) {
-      showToast('Enter a valid price in Rands', 'error');
+      reportError('Enter a valid price in Rands');
       return;
     }
     if (!Number.isFinite(durationMin) || durationMin < 1) {
-      showToast('Duration must be at least 1 minute', 'error');
+      reportError('Duration must be at least 1 minute');
       return;
     }
     if (bufferMin < 0) {
-      showToast('Buffer time cannot be negative', 'error');
+      reportError('Buffer time cannot be negative');
       return;
     }
 
@@ -271,26 +250,27 @@ export function ServicesClient({ token }: Props) {
           method: 'PATCH',
           body: JSON.stringify(payload),
         }, token);
-        showToast(`${savedName} updated`, 'success');
       } else {
         await apiFetch('/services', {
           method: 'POST',
           body: JSON.stringify({ ...payload, active: true }),
         }, token);
-        showToast(`${savedName} added`, 'success');
       }
 
       void loadServices(true);
 
+      const successMessage = editingId ? SAVE_MESSAGES.changesSaved : `${savedName} added`;
+
       if (shouldClose) {
+        showToast(successMessage, 'success');
         closeSheet();
       } else {
-        // Stay open — reset form for next service
+        reportSuccess(successMessage);
         setForm(emptyForm);
         setTemplateStep(false);
       }
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Save failed', 'error');
+      reportError(e instanceof ApiError ? e.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -616,7 +596,9 @@ export function ServicesClient({ token }: Props) {
                     </p>
                   )}
                 </div>
-                <SheetFooter className="px-0 pt-2 flex-row justify-end gap-2 flex-wrap">
+                <SheetFooter className="px-0 pt-2 flex-col items-stretch gap-2 sm:flex-col">
+                  <SaveFormFooter success={saveSuccess} error={saveError}>
+                  <div className="flex flex-row justify-end gap-2 flex-wrap">
                   {editingId ? (
                     <>
                       <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
@@ -639,6 +621,8 @@ export function ServicesClient({ token }: Props) {
                       </Button>
                     </>
                   )}
+                  </div>
+                  </SaveFormFooter>
                 </SheetFooter>
               </form>
             </>

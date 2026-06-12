@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { SaveFormFooter } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
+import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { updateName, updateEmail } from './actions';
-
 function formatRole(role: string): string {
   return role.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -28,35 +30,37 @@ export function SettingsForm({ user }: Props) {
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
+  const { success, error, clear, reportSuccess, reportError } = useSaveFeedback();
   const nameDirty = name.trim() !== user.name && name.trim().length >= 2;
   const emailDirty = email.trim().toLowerCase() !== user.email.toLowerCase() && email.includes('@');
   const dirty = nameDirty || emailDirty;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
+    clear();
     setSaving(true);
 
     try {
       if (nameDirty) {
         const result = await updateName(name.trim());
-        if (result.error) { setError(result.error); return; }
+        if (result.error) {
+          reportError(result.error);
+          return;
+        }
       }
       if (emailDirty) {
         const result = await updateEmail(email.trim().toLowerCase());
-        if (result.error) { setError(result.error); return; }
+        if (result.error) {
+          reportError(result.error);
+          return;
+        }
       }
-      setSuccess('Profile updated');
+      reportSuccess(SAVE_MESSAGES.profileUpdated);
       router.refresh();
     } finally {
       setSaving(false);
     }
   }
-
   return (
     <div className="space-y-6">
       <form onSubmit={(e) => void handleSave(e)}>
@@ -66,7 +70,7 @@ export function SettingsForm({ user }: Props) {
             <Input
               id="display-name"
               value={name}
-              onChange={(e) => { setName(e.target.value); setSuccess(null); }}
+              onChange={(e) => { setName(e.target.value); clear(); }}
               maxLength={80}
               required
             />
@@ -77,28 +81,22 @@ export function SettingsForm({ user }: Props) {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => { setEmail(e.target.value); setSuccess(null); }}
+              onChange={(e) => { setEmail(e.target.value); clear(); }}
               maxLength={120}
               required
             />
           </div>
         </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive mt-2">{error}</p>
-        )}
-        {success && (
-          <p role="status" className="text-sm text-green-600 dark:text-green-400 mt-2">{success} ✓</p>
-        )}
-
-        {dirty && (
-          <div className="mt-3">
-            <Button type="submit" size="sm" disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
-            </Button>
-          </div>
-        )}
-      </form>
+        <SaveFormFooter success={success} error={error}>
+          {dirty && (
+            <div>
+              <Button type="submit" size="sm" disabled={saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          )}
+        </SaveFormFooter>      </form>
 
       <Separator />
 

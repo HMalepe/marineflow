@@ -27,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { DashboardToast } from '@/components/dashboard-toast';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL ?? 'https://dashboard.marineflow.co.za';
@@ -90,32 +91,6 @@ function TierBadge({ tier }: { tier: string }) {
     <Badge variant="outline" className="capitalize">
       {tier}
     </Badge>
-  );
-}
-
-function Toast({
-  message,
-  type,
-  onDismiss,
-}: {
-  message: string;
-  type: 'success' | 'error';
-  onDismiss: () => void;
-}) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-lg max-w-sm',
-        type === 'success' ? 'bg-card border-green-600/30' : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      <Badge className={cn('shrink-0 border-0', type === 'success' && 'bg-green-600/15 text-green-700 dark:text-green-400')} variant={type === 'success' ? 'secondary' : 'destructive'}>
-        {type === 'success' ? 'Done' : 'Error'}
-      </Badge>
-      <span className="flex-1">{message}</span>
-      <button type="button" onClick={onDismiss} className="text-xs text-muted-foreground hover:text-foreground" aria-label="Dismiss">✕</button>
-    </div>
   );
 }
 
@@ -592,7 +567,7 @@ export function AdminSalonList({ token }: Props) {
         </SheetContent>
       </Sheet>
 
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+      {toast && <DashboardToast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

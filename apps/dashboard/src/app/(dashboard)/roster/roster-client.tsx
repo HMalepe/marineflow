@@ -36,6 +36,9 @@ import {
 } from '@/components/ui/sheet';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { DashboardToast } from '@/components/dashboard-toast';
+import { SaveErrorFeedback, SaveSuccessFeedback } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
 
 interface Props {
   token: string;
@@ -48,22 +51,6 @@ interface SelectedCell {
 
 type ViewTab = 'calendar' | 'team';
 type ApplyScope = 'day' | 'weekdays' | 'all' | 'rest';
-
-function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-[60] rounded-xl border px-4 py-3 text-sm shadow-lg max-w-sm animate-in slide-in-from-bottom-4',
-        type === 'success'
-          ? 'bg-card border-green-600/30'
-          : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      {message}
-    </div>
-  );
-}
 
 export function RosterClient({ token }: Props) {
   const todayRef = useRef<Date>((() => {
@@ -397,7 +384,13 @@ export function RosterClient({ token }: Props) {
         />
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} />}
+      {toast && (
+        <DashboardToast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }
@@ -437,6 +430,7 @@ function ScheduleCellSheet({
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [leaveReason, setLeaveReason] = useState('');
 
   async function saveSchedule() {
@@ -469,9 +463,12 @@ function ScheduleCellSheet({
         { method: 'PUT', body: JSON.stringify({ hours: scheduleToPayload(next) }) },
         token,
       );
-      showToast('Schedule saved', 'success');
+      setSaveSuccess(SAVE_MESSAGES.changesSaved);
       onRefresh();
-      onClose();
+      window.setTimeout(() => {
+        setSaveSuccess(null);
+        onClose();
+      }, 1200);
     } catch (e) {
       setFormError(e instanceof ApiError ? e.message : 'Save failed');
     } finally {
@@ -487,9 +484,12 @@ function ScheduleCellSheet({
         { method: 'POST', body: JSON.stringify({ start, end, reason: leaveReason.trim() || 'Leave' }) },
         token,
       );
-      showToast('Leave added', 'success');
+      setSaveSuccess('Leave added');
       onRefresh();
-      onClose();
+      window.setTimeout(() => {
+        setSaveSuccess(null);
+        onClose();
+      }, 1200);
     } catch (e) {
       setFormError(e instanceof ApiError ? e.message : 'Failed to add leave');
     } finally {
@@ -591,7 +591,7 @@ function ScheduleCellSheet({
               <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => onCopy({ enabled, startTime, endTime })}>
                 Copy shift
               </Button>
-              <Button type="button" size="sm" className="flex-1" disabled={saving} onClick={() => void saveSchedule()}>
+              <Button type="button" size="sm" className="flex-1" disabled={saving || !!saveSuccess} onClick={() => void saveSchedule()}>
                 {saving ? 'Saving…' : 'Save hours'}
               </Button>
             </div>
@@ -622,7 +622,8 @@ function ScheduleCellSheet({
             </div>
           </section>
 
-          {formError && <p className="text-xs text-destructive">{formError}</p>}
+          {formError && <SaveErrorFeedback message={formError} className="text-xs" />}
+          {saveSuccess && <SaveSuccessFeedback message={saveSuccess} className="text-xs" />}
         </div>
 
         <SheetFooter>

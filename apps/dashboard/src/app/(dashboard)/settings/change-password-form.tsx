@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/components/ui/password-input';
+import { SaveErrorFeedback } from '@/components/save-feedback';
 import { changePassword } from './actions';
 
 function validateStrongPassword(password: string): string | null {
@@ -60,11 +61,7 @@ export function ChangePasswordForm() {
         <PasswordInput id="confirmPassword" name="confirmPassword" required autoComplete="new-password" minLength={8} />
       </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
-          {error}
-        </p>
-      )}
+      {error && <SaveErrorFeedback message={error} className="rounded-md bg-destructive/10 px-3 py-2" />}
 
       <Button type="submit" size="sm" disabled={saving}>
         {saving ? 'Saving…' : 'Update password'}

@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { SectionSaveFeedback } from '@/components/save-feedback';
+import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import {
   saveDisplayName,
@@ -101,54 +103,11 @@ function CharCount({ value, limit = WHATSAPP_LIMIT }: { value: string; limit?: n
   );
 }
 
-function Toast({
-  message,
-  type,
-  onDismiss,
-}: {
-  message: string;
-  type: 'success' | 'error';
-  onDismiss: () => void;
-}) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-lg max-w-sm animate-in slide-in-from-bottom-4',
-        type === 'success'
-          ? 'bg-card border-green-600/30'
-          : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      <Badge
-        className={cn(
-          'shrink-0 border-0',
-          type === 'success'
-            ? 'bg-green-600/15 text-green-700 dark:text-green-400'
-            : undefined,
-        )}
-        variant={type === 'success' ? 'secondary' : 'destructive'}
-      >
-        {type === 'success' ? 'Saved' : 'Error'}
-      </Badge>
-      <span className="flex-1">{message}</span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="text-xs text-muted-foreground hover:text-foreground ml-1"
-        aria-label="Dismiss"
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
 export function SalonSettingsForm({ initialSettings }: Props) {
   const router = useRouter();
+  const { getSection, reportSuccess, reportError } = useMultiSectionSaveFeedback();
   const [salon, setSalon] = useState<SalonSettings>(initialSettings);
   const [saved, setSaved] = useState<SalonSettings>(initialSettings);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [previewMode, setPreviewMode] = useState<PreviewMode>('welcome');
 
   const [tradingName, setTradingName] = useState(initialSettings.tradingName ?? '');
@@ -190,16 +149,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
-
-  const showToast = useCallback((message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-  }, []);
-
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 4500);
-    return () => clearTimeout(t);
-  }, [toast]);
 
   const applySalon = useCallback((s: SalonSettings) => {
     setSalon(s);
@@ -302,7 +251,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     e.preventDefault();
     const trimmed = tradingName.trim();
     if (!trimmed) {
-      showToast('Enter a business display name', 'error');
+      reportError('displayName', 'Enter a business display name');
       return;
     }
     setSavingDisplayName(true);
@@ -310,13 +259,13 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       const result = await saveDisplayName(trimmed);
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Business display name saved', 'success');
+        reportSuccess('displayName', 'Business display name saved');
         router.refresh();
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('displayName', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('displayName', 'Save failed — please try again');
     } finally {
       setSavingDisplayName(false);
     }
@@ -325,11 +274,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   async function handleSaveHours(e: React.FormEvent) {
     e.preventDefault();
     if (!openTime || !closeTime) {
-      showToast('Enter both open and close times', 'error');
+      reportError('hours', 'Enter both open and close times');
       return;
     }
     if (openTime >= closeTime) {
-      showToast('Close time must be after open time', 'error');
+      reportError('hours', 'Close time must be after open time');
       return;
     }
     setSavingHours(true);
@@ -337,12 +286,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       const result = await saveHours(openTime, closeTime, timezone);
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Business hours saved', 'success');
+        reportSuccess('hours', 'Business hours saved');
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('hours', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('hours', 'Save failed — please try again');
     } finally {
       setSavingHours(false);
     }
@@ -351,7 +300,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   async function handleSaveMessages(e: React.FormEvent) {
     e.preventDefault();
     if (welcomeOver || afterHoursOver) {
-      showToast(`Messages must be under ${WHATSAPP_LIMIT.toLocaleString()} characters`, 'error');
+      reportError('messages', `Messages must be under ${WHATSAPP_LIMIT.toLocaleString()} characters`);
       return;
     }
     setSavingMessages(true);
@@ -362,12 +311,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       );
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Bot messages saved', 'success');
+        reportSuccess('messages', 'Bot messages saved');
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('messages', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('messages', 'Save failed — please try again');
     } finally {
       setSavingMessages(false);
     }
@@ -376,7 +325,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   async function handleSaveInactivity(e: React.FormEvent) {
     e.preventDefault();
     if (inactivityDelay2 <= inactivityDelay1) {
-      showToast('Second follow-up must be sent later than the first', 'error');
+      reportError('inactivity', 'Second follow-up must be sent later than the first');
       return;
     }
     setSavingInactivity(true);
@@ -390,12 +339,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       });
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Follow-up messages saved', 'success');
+        reportSuccess('inactivity', 'Follow-up messages saved');
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('inactivity', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('inactivity', 'Save failed — please try again');
     } finally {
       setSavingInactivity(false);
     }
@@ -415,12 +364,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       });
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Conversation flow settings saved', 'success');
+        reportSuccess('botBehaviour', 'Conversation flow settings saved');
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('botBehaviour', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('botBehaviour', 'Save failed — please try again');
     } finally {
       setSavingBotBehaviour(false);
     }
@@ -430,7 +379,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     e.preventDefault();
     const trimmed = botNameVal.trim();
     if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
-      showToast('Bot name must be 2–40 characters', 'error');
+      reportError('botName', 'Bot name must be 2–40 characters');
       return;
     }
     setSavingBotName(true);
@@ -438,12 +387,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       const result = await saveBotName(trimmed);
       if (result.salon) {
         applySalon(result.salon);
-        showToast(`Bot name updated to "${trimmed}"`, 'success');
+        reportSuccess('botName', `Bot name updated to "${trimmed}"`);
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('botName', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('botName', 'Save failed — please try again');
     } finally {
       setSavingBotName(false);
     }
@@ -452,11 +401,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   async function handleSaveLocation(e: React.FormEvent) {
     e.preventDefault();
     if (contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
-      showToast('Enter a valid email address', 'error');
+      reportError('location', 'Enter a valid email address');
       return;
     }
     if (mapsUrl.trim() && !/^https?:\/\//.test(mapsUrl.trim())) {
-      showToast('Maps link must start with https://', 'error');
+      reportError('location', 'Maps link must start with https://');
       return;
     }
     setSavingLocation(true);
@@ -470,10 +419,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       );
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Location & contact details saved', 'success');
+        reportSuccess('location', 'Location & contact details saved');
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('location', result.error ?? 'Save failed');
       }
+    } catch {
+      reportError('location', 'Save failed — please try again');
     } finally {
       setSavingLocation(false);
     }
@@ -483,11 +434,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     e.preventDefault();
     const trimmed = googleReviewUrl.trim();
     if (trimmed.length > 2048) {
-      showToast('Google Review URL is too long (max 2048 characters)', 'error');
+      reportError('googleReview', 'Google Review URL is too long (max 2048 characters)');
       return;
     }
     if (trimmed && !trimmed.startsWith('https://')) {
-      showToast('Google Review URL must start with https://', 'error');
+      reportError('googleReview', 'Google Review URL must start with https://');
       return;
     }
     setSavingGoogleReviewUrl(true);
@@ -495,12 +446,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       const result = await saveGoogleReviewUrl(trimmed || null);
       if (result.salon) {
         applySalon(result.salon);
-        showToast('Google Review URL saved', 'success');
+        reportSuccess('googleReview', 'Google Review URL saved');
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('googleReview', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('googleReview', 'Save failed — please try again');
     } finally {
       setSavingGoogleReviewUrl(false);
     }
@@ -513,15 +464,15 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       const result = await saveBotActive(botActive);
       if (result.salon) {
         applySalon(result.salon);
-        showToast(
+        reportSuccess(
+          'botActive',
           botActive ? 'Bot is live on WhatsApp' : 'Bot paused — team will handle all messages',
-          'success',
         );
       } else {
-        showToast(result.error ?? 'Save failed', 'error');
+        reportError('botActive', result.error ?? 'Save failed');
       }
     } catch {
-      showToast('Save failed — please try again', 'error');
+      reportError('botActive', 'Save failed — please try again');
     } finally {
       setSavingBot(false);
     }
@@ -552,6 +503,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           <Button type="submit" size="sm" disabled={!botNameDirty || savingBotName}>
             {savingBotName ? 'Saving…' : 'Save bot name'}
           </Button>
+          <SectionSaveFeedback feedback={getSection('botName')} />
         </form>
       </section>
 
@@ -581,6 +533,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           <Button type="submit" size="sm" disabled={!displayNameDirty || savingDisplayName}>
             {savingDisplayName ? 'Saving…' : 'Save display name'}
           </Button>
+          <SectionSaveFeedback feedback={getSection('displayName')} />
         </form>
       </section>
 
@@ -643,13 +596,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={savingHours || !hoursDirty}>
-              {savingHours ? 'Saving…' : 'Save business hours'}
-            </Button>
-            {hoursDirty && (
-              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-            )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingHours || !hoursDirty}>
+                {savingHours ? 'Saving…' : 'Save business hours'}
+              </Button>
+              {hoursDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('hours')} />
           </div>
         </form>
       </section>
@@ -709,17 +665,20 @@ export function SalonSettingsForm({ initialSettings }: Props) {
                 Sent when a customer chooses &quot;Talk to a human&quot; outside business hours. Bookings, FAQs, and loyalty still work 24/7.
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={savingMessages || !messagesDirty || welcomeOver || afterHoursOver}
-              >
-                {savingMessages ? 'Saving…' : 'Save bot messages'}
-              </Button>
-              {messagesDirty && (
-                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-              )}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={savingMessages || !messagesDirty || welcomeOver || afterHoursOver}
+                >
+                  {savingMessages ? 'Saving…' : 'Save bot messages'}
+                </Button>
+                {messagesDirty && (
+                  <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+                )}
+              </div>
+              <SectionSaveFeedback feedback={getSection('messages')} />
             </div>
           </div>
 
@@ -819,13 +778,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               placeholder="Free parking at rear, entrance on Smith St"
             />
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={savingLocation || !locationDirty}>
-              {savingLocation ? 'Saving…' : locationDirty ? 'Save location & contact' : 'No changes'}
-            </Button>
-            {locationDirty && (
-              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-            )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingLocation || !locationDirty}>
+                {savingLocation ? 'Saving…' : locationDirty ? 'Save location & contact' : 'No changes'}
+              </Button>
+              {locationDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('location')} />
           </div>
         </form>
       </section>
@@ -876,13 +838,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               </div>
             </label>
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={savingBot || !botDirty}>
-              {savingBot ? 'Saving…' : 'Save bot behaviour'}
-            </Button>
-            {botDirty && (
-              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-            )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingBot || !botDirty}>
+                {savingBot ? 'Saving…' : 'Save bot behaviour'}
+              </Button>
+              {botDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('botActive')} />
           </div>
         </form>
       </section>
@@ -957,13 +922,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               </label>
             </div>
           ))}
-          <div className="flex items-center gap-3 pt-1">
-            <Button type="submit" size="sm" disabled={savingBotBehaviour || !botBehaviourDirty}>
-              {savingBotBehaviour ? 'Saving…' : 'Save flow settings'}
-            </Button>
-            {botBehaviourDirty && (
-              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-            )}
+          <div className="flex flex-col gap-2 pt-1">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingBotBehaviour || !botBehaviourDirty}>
+                {savingBotBehaviour ? 'Saving…' : 'Save flow settings'}
+              </Button>
+              {botBehaviourDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('botBehaviour')} />
           </div>
         </form>
       </section>
@@ -993,13 +961,16 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               Paste your Google Business review link. Find it in Google Business Profile → &quot;Get more reviews&quot;. Leave blank to disable.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={savingGoogleReviewUrl || !googleReviewUrlDirty}>
-              {savingGoogleReviewUrl ? 'Saving…' : 'Save review URL'}
-            </Button>
-            {googleReviewUrlDirty && (
-              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-            )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingGoogleReviewUrl || !googleReviewUrlDirty}>
+                {savingGoogleReviewUrl ? 'Saving…' : 'Save review URL'}
+              </Button>
+              {googleReviewUrlDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('googleReview')} />
           </div>
         </form>
       </section>
@@ -1097,18 +1068,19 @@ export function SalonSettingsForm({ initialSettings }: Props) {
             <p className="text-xs text-muted-foreground text-right">{closingMsg.length} / 500</p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button type="submit" size="sm" disabled={savingInactivity || !inactivityDirty}>
-              {savingInactivity ? 'Saving…' : 'Save messages'}
-            </Button>
-            {inactivityDirty && (
-              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-            )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingInactivity || !inactivityDirty}>
+                {savingInactivity ? 'Saving…' : 'Save messages'}
+              </Button>
+              {inactivityDirty && (
+                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+              )}
+            </div>
+            <SectionSaveFeedback feedback={getSection('inactivity')} />
           </div>
         </form>
       </section>
-
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
     </div>
   );
 }

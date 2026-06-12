@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Info, Loader2 } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { StaffMember, WorkingHour, TimeOff } from './staff-client';
+import type { StaffMember, WorkingHour, TimeOffBlock as TimeOff } from '@/lib/staff-schedule';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -254,7 +254,7 @@ export function StaffCalendarSheet({ member, token, open, onClose, onSaved, onEr
         ).catch(() => null);
       }
       onClose();
-      onSaved('Schedule saved', prevSchedule.current);
+      onSaved('Changes saved', prevSchedule.current);
     } catch (err) {
       onError(err instanceof ApiError ? err.message : 'Save failed — please try again');
     } finally {

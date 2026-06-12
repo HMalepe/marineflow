@@ -22,6 +22,10 @@ import {
   Users,
   XCircle,
 } from 'lucide-react';
+import { DashboardToast } from '@/components/dashboard-toast';
+import { SaveErrorFeedback } from '@/components/save-feedback';
+import { SAVE_MESSAGES } from '@/lib/save-messages';
+import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -294,30 +298,7 @@ function Toast({
   type: 'success' | 'error';
   onDismiss: () => void;
 }) {
-  return (
-    <div
-      role="status"
-      className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-xl animate-in slide-in-from-bottom-4 max-w-md backdrop-blur-sm',
-        type === 'success' ? 'bg-card/95 border-green-600/30' : 'bg-destructive/10 border-destructive/40 text-destructive',
-      )}
-    >
-      {type === 'success' ? (
-        <CheckCircle2 className="size-4 text-green-600 shrink-0 mt-0.5" />
-      ) : (
-        <XCircle className="size-4 shrink-0 mt-0.5" />
-      )}
-      <span className="flex-1 leading-snug">{message}</span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="text-muted-foreground hover:text-foreground text-xs shrink-0"
-        aria-label="Dismiss"
-      >
-        ✕
-      </button>
-    </div>
-  );
+  return <DashboardToast message={message} type={type} onDismiss={onDismiss} />;
 }
 
 function WhatsAppText({ text }: { text: string }) {
@@ -455,6 +436,7 @@ export function CampaignsClient({ token }: Props) {
   const [confirmSendInSheet, setConfirmSendInSheet] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const { error: saveError, clear: clearSaveFeedback, reportError } = useSaveFeedback();
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -620,25 +602,26 @@ export function CampaignsClient({ token }: Props) {
 
   const validateForm = (): boolean => {
     if (!form.name.trim()) {
-      showToast('Add a newsletter name so you can find it later', 'error');
+      reportError('Add a newsletter name so you can find it later');
       return false;
     }
     if (!form.message.trim() && !form.mediaUrl) {
-      showToast('Add a caption, photo, or video for your newsletter', 'error');
+      reportError('Add a caption, photo, or video for your newsletter');
       return false;
     }
     if (form.audienceType === 'tags' && form.tags.length === 0) {
-      showToast('Choose at least one customer tag', 'error');
+      reportError('Choose at least one customer tag');
       return false;
     }
     if (form.deliveryMode === 'schedule' && !form.scheduledAtLocal) {
-      showToast('Choose when this campaign should send', 'error');
+      reportError('Choose when this campaign should send');
       return false;
     }
     if (audienceCount === 0 && (form.deliveryMode === 'now' || form.deliveryMode === 'schedule')) {
-      showToast('No customers match this audience — adjust targeting first, or save as a draft', 'error');
+      reportError('No customers match this audience — adjust targeting first, or save as a draft');
       return false;
     }
+    clearSaveFeedback();
     return true;
   };
 
@@ -687,7 +670,7 @@ export function CampaignsClient({ token }: Props) {
             token,
           );
           showToast(
-            form.deliveryMode === 'schedule' ? 'Schedule updated' : 'Draft saved',
+            form.deliveryMode === 'schedule' ? SAVE_MESSAGES.changesSaved : SAVE_MESSAGES.draftSaved,
             'success',
           );
         }
@@ -716,7 +699,7 @@ export function CampaignsClient({ token }: Props) {
       closeSheet();
       await loadAll(true);
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : 'Something went wrong — please try again', 'error');
+      reportError(err instanceof ApiError ? err.message : 'Something went wrong — please try again');
     } finally {
       setSaving(false);
       setConfirmSendInSheet(false);
@@ -1337,6 +1320,7 @@ export function CampaignsClient({ token }: Props) {
 
           {!confirmSendInSheet && (
             <SheetFooter className="flex-col sm:flex-col gap-2 border-t pt-5 mt-2">
+              <SaveErrorFeedback message={saveError} />
               <Button
                 className="w-full h-11 bg-[#128c7e] hover:bg-[#0d6b5f] text-white font-medium shadow-sm"
                 onClick={() => void handleSave()}
