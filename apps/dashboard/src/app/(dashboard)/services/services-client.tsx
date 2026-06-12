@@ -304,20 +304,21 @@ export function ServicesClient({ token }: Props) {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
+    const target = deleteTarget;
     setDeleting(true);
+    setDeleteTarget(null); // close sheet immediately so user sees feedback
     try {
       const result = await apiFetch<{ ok: boolean; deactivated?: boolean }>(
-        `/services/${deleteTarget.id}`,
+        `/services/${target.id}`,
         { method: 'DELETE' },
         token,
       );
       showToast(
         result.deactivated
-          ? `${deleteTarget.name} has bookings — marked inactive instead`
-          : `${deleteTarget.name} removed`,
+          ? `${target.name} has bookings — marked inactive instead`
+          : `${target.name} removed`,
         'success',
       );
-      setDeleteTarget(null);
       await loadServices(true);
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Delete failed', 'error');
@@ -473,6 +474,7 @@ export function ServicesClient({ token }: Props) {
                       className="text-destructive hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation();
+                        closeSheet();
                         setDeleteTarget(service);
                       }}
                     >
