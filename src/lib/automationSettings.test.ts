@@ -42,10 +42,13 @@ describe('automationSettings', () => {
         reminders: { hoursBefore: [-1, 0, 9999, 2] },
         cancellation: { cancelHoursBefore: 'not-a-number' },
         referral: { rewardCents: -100 },
+        googleReview: { incentiveCents: -100 },
       },
     });
     expect(parsed.reminders.hoursBefore).toContain(2);
     expect(parsed.cancellation.cancelHoursBefore).toBe(24);
     expect(parsed.referral.rewardCents).toBe(0);
+    expect(parsed.googleReview.incentiveEnabled).toBe(true);
+    expect(parsed.googleReview.incentiveCents).toBe(0);
   });
 });

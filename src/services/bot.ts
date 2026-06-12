@@ -46,6 +46,15 @@ import {
 } from './botPowerFeatures.js';
 import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
 import {
+  claimReviewIncentive,
+  applyReviewCreditTx,
+  formatReviewReward,
+  sendGoogleReviewFollowUp,
+  parseReviewClaimCommand,
+  reviewedClaimErrorMessage,
+  resolveGoogleReviewSettings,
+} from './reviewIncentive.js';
+import {
   applyMarketingConsentChoice,
   buildConsentAcceptedMessage,
   buildConsentDeclinedMessage,
@@ -569,6 +578,13 @@ async function processInboundWhatsApp(
   // Birthday-campaign treat claim — the outbound message says "reply BIRTHDAY"
   if (lower === 'birthday') {
     await handleBirthdayKeyword(conv);
+    return;
+  }
+
+  const reviewCmd = parseReviewClaimCommand(text);
+  if (reviewCmd) {
+    const token = reviewCmd.kind === 'token_only' ? reviewCmd.token : reviewCmd.token;
+    await handleReviewedKeyword(conv, token);
     return;
   }
 
@@ -1951,6 +1967,26 @@ async function handleConfirm(
     customerId: conv.customerId,
     service,
   });
+
+  let bookingTotalCents = service.priceCents;
+  if (addonIds.length) {
+    const addonServices = await tx.service.findMany({
+      where: { id: { in: addonIds }, salonId: conv.salonId },
+      select: { priceCents: true },
+    });
+    bookingTotalCents += addonServices.reduce((sum, a) => sum + a.priceCents, 0);
+  }
+
+  const needPay =
+    conv.salon.botRequireDepositStep &&
+    !redeem.redeemed &&
+    ((service.depositCents ?? 0) > 0 || service.fullPay);
+
+  const reviewCredit = await applyReviewCreditTx(tx, {
+    customerId: conv.customerId,
+    servicePriceCents: bookingTotalCents,
+    atVisitOnly: needPay,
+  });
   const reschedulingId = c.managingAppointmentId as string | undefined;
 
   const appointment = await tx.appointment.create({
@@ -2004,6 +2040,18 @@ async function handleConfirm(
     },
   });
 
+  if (reviewCredit.appliedCents > 0) {
+    await tx.analyticsEvent.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: appointment.id,
+        type: 'review_credit_applied',
+        payload: { appliedCents: reviewCredit.appliedCents },
+      },
+    });
+  }
+
   // Track booking count for no-show risk scoring (best-effort — must not fail booking)
   const isFirstBooking = conv.customer.bookingCount === 0;
   try {
@@ -2036,10 +2084,7 @@ async function handleConfirm(
 
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
 
-  const needPay =
-    conv.salon.botRequireDepositStep &&
-    !redeem.redeemed &&
-    ((service.depositCents ?? 0) > 0 || service.fullPay);
+  const bookingNotes = [redeem.note, reviewCredit.note].filter(Boolean).join('\n');
   if (needPay) {
     const sessionUrl = await createDepositCheckoutSession({
       salonId: conv.salonId,
@@ -2052,7 +2097,7 @@ async function handleConfirm(
       await reply(
         conv,
         [
-          redeem.note ? `${redeem.note}\n` : '',
+          bookingNotes ? `${bookingNotes}\n` : '',
           `Booking held (${appointment.id.slice(0, 8)}).`,
           `Please complete payment: ${sessionUrl}`,
           'We will confirm once payment succeeds.',
@@ -2079,7 +2124,7 @@ async function handleConfirm(
   await reply(
     conv,
     [
-      redeem.redeemed && redeem.note ? `${redeem.note}\n` : '',
+      bookingNotes ? `${bookingNotes}\n` : '',
       `Booked! Reference: ${appointment.id.slice(0, 8)}`,
       `${sanitize(service.name)} with ${sanitize(staff.name)}`,
       DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
@@ -2730,6 +2775,16 @@ async function handleCsat(
     });
   }
 
+  const reviewSettings = resolveGoogleReviewSettings(conv.salon.metadata);
+  let reviewRequestSentAt: Date | null = null;
+  if (appointmentId) {
+    const appt = await getTenantDb().appointment.findUnique({
+      where: { id: appointmentId },
+      select: { reviewRequestSentAt: true },
+    });
+    reviewRequestSentAt = appt?.reviewRequestSentAt ?? null;
+  }
+
   const messages: Record<number, string> = {
     1: "We're sorry to hear that. We'll work to improve. Thank you for the feedback.",
     2: "Thank you for letting us know. We'll do better next time.",
@@ -2740,19 +2795,56 @@ async function handleCsat(
 
   await reply(conv, messages[rating] ?? 'Thank you!');
 
-  // §6.1 — send a Google review nudge immediately after a 5-star rating.
-  if (rating === 5 && conv.salon.googleReviewUrl) {
-    // sanitize strips WhatsApp markdown injection chars (*_~`[]) from the admin-supplied URL
-    const safeUrl = sanitize(conv.salon.googleReviewUrl);
-    await reply(
-      conv,
-      "We'd love it if you shared your experience on Google — it helps other customers find us!\n\n" +
-        safeUrl,
-    );
+  if (conv.salon.googleReviewUrl) {
+    await sendGoogleReviewFollowUp({
+      salonId: conv.salon.id,
+      customerId: conv.customerId,
+      appointmentId: appointmentId ?? null,
+      googleReviewUrl: conv.salon.googleReviewUrl,
+      googleReviewEnabled: reviewSettings.enabled,
+      incentiveEnabled: reviewSettings.incentiveEnabled,
+      incentiveCents: reviewSettings.incentiveCents,
+      marketingConsentStatus: conv.customer.marketingConsentStatus,
+      reviewRequestSentAt,
+      reply: (body) => reply(conv, body),
+    });
   }
 
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await replyMenu(conv);
+}
+
+async function handleReviewedKeyword(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  token?: string,
+): Promise<void> {
+  const result = await claimReviewIncentive({
+    salonId: conv.salon.id,
+    customerId: conv.customerId,
+    token,
+  });
+
+  if (!result.ok) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await replyWithMenu(conv, reviewedClaimErrorMessage(result.reason));
+    return;
+  }
+
+  const reward = formatReviewReward(result.rewardCents);
+  if (result.alreadyClaimed) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await replyWithMenu(
+      conv,
+      `You've already claimed your ${reward} review reward — it's waiting on your next booking! 💈`,
+    );
+    return;
+  }
+
+  await saveCtx(conv.id, {}, ConversationStep.MENU);
+  await replyWithMenu(
+    conv,
+    `Thanks for leaving a review! 🎉\n\nYour ${reward} reward is saved and will come off your next booking automatically.\n\nReply 1 anytime to book.`,
+  );
 }
 
 function fmtMoney(cents: number): string {

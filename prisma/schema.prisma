@@ -236,6 +236,7 @@ model Salon {
   webhookSubscriptions WebhookSubscription[]
   staffUsers     StaffUser[]
   auditLogs      AuditLog[]
+  reviewIncentiveClaims ReviewIncentiveClaim[]
 }
 
 model Branch {
@@ -295,6 +296,8 @@ model Customer {
   noShowCount         Int       @default(0)
   bookingCount        Int       @default(0)
   noShowRisk          String    @default("LOW") // LOW | MEDIUM | HIGH
+  /// R50-off-style credit earned from leaving a Google review (applied on next booking)
+  reviewCreditCents   Int       @default(0)
   deletedAt           DateTime?
   createdAt           DateTime  @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
@@ -310,6 +313,7 @@ model Customer {
   memberships     CustomerMembership[]
   tickets         Ticket[]
   payments        Payment[]
+  reviewIncentiveClaims ReviewIncentiveClaim[]
 
   @@unique([salonId, waId])
   @@index([salonId])
@@ -561,11 +565,34 @@ model Appointment {
   payments    Payment[]
   invoices    Invoice[]
   analyticsEvents AnalyticsEvent[]
+  reviewIncentiveClaims ReviewIncentiveClaim[]
 
   @@index([salonId, start])
   @@index([staffId, start])
   @@index([customerId, start])
   @@index([salonId, status])
+}
+
+// ─── Google review incentive (R50 off claim link) ───────────────────
+
+model ReviewIncentiveClaim {
+  id            String       @id @default(cuid())
+  salonId       String
+  salon         Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  token         String       @unique
+  rewardCents   Int
+  claimedAt     DateTime?
+  expiresAt     DateTime
+  createdAt     DateTime     @default(now())
+
+  @@index([salonId])
+  @@index([customerId])
+  @@index([appointmentId])
+  @@unique([appointmentId])
 }
 
 model Invoice {

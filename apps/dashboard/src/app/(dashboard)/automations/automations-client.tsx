@@ -34,7 +34,7 @@ export interface SalonAutomations {
     forfeitDepositOnLateCancel: boolean;
   };
   waitlist: { enabled: boolean; autoFillOnCancel: boolean };
-  googleReview: { enabled: boolean; hoursAfterVisit: number };
+  googleReview: { enabled: boolean; hoursAfterVisit: number; incentiveEnabled: boolean; incentiveCents: number };
   welcomeJourney: { enabled: boolean; introMessage: string; showPopularServices: boolean };
   referral: { enabled: boolean; rewardCents: number; promptAfterVisits: number[] };
   membership: { enabled: boolean };
@@ -53,7 +53,7 @@ const DEFAULTS: SalonAutomations = {
     forfeitDepositOnLateCancel: true,
   },
   waitlist: { enabled: true, autoFillOnCancel: true },
-  googleReview: { enabled: true, hoursAfterVisit: 24 },
+  googleReview: { enabled: true, hoursAfterVisit: 24, incentiveEnabled: true, incentiveCents: 5000 },
   welcomeJourney: {
     enabled: true,
     introMessage:
@@ -280,8 +280,31 @@ export function AutomationsClient({ token }: Props) {
             checked={draft.googleReview.enabled}
             onChange={(v) => patch('googleReview', { enabled: v })}
             label="Request review after appointment"
-            description="Sends your Google review link after each completed visit (requires URL in Settings)."
+            description="Sends your Google review link + optional R50 claim link after each visit (configure in Settings)."
           />
+          <Toggle
+            icon={Star}
+            checked={draft.googleReview.incentiveEnabled}
+            onChange={(v) => patch('googleReview', { incentiveEnabled: v })}
+            label="Review incentive (R50 off)"
+            description="Customers receive a special claim link for any review — good or bad."
+          />
+          {draft.googleReview.incentiveEnabled && (
+            <div className="space-y-1.5 max-w-xs">
+              <Label className="text-xs">Incentive amount (R)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={1000}
+                value={draft.googleReview.incentiveCents / 100}
+                onChange={(e) =>
+                  patch('googleReview', {
+                    incentiveCents: Math.max(1, parseInt(e.target.value, 10) || 50) * 100,
+                  })
+                }
+              />
+            </div>
+          )}
           <div className="space-y-1.5 max-w-xs">
             <Label className="text-xs">Hours after visit</Label>
             <Input

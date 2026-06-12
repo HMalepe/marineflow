@@ -19,6 +19,9 @@ export interface SalonAutomations {
   googleReview: {
     enabled: boolean;
     hoursAfterVisit: number;
+    /** Offer R50-style credit after customer leaves a Google review */
+    incentiveEnabled: boolean;
+    incentiveCents: number;
   };
   welcomeJourney: {
     enabled: boolean;
@@ -73,6 +76,8 @@ export const DEFAULT_AUTOMATIONS: SalonAutomations = {
   googleReview: {
     enabled: true,
     hoursAfterVisit: 24,
+    incentiveEnabled: true,
+    incentiveCents: 5000,
   },
   welcomeJourney: {
     enabled: true,
@@ -228,6 +233,16 @@ export function parseAutomationsFromMetadata(metadata: unknown): SalonAutomation
         1,
         168,
         DEFAULT_AUTOMATIONS.googleReview.hoursAfterVisit,
+      ),
+      incentiveEnabled: parseBool(
+        reviewRaw.incentiveEnabled,
+        DEFAULT_AUTOMATIONS.googleReview.incentiveEnabled,
+      ),
+      incentiveCents: clampInt(
+        reviewRaw.incentiveCents,
+        0,
+        1_000_000,
+        DEFAULT_AUTOMATIONS.googleReview.incentiveCents,
       ),
     },
     welcomeJourney: {

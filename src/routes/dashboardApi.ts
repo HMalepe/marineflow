@@ -59,6 +59,13 @@ import {
   validateAutomationsPayload,
   type SalonAutomations,
 } from '../lib/automationSettings.js';
+import { getPublicReviewClaimInfo } from '../services/reviewIncentive.js';
+import {
+  clampInactivityDelay1,
+  clampInactivityDelay2,
+  sanitizeFollowUpMessage,
+  validateFollowUpSettings,
+} from '../lib/followUpMessages.js';
 import { SEASONAL_CAMPAIGN_TEMPLATES } from '../lib/campaignTemplates.js';
 import { maybeSendReferralPrompt } from '../services/referralProgram.js';
 
@@ -119,6 +126,12 @@ function serializeFaq(item: {
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
   const UPLOAD_BODY_LIMIT = 17 * 1024 * 1024;
+
+  app.get<{ Params: { token: string } }>(
+    '/public/review-reward/:token',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request) => getPublicReviewClaimInfo(request.params.token),
+  );
 
   app.addContentTypeParser(
     'application/octet-stream',
@@ -444,6 +457,61 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           }
         }
 
+        const followUpTouched =
+          inactivityMessage1 !== undefined ||
+          inactivityMessage1DelayMin !== undefined ||
+          inactivityMessage2 !== undefined ||
+          inactivityMessage2DelayMin !== undefined ||
+          closingMessage !== undefined;
+
+        let resolvedDelay1: number | undefined;
+        let resolvedDelay2: number | undefined;
+
+        if (followUpTouched) {
+          const existingFollowUp = await db.salon.findUnique({
+            where: { id: user.salonId },
+            select: {
+              inactivityMessage1: true,
+              inactivityMessage1DelayMin: true,
+              inactivityMessage2: true,
+              inactivityMessage2DelayMin: true,
+              closingMessage: true,
+            },
+          });
+
+          resolvedDelay1 =
+            inactivityMessage1DelayMin !== undefined
+              ? clampInactivityDelay1(inactivityMessage1DelayMin)
+              : existingFollowUp?.inactivityMessage1DelayMin ?? 10;
+          resolvedDelay2 =
+            inactivityMessage2DelayMin !== undefined
+              ? clampInactivityDelay2(inactivityMessage2DelayMin, resolvedDelay1)
+              : existingFollowUp?.inactivityMessage2DelayMin ?? 30;
+
+          const followUpValidation = validateFollowUpSettings({
+            inactivityMessage1:
+              inactivityMessage1 !== undefined
+                ? inactivityMessage1
+                : existingFollowUp?.inactivityMessage1,
+            inactivityMessage1DelayMin: resolvedDelay1,
+            inactivityMessage2:
+              inactivityMessage2 !== undefined
+                ? inactivityMessage2
+                : existingFollowUp?.inactivityMessage2,
+            inactivityMessage2DelayMin: resolvedDelay2,
+            closingMessage:
+              closingMessage !== undefined ? closingMessage : existingFollowUp?.closingMessage,
+          });
+          if (!followUpValidation.ok) {
+            reply.code(400);
+            return {
+              error: 'invalid_follow_up_messages',
+              message: followUpValidation.message,
+              field: followUpValidation.field,
+            };
+          }
+        }
+
         let nextStatus = status;
         if (botActive !== undefined) {
           nextStatus = botActive ? 'ACTIVE' : 'SUSPENDED';
@@ -503,11 +571,25 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(botRequireDepositStep !== undefined && { botRequireDepositStep }),
             ...(botWinbackEnabled !== undefined && { botWinbackEnabled }),
             ...(botBirthdayEnabled !== undefined && { botBirthdayEnabled }),
-            ...(inactivityMessage1 !== undefined && { inactivityMessage1: inactivityMessage1?.trim() || null }),
-            ...(inactivityMessage1DelayMin !== undefined && { inactivityMessage1DelayMin }),
-            ...(inactivityMessage2 !== undefined && { inactivityMessage2: inactivityMessage2?.trim() || null }),
-            ...(inactivityMessage2DelayMin !== undefined && { inactivityMessage2DelayMin }),
-            ...(closingMessage !== undefined && { closingMessage: closingMessage?.trim() || null }),
+            ...(inactivityMessage1 !== undefined && {
+              inactivityMessage1: inactivityMessage1
+                ? sanitizeFollowUpMessage(inactivityMessage1) || null
+                : null,
+            }),
+            ...(inactivityMessage1DelayMin !== undefined && {
+              inactivityMessage1DelayMin: resolvedDelay1 ?? clampInactivityDelay1(inactivityMessage1DelayMin),
+            }),
+            ...(inactivityMessage2 !== undefined && {
+              inactivityMessage2: inactivityMessage2
+                ? sanitizeFollowUpMessage(inactivityMessage2) || null
+                : null,
+            }),
+            ...(inactivityMessage2DelayMin !== undefined && {
+              inactivityMessage2DelayMin: resolvedDelay2 ?? clampInactivityDelay2(inactivityMessage2DelayMin, resolvedDelay1 ?? 10),
+            }),
+            ...(closingMessage !== undefined && {
+              closingMessage: closingMessage ? sanitizeFollowUpMessage(closingMessage) || null : null,
+            }),
             ...(nextStatus !== undefined && {
               status: nextStatus,
               statusChangedAt: new Date(),

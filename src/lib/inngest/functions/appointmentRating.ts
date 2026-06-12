@@ -6,6 +6,10 @@ import { inngest } from '../client.js';
 import { prisma } from '../../prisma.js';
 import { sendWithFallback } from '../../../services/channelRouter.js';
 import { parseAutomationsFromMetadata } from '../../automationSettings.js';
+import {
+  prepareGoogleReviewFollowUp,
+  shouldSendGoogleReviewFollowUp,
+} from '../../../services/reviewIncentive.js';
 
 export type AppointmentCompletedEvent = {
   data: {
@@ -60,24 +64,45 @@ export const googleReviewRequest = inngest.createFunction(
           where: { id: appointmentId },
           select: { status: true, reviewRequestSentAt: true },
         });
-        if (!appt || appt.status !== 'COMPLETED' || appt.reviewRequestSentAt) return;
+        if (!appt || appt.status !== 'COMPLETED') return;
         if (!customerWaId) return;
 
         const customer = await prisma.customer.findUnique({
           where: { id: customerId },
-          select: { firstName: true, marketingConsentStatus: true },
+          select: { firstName: true, marketingConsentStatus: true, deletedAt: true },
         });
-        if (customer?.marketingConsentStatus !== 'ACCEPTED') return;
+        if (!customer || customer.deletedAt) return;
+
+        if (
+          !shouldSendGoogleReviewFollowUp({
+            googleReviewUrl: config.googleReviewUrl,
+            googleReviewEnabled: config.automations.googleReview.enabled,
+            marketingConsentStatus: customer.marketingConsentStatus,
+            reviewRequestSentAt: appt.reviewRequestSentAt,
+          })
+        ) {
+          return;
+        }
+
+        const reviewCfg = config.automations.googleReview;
+        const { body: followUpBody } = await prepareGoogleReviewFollowUp({
+          salonId,
+          customerId,
+          appointmentId,
+          googleReviewUrl: config.googleReviewUrl!,
+          incentiveEnabled: reviewCfg.incentiveEnabled,
+          incentiveCents: reviewCfg.incentiveCents,
+        });
 
         const body =
-          `Hi ${customer?.firstName ?? 'there'}! Thanks for visiting ${config.salonName} 😊\n\n` +
-          `We'd love your feedback on Google — it helps other customers find us:\n${config.googleReviewUrl}\n\n` +
-          `Thank you for supporting us!`;
+          `Hi ${customer.firstName ?? 'there'}! Thanks for visiting ${config.salonName} 😊\n\n` +
+          followUpBody +
+          `\n\nThank you for supporting us!`;
 
         await sendWithFallback({ salonId, to: customerWaId, body });
 
-        await prisma.appointment.update({
-          where: { id: appointmentId },
+        await prisma.appointment.updateMany({
+          where: { id: appointmentId, reviewRequestSentAt: null },
           data: { reviewRequestSentAt: new Date() },
         });
 

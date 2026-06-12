@@ -35,6 +35,12 @@ export interface SalonSettings {
   mapsUrl: string | null;
   parkingNotes: string | null;
   googleReviewUrl: string | null;
+  automations?: {
+    googleReview?: {
+      incentiveEnabled?: boolean;
+      incentiveCents?: number;
+    };
+  };
 }
 
 export interface CustomBotFlow {
@@ -44,20 +50,37 @@ export interface CustomBotFlow {
   enabled: boolean;
 }
 
-export async function saveGoogleReviewUrl(
+export async function saveGoogleReviewSettings(
   googleReviewUrl: string | null,
+  reviewIncentive?: { incentiveEnabled: boolean; incentiveCents: number },
 ): Promise<{ salon?: SalonSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };
   try {
+    const body: Record<string, unknown> = { googleReviewUrl };
+    if (reviewIncentive) {
+      body.automations = {
+        googleReview: {
+          incentiveEnabled: reviewIncentive.incentiveEnabled,
+          incentiveCents: reviewIncentive.incentiveCents,
+        },
+      };
+    }
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
-      body: JSON.stringify({ googleReviewUrl }),
+      body: JSON.stringify(body),
     }, token);
     return { salon: data.salon };
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Save failed' };
   }
+}
+
+/** @deprecated Use saveGoogleReviewSettings */
+export async function saveGoogleReviewUrl(
+  googleReviewUrl: string | null,
+): Promise<{ salon?: SalonSettings; error?: string }> {
+  return saveGoogleReviewSettings(googleReviewUrl);
 }
 
 export async function saveLocation(

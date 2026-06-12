@@ -17,11 +17,24 @@ import {
   saveLocation,
   saveBotName,
   saveInactivityMessages,
-  saveGoogleReviewUrl,
+  saveGoogleReviewSettings,
   type SalonSettings,
 } from './actions';
 import { ConversationFlowSection } from './conversation-flow-section';
 import { BusinessHoursSection } from './business-hours-section';
+import {
+  FIRST_FOLLOW_UP_TEMPLATES,
+  SECOND_FOLLOW_UP_TEMPLATES,
+  CLOSING_MESSAGE_TEMPLATES,
+  FOLLOW_UP_MESSAGE_SETS,
+  type FollowUpMessageSet,
+} from './follow-up-message-templates';
+import { FollowUpTemplatePicker, FollowUpCharCount } from './follow-up-template-picker';
+import {
+  resolveMessageSet,
+  sanitizeFollowUpMessage,
+  validateFollowUpSettings,
+} from '@/lib/follow-up-template-utils';
 
 const WHATSAPP_LIMIT = 4096;
 
@@ -109,6 +122,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [inactivityMsg2, setInactivityMsg2] = useState(initialSettings.inactivityMessage2 ?? '');
   const [inactivityDelay2, setInactivityDelay2] = useState(initialSettings.inactivityMessage2DelayMin ?? 30);
   const [closingMsg, setClosingMsg] = useState(initialSettings.closingMessage ?? '');
+  const [templateApplyHint, setTemplateApplyHint] = useState<string | null>(null);
   const [savingInactivity, setSavingInactivity] = useState(false);
 
   const [botNameVal, setBotNameVal] = useState(initialSettings.botName ?? 'Ava');
@@ -121,6 +135,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [parkingNotes, setParkingNotes] = useState(initialSettings.parkingNotes ?? '');
 
   const [googleReviewUrl, setGoogleReviewUrl] = useState(initialSettings.googleReviewUrl ?? '');
+  const [reviewIncentiveEnabled, setReviewIncentiveEnabled] = useState(
+    initialSettings.automations?.googleReview?.incentiveEnabled ?? true,
+  );
+  const [reviewIncentiveRands, setReviewIncentiveRands] = useState(
+    String((initialSettings.automations?.googleReview?.incentiveCents ?? 5000) / 100),
+  );
   const [savingGoogleReviewUrl, setSavingGoogleReviewUrl] = useState(false);
 
   const [savingDisplayName, setSavingDisplayName] = useState(false);
@@ -149,6 +169,8 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setMapsUrl(s.mapsUrl ?? '');
     setParkingNotes(s.parkingNotes ?? '');
     setGoogleReviewUrl(s.googleReviewUrl ?? '');
+    setReviewIncentiveEnabled(s.automations?.googleReview?.incentiveEnabled ?? true);
+    setReviewIncentiveRands(String((s.automations?.googleReview?.incentiveCents ?? 5000) / 100));
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -187,8 +209,12 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   }, [saved, addressLine, phoneDisplay, contactEmail, mapsUrl, parkingNotes]);
 
   const googleReviewUrlDirty = useMemo(
-    () => googleReviewUrl !== (saved.googleReviewUrl ?? ''),
-    [saved, googleReviewUrl],
+    () =>
+      googleReviewUrl !== (saved.googleReviewUrl ?? '') ||
+      reviewIncentiveEnabled !== (saved.automations?.googleReview?.incentiveEnabled ?? true) ||
+      reviewIncentiveRands !==
+        String((saved.automations?.googleReview?.incentiveCents ?? 5000) / 100),
+    [saved, googleReviewUrl, reviewIncentiveEnabled, reviewIncentiveRands],
   );
 
   const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
@@ -253,8 +279,32 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     }
   }
 
+  const salonDisplayName = salon.tradingName ?? salon.name;
+
+  function applyMessageSet(set: FollowUpMessageSet) {
+    const resolved = resolveMessageSet(set, salonDisplayName);
+    setInactivityMsg1(resolved.msg1);
+    setInactivityMsg2(resolved.msg2);
+    setClosingMsg(resolved.closing);
+    setTemplateApplyHint(`Applied "${set.label}" preset — review and save when ready.`);
+  }
+
   async function handleSaveInactivity(e: React.FormEvent) {
     e.preventDefault();
+    setTemplateApplyHint(null);
+
+    const validation = validateFollowUpSettings({
+      inactivityMessage1: inactivityMsg1,
+      inactivityMessage1DelayMin: inactivityDelay1,
+      inactivityMessage2: inactivityMsg2,
+      inactivityMessage2DelayMin: inactivityDelay2,
+      closingMessage: closingMsg,
+    });
+    if (!validation.ok) {
+      reportError('inactivity', validation.message);
+      return;
+    }
+
     if (inactivityDelay2 <= inactivityDelay1) {
       reportError('inactivity', 'Second follow-up must be sent later than the first');
       return;
@@ -262,11 +312,11 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setSavingInactivity(true);
     try {
       const result = await saveInactivityMessages({
-        inactivityMessage1: inactivityMsg1.trim() || null,
+        inactivityMessage1: sanitizeFollowUpMessage(inactivityMsg1) || null,
         inactivityMessage1DelayMin: inactivityDelay1,
-        inactivityMessage2: inactivityMsg2.trim() || null,
+        inactivityMessage2: sanitizeFollowUpMessage(inactivityMsg2) || null,
         inactivityMessage2DelayMin: inactivityDelay2,
-        closingMessage: closingMsg.trim() || null,
+        closingMessage: sanitizeFollowUpMessage(closingMsg) || null,
       });
       if (result.salon) {
         applySalon(result.salon);
@@ -347,12 +397,20 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       reportError('googleReview', 'Google Review URL must start with https://');
       return;
     }
+    const incentiveRands = parseInt(reviewIncentiveRands, 10);
+    if (reviewIncentiveEnabled && (!Number.isFinite(incentiveRands) || incentiveRands < 1 || incentiveRands > 1000)) {
+      reportError('googleReview', 'Incentive amount must be between R1 and R1000');
+      return;
+    }
     setSavingGoogleReviewUrl(true);
     try {
-      const result = await saveGoogleReviewUrl(trimmed || null);
+      const result = await saveGoogleReviewSettings(trimmed || null, {
+        incentiveEnabled: reviewIncentiveEnabled,
+        incentiveCents: reviewIncentiveEnabled ? incentiveRands * 100 : 0,
+      });
       if (result.salon) {
         applySalon(result.salon);
-        reportSuccess('googleReview', 'Google Review URL saved');
+        reportSuccess('googleReview', 'Google review settings saved');
       } else {
         reportError('googleReview', result.error ?? 'Save failed');
       }
@@ -703,7 +761,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
         <div>
           <h3 className="text-base font-semibold">Google Reviews</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Customers who rate their experience <span className="font-medium text-foreground">5 stars</span> will automatically receive this link via WhatsApp to leave a Google review.
+            After a visit, customers receive your Google review link via WhatsApp. Enable the incentive to offer a discount for any review — good or bad — with a special claim link.
           </p>
         </div>
         <form onSubmit={(e) => void handleSaveGoogleReviewUrl(e)} className="space-y-4 max-w-lg">
@@ -721,10 +779,43 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               Paste your Google Business review link. Find it in Google Business Profile → &quot;Get more reviews&quot;. Leave blank to disable.
             </p>
           </div>
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium">Review incentive</p>
+                <p className="text-xs text-muted-foreground">
+                  Customers get a special link to claim their discount after leaving a review.
+                </p>
+              </div>
+              <input
+                id="review-incentive-enabled"
+                type="checkbox"
+                checked={reviewIncentiveEnabled}
+                onChange={(e) => setReviewIncentiveEnabled(e.target.checked)}
+                className="size-4 rounded border-input"
+              />
+            </div>
+            {reviewIncentiveEnabled && (
+              <div className="space-y-2 max-w-xs">
+                <Label htmlFor="review-incentive-rands">Discount amount (R)</Label>
+                <Input
+                  id="review-incentive-rands"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={reviewIncentiveRands}
+                  onChange={(e) => setReviewIncentiveRands(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Default R50 — applied automatically on their next booking after they claim via WhatsApp.
+                </p>
+              </div>
+            )}
+          </div>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Button type="submit" size="sm" disabled={savingGoogleReviewUrl || !googleReviewUrlDirty}>
-                {savingGoogleReviewUrl ? 'Saving…' : 'Save review URL'}
+                {savingGoogleReviewUrl ? 'Saving…' : 'Save review settings'}
               </Button>
               {googleReviewUrlDirty && (
                 <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
@@ -746,10 +837,42 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           </p>
         </div>
         <form onSubmit={(e) => void handleSaveInactivity(e)} className="space-y-6 max-w-lg">
+          <div className="space-y-2 rounded-lg border border-dashed p-4 bg-muted/30">
+            <p className="text-sm font-medium">Quick apply all three</p>
+            <p className="text-xs text-muted-foreground">
+              One tap fills every message — toggle individual presets below or edit before saving.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {FOLLOW_UP_MESSAGE_SETS.map((set) => (
+                <Button
+                  key={set.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  title={set.description}
+                  onClick={() => applyMessageSet(set)}
+                >
+                  {set.label}
+                </Button>
+              ))}
+            </div>
+            {templateApplyHint && (
+              <p className="text-xs text-primary">{templateApplyHint}</p>
+            )}
+          </div>
+
           {/* First follow-up */}
           <div className="space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">First follow-up</p>
             <p className="text-xs text-muted-foreground">Sent when a customer stops replying. Leave blank to skip.</p>
+            <FollowUpTemplatePicker
+              templates={FIRST_FOLLOW_UP_TEMPLATES}
+              salonName={salonDisplayName}
+              value={inactivityMsg1}
+              onChange={setInactivityMsg1}
+              onApplyError={(msg) => setTemplateApplyHint(msg)}
+            />
             <div className="flex items-center gap-3">
               <Label htmlFor="inactivityDelay1" className="text-xs whitespace-nowrap">Send after</Label>
               <select
@@ -779,13 +902,20 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               maxLength={500}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
             />
-            <p className="text-xs text-muted-foreground text-right">{inactivityMsg1.length} / 500</p>
+            <FollowUpCharCount value={inactivityMsg1} />
           </div>
 
           {/* Second follow-up */}
           <div className="space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Second follow-up</p>
             <p className="text-xs text-muted-foreground">A final nudge before the conversation goes idle. Leave blank to skip.</p>
+            <FollowUpTemplatePicker
+              templates={SECOND_FOLLOW_UP_TEMPLATES}
+              salonName={salonDisplayName}
+              value={inactivityMsg2}
+              onChange={setInactivityMsg2}
+              onApplyError={(msg) => setTemplateApplyHint(msg)}
+            />
             <div className="flex items-center gap-3">
               <Label htmlFor="inactivityDelay2" className="text-xs whitespace-nowrap">Send after</Label>
               <select
@@ -810,13 +940,20 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               maxLength={500}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
             />
-            <p className="text-xs text-muted-foreground text-right">{inactivityMsg2.length} / 500</p>
+            <FollowUpCharCount value={inactivityMsg2} />
           </div>
 
           {/* Closing message */}
           <div className="space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Closing message</p>
             <p className="text-xs text-muted-foreground">Sent when a booking is confirmed or the conversation wraps up. Leave blank to skip.</p>
+            <FollowUpTemplatePicker
+              templates={CLOSING_MESSAGE_TEMPLATES}
+              salonName={salonDisplayName}
+              value={closingMsg}
+              onChange={setClosingMsg}
+              onApplyError={(msg) => setTemplateApplyHint(msg)}
+            />
             <textarea
               value={closingMsg}
               onChange={(e) => setClosingMsg(e.target.value)}
@@ -825,7 +962,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               maxLength={500}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
             />
-            <p className="text-xs text-muted-foreground text-right">{closingMsg.length} / 500</p>
+            <FollowUpCharCount value={closingMsg} />
           </div>
 
           <div className="flex flex-col gap-2">
