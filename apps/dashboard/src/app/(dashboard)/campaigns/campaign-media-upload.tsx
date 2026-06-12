@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 export type CampaignMediaType = 'image' | 'video';
 
 const IMAGE_MAX = 5 * 1024 * 1024;
+const GIF_MAX = 5 * 1024 * 1024;
 const VIDEO_MAX = 16 * 1024 * 1024;
 
 function mimeToMediaType(mime: string): CampaignMediaType | null {
@@ -37,12 +38,13 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
     setError(null);
     const type = mimeToMediaType(file.type);
     if (!type) {
-      setError('Use JPEG, PNG, WebP, or MP4 video.');
+      setError('Use JPEG, PNG, WebP, GIF, or MP4 video.');
       return;
     }
-    const max = type === 'image' ? IMAGE_MAX : VIDEO_MAX;
+    const isGif = file.type === 'image/gif';
+    const max = type === 'video' ? VIDEO_MAX : isGif ? GIF_MAX : IMAGE_MAX;
     if (file.size > max) {
-      setError(type === 'image' ? 'Images must be under 5 MB.' : 'Videos must be under 16 MB.');
+      setError(type === 'video' ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.');
       return;
     }
 
@@ -157,7 +159,7 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
               </div>
               <span className="text-sm font-medium">Add photo or video</span>
               <span className="text-xs text-muted-foreground text-center max-w-xs">
-                JPG, PNG, WebP up to 5 MB · MP4 up to 16 MB
+                JPG, PNG, WebP, GIF up to 5 MB · MP4 up to 16 MB
               </span>
               <span className="inline-flex items-center gap-1 text-xs text-[#128c7e] font-medium mt-1">
                 <Upload className="size-3.5" />
@@ -183,7 +185,7 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime"
+        accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0];

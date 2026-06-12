@@ -320,6 +320,21 @@ function Toast({
   );
 }
 
+function WhatsAppText({ text }: { text: string }) {
+  const parts = text.split(/(\*[^*]+\*)/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('*') && part.endsWith('*') && part.length > 2 ? (
+          <strong key={i}>{part.slice(1, -1)}</strong>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function WhatsAppPreview({
   message,
   mediaUrl,
@@ -354,7 +369,7 @@ function WhatsAppPreview({
         )}
         {(fullText || !mediaUrl) && (
           <div className="rounded-lg rounded-tl-sm bg-[#dcf8c6] dark:bg-[#005c4b] px-3 py-2.5 text-[13px] leading-relaxed text-[#111] dark:text-[#e9edef] whitespace-pre-wrap break-words">
-            {fullText}
+            <WhatsAppText text={fullText} />
           </div>
         )}
         <p className="text-[9px] text-right text-[#8696a0] pr-0.5">12:30 ✓✓</p>
@@ -581,6 +596,28 @@ export function CampaignsClient({ token }: Props) {
     });
   };
 
+  const insertBold = () => {
+    const el = messageRef.current;
+    if (!el) {
+      setForm((f) => ({ ...f, message: f.message + '**' }));
+      return;
+    }
+    const start = el.selectionStart ?? form.message.length;
+    const end = el.selectionEnd ?? start;
+    const selected = form.message.slice(start, end);
+    const wrapped = selected ? `*${selected}*` : '**';
+    const next = form.message.slice(0, start) + wrapped + form.message.slice(end);
+    setForm((f) => ({ ...f, message: next }));
+    requestAnimationFrame(() => {
+      el.focus();
+      if (selected) {
+        el.setSelectionRange(start + wrapped.length, start + wrapped.length);
+      } else {
+        el.setSelectionRange(start + 1, start + 1);
+      }
+    });
+  };
+
   const validateForm = (): boolean => {
     if (!form.name.trim()) {
       showToast('Add a newsletter name so you can find it later', 'error');
@@ -598,8 +635,8 @@ export function CampaignsClient({ token }: Props) {
       showToast('Choose when this campaign should send', 'error');
       return false;
     }
-    if (audienceCount === 0) {
-      showToast('No customers match this audience — adjust targeting first', 'error');
+    if (audienceCount === 0 && (form.deliveryMode === 'now' || form.deliveryMode === 'schedule')) {
+      showToast('No customers match this audience — adjust targeting first, or save as a draft', 'error');
       return false;
     }
     return true;
@@ -757,7 +794,6 @@ export function CampaignsClient({ token }: Props) {
           <Button
             size="sm"
             onClick={openCreate}
-            disabled={optedInCount === 0 && !loading}
             className="bg-[#128c7e] hover:bg-[#0d6b5f] text-white shadow-sm"
           >
             <Plus className="size-4 mr-1.5" />
@@ -880,7 +916,6 @@ export function CampaignsClient({ token }: Props) {
               </p>
               <Button
                 onClick={openCreate}
-                disabled={optedInCount === 0}
                 className="bg-[#128c7e] hover:bg-[#0d6b5f] text-white"
               >
                 <Plus className="size-4 mr-1.5" />
@@ -1066,15 +1101,25 @@ export function CampaignsClient({ token }: Props) {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="camp-msg">Caption &amp; message</Label>
-                  <span
-                    className={cn(
-                      'text-[11px] tabular-nums',
-                      form.message.length > MESSAGE_MAX * 0.9 && 'text-amber-600',
-                      form.message.length > MESSAGE_MAX && 'text-destructive',
-                    )}
-                  >
-                    {form.message.length}/{MESSAGE_MAX}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      title="Bold (*text*)"
+                      onClick={insertBold}
+                      className="flex h-6 w-6 items-center justify-center rounded border border-input bg-background text-xs font-bold hover:bg-muted transition-colors"
+                    >
+                      B
+                    </button>
+                    <span
+                      className={cn(
+                        'text-[11px] tabular-nums',
+                        form.message.length > MESSAGE_MAX * 0.9 && 'text-amber-600',
+                        form.message.length > MESSAGE_MAX && 'text-destructive',
+                      )}
+                    >
+                      {form.message.length}/{MESSAGE_MAX}
+                    </span>
+                  </div>
                 </div>
                 <textarea
                   ref={messageRef}
@@ -1295,7 +1340,7 @@ export function CampaignsClient({ token }: Props) {
               <Button
                 className="w-full h-11 bg-[#128c7e] hover:bg-[#0d6b5f] text-white font-medium shadow-sm"
                 onClick={() => void handleSave()}
-                disabled={saving || audienceCount === 0 || (!form.message.trim() && !form.mediaUrl)}
+                disabled={saving || (audienceCount === 0 && form.deliveryMode !== 'draft') || (!form.message.trim() && !form.mediaUrl)}
               >
                 {saving ? (
                   <Loader2 className="size-4 animate-spin mr-2" />
