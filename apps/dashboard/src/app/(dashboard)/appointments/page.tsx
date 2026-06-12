@@ -1,5 +1,6 @@
 import { WaivePenaltyButton } from './waive-penalty-button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 

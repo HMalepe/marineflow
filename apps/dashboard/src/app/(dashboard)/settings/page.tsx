@@ -11,6 +11,7 @@ interface MeResponse {
   user: {
     id: string;
     email: string;
+    phone?: string | null;
     name: string;
     role: string;
     salonId: string;
@@ -95,7 +96,11 @@ export default async function SettingsPage() {
           <CardDescription>Update your dashboard login password</CardDescription>
         </CardHeader>
         <CardContent>
-          <ChangePasswordForm />
+          {user ? (
+            <ChangePasswordForm email={user.email} phone={user.phone} />
+          ) : (
+            <p className="text-sm text-destructive">Failed to load profile. Refresh to change password.</p>
+          )}
         </CardContent>
       </Card>
 

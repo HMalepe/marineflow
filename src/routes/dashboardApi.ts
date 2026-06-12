@@ -206,6 +206,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       if (!ok) {
         return reply.code(401).send({ error: 'wrong_current_password' });
       }
+      const sameAsCurrent = await bcrypt.compare(newPassword, u.passwordHash);
+      if (sameAsCurrent) {
+        return reply.code(400).send({
+          error: 'same_password',
+          message: 'New password must be different from your current password',
+        });
+      }
       const hash = await bcrypt.hash(newPassword, 12);
       await db.staffUser.update({ where: { id: user.sub }, data: { passwordHash: hash } });
       await db.auditLog.create({
@@ -228,7 +235,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const db = getTenantDb();
       const u = await db.staffUser.findUniqueOrThrow({
         where: { id: user.sub },
-        select: { id: true, email: true, name: true, role: true, salonId: true },
+        select: { id: true, email: true, phone: true, name: true, role: true, salonId: true },
       });
       const salon = await db.salon.findUniqueOrThrow({
         where: { id: user.salonId },
