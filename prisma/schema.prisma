@@ -175,6 +175,9 @@ model Salon {
   botAllowStaffPick      Boolean @default(true)
   botLoyaltyEnabled      Boolean @default(true)
   botRequireDepositStep  Boolean @default(true)
+  /// Automated outbound campaigns (Inngest daily crons)
+  botWinbackEnabled      Boolean @default(true)
+  botBirthdayEnabled     Boolean @default(true)
   /// Inactivity follow-up: sent after N minutes of silence
   inactivityMessage1         String?  @db.Text
   inactivityMessage1DelayMin Int      @default(10)
@@ -271,6 +274,8 @@ model Customer {
   lastName            String?
   email               String?
   dateOfBirth         DateTime?
+  /// When the last automated win-back message was sent (30-day cooldown)
+  lastWinBackAt       DateTime?
   locale              String    @default("en")
   tags                String[]  @default([])
   notes               String?   @db.Text
@@ -303,6 +308,7 @@ model Customer {
   @@index([salonId, tags])
   @@index([salonId, email])
   @@index([preferredStaffId])
+  @@index([salonId, lastInteractionAt])
 }
 
 model Conversation {

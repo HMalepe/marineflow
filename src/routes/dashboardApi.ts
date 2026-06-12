@@ -210,6 +210,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botAllowStaffPick: true,
           botLoyaltyEnabled: true,
           botRequireDepositStep: true,
+          botWinbackEnabled: true,
+          botBirthdayEnabled: true,
           inactivityMessage1: true,
           inactivityMessage1DelayMin: true,
           inactivityMessage2: true,
@@ -248,6 +250,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       botAllowStaffPick?: boolean;
       botLoyaltyEnabled?: boolean;
       botRequireDepositStep?: boolean;
+      botWinbackEnabled?: boolean;
+      botBirthdayEnabled?: boolean;
       inactivityMessage1?: string | null;
       inactivityMessage1DelayMin?: number;
       inactivityMessage2?: string | null;
@@ -281,6 +285,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botAllowStaffPick,
           botLoyaltyEnabled,
           botRequireDepositStep,
+          botWinbackEnabled,
+          botBirthdayEnabled,
           inactivityMessage1,
           inactivityMessage1DelayMin,
           inactivityMessage2,
@@ -367,6 +373,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(botAllowStaffPick !== undefined && { botAllowStaffPick }),
             ...(botLoyaltyEnabled !== undefined && { botLoyaltyEnabled }),
             ...(botRequireDepositStep !== undefined && { botRequireDepositStep }),
+            ...(botWinbackEnabled !== undefined && { botWinbackEnabled }),
+            ...(botBirthdayEnabled !== undefined && { botBirthdayEnabled }),
             ...(inactivityMessage1 !== undefined && { inactivityMessage1: inactivityMessage1?.trim() || null }),
             ...(inactivityMessage1DelayMin !== undefined && { inactivityMessage1DelayMin }),
             ...(inactivityMessage2 !== undefined && { inactivityMessage2: inactivityMessage2?.trim() || null }),
@@ -406,6 +414,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             botAllowStaffPick: true,
             botLoyaltyEnabled: true,
             botRequireDepositStep: true,
+            botWinbackEnabled: true,
+            botBirthdayEnabled: true,
             inactivityMessage1: true,
             inactivityMessage1DelayMin: true,
             inactivityMessage2: true,

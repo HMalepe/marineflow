@@ -40,6 +40,11 @@ import {
   needsMarketingConsentPrompt,
   parseMarketingConsentReply,
 } from './marketingConsent.js';
+import {
+  BIRTHDAY_MSG_LOOKBACK_DAYS,
+  BIRTHDAY_TREAT_TAG,
+  isWithinBirthdayWindow,
+} from './outboundCampaigns.js';
 
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
@@ -465,6 +470,12 @@ async function processInboundWhatsApp(
     return;
   }
 
+  // Birthday-campaign treat claim — the outbound message says "reply BIRTHDAY"
+  if (lower === 'birthday') {
+    await handleBirthdayKeyword(conv);
+    return;
+  }
+
   if (isHumanHandoffRequest(text)) {
     if (!isWithinBusinessHours(salon)) {
       // After hours — don't escalate yet; offer AI help first
@@ -662,6 +673,113 @@ async function escalateNegativeSentiment(
     reason: 'negative_sentiment',
     lastText: text.slice(0, 200),
   }).catch((err: unknown) => logger.warn({ err }, 'emit_escalation_failed'));
+}
+
+const BIRTHDAY_TREAT_TICKET_SUBJECT = 'Birthday treat — apply 50% off';
+const DAY_MS = 86_400_000;
+
+/**
+ * The birthday campaign promises "reply BIRTHDAY for a special treat" (50% off
+ * a service). Guarded by:
+ *   1. DOB on file + within ±7 days of birthday (salon timezone)
+ *   2. A birthday_sent outbound message in the last 14 days (proves we invited them)
+ * Staff apply the discount manually via the ticket this opens.
+ */
+async function handleBirthdayKeyword(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const db = getTenantDb();
+  const fresh = await db.customer.findUnique({
+    where: { id: conv.customerId },
+    select: { dateOfBirth: true, tags: true, marketingConsentStatus: true },
+  });
+
+  if (
+    !fresh?.dateOfBirth ||
+    !isWithinBirthdayWindow(fresh.dateOfBirth, conv.salon.timezone)
+  ) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(
+      conv,
+      `We'd love to celebrate with you, but the birthday treat is only available around your birthday. 😊\n\n${mainMenu(conv.salon)}`,
+    );
+    return;
+  }
+
+  const recentBirthdayMsg = await db.analyticsEvent.findFirst({
+    where: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      type: 'birthday_sent',
+      createdAt: { gte: new Date(Date.now() - BIRTHDAY_MSG_LOOKBACK_DAYS * DAY_MS) },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (!recentBirthdayMsg) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await reply(
+      conv,
+      `The birthday treat is available after you receive our birthday message. If you think this is a mistake, reply 0 to speak to our team.\n\n${mainMenu(conv.salon)}`,
+    );
+    return;
+  }
+
+  if (!fresh.tags.includes(BIRTHDAY_TREAT_TAG)) {
+    await db.customer.update({
+      where: { id: conv.customerId },
+      data: { tags: { push: BIRTHDAY_TREAT_TAG } },
+    });
+  }
+
+  const alreadyClaimed = await db.analyticsEvent.findFirst({
+    where: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      type: 'birthday_treat_claimed',
+      createdAt: { gte: recentBirthdayMsg.createdAt },
+    },
+  });
+
+  if (!alreadyClaimed) {
+    const existingTicket = await db.ticket.findFirst({
+      where: {
+        customerId: conv.customerId,
+        subject: BIRTHDAY_TREAT_TICKET_SUBJECT,
+        status: 'OPEN',
+      },
+    });
+    if (!existingTicket) {
+      await db.ticket.create({
+        data: {
+          salonId: conv.salonId,
+          customerId: conv.customerId,
+          status: 'OPEN',
+          subject: BIRTHDAY_TREAT_TICKET_SUBJECT,
+          messages: {
+            create: {
+              direction: MessageDirection.INBOUND,
+              body: 'Customer claimed their birthday treat. Apply 50% off one service of their choice on their next booking.',
+            },
+          },
+        },
+      });
+    }
+    await db.analyticsEvent.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        type: 'birthday_treat_claimed',
+        payload: { birthdaySentAt: recentBirthdayMsg.createdAt.toISOString() },
+      },
+    });
+    logger.info({ convId: conv.id, customerId: conv.customerId }, 'birthday_treat_claimed');
+  }
+
+  await saveCtx(conv.id, {}, ConversationStep.MENU);
+  await reply(
+    conv,
+    `🎂 Wonderful! Your birthday treat is locked in — 50% off a service of your choice. Our team will apply it when you visit.\n\nReply 1 to book now!\n\n${mainMenu(conv.salon)}`,
+  );
 }
 
 async function handleMarketingConsentFlow(

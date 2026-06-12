@@ -162,6 +162,8 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [botAllowStaffPick, setBotAllowStaffPick] = useState(initialSettings.botAllowStaffPick ?? true);
   const [botLoyaltyEnabled, setBotLoyaltyEnabled] = useState(initialSettings.botLoyaltyEnabled ?? true);
   const [botRequireDepositStep, setBotRequireDepositStep] = useState(initialSettings.botRequireDepositStep ?? true);
+  const [botWinbackEnabled, setBotWinbackEnabled] = useState(initialSettings.botWinbackEnabled ?? true);
+  const [botBirthdayEnabled, setBotBirthdayEnabled] = useState(initialSettings.botBirthdayEnabled ?? true);
   const [savingBotBehaviour, setSavingBotBehaviour] = useState(false);
 
   const [inactivityMsg1, setInactivityMsg1] = useState(initialSettings.inactivityMessage1 ?? '');
@@ -214,6 +216,8 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setBotAllowStaffPick(s.botAllowStaffPick ?? true);
     setBotLoyaltyEnabled(s.botLoyaltyEnabled ?? true);
     setBotRequireDepositStep(s.botRequireDepositStep ?? true);
+    setBotWinbackEnabled(s.botWinbackEnabled ?? true);
+    setBotBirthdayEnabled(s.botBirthdayEnabled ?? true);
     setInactivityMsg1(s.inactivityMessage1 ?? '');
     setInactivityDelay1(s.inactivityMessage1DelayMin ?? 10);
     setInactivityMsg2(s.inactivityMessage2 ?? '');
@@ -257,8 +261,10 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     botAskMarketingConsent !== (saved.botAskMarketingConsent ?? true) ||
     botAllowStaffPick !== (saved.botAllowStaffPick ?? true) ||
     botLoyaltyEnabled !== (saved.botLoyaltyEnabled ?? true) ||
-    botRequireDepositStep !== (saved.botRequireDepositStep ?? true),
-  [saved, botAskMarketingConsent, botAllowStaffPick, botLoyaltyEnabled, botRequireDepositStep]);
+    botRequireDepositStep !== (saved.botRequireDepositStep ?? true) ||
+    botWinbackEnabled !== (saved.botWinbackEnabled ?? true) ||
+    botBirthdayEnabled !== (saved.botBirthdayEnabled ?? true),
+  [saved, botAskMarketingConsent, botAllowStaffPick, botLoyaltyEnabled, botRequireDepositStep, botWinbackEnabled, botBirthdayEnabled]);
   const botNameDirty = useMemo(() => botNameVal !== (saved.botName ?? 'Ava'), [saved, botNameVal]);
 
   const locationDirty = useMemo(() => {
@@ -404,6 +410,8 @@ export function SalonSettingsForm({ initialSettings }: Props) {
         botAllowStaffPick,
         botLoyaltyEnabled,
         botRequireDepositStep,
+        botWinbackEnabled,
+        botBirthdayEnabled,
       });
       if (result.salon) {
         applySalon(result.salon);
@@ -918,6 +926,20 @@ export function SalonSettingsForm({ initialSettings }: Props) {
               set: setBotRequireDepositStep,
               label: 'Require deposit / payment before confirming',
               description: 'When a service has a deposit or full-pay requirement, the bot sends a payment link before confirming. Disable to confirm immediately and collect payment in-person.',
+            },
+            {
+              key: 'botWinbackEnabled' as const,
+              value: botWinbackEnabled,
+              set: setBotWinbackEnabled,
+              label: 'Win-back messages (21-day inactive)',
+              description: 'Daily at 09:00 — messages customers who have not visited in 21–60 days. Requires marketing consent. Max 50 customers per day.',
+            },
+            {
+              key: 'botBirthdayEnabled' as const,
+              value: botBirthdayEnabled,
+              set: setBotBirthdayEnabled,
+              label: 'Birthday messages',
+              description: 'Daily at 08:00 — sends a birthday greeting with a treat offer. Requires date of birth on file and marketing consent.',
             },
           ].map(({ key, value, set, label, description }) => (
             <div key={key} className="rounded-lg border p-4">

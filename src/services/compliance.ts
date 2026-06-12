@@ -117,6 +117,7 @@ export async function eraseCustomerData(customerId: string) {
       email: null,
       dateOfBirth: null,
       preferredStaffId: null,
+      lastWinBackAt: null,
       waId: `erased_${customerId.slice(0, 8)}`,
       notes: null,
       tags: [],

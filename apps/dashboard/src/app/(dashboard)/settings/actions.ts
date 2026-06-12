@@ -20,6 +20,8 @@ export interface SalonSettings {
   botAllowStaffPick: boolean;
   botLoyaltyEnabled: boolean;
   botRequireDepositStep: boolean;
+  botWinbackEnabled: boolean;
+  botBirthdayEnabled: boolean;
   inactivityMessage1: string | null;
   inactivityMessage1DelayMin: number;
   inactivityMessage2: string | null;
@@ -179,6 +181,8 @@ export async function saveBotBehaviour(flags: {
   botAllowStaffPick?: boolean;
   botLoyaltyEnabled?: boolean;
   botRequireDepositStep?: boolean;
+  botWinbackEnabled?: boolean;
+  botBirthdayEnabled?: boolean;
 }): Promise<{ salon?: SalonSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };
