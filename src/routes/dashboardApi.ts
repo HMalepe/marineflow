@@ -38,6 +38,12 @@ import {
 import { recordCustomerNoShow, normalizeNoShowRisk } from '../services/noShowRisk.js';
 import { clampRosterEnd, parseRosterDate } from '../lib/rosterRange.js';
 import {
+  mergeBotFlowIntoMetadata,
+  parseBotFlowSettingsFromMetadata,
+  validateBotFlowPayload,
+  type CustomBotFlow,
+} from '../lib/botFlowSettings.js';
+import {
   loadWeeklyHoursSettings,
   saveWeeklyHoursSettings,
   seedStaffWorkingHoursFromBusiness,
@@ -250,12 +256,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           mapsUrl: true,
           parkingNotes: true,
           googleReviewUrl: true,
+          metadata: true,
         },
       });
+      const flow = parseBotFlowSettingsFromMetadata(salon.metadata);
       return {
         salon: {
           ...salon,
           botActive: salon.status === 'ACTIVE',
+          botFlowOrder: flow.order,
+          botCustomFlows: flow.customFlows,
         },
       };
     });
@@ -322,6 +332,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       botRequireDepositStep?: boolean;
       botWinbackEnabled?: boolean;
       botBirthdayEnabled?: boolean;
+      botFlowOrder?: string[];
+      botCustomFlows?: CustomBotFlow[];
       inactivityMessage1?: string | null;
       inactivityMessage1DelayMin?: number;
       inactivityMessage2?: string | null;
@@ -357,6 +369,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botRequireDepositStep,
           botWinbackEnabled,
           botBirthdayEnabled,
+          botFlowOrder,
+          botCustomFlows,
           inactivityMessage1,
           inactivityMessage1DelayMin,
           inactivityMessage2,
@@ -424,9 +438,28 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           nextStatus = botActive ? 'ACTIVE' : 'SUSPENDED';
         }
 
+        let metadataPatch: ReturnType<typeof mergeBotFlowIntoMetadata> | undefined;
+        if (botFlowOrder !== undefined || botCustomFlows !== undefined) {
+          const existing = await db.salon.findUniqueOrThrow({
+            where: { id: user.salonId },
+            select: { metadata: true },
+          });
+          const validated = validateBotFlowPayload(botFlowOrder, botCustomFlows);
+          if ('error' in validated) {
+            reply.code(400);
+            return { error: 'invalid_bot_flow', message: validated.error };
+          }
+          metadataPatch = mergeBotFlowIntoMetadata(
+            existing.metadata,
+            validated.order,
+            validated.customFlows,
+          );
+        }
+
         const updated = await db.salon.update({
           where: { id: user.salonId },
           data: {
+            ...(metadataPatch !== undefined && { metadata: metadataPatch }),
             ...(tradingName !== undefined && {
               tradingName: tradingName?.trim() || null,
             }),
@@ -492,9 +525,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             inactivityMessage2DelayMin: true,
             closingMessage: true,
             googleReviewUrl: true,
+            metadata: true,
           },
         });
 
+        const flow = parseBotFlowSettingsFromMetadata(updated.metadata);
         await db.auditLog.create({
           data: {
             salonId: user.salonId,
@@ -509,6 +544,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           salon: {
             ...updated,
             botActive: updated.status === 'ACTIVE',
+            botFlowOrder: flow.order,
+            botCustomFlows: flow.customFlows,
           },
         };
       });

@@ -22,6 +22,8 @@ export interface SalonSettings {
   botRequireDepositStep: boolean;
   botWinbackEnabled: boolean;
   botBirthdayEnabled: boolean;
+  botFlowOrder?: string[];
+  botCustomFlows?: CustomBotFlow[];
   inactivityMessage1: string | null;
   inactivityMessage1DelayMin: number;
   inactivityMessage2: string | null;
@@ -33,6 +35,13 @@ export interface SalonSettings {
   mapsUrl: string | null;
   parkingNotes: string | null;
   googleReviewUrl: string | null;
+}
+
+export interface CustomBotFlow {
+  id: string;
+  label: string;
+  prompt: string;
+  enabled: boolean;
 }
 
 export async function saveGoogleReviewUrl(
@@ -200,6 +209,30 @@ export async function saveMessages(welcomeMessage: string | null, afterHoursMess
   }
 }
 
+export async function saveBotFlowSettings(flags: {
+  botAskMarketingConsent?: boolean;
+  botAllowStaffPick?: boolean;
+  botLoyaltyEnabled?: boolean;
+  botRequireDepositStep?: boolean;
+  botWinbackEnabled?: boolean;
+  botBirthdayEnabled?: boolean;
+  botFlowOrder?: string[];
+  botCustomFlows?: CustomBotFlow[];
+}): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(flags),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof ApiError ? e.message : 'Save failed' };
+  }
+}
+
+/** @deprecated Use saveBotFlowSettings */
 export async function saveBotBehaviour(flags: {
   botAskMarketingConsent?: boolean;
   botAllowStaffPick?: boolean;

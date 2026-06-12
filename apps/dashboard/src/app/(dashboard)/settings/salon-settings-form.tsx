@@ -16,11 +16,11 @@ import {
   saveBotActive,
   saveLocation,
   saveBotName,
-  saveBotBehaviour,
   saveInactivityMessages,
   saveGoogleReviewUrl,
   type SalonSettings,
 } from './actions';
+import { ConversationFlowSection } from './conversation-flow-section';
 import { BusinessHoursSection } from './business-hours-section';
 
 const WHATSAPP_LIMIT = 4096;
@@ -103,13 +103,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   const [welcomeMessage, setWelcomeMessage] = useState(initialSettings.welcomeMessage ?? '');
   const [afterHoursMessage, setAfterHoursMessage] = useState(initialSettings.afterHoursMessage ?? '');
   const [botActive, setBotActive] = useState(initialSettings.botActive);
-  const [botAskMarketingConsent, setBotAskMarketingConsent] = useState(initialSettings.botAskMarketingConsent ?? true);
-  const [botAllowStaffPick, setBotAllowStaffPick] = useState(initialSettings.botAllowStaffPick ?? true);
-  const [botLoyaltyEnabled, setBotLoyaltyEnabled] = useState(initialSettings.botLoyaltyEnabled ?? true);
-  const [botRequireDepositStep, setBotRequireDepositStep] = useState(initialSettings.botRequireDepositStep ?? true);
-  const [botWinbackEnabled, setBotWinbackEnabled] = useState(initialSettings.botWinbackEnabled ?? true);
-  const [botBirthdayEnabled, setBotBirthdayEnabled] = useState(initialSettings.botBirthdayEnabled ?? true);
-  const [savingBotBehaviour, setSavingBotBehaviour] = useState(false);
 
   const [inactivityMsg1, setInactivityMsg1] = useState(initialSettings.inactivityMessage1 ?? '');
   const [inactivityDelay1, setInactivityDelay1] = useState(initialSettings.inactivityMessage1DelayMin ?? 10);
@@ -145,12 +138,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
     setBotNameVal(s.botName ?? 'Ava');
-    setBotAskMarketingConsent(s.botAskMarketingConsent ?? true);
-    setBotAllowStaffPick(s.botAllowStaffPick ?? true);
-    setBotLoyaltyEnabled(s.botLoyaltyEnabled ?? true);
-    setBotRequireDepositStep(s.botRequireDepositStep ?? true);
-    setBotWinbackEnabled(s.botWinbackEnabled ?? true);
-    setBotBirthdayEnabled(s.botBirthdayEnabled ?? true);
     setInactivityMsg1(s.inactivityMessage1 ?? '');
     setInactivityDelay1(s.inactivityMessage1DelayMin ?? 10);
     setInactivityMsg2(s.inactivityMessage2 ?? '');
@@ -187,14 +174,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     closingMsg !== (saved.closingMessage ?? ''),
   [saved, inactivityMsg1, inactivityDelay1, inactivityMsg2, inactivityDelay2, closingMsg]);
 
-  const botBehaviourDirty = useMemo(() =>
-    botAskMarketingConsent !== (saved.botAskMarketingConsent ?? true) ||
-    botAllowStaffPick !== (saved.botAllowStaffPick ?? true) ||
-    botLoyaltyEnabled !== (saved.botLoyaltyEnabled ?? true) ||
-    botRequireDepositStep !== (saved.botRequireDepositStep ?? true) ||
-    botWinbackEnabled !== (saved.botWinbackEnabled ?? true) ||
-    botBirthdayEnabled !== (saved.botBirthdayEnabled ?? true),
-  [saved, botAskMarketingConsent, botAllowStaffPick, botLoyaltyEnabled, botRequireDepositStep, botWinbackEnabled, botBirthdayEnabled]);
   const botNameDirty = useMemo(() => botNameVal !== (saved.botName ?? 'Ava'), [saved, botNameVal]);
 
   const locationDirty = useMemo(() => {
@@ -299,31 +278,6 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       reportError('inactivity', 'Save failed — please try again');
     } finally {
       setSavingInactivity(false);
-    }
-  }
-
-  async function handleSaveBotBehaviour(e: React.FormEvent) {
-    e.preventDefault();
-    setSavingBotBehaviour(true);
-    try {
-      const result = await saveBotBehaviour({
-        botAskMarketingConsent,
-        botAllowStaffPick,
-        botLoyaltyEnabled,
-        botRequireDepositStep,
-        botWinbackEnabled,
-        botBirthdayEnabled,
-      });
-      if (result.salon) {
-        applySalon(result.salon);
-        reportSuccess('botBehaviour', 'Conversation flow settings saved');
-      } else {
-        reportError('botBehaviour', result.error ?? 'Save failed');
-      }
-    } catch {
-      reportError('botBehaviour', 'Save failed — please try again');
-    } finally {
-      setSavingBotBehaviour(false);
     }
   }
 
@@ -740,87 +694,7 @@ export function SalonSettingsForm({ initialSettings }: Props) {
 
       <Separator />
 
-      {/* Bot conversation flow */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Conversation flow</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Control which steps the bot runs when a customer messages for the first time.
-          </p>
-        </div>
-        <form onSubmit={(e) => void handleSaveBotBehaviour(e)} className="space-y-3 max-w-lg">
-          {[
-            {
-              key: 'botAskMarketingConsent' as const,
-              value: botAskMarketingConsent,
-              set: setBotAskMarketingConsent,
-              label: 'Ask for marketing consent (POPIA)',
-              description: 'Prompts new customers to accept or decline marketing messages before entering the menu.',
-            },
-            {
-              key: 'botAllowStaffPick' as const,
-              value: botAllowStaffPick,
-              set: setBotAllowStaffPick,
-              label: 'Let customers choose their stylist',
-              description: 'Shows a staff selection step after the customer picks a service. Disable to auto-assign the next available.',
-            },
-            {
-              key: 'botLoyaltyEnabled' as const,
-              value: botLoyaltyEnabled,
-              set: setBotLoyaltyEnabled,
-              label: 'Loyalty rewards in bot menu',
-              description: 'Shows "My rewards / loyalty" as a menu option so customers can check their stamp balance.',
-            },
-            {
-              key: 'botRequireDepositStep' as const,
-              value: botRequireDepositStep,
-              set: setBotRequireDepositStep,
-              label: 'Require deposit / payment before confirming',
-              description: 'When a service has a deposit or full-pay requirement, the bot sends a payment link before confirming. Disable to confirm immediately and collect payment in-person.',
-            },
-            {
-              key: 'botWinbackEnabled' as const,
-              value: botWinbackEnabled,
-              set: setBotWinbackEnabled,
-              label: 'Win-back messages (21-day inactive)',
-              description: 'Daily at 09:00 — messages customers who have not visited in 21–60 days. Requires marketing consent. Max 50 customers per day.',
-            },
-            {
-              key: 'botBirthdayEnabled' as const,
-              value: botBirthdayEnabled,
-              set: setBotBirthdayEnabled,
-              label: 'Birthday messages',
-              description: 'Daily at 08:00 — sends a birthday greeting with a treat offer. Requires date of birth on file and marketing consent.',
-            },
-          ].map(({ key, value, set, label, description }) => (
-            <div key={key} className="rounded-lg border p-4">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={value}
-                  onChange={(e) => set(e.target.checked)}
-                  className="mt-0.5 size-4 rounded border-input accent-primary"
-                />
-                <div className="space-y-0.5">
-                  <p className="text-sm font-medium leading-snug">{label}</p>
-                  <p className="text-xs text-muted-foreground">{description}</p>
-                </div>
-              </label>
-            </div>
-          ))}
-          <div className="flex flex-col gap-2 pt-1">
-            <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" disabled={savingBotBehaviour || !botBehaviourDirty}>
-                {savingBotBehaviour ? 'Saving…' : 'Save flow settings'}
-              </Button>
-              {botBehaviourDirty && (
-                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-              )}
-            </div>
-            <SectionSaveFeedback feedback={getSection('botBehaviour')} />
-          </div>
-        </form>
-      </section>
+      <ConversationFlowSection initialSettings={salon} onSaved={applySalon} />
 
       <Separator />
 
