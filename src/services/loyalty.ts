@@ -97,6 +97,12 @@ export async function earnStampForCompletedVisit(input: {
     where: { salonId: input.salonId },
   });
 
+  // Idempotency guard — prevents double stamps if appointment is completed twice
+  const alreadyEarned = await db.loyaltyLedger.findFirst({
+    where: { programId: program.id, customerId: input.customerId, appointmentId: input.appointmentId, delta: { gt: 0 } },
+  });
+  if (alreadyEarned) return;
+
   await db.loyaltyLedger.create({
     data: {
       programId: program.id,

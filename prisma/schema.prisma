@@ -552,6 +552,8 @@ model Appointment {
   reminderSentAt      DateTime?          /// @deprecated use reminder24hSentAt
   reminder24hSentAt   DateTime?
   reminder2hSentAt    DateTime?
+  reminder24hFailed   Boolean            @default(false)
+  reminder2hFailed    Boolean            @default(false)
   reviewRequestSentAt DateTime?
   penaltyWaivedAt     DateTime?
   penaltyWaivedBy     String?            /// StaffUser id

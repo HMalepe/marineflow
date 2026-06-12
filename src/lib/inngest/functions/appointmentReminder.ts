@@ -64,7 +64,7 @@ export const appointmentReminder = inngest.createFunction(
       return { skipped: true, reason: 'already_sent' };
     }
 
-    await step.run('send-reminder', async () => {
+    const sendResult = await step.run('send-reminder', async () => {
       const startDate = new Date(appt.start as unknown as string);
       const startFormatted = startDate.toLocaleString('en-ZA', {
         timeZone: appt.salon.timezone,
@@ -88,21 +88,37 @@ export const appointmentReminder = inngest.createFunction(
         'Reply CANCEL or RESCHEDULE to manage your booking.',
       ].join('\n');
 
-      await messaging.sendText({
-        to: appt.customer.waId,
-        body,
-        phoneNumberId: appt.salon.whatsappPhoneId ?? undefined,
-      });
+      try {
+        await messaging.sendText({
+          to: appt.customer.waId,
+          body,
+          phoneNumberId: appt.salon.whatsappPhoneId ?? undefined,
+        });
+        return { ok: true };
+      } catch (err) {
+        // Record failure immediately so the dashboard shows failed state even before retries exhaust.
+        // On a successful retry the mark-reminder-sent step will clear the failure flag.
+        const failField = field === 'reminder24hSentAt' ? 'reminder24hFailed'
+          : field === 'reminder2hSentAt' ? 'reminder2hFailed' : null;
+        if (failField) {
+          await withJobTenant(salonId, () =>
+            prisma.appointment.update({ where: { id: appointmentId }, data: { [failField]: true } }),
+          );
+        }
+        throw err; // re-throw so Inngest retries
+      }
     });
 
     await step.run('mark-reminder-sent', async () => {
       await withJobTenant(salonId, () => {
-        const data: Record<string, Date> = { reminderSentAt: new Date() };
-        if (field) data[field] = new Date();
-        return prisma.appointment.update({
-          where: { id: appointmentId },
-          data,
-        });
+        const data: Record<string, Date | boolean> = { reminderSentAt: new Date() };
+        if (field) {
+          data[field] = new Date();
+          // Clear failure flag on success (may have been set on a previous retry attempt)
+          const failField = field === 'reminder24hSentAt' ? 'reminder24hFailed' : 'reminder2hFailed';
+          data[failField] = false;
+        }
+        return prisma.appointment.update({ where: { id: appointmentId }, data });
       });
     });
 

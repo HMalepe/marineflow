@@ -19,8 +19,13 @@ interface Appointment {
   start: string;
   end: string;
   status: string;
-  service: { name: string };
-  staff: { name: string };
+  cancellationPenaltyApplied: boolean;
+  reminder24hSentAt: string | null;
+  reminder2hSentAt: string | null;
+  reminder24hFailed: boolean;
+  reminder2hFailed: boolean;
+  service: { name: string; depositCents: number | null; fullPay: boolean };
+  staff: { name: string; displayName: string | null; deletedAt: string | null };
   customer: {
     displayName: string | null;
     waId: string;
@@ -28,6 +33,7 @@ interface Appointment {
     noShowCount?: number;
     bookingCount?: number;
   };
+  payments: { id: string; amountCents: number; status: string }[];
 }
 
 function shouldShowRiskBadge(appt: Appointment): boolean {
@@ -141,6 +147,22 @@ function NoShowRiskBadge({
   );
 }
 
+function ReminderPill({ sent, failed, label }: { sent: boolean; failed: boolean; label: string }) {
+  if (sent) return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+      {label} sent
+    </span>
+  );
+  if (failed) return (
+    <span className="inline-flex items-center gap-1 text-[10px] text-destructive">
+      <span className="w-1.5 h-1.5 rounded-full bg-destructive inline-block" />
+      {label} failed
+    </span>
+  );
+  return null;
+}
+
 function AppointmentRow({
   appt,
   showRisk = false,
@@ -166,15 +188,43 @@ function AppointmentRow({
   const bookingCount = appt.customer.bookingCount ?? 0;
   const showBadge = showRisk && shouldShowRiskBadge(appt);
 
+  const isFormerStaff = !!appt.staff.deletedAt;
+  const staffLabel = appt.staff.displayName ?? appt.staff.name;
+
+  // Deposit status: appointment status is the source of truth; payment records are secondary signal
+  const requiresDeposit = (appt.service.depositCents ?? 0) > 0 || appt.service.fullPay;
+  const depositStatus = !requiresDeposit
+    ? 'none'
+    : appt.status === 'CONFIRMED_PAID' || appt.payments.length > 0
+      ? 'paid'
+      : 'unpaid';
+
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg border">
-      <div className="space-y-1 min-w-0 pr-3">
+    <div className="flex items-start justify-between p-3 rounded-lg border gap-3">
+      <div className="space-y-1 min-w-0 flex-1">
         <p className="text-sm font-medium truncate">
           {appt.customer.displayName ?? appt.customer.waId}
         </p>
         <p className="text-xs text-muted-foreground">
-          {appt.service.name} with {appt.staff.name}
+          {appt.service.name} with{' '}
+          <span className={isFormerStaff ? 'line-through opacity-60' : ''}>
+            {staffLabel}
+          </span>
+          {isFormerStaff && (
+            <span className="ml-1 text-[10px] text-muted-foreground italic">(former)</span>
+          )}
         </p>
+        {/* Reminder status pills */}
+        {ACTIONABLE_STATUSES.has(appt.status) && (
+          <div className="flex gap-2 mt-0.5">
+            <ReminderPill sent={!!appt.reminder24hSentAt} failed={appt.reminder24hFailed} label="24h" />
+            <ReminderPill sent={!!appt.reminder2hSentAt} failed={appt.reminder2hFailed} label="2h" />
+          </div>
+        )}
+        {/* Penalty applied warning */}
+        {appt.cancellationPenaltyApplied && (
+          <span className="text-[10px] text-destructive font-medium">⚠ Cancellation penalty applied</span>
+        )}
       </div>
       <div className="text-right space-y-1 shrink-0">
         <p className="text-sm whitespace-nowrap">
@@ -193,6 +243,16 @@ function AppointmentRow({
           )}
           {showBadge && (
             <NoShowRiskBadge risk={risk} noShowCount={noShowCount} bookingCount={bookingCount} />
+          )}
+          {/* Deposit badge */}
+          {requiresDeposit && ACTIONABLE_STATUSES.has(appt.status) && (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+              depositStatus === 'paid'
+                ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
+                : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+            }`}>
+              {depositStatus === 'paid' ? 'Deposit paid' : 'Deposit pending'}
+            </span>
           )}
           <Badge variant={statusColors[appt.status] ?? 'secondary'}>
             {appt.status.toLowerCase().replace(/_/g, ' ')}

@@ -1961,6 +1961,29 @@ async function handleConfirm(
     return;
   }
 
+  // EC-DUP: Prevent customer from booking two overlapping appointments
+  {
+    const reschedulingId = c.managingAppointmentId as string | undefined;
+    const customerOverlap = await getTenantDb().appointment.findFirst({
+      where: {
+        customerId: conv.customerId,
+        status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
+        start: { lt: end },
+        end: { gt: start },
+        ...(reschedulingId ? { NOT: { id: reschedulingId } } : {}),
+      },
+      include: { service: true },
+    });
+    if (customerOverlap) {
+      const dt = DateTime.fromJSDate(new Date(customerOverlap.start)).setZone(conv.salon.timezone);
+      await reply(
+        conv,
+        `You already have a booking at that time — ${sanitize(customerOverlap.service.name)} at ${dt.toFormat('HH:mm')}. Reply BACK to choose a different slot, or MANAGE to view your bookings.`,
+      );
+      return;
+    }
+  }
+
   const tx = getTenantDb();
   const redeem = await redeemForNextBookingTx(tx, {
     salonId: conv.salonId,
@@ -2238,6 +2261,13 @@ async function handleManageBooking(
       appointment: appt,
     });
     if (!cancelCheck.ok) {
+      // Record penalty attempted so the dashboard can surface it — tenant context is live here
+      if (cancelCheck.penaltyApplies) {
+        void getTenantDb().appointment.update({
+          where: { id: appt.id },
+          data: { cancellationPenaltyApplied: true },
+        }).catch(() => {});
+      }
       await reply(conv, cancelCheck.message);
       return;
     }

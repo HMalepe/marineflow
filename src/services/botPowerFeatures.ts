@@ -274,14 +274,16 @@ export async function tryCancelWithRules(params: {
     penaltyWaivedAt: Date | null;
     cancellationPenaltyApplied: boolean;
   };
-}): Promise<{ ok: true; penaltyApplied: boolean } | { ok: false; message: string }> {
+}): Promise<{ ok: true; penaltyApplied: boolean } | { ok: false; message: string; penaltyApplies: boolean }> {
   const check = checkCancellationAllowed({
     salon: params.salon,
     appointment: params.appointment,
     action: 'cancel',
   });
   if (!check.allowed) {
-    return { ok: false, message: check.message };
+    // Return penaltyApplies flag — callers with a guaranteed tenant context
+    // should update cancellationPenaltyApplied on the appointment themselves.
+    return { ok: false, message: check.message, penaltyApplies: check.penaltyApplies };
   }
   return { ok: true, penaltyApplied: false };
 }

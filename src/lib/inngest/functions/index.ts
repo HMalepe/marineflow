@@ -7,3 +7,4 @@ export { appointmentRating, googleReviewRequest } from './appointmentRating.js';
 export { reactivationCampaign } from './reactivationCampaign.js';
 export { winbackCampaign } from './winbackCampaign.js';
 export { birthdayCampaign } from './birthdayCampaign.js';
+export { noShowFollowUp } from './noShowFollowUp.js';

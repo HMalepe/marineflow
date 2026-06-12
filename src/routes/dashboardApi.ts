@@ -698,8 +698,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           status: { not: 'CANCELLED' },
         },
         include: {
-          service: true,
-          staff: true,
+          service: { select: { name: true, depositCents: true, fullPay: true } },
+          staff: { select: { id: true, name: true, displayName: true, avatarUrl: true, deletedAt: true } },
           customer: {
             select: {
               displayName: true,
@@ -710,6 +710,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
               noShowCount: true,
               bookingCount: true,
             },
+          },
+          payments: {
+            where: { status: 'SUCCEEDED' },
+            select: { id: true, amountCents: true, status: true },
+            take: 1,
           },
         },
         orderBy: { start: 'asc' },
@@ -853,7 +858,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         const customer = await db.customer.findFirst({
           where: { id: appt.customerId, deletedAt: null },
-          select: { id: true },
+          select: { id: true, waId: true, marketingConsentStatus: true },
         });
         if (!customer) {
           reply.code(409);
@@ -888,6 +893,20 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           },
         });
 
+        // Schedule a "we missed you" follow-up message 30 min later (best-effort)
+        if (customer.waId && !customer.waId.startsWith('erased_') && customer.marketingConsentStatus === 'ACCEPTED') {
+          void inngest.send({
+            name: 'appointment/no_show.followup',
+            data: {
+              appointmentId: appt.id,
+              salonId: appt.salonId,
+              customerId: appt.customerId,
+              customerWaId: customer.waId,
+            },
+            ts: Date.now() + 30 * 60 * 1000,
+          }).catch(() => {});
+        }
+
         return { ok: true, noShowRisk };
       });
     },
@@ -899,7 +918,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const appt = await db.appointment.findFirst({ where: { id: request.params.id } });
+        const appt = await db.appointment.findFirst({
+          where: { id: request.params.id },
+          include: {
+            customer: { select: { id: true, waId: true, firstName: true, displayName: true } },
+            salon: { select: { whatsappPhoneId: true, tradingName: true, name: true } },
+          },
+        });
         if (!appt) {
           reply.code(404);
           return { error: 'not_found' };
@@ -921,6 +946,19 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: appt.id,
           },
         });
+
+        // Notify the customer on WhatsApp — best-effort, never fails the request
+        const { waId, firstName, displayName } = appt.customer;
+        if (waId && !waId.startsWith('erased_')) {
+          const salonName = appt.salon.tradingName ?? appt.salon.name;
+          const firstName_ = displayName ?? firstName ?? 'there';
+          void sendWithFallback({
+            salonId: user.salonId,
+            to: waId,
+            body: `Hi ${firstName_} 😊 Good news — ${salonName} has waived your cancellation fee. We hope to see you again soon!`,
+          }).catch(() => {});
+        }
+
         return { ok: true };
       });
     },
