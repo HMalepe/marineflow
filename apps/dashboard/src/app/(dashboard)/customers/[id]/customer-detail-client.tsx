@@ -1,0 +1,417 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import {
+  ArrowLeft,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Mail,
+  MessageSquare,
+  Phone,
+  Star,
+  TrendingUp,
+  User,
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+
+interface AppointmentSummary {
+  id: string;
+  start: string;
+  status: string;
+  serviceName: string;
+  staffName: string;
+}
+
+interface MessageSummary {
+  id: string;
+  direction: 'INBOUND' | 'OUTBOUND';
+  body: string;
+  createdAt: string;
+}
+
+interface CustomerDetail {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  displayName: string | null;
+  email: string | null;
+  waId: string | null;
+  marketingConsentStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+  marketingConsentAt: string | null;
+  noShowCount: number;
+  bookingCount: number;
+  noShowRisk: 'LOW' | 'MEDIUM' | 'HIGH';
+  createdAt: string;
+  loyaltyStamps: number;
+  appointments: AppointmentSummary[];
+  messages: MessageSummary[];
+}
+
+type Tab = 'overview' | 'appointments' | 'messages';
+
+const AVATAR_GRADIENTS = [
+  'from-violet-500 to-purple-600',
+  'from-emerald-500 to-teal-600',
+  'from-orange-500 to-amber-600',
+  'from-sky-500 to-blue-600',
+  'from-rose-500 to-pink-600',
+];
+
+function avatarGradient(seed: string): string {
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) + h + seed.charCodeAt(i)) | 0;
+  return AVATAR_GRADIENTS[Math.abs(h) % AVATAR_GRADIENTS.length];
+}
+
+function getDisplayName(c: CustomerDetail): string {
+  if (c.displayName) return c.displayName;
+  const first = c.firstName?.trim();
+  const last = c.lastName?.trim();
+  if (first && last) return `${first} ${last}`;
+  if (first) return first;
+  if (last) return last;
+  if (c.waId) return formatPhone(c.waId);
+  return 'Unknown customer';
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/^\+/, '');
+  if (digits.startsWith('27') && digits.length === 11) {
+    return `+27 ${digits.slice(2, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  }
+  return raw.startsWith('+') ? raw : `+${raw}`;
+}
+
+const STATUS_STYLES: Record<string, string> = {
+  COMPLETED: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300',
+  CONFIRMED: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+  CANCELLED: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+  NO_SHOW: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+  PENDING_PAYMENT: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300',
+};
+
+function StatPill({
+  icon: Icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string | number;
+  sub?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-2xl border bg-card px-5 py-4 text-center min-w-[90px]">
+      <Icon className="size-4 text-muted-foreground" />
+      <p className="text-2xl font-bold tabular-nums leading-none mt-1">{value}</p>
+      <p className="text-[11px] text-muted-foreground font-medium">{label}</p>
+      {sub && <p className="text-[10px] text-muted-foreground/60">{sub}</p>}
+    </div>
+  );
+}
+
+function AppointmentRow({ a }: { a: AppointmentSummary }) {
+  return (
+    <div className="flex items-center gap-4 py-3 border-b last:border-0 hover:bg-muted/30 px-2 rounded-lg transition-colors">
+      <div className="w-8 flex flex-col items-center shrink-0">
+        <p className="text-[10px] text-muted-foreground font-medium uppercase">
+          {new Date(a.start).toLocaleDateString('en-ZA', { month: 'short' })}
+        </p>
+        <p className="text-lg font-bold leading-none">{new Date(a.start).getDate()}</p>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{a.serviceName}</p>
+        <p className="text-xs text-muted-foreground">
+          {a.staffName} ·{' '}
+          {new Date(a.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+        </p>
+      </div>
+      <span
+        className={cn(
+          'px-2 py-0.5 rounded-md text-xs font-medium shrink-0',
+          STATUS_STYLES[a.status] ?? 'bg-muted text-muted-foreground',
+        )}
+      >
+        {a.status.replace(/_/g, ' ')}
+      </span>
+    </div>
+  );
+}
+
+function MessageBubble({ m }: { m: MessageSummary }) {
+  const isIn = m.direction === 'INBOUND';
+  return (
+    <div className={cn('flex', isIn ? 'justify-start' : 'justify-end')}>
+      <div
+        className={cn(
+          'max-w-[78%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed',
+          isIn
+            ? 'rounded-tl-sm bg-muted text-foreground'
+            : 'rounded-tr-sm bg-[#dcf8c6] dark:bg-[#005c4b] text-foreground',
+        )}
+      >
+        <p className="whitespace-pre-wrap break-words">{m.body}</p>
+        <p className={cn('text-[10px] mt-1 text-muted-foreground', !isIn && 'text-right')}>
+          {new Date(m.createdAt).toLocaleString('en-ZA', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function CustomerDetailClient({ customer }: { customer: CustomerDetail }) {
+  const [tab, setTab] = useState<Tab>('overview');
+
+  const name = getDisplayName(customer);
+  const gradient = avatarGradient(customer.waId ?? customer.id);
+  const completedVisits = customer.appointments.filter((a) => a.status === 'COMPLETED').length;
+  const lastCompleted = customer.appointments.find((a) => a.status === 'COMPLETED');
+
+  const consentBadge =
+    customer.marketingConsentStatus === 'ACCEPTED'
+      ? { text: 'Marketing accepted', className: 'bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30' }
+      : customer.marketingConsentStatus === 'DECLINED'
+        ? { text: 'Marketing declined', className: 'bg-muted text-muted-foreground border-border' }
+        : { text: 'Awaiting POPIA choice', className: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-600/30' };
+
+  const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'appointments', label: 'Appointments', count: customer.appointments.length },
+    { key: 'messages', label: 'Messages', count: customer.messages.length },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      {/* Back */}
+      <Link
+        href="/customers"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="size-3.5" />
+        All customers
+      </Link>
+
+      {/* Hero card */}
+      <div className="rounded-2xl border bg-card overflow-hidden">
+        <div className={cn('h-20 bg-gradient-to-r opacity-50', gradient)} />
+        <div className="px-6 pb-6">
+          <div className="-mt-10 flex items-end gap-4 mb-4">
+            <div
+              className={cn(
+                'flex size-20 items-center justify-center rounded-2xl text-white text-2xl font-bold ring-4 ring-background bg-gradient-to-br shrink-0',
+                gradient,
+              )}
+            >
+              {getInitials(name)}
+            </div>
+            <div className="pb-1 min-w-0">
+              <h1 className="text-2xl font-bold truncate">{name}</h1>
+              <div className="flex flex-wrap gap-2 items-center mt-1.5">
+                <Badge variant="outline" className={consentBadge.className}>
+                  {consentBadge.text}
+                </Badge>
+                {customer.noShowRisk === 'HIGH' && (
+                  <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300">
+                    High no-show risk
+                  </Badge>
+                )}
+                {customer.noShowRisk === 'MEDIUM' && (
+                  <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300">
+                    Confirm before visit
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Contact row */}
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+            {customer.waId && (
+              <span className="inline-flex items-center gap-1.5">
+                <Phone className="size-3.5 shrink-0" />
+                <span className="font-mono">{formatPhone(customer.waId)}</span>
+              </span>
+            )}
+            {customer.email && (
+              <span className="inline-flex items-center gap-1.5">
+                <Mail className="size-3.5 shrink-0" />
+                {customer.email}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5">
+              <User className="size-3.5 shrink-0" />
+              Since{' '}
+              {new Date(customer.createdAt).toLocaleDateString('en-ZA', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="flex flex-wrap gap-3">
+        <StatPill icon={CheckCircle2} label="Visits" value={completedVisits} />
+        <StatPill
+          icon={Calendar}
+          label="Bookings"
+          value={customer.bookingCount}
+          sub={customer.noShowCount > 0 ? `${customer.noShowCount} no-show` : undefined}
+        />
+        <StatPill icon={Star} label="Stamps" value={customer.loyaltyStamps} />
+        <StatPill
+          icon={TrendingUp}
+          label="No-show %"
+          value={
+            customer.bookingCount > 0
+              ? `${Math.round((customer.noShowCount / customer.bookingCount) * 100)}%`
+              : '0%'
+          }
+        />
+        <StatPill
+          icon={Clock}
+          label="Last visit"
+          value={
+            lastCompleted
+              ? new Date(lastCompleted.start).toLocaleDateString('en-ZA', {
+                  day: 'numeric',
+                  month: 'short',
+                })
+              : '—'
+          }
+        />
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b flex gap-0">
+        {tabs.map(({ key, label, count }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTab(key)}
+            className={cn(
+              'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px flex items-center gap-1.5',
+              tab === key
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {label}
+            {count !== undefined && count > 0 && (
+              <span
+                className={cn(
+                  'text-[10px] rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center tabular-nums',
+                  tab === key ? 'bg-foreground/10' : 'bg-muted',
+                )}
+              >
+                {count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab: Overview */}
+      {tab === 'overview' && (
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="rounded-xl border bg-card p-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Marketing consent
+            </p>
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'size-2.5 rounded-full shrink-0',
+                  customer.marketingConsentStatus === 'ACCEPTED'
+                    ? 'bg-green-500'
+                    : customer.marketingConsentStatus === 'DECLINED'
+                      ? 'bg-slate-400'
+                      : 'bg-amber-400',
+                )}
+              />
+              <p className="text-sm font-medium">{consentBadge.text}</p>
+            </div>
+            {customer.marketingConsentAt && (
+              <p className="text-xs text-muted-foreground">
+                Updated {new Date(customer.marketingConsentAt).toLocaleDateString('en-ZA')}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border bg-card p-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Most recent appointment
+            </p>
+            {customer.appointments.length > 0 ? (
+              <>
+                <p className="text-sm font-medium">{customer.appointments[0].serviceName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {new Date(customer.appointments[0].start).toLocaleDateString('en-ZA', {
+                    day: 'numeric',
+                    month: 'long',
+                  })}{' '}
+                  · {customer.appointments[0].staffName}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No appointments yet</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Appointments */}
+      {tab === 'appointments' && (
+        <div>
+          {customer.appointments.length === 0 ? (
+            <div className="py-12 text-center">
+              <Calendar className="size-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No appointments yet</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border bg-card px-4 py-2">
+              {customer.appointments.map((a) => (
+                <AppointmentRow key={a.id} a={a} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Messages */}
+      {tab === 'messages' && (
+        <div>
+          {customer.messages.length === 0 ? (
+            <div className="py-12 text-center">
+              <MessageSquare className="size-8 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">No messages yet</p>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[560px] overflow-y-auto pr-1">
+              {customer.messages.map((m) => (
+                <MessageBubble key={m.id} m={m} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

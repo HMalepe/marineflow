@@ -1394,6 +1394,81 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── Customer merge ─────────────────────────────────────────
+
+  app.post<{
+    Params: { id: string };
+    Body: { secondaryId: string };
+  }>(
+    '/customers/:id/merge',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { id } = request.params;
+        const { secondaryId } = request.body ?? {};
+
+        if (!secondaryId || typeof secondaryId !== 'string') {
+          reply.code(400);
+          return { error: 'bad_request', message: 'secondaryId is required.' };
+        }
+        if (id === secondaryId) {
+          reply.code(400);
+          return { error: 'same_customer', message: 'Cannot merge a customer with itself.' };
+        }
+
+        const db = getTenantDb();
+        const [primary, secondary] = await Promise.all([
+          db.customer.findFirst({ where: { id, salonId: user.salonId, deletedAt: null } }),
+          db.customer.findFirst({ where: { id: secondaryId, salonId: user.salonId, deletedAt: null } }),
+        ]);
+
+        if (!primary || !secondary) {
+          reply.code(404);
+          return { error: 'not_found', message: 'One or both customers not found.' };
+        }
+
+        const mergedWaId = (() => {
+          const raw = primary.waId ?? secondary.waId ?? null;
+          if (!raw) return null;
+          return raw.startsWith('+') ? raw : `+${raw}`;
+        })();
+
+        await db.conversation.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
+        await db.appointment.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
+        await db.loyaltyLedger.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
+        await db.analyticsEvent.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
+
+        await db.customer.update({
+          where: { id },
+          data: {
+            firstName: primary.firstName || secondary.firstName || null,
+            lastName: primary.lastName || secondary.lastName || null,
+            displayName: primary.displayName || secondary.displayName || null,
+            email: primary.email || secondary.email || null,
+            waId: mergedWaId,
+            noShowCount: primary.noShowCount + secondary.noShowCount,
+            bookingCount: primary.bookingCount + secondary.bookingCount,
+          },
+        });
+
+        await db.customer.update({ where: { id: secondaryId }, data: { deletedAt: new Date() } });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'customer_merge',
+            entity: 'Customer',
+            entityId: id,
+            payload: { secondaryId } as unknown as Record<string, string>,
+          },
+        });
+
+        return { ok: true, primaryId: id };
+      });
+    },
+  );
+
   // ── Branch CRUD ────────────────────────────────────────────
 
   app.get('/branches', async (request, reply) => {

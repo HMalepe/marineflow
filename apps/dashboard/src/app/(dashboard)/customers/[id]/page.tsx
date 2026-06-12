@@ -1,11 +1,11 @@
-import { Badge } from '@/components/ui/badge';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { CustomerDetailClient } from './customer-detail-client';
 
 interface CustomerDetail {
   id: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
+  lastName: string | null;
   displayName: string | null;
   email: string | null;
   waId: string | null;
@@ -16,46 +16,19 @@ interface CustomerDetail {
   noShowRisk: 'LOW' | 'MEDIUM' | 'HIGH';
   createdAt: string;
   loyaltyStamps: number;
-  appointments: AppointmentSummary[];
-  messages: MessageSummary[];
-}
-
-function consentLabel(status: CustomerDetail['marketingConsentStatus']): {
-  text: string;
-  className: string;
-} {
-  switch (status) {
-    case 'ACCEPTED':
-      return {
-        text: 'Marketing accepted (POPIA)',
-        className: 'bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30',
-      };
-    case 'DECLINED':
-      return {
-        text: 'Marketing declined',
-        className: 'bg-muted text-muted-foreground border-border',
-      };
-    default:
-      return {
-        text: 'Awaiting POPIA choice',
-        className: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-600/30',
-      };
-  }
-}
-
-interface AppointmentSummary {
-  id: string;
-  start: string;
-  status: string;
-  serviceName: string;
-  staffName: string;
-}
-
-interface MessageSummary {
-  id: string;
-  direction: 'INBOUND' | 'OUTBOUND';
-  body: string;
-  createdAt: string;
+  appointments: {
+    id: string;
+    start: string;
+    status: string;
+    serviceName: string;
+    staffName: string;
+  }[];
+  messages: {
+    id: string;
+    direction: 'INBOUND' | 'OUTBOUND';
+    body: string;
+    createdAt: string;
+  }[];
 }
 
 export default async function CustomerDetailPage({
@@ -71,166 +44,12 @@ export default async function CustomerDetailPage({
     customer = await apiFetch<CustomerDetail>(`/customers/${id}`, {}, token);
   } catch {
     return (
-      <div className="py-12 text-center">
+      <div className="flex flex-col items-center justify-center py-20 text-center">
         <p className="text-destructive font-medium">Customer not found</p>
-        <p className="text-sm text-muted-foreground mt-1">The customer may have been deleted or you lack access.</p>
+        <p className="text-sm text-muted-foreground mt-1">The customer may have been deleted.</p>
       </div>
     );
   }
 
-  const consent = consentLabel(customer.marketingConsentStatus);
-
-  const riskBadge =
-    customer.noShowRisk === 'HIGH'
-      ? { text: 'High no-show risk', className: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200' }
-      : customer.noShowRisk === 'MEDIUM'
-        ? { text: 'Confirm before visit', className: 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-200' }
-        : null;
-
-  return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
-          {(customer.firstName?.[0] ?? '').toUpperCase()}
-          {(customer.lastName?.[0] ?? '').toUpperCase()}
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold">
-            {customer.displayName ?? `${customer.firstName} ${customer.lastName}`}
-          </h1>
-          <div className="flex flex-wrap gap-2 items-center mt-2">
-            <Badge variant="outline" className={consent.className}>
-              {consent.text}
-            </Badge>
-            {riskBadge && (
-              <Badge variant="outline" className={riskBadge.className}>
-                {riskBadge.text}
-              </Badge>
-            )}
-            {customer.marketingConsentAt && (
-              <span className="text-xs text-muted-foreground">
-                Updated {new Date(customer.marketingConsentAt).toLocaleDateString('en-ZA')}
-              </span>
-            )}
-          </div>
-          <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-            {customer.email && <span>{customer.email}</span>}
-            {customer.waId && <span className="font-mono">{customer.waId}</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatCard
-          label="Total Visits"
-          value={customer.appointments.filter((a) => a.status === 'COMPLETED').length}
-        />
-        <StatCard
-          label="No-Shows"
-          value={customer.noShowCount}
-          hint={`from ${customer.bookingCount} booking${customer.bookingCount === 1 ? '' : 's'}`}
-        />
-        <StatCard label="Loyalty Stamps" value={customer.loyaltyStamps} />
-        <StatCard
-          label="Customer Since"
-          value={new Date(customer.createdAt).toLocaleDateString()}
-        />
-      </div>
-
-      {/* Appointment History */}
-      <section>
-        <h2 className="text-lg font-semibold mb-3">Appointment History</h2>
-        {customer.appointments.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No appointments yet.</p>
-        ) : (
-          <div className="border rounded-lg overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left p-3 font-medium">Date</th>
-                  <th className="text-left p-3 font-medium">Service</th>
-                  <th className="text-left p-3 font-medium">Staff</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {customer.appointments.map((a) => (
-                  <tr key={a.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3">{new Date(a.start).toLocaleDateString()}</td>
-                    <td className="p-3">{a.serviceName}</td>
-                    <td className="p-3">{a.staffName}</td>
-                    <td className="p-3">
-                      <StatusBadge status={a.status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Recent Messages */}
-      <section>
-        <h2 className="text-lg font-semibold mb-3">Recent Messages</h2>
-        {customer.messages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No messages yet.</p>
-        ) : (
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {customer.messages.map((m) => (
-              <div
-                key={m.id}
-                className={`rounded-lg px-4 py-2 max-w-[80%] text-sm ${
-                  m.direction === 'INBOUND'
-                    ? 'bg-muted self-start'
-                    : 'bg-primary/10 ml-auto text-right'
-                }`}
-              >
-                <p>{m.body}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {new Date(m.createdAt).toLocaleString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
-  return (
-    <div className="border rounded-lg p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-      {hint && <p className="text-[10px] text-muted-foreground mt-1">{hint}</p>}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    COMPLETED: 'bg-green-100 text-green-700',
-    CONFIRMED: 'bg-blue-100 text-blue-700',
-    CANCELLED: 'bg-red-100 text-red-700',
-    NO_SHOW: 'bg-amber-100 text-amber-700',
-    PENDING_PAYMENT: 'bg-yellow-100 text-yellow-700',
-  };
-
-  return (
-    <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[status] ?? 'bg-muted'}`}>
-      {status.replace(/_/g, ' ')}
-    </span>
-  );
+  return <CustomerDetailClient customer={customer} />;
 }
