@@ -1,3 +1,26 @@
+export type MediaType = 'image' | 'document' | 'audio' | 'video';
+
+/** WhatsApp interactive list message (Meta Cloud API). Twilio Phase 1: plain text fallback. */
+export interface InteractiveList {
+  type: 'list';
+  header?: string;
+  body: string;
+  footer?: string;
+  /** CTA button label — max 20 characters */
+  button: string;
+  sections: Array<{
+    title?: string;
+    rows: Array<{
+      /** Value returned when the customer taps (e.g. "1", "book") */
+      id: string;
+      /** Display text — max 24 characters */
+      title: string;
+      /** Subtitle — max 72 characters */
+      description?: string;
+    }>;
+  }>;
+}
+
 export interface SendOptions {
   to: string;
   body: string;
@@ -11,14 +34,14 @@ export interface SendOptions {
   templateName?: string;
   templateLang?: string;
   templateParams?: TemplateParam[];
+  /** Meta Cloud API interactive list — body is used as plain-text fallback */
+  interactive?: InteractiveList;
 }
 
 export interface TemplateParam {
   name: string;
   value: string;
 }
-
-export type MediaType = 'image' | 'document' | 'audio' | 'video';
 
 export interface SentMessage {
   providerMessageId: string | null;

@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import { env } from '../../../config.js';
 import type {
+  InteractiveList,
   MessagingProvider,
   NormalisedInboundMessage,
   SendOptions,
   SentMessage,
 } from './types.js';
+import { assertValidInteractiveList } from './interactiveList.js';
 
 /** Verify Meta webhook signature against the raw request body Buffer. */
 export function verifyWebhookRawBuffer(buf: Buffer, signature: string | undefined): boolean {
@@ -40,17 +42,62 @@ function buildMediaPayload(options: SendOptions): Record<string, unknown> | null
   };
 }
 
+/** Build Meta Graph API interactive list payload (exported for tests). */
+export function buildCloudInteractivePayload(interactive: InteractiveList): Record<string, unknown> {
+  assertValidInteractiveList(interactive);
+  return {
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      ...(interactive.header ? { header: { type: 'text', text: interactive.header } } : {}),
+      body: { text: interactive.body },
+      ...(interactive.footer ? { footer: { text: interactive.footer } } : {}),
+      action: {
+        button: interactive.button,
+        sections: interactive.sections.map((section) => ({
+          ...(section.title ? { title: section.title } : {}),
+          rows: section.rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            ...(row.description ? { description: row.description } : {}),
+          })),
+        })),
+      },
+    },
+  };
+}
+
+function extractInboundBody(msg: {
+  text?: { body: string };
+  interactive?: {
+    type?: string;
+    list_reply?: { id: string; title?: string };
+    button_reply?: { id: string; title?: string };
+  };
+}): string {
+  if (msg.text?.body) return msg.text.body.trim();
+  if (msg.interactive?.list_reply?.id) return msg.interactive.list_reply.id.trim();
+  if (msg.interactive?.button_reply?.id) return msg.interactive.button_reply.id.trim();
+  return '';
+}
+
+/** @internal Exported for unit tests */
+export { extractInboundBody };
+
 export const whatsappCloudMessaging: MessagingProvider = {
   async sendText(options: SendOptions): Promise<SentMessage> {
-    const { to, body, phoneNumberId } = options;
+    const { to, body, phoneNumberId, interactive } = options;
     if (!phoneNumberId) throw new Error('phoneNumberId required for Meta Cloud API');
     if (!env.META_ACCESS_TOKEN) throw new Error('META_ACCESS_TOKEN not configured');
 
-    const mediaPayload = buildMediaPayload(options);
-    const payload = mediaPayload ?? {
-      type: 'text',
-      text: { preview_url: false, body },
-    };
+    const mediaPayload = !interactive ? buildMediaPayload(options) : null;
+    const payload =
+      interactive != null
+        ? buildCloudInteractivePayload(interactive)
+        : mediaPayload ?? {
+            type: 'text',
+            text: { preview_url: false, body },
+          };
 
     const response = await fetch(apiUrl(phoneNumberId), {
       method: 'POST',
@@ -131,6 +178,8 @@ export const whatsappCloudMessaging: MessagingProvider = {
   },
 
   parseInboundBatch(payload: unknown): NormalisedInboundMessage[] {
+    if (payload == null || typeof payload !== 'object') return [];
+
     const body = payload as {
       entry?: {
         changes?: {
@@ -141,6 +190,11 @@ export const whatsappCloudMessaging: MessagingProvider = {
               from: string;
               timestamp: string;
               text?: { body: string };
+              interactive?: {
+                type?: string;
+                list_reply?: { id: string };
+                button_reply?: { id: string };
+              };
             }[];
           };
         }[];
@@ -158,7 +212,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
             externalId: msg.id,
             fromPhoneE164: msg.from.startsWith('+') ? msg.from : `+${msg.from}`,
             toAddress: phoneId ?? '',
-            body: msg.text?.body ?? '',
+            body: extractInboundBody(msg),
             receivedAt: isNaN(ts) ? new Date() : new Date(ts * 1000),
             metaPhoneNumberId: phoneId,
           });

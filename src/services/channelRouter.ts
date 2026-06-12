@@ -5,7 +5,7 @@ import { smsMessaging } from '../lib/integrations/messaging/sms-impl.js';
 import { callBookingConfirmation } from '../lib/integrations/messaging/voice.js';
 import { logger } from '../lib/logger.js';
 import { isTwilioConfigured } from '../config.js';
-import type { SentMessage } from '../lib/integrations/messaging/types.js';
+import type { InteractiveList, SentMessage } from '../lib/integrations/messaging/types.js';
 
 export type Channel = 'whatsapp' | 'sms' | 'voice';
 
@@ -21,6 +21,7 @@ export async function sendWithFallback(params: {
   phoneNumberId?: string;
   mediaUrl?: string;
   mediaType?: 'image' | 'video' | 'document' | 'audio';
+  interactive?: InteractiveList;
 }): Promise<{ channel: Channel; result: SentMessage }> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: params.salonId },
@@ -35,17 +36,40 @@ export async function sendWithFallback(params: {
   };
 
   // Try WhatsApp Cloud API
-  if (salon.whatsappPhoneId) {
+  const cloudPhoneId = salon.whatsappPhoneId?.trim();
+  if (cloudPhoneId) {
     try {
       const result = await whatsappCloudMessaging.sendText({
         ...sendOpts,
-        phoneNumberId: salon.whatsappPhoneId,
+        phoneNumberId: cloudPhoneId,
+        interactive: params.interactive,
       });
       if (result.providerMessageId) {
         return { channel: 'whatsapp', result };
       }
+      if (params.interactive) {
+        logger.warn({ salonId: params.salonId }, 'whatsapp_cloud_interactive_empty_id_retry_plain');
+      }
     } catch (err) {
-      logger.warn({ err }, 'whatsapp_cloud_fallthrough');
+      if (params.interactive) {
+        logger.warn({ err }, 'whatsapp_cloud_interactive_failed_retry_plain');
+      } else {
+        logger.warn({ err }, 'whatsapp_cloud_fallthrough');
+      }
+    }
+
+    if (params.interactive) {
+      try {
+        const result = await whatsappCloudMessaging.sendText({
+          ...sendOpts,
+          phoneNumberId: cloudPhoneId,
+        });
+        if (result.providerMessageId) {
+          return { channel: 'whatsapp', result };
+        }
+      } catch (retryErr) {
+        logger.warn({ err: retryErr }, 'whatsapp_cloud_fallthrough');
+      }
     }
   }
 
