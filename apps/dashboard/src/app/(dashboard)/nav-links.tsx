@@ -14,6 +14,7 @@ export function NavLinks({ isAdmin, isOwner }: NavLinksProps) {
 
   function active(href: string) {
     if (href === '/') return pathname === '/';
+    if (href === '/roster') return pathname.startsWith('/roster') || pathname.startsWith('/staff');
     return pathname.startsWith(href);
   }
 
@@ -46,8 +47,7 @@ export function NavLinks({ isAdmin, isOwner }: NavLinksProps) {
       <Link href="/conversations" className={cls('/conversations')}>Conversations</Link>
       <Link href="/tickets" className={cls('/tickets')}>Tickets</Link>
       <Link href="/analytics" className={cls('/analytics')}>Analytics</Link>
-      <Link href="/staff" className={cls('/staff')}>Staff</Link>
-      <Link href="/roster" className={cls('/roster')}>Roster</Link>
+      <Link href="/roster" className={cls('/roster')}>Staff Roster</Link>
       <Link href="/services" className={cls('/services')}>Services</Link>
       <Link href="/faqs" className={cls('/faqs')}>Bot FAQs</Link>
       {isOwner && <Link href="/billing" className={cls('/billing')}>Billing</Link>}

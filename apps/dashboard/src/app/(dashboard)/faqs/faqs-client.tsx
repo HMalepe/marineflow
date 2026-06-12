@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
+import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
 
 type FaqStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -369,6 +370,18 @@ export function FaqsClient({ token }: Props) {
     return { total: faqs.length, approved, pending, rejected };
   }, [faqs]);
 
+  const existingFaqQuestions = useMemo(() => faqs.map((f) => f.question), [faqs]);
+
+  const unusedFaqTemplates = useMemo(
+    () => filterAvailableFaqTemplates(FAQ_TEMPLATES, existingFaqQuestions),
+    [existingFaqQuestions],
+  );
+
+  const usedFaqTemplateCount = useMemo(
+    () => countUsedFaqTemplates(FAQ_TEMPLATES, existingFaqQuestions),
+    [existingFaqQuestions],
+  );
+
   const faqIds = useMemo(() => filtered.map((f) => f.id), [filtered]);
   const answerLen = form.answer.length;
   const answerOverLimit = answerLen > WHATSAPP_ANSWER_LIMIT;
@@ -454,11 +467,15 @@ export function FaqsClient({ token }: Props) {
   async function handleSmartScan() {
     setSmartScanning(true);
     try {
-      const data = await apiFetch<{ results: SmartResult[]; summary: { total: number; approve: number; needsEdit: number } }>(
+      const data = await apiFetch<{ results: SmartResult[]; message?: string; summary?: { total: number; approve: number; needsEdit: number } }>(
         '/faqs/smart-approve',
         { method: 'POST' },
         token,
       );
+      if (!data.results?.length) {
+        showToast(data.message ?? 'No pending FAQs to review', 'success');
+        return;
+      }
       setSmartResults(data.results);
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Scan failed', 'error');
@@ -756,7 +773,7 @@ export function FaqsClient({ token }: Props) {
 
                 {(() => {
                   const q = templateSearch.trim().toLowerCase();
-                  const visibleTemplates = FAQ_TEMPLATES.filter((t) => {
+                  const visibleTemplates = unusedFaqTemplates.filter((t) => {
                     const matchesBiz = !templateBizType || t.businessTypes.includes('All') || t.businessTypes.includes(templateBizType);
                     const matchesCat = templateCategory === 'All' || t.category === templateCategory;
                     const matchesSearch = !q || t.question.toLowerCase().includes(q) || t.answer.toLowerCase().includes(q);
@@ -765,14 +782,23 @@ export function FaqsClient({ token }: Props) {
                   return (
                     <div className="space-y-1.5 max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
                       {visibleTemplates.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-6">No templates match your search.</p>
+                        <p className="text-sm text-muted-foreground text-center py-6">
+                          {unusedFaqTemplates.length === 0
+                            ? 'You’ve added all suggested templates — use “Write your own from scratch” for anything else.'
+                            : 'No templates match your search.'}
+                        </p>
                       )}
                       {visibleTemplates.length > 0 && (
-                        <p className="text-xs text-muted-foreground pb-0.5">{visibleTemplates.length} template{visibleTemplates.length !== 1 ? 's' : ''}</p>
+                        <p className="text-xs text-muted-foreground pb-0.5">
+                          {visibleTemplates.length} template{visibleTemplates.length !== 1 ? 's' : ''}
+                          {usedFaqTemplateCount > 0 && (
+                            <span> · {usedFaqTemplateCount} already in your library</span>
+                          )}
+                        </p>
                       )}
-                      {visibleTemplates.map((t, i) => (
+                      {visibleTemplates.map((t) => (
                         <button
-                          key={i}
+                          key={t.question}
                           type="button"
                           onClick={() => applyTemplate(t.question, t.answer)}
                           className="w-full text-left rounded-lg border bg-card px-3 py-2.5 hover:bg-accent hover:border-primary/40 transition-colors group"

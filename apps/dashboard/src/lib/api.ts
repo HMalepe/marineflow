@@ -18,7 +18,6 @@ export async function apiFetch<T>(
   token?: string | null,
 ): Promise<T> {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) ?? {}),
   };
 
@@ -26,8 +25,29 @@ export async function apiFetch<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const method = (options.method ?? 'GET').toUpperCase();
+  let body = options.body;
+
+  // Fastify rejects requests with Content-Type: application/json but an empty body
+  if (body == null && ['POST', 'PUT', 'PATCH'].includes(method)) {
+    body = '{}';
+  }
+
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (
+    !isFormData &&
+    body != null &&
+    body !== '' &&
+    !headers['Content-Type'] &&
+    !headers['content-type']
+  ) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   const res = await fetch(`${API_URL}/api${path}`, {
     ...options,
+    method,
+    body,
     headers,
   });
 

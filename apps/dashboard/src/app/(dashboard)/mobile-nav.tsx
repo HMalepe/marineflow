@@ -88,7 +88,7 @@ const ownerTabs: TabItem[] = [
   { href: '/', label: 'Overview', icon: HomeIcon },
   { href: '/appointments', label: 'Bookings', icon: CalendarIcon },
   { href: '/conversations', label: 'Chats', icon: ChatIcon },
-  { href: '/staff', label: 'Staff', icon: PeopleIcon },
+  { href: '/roster', label: 'Roster', icon: PeopleIcon },
   { href: '/services', label: 'Services', icon: GridIcon },
 ];
 
@@ -107,6 +107,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
 
   function isActive(href: string) {
     if (href === '/') return pathname === '/';
+    if (href === '/roster') return pathname.startsWith('/roster') || pathname.startsWith('/staff');
     return pathname.startsWith(href);
   }
 

@@ -646,29 +646,39 @@ export function ServicesClient({ token }: Props) {
         </SheetContent>
       </Sheet>
 
-      <Sheet open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <SheetContent side="right" className="sm:max-w-sm">
-          <SheetHeader>
-            <SheetTitle>Remove service?</SheetTitle>
-            <SheetDescription>
-              {deleteTarget && (
-                <>
-                  You&apos;re about to remove <strong>{deleteTarget.name}</strong>.
-                  If it has existing bookings, we&apos;ll hide it from new bookings instead of deleting it.
-                </>
-              )}
-            </SheetDescription>
-          </SheetHeader>
-          <SheetFooter className="mt-6 flex-row justify-end gap-2">
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
-              {deleting ? 'Removing…' : 'Remove service'}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !deleting && setDeleteTarget(null)}
+          onKeyDown={(e) => e.key === 'Escape' && !deleting && setDeleteTarget(null)}
+          role="presentation"
+        >
+          <Card
+            className="w-full max-w-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-service-title"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <CardContent className="p-6 space-y-4">
+              <h2 id="delete-service-title" className="font-semibold">Remove service?</h2>
+              <p className="text-sm text-muted-foreground">
+                You&apos;re about to remove <strong>{deleteTarget.name}</strong>.
+                If it has existing bookings, we&apos;ll hide it from new bookings instead of deleting it.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>
+                  Cancel
+                </Button>
+                <Button type="button" variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
+                  {deleting ? 'Removing…' : 'Remove service'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {toast && (
         <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />

@@ -33,6 +33,7 @@ import {
   parseMarketingConsentStatus,
 } from '../services/marketingConsent.js';
 import { recordCustomerNoShow, normalizeNoShowRisk } from '../services/noShowRisk.js';
+import { clampRosterEnd, parseRosterDate } from '../lib/rosterRange.js';
 
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
 import {
@@ -1011,14 +1012,252 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.get('/staff', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
+      const now = new Date();
       const staff = await db.staff.findMany({
         where: { deletedAt: null },
-        include: { services: { include: { service: true } }, workingHours: true },
+        include: {
+          services: { include: { service: true } },
+          workingHours: true,
+          timeOff: {
+            where: { end: { gte: now } },
+            orderBy: { start: 'asc' },
+          },
+          _count: { select: { appointments: true } },
+        },
         orderBy: { sortOrder: 'asc' },
+      });
+      return {
+        staff: staff.map((s) => ({
+          ...s,
+          timeOff: s.timeOff.map((t) => ({
+            id: t.id,
+            start: t.start.toISOString().slice(0, 10),
+            end: t.end.toISOString().slice(0, 10),
+            reason: t.reason ?? null,
+          })),
+        })),
+      };
+    });
+  });
+
+  app.post<{
+    Body: {
+      name: string;
+      displayName?: string | null;
+      bio?: string | null;
+      specialties?: string[];
+      isBookable?: boolean;
+      avatarUrl?: string | null;
+    };
+  }>('/staff', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const { name, displayName, bio, specialties, isBookable, avatarUrl } = request.body;
+      if (!name?.trim()) {
+        reply.code(400);
+        return { error: 'missing_name', message: 'Name is required.' };
+      }
+      const maxOrder = await db.staff.aggregate({
+        where: { salonId: user.salonId, deletedAt: null },
+        _max: { sortOrder: true },
+      });
+      const staff = await db.staff.create({
+        data: {
+          salonId: user.salonId,
+          name: name.trim(),
+          displayName: displayName?.trim() || null,
+          bio: bio?.trim() || null,
+          specialties: specialties ?? [],
+          isBookable: isBookable ?? true,
+          avatarUrl: avatarUrl ?? null,
+          sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
+        },
+        include: { workingHours: true },
+      });
+      await db.auditLog.create({
+        data: {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          action: 'staff_create',
+          entity: 'Staff',
+          entityId: staff.id,
+        },
       });
       return { staff };
     });
   });
+
+  app.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      displayName?: string | null;
+      bio?: string | null;
+      specialties?: string[];
+      isBookable?: boolean;
+      avatarUrl?: string | null;
+      active?: boolean;
+    };
+  }>('/staff/:id', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const existing = await db.staff.findFirst({
+        where: { id: request.params.id, salonId: user.salonId, deletedAt: null },
+      });
+      if (!existing) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      const body = request.body;
+      const staff = await db.staff.update({
+        where: { id: existing.id },
+        data: {
+          ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+          ...(body.displayName !== undefined ? { displayName: body.displayName?.trim() || null } : {}),
+          ...(body.bio !== undefined ? { bio: body.bio?.trim() || null } : {}),
+          ...(body.specialties !== undefined ? { specialties: body.specialties } : {}),
+          ...(body.isBookable !== undefined ? { isBookable: body.isBookable } : {}),
+          ...(body.avatarUrl !== undefined ? { avatarUrl: body.avatarUrl } : {}),
+          ...(body.active !== undefined ? { active: body.active } : {}),
+        },
+        include: { workingHours: true },
+      });
+      await db.auditLog.create({
+        data: {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          action: 'staff_update',
+          entity: 'Staff',
+          entityId: staff.id,
+        },
+      });
+      return { staff };
+    });
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    '/staff/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.staff.findFirst({
+          where: { id: request.params.id, salonId: user.salonId, deletedAt: null },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        await db.staff.update({
+          where: { id: existing.id },
+          data: { deletedAt: new Date(), active: false, isBookable: false },
+        });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'staff_delete',
+            entity: 'Staff',
+            entityId: existing.id,
+          },
+        });
+        return { ok: true };
+      });
+    },
+  );
+
+  app.put<{
+    Params: { id: string };
+    Body: { hours: { weekday: number; startTime: string; endTime: string }[] };
+  }>(
+    '/staff/:id/working-hours',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { id } = request.params;
+        const staff = await db.staff.findFirst({
+          where: { id, salonId: user.salonId, deletedAt: null },
+        });
+        if (!staff) {
+          reply.code(404);
+          return { error: 'not_found', message: 'Staff member not found.' };
+        }
+        const hours = request.body.hours ?? [];
+        const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+        for (const h of hours) {
+          if (h.weekday < 0 || h.weekday > 6) {
+            reply.code(400);
+            return { error: 'invalid_weekday' };
+          }
+          if (!TIME_RE.test(h.startTime) || !TIME_RE.test(h.endTime)) {
+            reply.code(400);
+            return { error: 'invalid_time', message: 'Use HH:MM format.' };
+          }
+          if (h.startTime >= h.endTime) {
+            reply.code(400);
+            return { error: 'invalid_range', message: 'End time must be after start time.' };
+          }
+        }
+        await db.workingHour.deleteMany({ where: { staffId: id } });
+        if (hours.length > 0) {
+          await db.workingHour.createMany({
+            data: hours.map((h) => ({
+              salonId: user.salonId,
+              staffId: id,
+              weekday: h.weekday,
+              startTime: h.startTime,
+              endTime: h.endTime,
+            })),
+          });
+        }
+        const updated = await db.workingHour.findMany({
+          where: { staffId: id },
+          orderBy: { weekday: 'asc' },
+        });
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'staff_schedule_update',
+            entity: 'Staff',
+            entityId: id,
+            payload: { days: hours.length },
+          },
+        });
+        return { hours: updated };
+      });
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    '/staff/:id/time-off',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const staff = await db.staff.findFirst({
+          where: { id: request.params.id, salonId: user.salonId, deletedAt: null },
+        });
+        if (!staff) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        const timeOff = await db.timeOff.findMany({
+          where: { staffId: staff.id },
+          orderBy: { start: 'asc' },
+        });
+        return {
+          timeOff: timeOff.map((t) => ({
+            id: t.id,
+            start: t.start.toISOString().slice(0, 10),
+            end: t.end.toISOString().slice(0, 10),
+            reason: t.reason ?? null,
+          })),
+        };
+      });
+    },
+  );
 
   // ─── Roster ──────────────────────────────────────────────────────────────
 
@@ -1027,19 +1266,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string };
 
-      // Validate and clamp date range — bad/missing params fall back to current week
-      const parseDate = (s: string | undefined, fallback: Date): Date => {
-        if (!s) return fallback;
-        const d = new Date(s);
-        return isNaN(d.getTime()) ? fallback : d;
-      };
-      const now  = new Date();
-      const from = parseDate(q.from, now);
-      const to   = parseDate(q.to, new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000));
-
-      // Hard cap: never return more than 31 days in one call
-      const maxTo = new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
-      const clampedTo = to > maxTo ? maxTo : to;
+      const now = new Date();
+      const from = parseRosterDate(q.from, now);
+      const to = parseRosterDate(q.to, new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000));
+      const clampedTo = clampRosterEnd(from, to);
 
       const staff = await db.staff.findMany({
         where: { deletedAt: null },
