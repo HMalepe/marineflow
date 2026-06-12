@@ -136,24 +136,50 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
-function Toast({ message, type, onDismiss }: { message: string; type: 'success' | 'error'; onDismiss: () => void }) {
+function Toast({
+  message,
+  type,
+  onUndo,
+  onDismiss,
+}: {
+  message: string;
+  type: 'success' | 'error';
+  onUndo?: () => void;
+  onDismiss: () => void;
+}) {
   return (
     <div
       role="status"
       className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm shadow-lg animate-in slide-in-from-bottom-4 max-w-sm',
+        'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-xl border px-4 py-3 text-sm shadow-xl animate-in slide-in-from-bottom-4 max-w-sm backdrop-blur-sm',
         type === 'success'
-          ? 'bg-card border-green-600/30 text-foreground'
+          ? 'bg-card/95 border-green-600/30 text-foreground'
           : 'bg-destructive/10 border-destructive/40 text-destructive',
       )}
     >
       {type === 'success' ? (
-        <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 border-0 shrink-0">Saved</Badge>
+        <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 border-0 shrink-0">Saved ✓</Badge>
       ) : (
         <Badge variant="destructive" className="shrink-0">Error</Badge>
       )}
-      <span className="flex-1">{message}</span>
-      <button type="button" onClick={onDismiss} className="text-muted-foreground hover:text-foreground text-xs ml-1" aria-label="Dismiss">✕</button>
+      <span className="flex-1 leading-snug">{message}</span>
+      {onUndo && (
+        <button
+          type="button"
+          onClick={onUndo}
+          className="shrink-0 text-xs font-medium text-[#128c7e] hover:underline"
+        >
+          Undo
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="text-muted-foreground hover:text-foreground text-xs shrink-0"
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
     </div>
   );
 }
@@ -192,17 +218,21 @@ function Avatar({ member, size = 'md' }: { member: StaffMember; size?: 'sm' | 'm
 function AvatarUploader({
   current,
   name,
+  token,
+  onUploading,
   onChange,
 }: {
   current: string | null;
   name: string;
+  token: string;
+  onUploading: (busy: boolean) => void;
   onChange: (url: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(current);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync when a different staff member is loaded into the form
   useEffect(() => {
     setPreview(current);
     setError(null);
@@ -210,53 +240,95 @@ function AvatarUploader({
 
   const initials = name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     setError(null);
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { setError('Please select an image file'); return; }
     if (file.size > MAX_AVATAR_BYTES) { setError('Image must be under 5 MB'); return; }
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const url = ev.target?.result as string;
-      setPreview(url);
-      onChange(url);
-    };
-    reader.readAsDataURL(file);
+
+    const blobUrl = URL.createObjectURL(file);
+    setPreview(blobUrl);
+    setUploading(true);
+    onUploading(true);
+
+    try {
+      const presign = await apiFetch<{ uploadUrl: string; fileKey: string; publicUrl: string }>(
+        '/uploads/presign',
+        { method: 'POST', body: JSON.stringify({ filename: file.name, mimeType: file.type, purpose: 'avatar' }) },
+        token,
+      );
+
+      const putRes = await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!putRes.ok) throw new Error('Upload to storage failed');
+
+      await apiFetch(
+        '/uploads/confirm',
+        { method: 'POST', body: JSON.stringify({ fileKey: presign.fileKey, filename: file.name, mimeType: file.type, sizeBytes: file.size, purpose: 'avatar' }) },
+        token,
+      );
+
+      URL.revokeObjectURL(blobUrl);
+      setPreview(presign.publicUrl);
+      onChange(presign.publicUrl);
+    } catch (err) {
+      setPreview(current);
+      URL.revokeObjectURL(blobUrl);
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      onUploading(false);
+    }
   }
 
   return (
     <div className="flex items-center gap-4">
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => !uploading && inputRef.current?.click()}
         className={cn(
           'relative size-16 rounded-2xl border-2 border-dashed overflow-hidden shrink-0 transition-colors',
           'hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           preview ? 'border-transparent' : 'border-muted-foreground/30 bg-muted/50',
+          uploading && 'cursor-wait',
         )}
         aria-label="Upload photo"
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt={name} className="size-full object-cover" />
+          <img src={preview} alt={name} className={cn('size-full object-cover transition-opacity', uploading && 'opacity-40')} />
         ) : (
           <span className="text-sm font-bold text-muted-foreground">{initials || '?'}</span>
         )}
-        <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
-          <svg className="size-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
-          </svg>
-        </span>
+        {uploading ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-2xl">
+            <svg className="size-5 text-white animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+          </span>
+        ) : (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
+            <svg className="size-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" />
+            </svg>
+          </span>
+        )}
       </button>
       <div className="space-y-1.5">
-        <p className="text-xs text-muted-foreground">PNG, JPG, WebP · max 450 KB</p>
+        <p className="text-xs text-muted-foreground">
+          {uploading ? 'Uploading photo…' : 'PNG, JPG, WebP · max 5 MB'}
+        </p>
         <div className="flex gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()}>
+          <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()} disabled={uploading}>
             {preview ? 'Change' : 'Upload photo'}
           </Button>
-          {preview && (
+          {preview && !uploading && (
             <Button
               type="button" size="sm" variant="ghost"
               className="text-destructive hover:text-destructive"
@@ -268,7 +340,7 @@ function AvatarUploader({
         </div>
         {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
-      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(e) => void handleFile(e)} />
     </div>
   );
 }
@@ -461,8 +533,9 @@ type SheetMode = 'edit' | 'schedule' | 'timeoff' | null;
 export function StaffClient({ initialStaff, token }: Props) {
   const [staff, setStaff] = useState<StaffMember[]>(initialStaff);
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error'; onUndo?: () => void } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const [sheetMode, setSheetMode] = useState<SheetMode>(null);
@@ -490,8 +563,8 @@ export function StaffClient({ initialStaff, token }: Props) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const showToast = useCallback((message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
+  const showToast = useCallback((message: string, type: 'success' | 'error', onUndo?: () => void) => {
+    setToast({ message, type, onUndo });
   }, []);
 
   const reload = useCallback(async () => {
@@ -509,6 +582,7 @@ export function StaffClient({ initialStaff, token }: Props) {
   function openEdit(member: StaffMember) {
     setSelected(member);
     setDeleteConfirm(false);
+    setAvatarUploading(false);
     setEditForm({
       name: member.name,
       displayName: member.displayName ?? '',
@@ -523,6 +597,7 @@ export function StaffClient({ initialStaff, token }: Props) {
   function openAddNew() {
     setSelected(null);
     setDeleteConfirm(false);
+    setAvatarUploading(false);
     setEditForm({ name: '', displayName: '', bio: '', specialties: '', isBookable: true, avatarUrl: null });
     setSheetMode('edit');
   }
@@ -556,6 +631,10 @@ export function StaffClient({ initialStaff, token }: Props) {
   async function handleSaveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editForm.name.trim()) { showToast('Name is required', 'error'); return; }
+    if (avatarUploading) { showToast('Photo is still uploading — wait a moment', 'error'); return; }
+
+    const snapshot = selected ? { ...selected } : null;
+
     setBusyId(selected?.id ?? '__new__');
     try {
       const payload = {
@@ -568,15 +647,49 @@ export function StaffClient({ initialStaff, token }: Props) {
       };
       if (selected) {
         await apiFetch(`/staff/${selected.id}`, { method: 'PATCH', body: JSON.stringify(payload) }, token);
-        showToast('Staff member updated', 'success');
+        closeSheet();
+        await reload();
+        showToast(
+          `${payload.name} updated`,
+          'success',
+          () => void undoSaveEdit(selected.id, snapshot!),
+        );
       } else {
         await apiFetch('/staff', { method: 'POST', body: JSON.stringify(payload) }, token);
+        closeSheet();
+        await reload();
         showToast('Staff member added', 'success');
       }
-      closeSheet();
-      await reload();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : 'Save failed', 'error');
+      showToast(err instanceof ApiError ? err.message : 'Save failed — please try again', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function undoSaveEdit(id: string, previous: StaffMember) {
+    setToast(null);
+    setBusyId(id);
+    try {
+      await apiFetch(
+        `/staff/${id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            name: previous.name,
+            displayName: previous.displayName,
+            bio: previous.bio,
+            specialties: previous.specialties,
+            isBookable: previous.isBookable,
+            avatarUrl: previous.avatarUrl,
+          }),
+        },
+        token,
+      );
+      await reload();
+      showToast('Changes undone', 'success');
+    } catch {
+      showToast('Undo failed', 'error');
     } finally {
       setBusyId(null);
     }
@@ -797,6 +910,8 @@ export function StaffClient({ initialStaff, token }: Props) {
             <AvatarUploader
               current={editForm.avatarUrl}
               name={editForm.displayName || editForm.name || 'Staff'}
+              token={token}
+              onUploading={setAvatarUploading}
               onChange={(url) => setEditForm((f) => ({ ...f, avatarUrl: url }))}
             />
 
@@ -896,9 +1011,9 @@ export function StaffClient({ initialStaff, token }: Props) {
             )}
 
             <SheetFooter className="px-0">
-              <Button type="button" variant="outline" onClick={closeSheet}>Cancel</Button>
-              <Button type="submit" disabled={busyId !== null}>
-                {busyId !== null ? 'Saving…' : selected ? 'Save changes' : 'Add staff member'}
+              <Button type="button" variant="outline" onClick={closeSheet} disabled={busyId !== null}>Cancel</Button>
+              <Button type="submit" disabled={busyId !== null || avatarUploading}>
+                {avatarUploading ? 'Uploading photo…' : busyId !== null ? 'Saving…' : selected ? 'Save changes' : 'Add staff member'}
               </Button>
             </SheetFooter>
           </form>
@@ -1060,7 +1175,7 @@ export function StaffClient({ initialStaff, token }: Props) {
         </SheetContent>
       </Sheet>
 
-      {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onUndo={toast.onUndo} onDismiss={() => setToast(null)} />}
     </div>
   );
 }
