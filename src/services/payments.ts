@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
 import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
 import { sendWithFallback } from './channelRouter.js';
+import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
 import { DateTime } from 'luxon';
@@ -72,6 +73,10 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     });
     if (!appt || appt.status === 'CONFIRMED_PAID') return;
 
+    const priorSucceededPayments = await tx.payment.count({
+      where: { customerId: appt.customerId, status: 'SUCCEEDED' },
+    });
+
     await tx.payment.updateMany({
       where: { appointmentId, status: 'PENDING' },
       data: {
@@ -92,19 +97,28 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     const tz = appt.salon.timezone;
     const dateStr = DateTime.fromJSDate(appt.start).setZone(tz).toFormat('cccc dd LLL yyyy HH:mm');
 
-    const confirmMsg =
+    const conv = await tx.conversation.findFirst({
+      where: { salonId: appt.salonId, customerId: appt.customerId },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const convCtx = (conv?.context ?? {}) as Record<string, unknown>;
+    const includePopiaHint = shouldAttachPopiaRightsHint({
+      priorSucceededPayments,
+      popiaRightsNotified: Boolean(convCtx.popiaRightsNotified),
+    });
+
+    let confirmMsg =
       `✅ Payment received! Your booking is confirmed.\n\n` +
       `${appt.service.name} with ${appt.staff.name}\n` +
       `${dateStr}\n\n` +
       `Reference: ${appointmentId.slice(0, 8)}\n\n` +
       `See you at ${salonName}! 💈`;
+    if (includePopiaHint) {
+      confirmMsg += `\n\n${buildPopiaRightsHint()}`;
+    }
 
     const ratingMsg = `How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)`;
-
-    const conv = await tx.conversation.findFirst({
-      where: { salonId: appt.salonId, customerId: appt.customerId },
-      orderBy: { updatedAt: 'desc' },
-    });
 
     // Send confirmation message
     let confirmSid: string | null = null;
@@ -134,7 +148,11 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
         where: { id: conv.id },
         data: {
           step: ConversationStep.BOOKING_RATING,
-          context: { ...currentCtx, pendingAppointmentId: appointmentId } as object,
+          context: {
+            ...currentCtx,
+            pendingAppointmentId: appointmentId,
+            ...(includePopiaHint ? { popiaRightsNotified: true } : {}),
+          } as object,
         },
       });
     }

@@ -1,4 +1,78 @@
+import { ConversationStep } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+
+/** Normalise inbound text for exact POPIA keyword matching (trim, uppercase, Unicode NFKC). */
+export function normalizePopiaCommandText(text: string): string {
+  return text.trim().normalize('NFKC').toUpperCase();
+}
+
+export function isPopiaDeleteCommand(text: string): boolean {
+  return normalizePopiaCommandText(text) === 'DELETE';
+}
+
+export function isPopiaMyDataCommand(text: string): boolean {
+  return normalizePopiaCommandText(text) === 'MYDATA';
+}
+
+export function isPopiaComplianceCommand(text: string): boolean {
+  const n = normalizePopiaCommandText(text);
+  return n === 'DELETE' || n === 'MYDATA';
+}
+
+export function isDeletedCustomer(customer: { displayName?: string | null }): boolean {
+  return customer.displayName === 'Deleted Customer';
+}
+
+/** Subtle one-line POPIA rights reminder (after first booking/payment). */
+export function buildPopiaRightsHint(): string {
+  return '_(POPIA)_ Reply *MYDATA* to see what we store · *DELETE* to remove your personal info anytime.';
+}
+
+export function computeLoyaltyStampTotal(loyaltyActivity: { delta: number }[]): number {
+  return Math.max(0, loyaltyActivity.reduce((sum, entry) => sum + entry.delta, 0));
+}
+
+/** Whether to append the one-time POPIA rights hint on first payment confirmation. */
+export function shouldAttachPopiaRightsHint(params: {
+  priorSucceededPayments: number;
+  popiaRightsNotified?: boolean;
+}): boolean {
+  return params.priorSucceededPayments === 0 && !params.popiaRightsNotified;
+}
+
+export type CustomerDataExport = NonNullable<Awaited<ReturnType<typeof exportCustomerData>>>;
+
+/** Format POPIA right-of-access summary for WhatsApp. */
+export function formatMyDataAccessSummary(data: CustomerDataExport): string {
+  if (isDeletedCustomer(data.customer)) {
+    return [
+      '📋 *Your data summary*',
+      '',
+      'Your personal information has been removed from our records.',
+      `Bookings on record: ${data.appointments.length} (retained for legal compliance only)`,
+      '',
+      'Reply *1* to book again — we\'ll collect fresh details.',
+    ].join('\n');
+  }
+
+  const name =
+    [data.customer.firstName, data.customer.lastName].filter(Boolean).join(' ').trim() ||
+    data.customer.displayName ||
+    'Not provided';
+  const stampTotal = computeLoyaltyStampTotal(data.loyaltyActivity);
+
+  return [
+    '📋 *Your data summary*',
+    '',
+    `Name: ${name}`,
+    `Email: ${data.customer.email ?? 'Not provided'}`,
+    `Bookings on record: ${data.appointments.length}`,
+    `Loyalty stamps: ${stampTotal}`,
+    '',
+    'Booking and payment records are kept for legal compliance.',
+    'Reply *DELETE* anytime to remove your personal information.',
+  ].join('\n');
+}
 
 /**
  * Full data export for a customer (POPIA right of access).
@@ -149,6 +223,92 @@ export async function eraseCustomerData(customerId: string) {
   });
 
   return { erased: true, customerId };
+}
+
+/**
+ * POPIA right to erasure via WhatsApp DELETE command.
+ * Anonymises PII, retains bookings/payments/audit trail, keeps waId for identity continuity.
+ */
+export async function deleteCustomerData(
+  customerId: string,
+  salonId: string,
+): Promise<{ alreadyDeleted: boolean }> {
+  const db = getTenantDb();
+
+  const customer = await db.customer.findFirst({
+    where: { id: customerId, salonId },
+  });
+  if (!customer) return { alreadyDeleted: false };
+
+  if (isDeletedCustomer(customer)) {
+    await db.conversation.updateMany({
+      where: { customerId, salonId },
+      data: { step: ConversationStep.GREETING, context: {} },
+    });
+    return { alreadyDeleted: true };
+  }
+
+  await db.consentRecord.deleteMany({ where: { customerId, salonId } });
+  await db.pushToken.deleteMany({ where: { customerId, salonId } });
+
+  await db.customer.update({
+    where: { id: customerId },
+    data: {
+      firstName: null,
+      lastName: null,
+      email: null,
+      displayName: 'Deleted Customer',
+      notes: null,
+      tags: [],
+      preferredStaffId: null,
+      dateOfBirth: null,
+      lastWinBackAt: null,
+      loyaltyStampsCached: null,
+      marketingConsent: false,
+      marketingConsentStatus: 'DECLINED',
+      marketingConsentAt: null,
+      deletedAt: new Date(),
+    },
+  });
+
+  await db.auditLog.create({
+    data: {
+      salonId,
+      action: 'customer_data_deletion',
+      entity: 'Customer',
+      entityId: customerId,
+      payload: {
+        requestedVia: 'whatsapp',
+        deletedAt: new Date().toISOString(),
+      },
+    },
+  });
+
+  await db.conversation.updateMany({
+    where: { customerId, salonId },
+    data: { step: ConversationStep.GREETING, context: {} },
+  });
+
+  return { alreadyDeleted: false };
+}
+
+export async function notifyPopiaRightsOnce(
+  conversationId: string,
+  sendHint: () => Promise<void>,
+): Promise<boolean> {
+  const db = getTenantDb();
+  const conv = await db.conversation.findUnique({ where: { id: conversationId } });
+  if (!conv) return false;
+
+  const context = (conv.context ?? {}) as Record<string, unknown>;
+  if (context.popiaRightsNotified) return false;
+
+  await sendHint();
+  await db.conversation.update({
+    where: { id: conversationId },
+    data: { context: { ...context, popiaRightsNotified: true } as object },
+  });
+  return true;
 }
 
 /**

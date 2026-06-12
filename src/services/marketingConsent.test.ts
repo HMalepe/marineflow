@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPopiaConsentMessage,
   parseMarketingConsentReply,
   parseMarketingConsentStatus,
   isGlobalMarketingOptIn,
@@ -42,6 +43,15 @@ describe('global marketing keywords', () => {
     expect(isGlobalMarketingOptOut('STOP')).toBe(true);
     expect(isGlobalMarketingOptIn('accept')).toBe(true);
     expect(isGlobalMarketingOptOut('yes')).toBe(false);
+  });
+});
+
+describe('buildPopiaConsentMessage', () => {
+  it('mentions POPIA MYDATA and DELETE rights', () => {
+    const msg = buildPopiaConsentMessage('Glow Salon');
+    expect(msg).toContain('MYDATA');
+    expect(msg).toContain('DELETE');
+    expect(msg).toContain('POPIA');
   });
 });
 

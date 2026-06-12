@@ -35,6 +35,8 @@ export function buildPopiaConsentMessage(salonName: string): string {
     '• *DECLINE* — no marketing messages',
     '',
     'Change anytime: reply STOP (opt out) or ACCEPT (opt in).',
+    '',
+    'Your POPIA rights: reply *MYDATA* to see stored data · *DELETE* to remove personal info.',
   ].join('\n');
 }
 

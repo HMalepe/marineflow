@@ -48,6 +48,16 @@ import {
   isWithinBirthdayWindow,
 } from './outboundCampaigns.js';
 import { incrementCustomerBookingCount } from './noShowRisk.js';
+import {
+  buildPopiaRightsHint,
+  deleteCustomerData,
+  exportCustomerData,
+  formatMyDataAccessSummary,
+  isDeletedCustomer,
+  isPopiaDeleteCommand,
+  isPopiaMyDataCommand,
+  notifyPopiaRightsOnce,
+} from './compliance.js';
 
 export type BotContext = Record<string, unknown> & {
   selectedServiceId?: string;
@@ -478,6 +488,38 @@ async function processInboundWhatsApp(
       salon.afterHoursMessage?.trim() ||
         'Thanks for your message. Our team will reply as soon as possible.',
     );
+    return;
+  }
+
+  // POPIA erasure / access — must run before marketing consent gate (legal priority)
+  if (isPopiaDeleteCommand(text)) {
+    if (isDeletedCustomer(customer)) {
+      await reply(
+        conv,
+        'Your personal data has already been removed from our records. ' +
+          'Reply 1 anytime to book again — we\'ll start fresh.',
+      );
+      await saveCtx(conv.id, {}, ConversationStep.GREETING);
+      return;
+    }
+    await deleteCustomerData(customer.id, salon.id);
+    await reply(
+      conv,
+      'Your personal data has been removed from our records as requested. ' +
+        'Your booking history is retained for legal compliance only. ' +
+        'If you\'d like to book again in the future, we\'ll start fresh.',
+    );
+    await saveCtx(conv.id, {}, ConversationStep.GREETING);
+    return;
+  }
+
+  if (isPopiaMyDataCommand(text)) {
+    const exported = await exportCustomerData(customer.id);
+    if (!exported) {
+      await reply(conv, 'We could not find your data on file. Reply 1 to get started.');
+      return;
+    }
+    await reply(conv, formatMyDataAccessSummary(exported));
     return;
   }
 
@@ -1887,6 +1929,7 @@ async function handleConfirm(
   });
 
   // Track booking count for no-show risk scoring (best-effort — must not fail booking)
+  const isFirstBooking = conv.customer.bookingCount === 0;
   try {
     await incrementCustomerBookingCount(conv.customerId, tx);
   } catch (err) {
@@ -1941,6 +1984,9 @@ async function handleConfirm(
           .filter(Boolean)
           .join('\n'),
       );
+      if (isFirstBooking) {
+        await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+      }
       await replyMenu(conv);
       return;
     }
@@ -1948,6 +1994,9 @@ async function handleConfirm(
       conv,
       `Booking created — payment link unavailable. Staff will confirm manually.`,
     );
+    if (isFirstBooking) {
+      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+    }
     return;
   }
 
@@ -1962,6 +2011,9 @@ async function handleConfirm(
       .filter(Boolean)
       .join('\n'),
   );
+  if (isFirstBooking) {
+    await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+  }
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
   await reply(conv, 'How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)');
 }
