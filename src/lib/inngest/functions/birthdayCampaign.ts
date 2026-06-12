@@ -15,6 +15,7 @@ import {
   birthdayPartsForTimezone,
   isOutboundDelivered,
 } from '../../../services/outboundCampaigns.js';
+import { parseAutomationsFromMetadata } from '../../automationSettings.js';
 
 const DAY_MS = 86_400_000;
 /** Re-send guard window — well past any year boundary edge cases. */
@@ -25,6 +26,7 @@ interface SalonTarget {
   name: string;
   tradingName: string | null;
   timezone: string;
+  metadata: unknown;
 }
 
 interface BirthdayCandidate {
@@ -44,7 +46,7 @@ export const birthdayCampaign = inngest.createFunction(
     try {
       salons = await prisma.salon.findMany({
         where: { status: { in: ['ACTIVE', 'TRIAL'] }, botBirthdayEnabled: true, deletedAt: null },
-        select: { id: true, name: true, tradingName: true, timezone: true },
+        select: { id: true, name: true, tradingName: true, timezone: true, metadata: true },
       });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2022') {
@@ -114,10 +116,17 @@ async function runBirthdaysForSalon(salon: SalonTarget): Promise<number> {
         });
         if (!fresh) return;
 
+        const automations = parseAutomationsFromMetadata(salon.metadata);
+        const customBody = automations.messaging?.birthdayBody?.trim();
+        const body = customBody
+          ? customBody
+              .replace(/\{name\}/gi, fresh.firstName ?? 'there')
+              .replace(/\{salon\}/gi, salonName)
+          : buildBirthdayBody(fresh.firstName, salonName);
         const { result } = await sendWithFallback({
           salonId: salon.id,
           to: fresh.waId,
-          body: buildBirthdayBody(fresh.firstName, salonName),
+          body,
         });
 
         if (!isOutboundDelivered(result)) {

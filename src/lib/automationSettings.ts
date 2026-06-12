@@ -56,6 +56,15 @@ export interface SalonAutomations {
     /** Percent of service price paid to stylist as incentive */
     incentivePercentPerCut: number;
   };
+  booking: {
+    /** Slot interval in minutes — controls how granular the time picker is */
+    slotIntervalMin: number;
+  };
+  messaging: {
+    winbackBody: string;
+    birthdayBody: string;
+    cancellationPolicyText: string;
+  };
 }
 
 export const DEFAULT_AUTOMATIONS: SalonAutomations = {
@@ -110,6 +119,14 @@ export const DEFAULT_AUTOMATIONS: SalonAutomations = {
     enabled: true,
     incentiveEnabled: false,
     incentivePercentPerCut: 10,
+  },
+  booking: {
+    slotIntervalMin: 15,
+  },
+  messaging: {
+    winbackBody: '',
+    birthdayBody: '',
+    cancellationPolicyText: '',
   },
 };
 
@@ -194,6 +211,8 @@ export function parseAutomationsFromMetadata(metadata: unknown): SalonAutomation
   const reactivationRaw = isRecord(raw.reactivation) ? raw.reactivation : {};
   const upsellingRaw = isRecord(raw.upselling) ? raw.upselling : {};
   const stylistRaw = isRecord(raw.stylistPerformance) ? raw.stylistPerformance : {};
+  const bookingRaw = isRecord(raw.booking) ? raw.booking : {};
+  const messagingRaw = isRecord(raw.messaging) ? raw.messaging : {};
 
   return {
     reminders: {
@@ -312,6 +331,26 @@ export function parseAutomationsFromMetadata(metadata: unknown): SalonAutomation
         DEFAULT_AUTOMATIONS.stylistPerformance.incentivePercentPerCut,
       ),
     },
+    booking: {
+      slotIntervalMin: (() => {
+        const v = clampInt(bookingRaw.slotIntervalMin, 5, 60, 15);
+        return [5, 10, 15, 30, 60].includes(v) ? v : 15;
+      })(),
+    },
+    messaging: {
+      winbackBody:
+        typeof messagingRaw.winbackBody === 'string'
+          ? messagingRaw.winbackBody.trim().slice(0, 1600)
+          : '',
+      birthdayBody:
+        typeof messagingRaw.birthdayBody === 'string'
+          ? messagingRaw.birthdayBody.trim().slice(0, 1600)
+          : '',
+      cancellationPolicyText:
+        typeof messagingRaw.cancellationPolicyText === 'string'
+          ? messagingRaw.cancellationPolicyText.trim().slice(0, 2000)
+          : '',
+    },
   };
 }
 
@@ -333,6 +372,8 @@ export function validateAutomationsPayload(
     reactivation: { ...existing.reactivation, ...patch.reactivation },
     upselling: { ...existing.upselling, ...patch.upselling },
     stylistPerformance: { ...existing.stylistPerformance, ...patch.stylistPerformance },
+    booking: { ...existing.booking, ...patch.booking },
+    messaging: { ...existing.messaging, ...patch.messaging },
   };
 
   if (merged.reminders.hoursBefore.length === 0) {

@@ -132,10 +132,16 @@ async function runWinbackForSalon(salon: SalonTarget): Promise<number> {
         });
 
         try {
+          const customBody = automations.messaging?.winbackBody?.trim();
+          const body = customBody
+            ? customBody
+                .replace(/\{name\}/gi, fresh.firstName ?? 'there')
+                .replace(/\{salon\}/gi, salonName)
+            : buildWinbackBody(fresh.firstName, salonName);
           const { channel, result } = await sendWithFallback({
             salonId: salon.id,
             to: fresh.waId,
-            body: buildWinbackBody(fresh.firstName, salonName),
+            body,
           });
 
           if (!isOutboundDelivered(result)) {

@@ -32,12 +32,19 @@ export default async function SettingsPage() {
 
   const canEditSalon = user?.role === 'OWNER' || user?.role === 'MANAGER';
 
+  let loyaltyProgram: { stampsPerReward: number; rewardDescription: string } | null = null;
+
   if (canEditSalon && token) {
     try {
       const data = await apiFetch<{ salon: SalonSettings }>('/settings', {}, token);
       salonSettings = data.salon;
     } catch {
       // handled in UI
+    }
+    try {
+      loyaltyProgram = await apiFetch<{ stampsPerReward: number; rewardDescription: string }>('/loyalty/program', {}, token);
+    } catch {
+      // non-critical
     }
   }
 
@@ -82,7 +89,7 @@ export default async function SettingsPage() {
           </CardHeader>
           <CardContent>
             {salonSettings ? (
-              <SalonSettingsForm initialSettings={salonSettings} />
+              <SalonSettingsForm initialSettings={salonSettings} loyaltyProgram={loyaltyProgram} />
             ) : (
               <p className="text-sm text-destructive">Could not load salon settings. Please refresh the page.</p>
             )}

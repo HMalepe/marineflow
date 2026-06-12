@@ -45,6 +45,20 @@ export interface SalonSettings {
       enabled?: boolean;
       hoursBefore?: number[];
     };
+    reactivation?: {
+      enabled?: boolean;
+      inactiveDays?: number[];
+      dailyLimit?: number;
+      cooldownDays?: number;
+    };
+    booking?: {
+      slotIntervalMin?: number;
+    };
+    messaging?: {
+      winbackBody?: string;
+      birthdayBody?: string;
+      cancellationPolicyText?: string;
+    };
   };
 }
 
@@ -338,6 +352,41 @@ export async function saveBotActive(botActive: boolean): Promise<{ salon?: Salon
       body: JSON.stringify({ botActive }),
     }, token);
     return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
+export async function saveAutomationSection(
+  section: 'reactivation' | 'booking' | 'messaging',
+  data: Record<string, unknown>,
+): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const result = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ automations: { [section]: data } }),
+    }, token);
+    return { salon: result.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
+export async function saveLoyaltyProgram(
+  stampsPerReward: number,
+  rewardDescription: string,
+): Promise<{ stampsPerReward?: number; rewardDescription?: string; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ stampsPerReward: number; rewardDescription: string }>(
+      '/loyalty/program',
+      { method: 'PATCH', body: JSON.stringify({ stampsPerReward, rewardDescription }) },
+      token,
+    );
+    return data;
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Save failed' };
   }

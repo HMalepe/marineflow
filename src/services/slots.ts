@@ -1,6 +1,7 @@
 import { DateTime } from 'luxon';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import type { Service, Staff, TimeOff, Appointment } from '@prisma/client';
+import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 
 const SLOT_STEP_MIN = 15;
 
@@ -39,6 +40,8 @@ export async function getAvailableSlots(input: {
     include: { businessHours: true },
   });
   const tz = salon.timezone;
+  const automations = parseAutomationsFromMetadata(salon.metadata);
+  const slotStep = automations.booking.slotIntervalMin;
 
   const dayStart = DateTime.fromISO(input.localDateStr, { zone: tz }).startOf('day');
   if (!dayStart.isValid) return { slots: [], tooLong: false };
@@ -101,7 +104,7 @@ export async function getAvailableSlots(input: {
     ) {
       slots.push({ start, end });
     }
-    cursor = cursor.plus({ minutes: SLOT_STEP_MIN });
+    cursor = cursor.plus({ minutes: slotStep });
   }
   return { slots, tooLong: false };
 }

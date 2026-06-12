@@ -660,12 +660,13 @@ model Payment {
 }
 
 model LoyaltyProgram {
-  id              String @id @default(cuid())
-  salonId         String @unique
-  salon           Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  stampsPerReward Int    @default(10)
-  rewardKind      String @default("FREE_SERVICE_TIER") /** free qualifying service */
-  createdAt       DateTime @default(now())
+  id                String  @id @default(cuid())
+  salonId           String  @unique
+  salon             Salon   @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  stampsPerReward   Int     @default(10)
+  rewardKind        String  @default("FREE_SERVICE_TIER")
+  rewardDescription String? @default("")
+  createdAt         DateTime @default(now())
 
   ledger LoyaltyLedger[]
 }

@@ -20,6 +20,8 @@ import {
   saveGoogleReviewSettings,
   saveCurrentSpecial,
   saveReminderSettings,
+  saveAutomationSection,
+  saveLoyaltyProgram,
   type SalonSettings,
 } from './actions';
 import { ConversationFlowSection } from './conversation-flow-section';
@@ -46,6 +48,7 @@ type PreviewMode = 'welcome' | 'afterHours';
 
 interface Props {
   initialSettings: SalonSettings;
+  loyaltyProgram?: { stampsPerReward: number; rewardDescription: string } | null;
 }
 
 function WhatsAppPreview({
@@ -105,7 +108,7 @@ function CharCount({ value, limit = WHATSAPP_LIMIT }: { value: string; limit?: n
   );
 }
 
-export function SalonSettingsForm({ initialSettings }: Props) {
+export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const router = useRouter();
   const { getSection, reportSuccess, reportError } = useMultiSectionSaveFeedback();
   const [salon, setSalon] = useState<SalonSettings>(initialSettings);
@@ -157,6 +160,42 @@ export function SalonSettingsForm({ initialSettings }: Props) {
   );
   const [savingReminders, setSavingReminders] = useState(false);
 
+  // Phase 4 — win-back / reactivation settings
+  const [reactivationEnabled, setReactivationEnabled] = useState(
+    initialSettings.automations?.reactivation?.enabled ?? true,
+  );
+  const [reactivationInactiveDays, setReactivationInactiveDays] = useState(
+    (initialSettings.automations?.reactivation?.inactiveDays ?? [21])[0] ?? 21,
+  );
+  const [reactivationDailyLimit, setReactivationDailyLimit] = useState(
+    initialSettings.automations?.reactivation?.dailyLimit ?? 50,
+  );
+  const [reactivationCooldown, setReactivationCooldown] = useState(
+    initialSettings.automations?.reactivation?.cooldownDays ?? 30,
+  );
+  const [savingReactivation, setSavingReactivation] = useState(false);
+
+  // Phase 4 — slot interval
+  const [slotIntervalMin, setSlotIntervalMin] = useState(
+    initialSettings.automations?.booking?.slotIntervalMin ?? 15,
+  );
+  const [savingSlotInterval, setSavingSlotInterval] = useState(false);
+
+  // Phase 4 — message templates
+  const [winbackBody, setWinbackBody] = useState(initialSettings.automations?.messaging?.winbackBody ?? '');
+  const [birthdayBody, setBirthdayBody] = useState(initialSettings.automations?.messaging?.birthdayBody ?? '');
+  const [cancellationPolicyText, setCancellationPolicyText] = useState(
+    initialSettings.automations?.messaging?.cancellationPolicyText ?? '',
+  );
+  const [savingMessaging, setSavingMessaging] = useState(false);
+
+  // Phase 4 — loyalty programme
+  const [loyaltyStampsPerReward, setLoyaltyStampsPerReward] = useState(loyaltyProgram?.stampsPerReward ?? 10);
+  const [loyaltyRewardDescription, setLoyaltyRewardDescription] = useState(loyaltyProgram?.rewardDescription ?? '');
+  const [savedLoyaltyStamps, setSavedLoyaltyStamps] = useState(loyaltyProgram?.stampsPerReward ?? 10);
+  const [savedLoyaltyDesc, setSavedLoyaltyDesc] = useState(loyaltyProgram?.rewardDescription ?? '');
+  const [savingLoyalty, setSavingLoyalty] = useState(false);
+
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
   const [savingBot, setSavingBot] = useState(false);
@@ -188,6 +227,14 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     setCurrentSpecial(s.currentSpecial ?? '');
     setReminderEnabled(s.automations?.reminders?.enabled ?? true);
     setReminderHours(s.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS);
+    setReactivationEnabled(s.automations?.reactivation?.enabled ?? true);
+    setReactivationInactiveDays((s.automations?.reactivation?.inactiveDays ?? [21])[0] ?? 21);
+    setReactivationDailyLimit(s.automations?.reactivation?.dailyLimit ?? 50);
+    setReactivationCooldown(s.automations?.reactivation?.cooldownDays ?? 30);
+    setSlotIntervalMin(s.automations?.booking?.slotIntervalMin ?? 15);
+    setWinbackBody(s.automations?.messaging?.winbackBody ?? '');
+    setBirthdayBody(s.automations?.messaging?.birthdayBody ?? '');
+    setCancellationPolicyText(s.automations?.messaging?.cancellationPolicyText ?? '');
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
@@ -249,6 +296,35 @@ export function SalonSettingsForm({ initialSettings }: Props) {
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saved, reminderEnabled, reminderHours]);
+
+  const reactivationDirty = useMemo(() => {
+    const a = saved.automations?.reactivation;
+    return (
+      reactivationEnabled !== (a?.enabled ?? true) ||
+      reactivationInactiveDays !== ((a?.inactiveDays ?? [21])[0] ?? 21) ||
+      reactivationDailyLimit !== (a?.dailyLimit ?? 50) ||
+      reactivationCooldown !== (a?.cooldownDays ?? 30)
+    );
+  }, [saved, reactivationEnabled, reactivationInactiveDays, reactivationDailyLimit, reactivationCooldown]);
+
+  const slotIntervalDirty = useMemo(
+    () => slotIntervalMin !== (saved.automations?.booking?.slotIntervalMin ?? 15),
+    [saved, slotIntervalMin],
+  );
+
+  const messagingDirty = useMemo(() => {
+    const m = saved.automations?.messaging;
+    return (
+      winbackBody !== (m?.winbackBody ?? '') ||
+      birthdayBody !== (m?.birthdayBody ?? '') ||
+      cancellationPolicyText !== (m?.cancellationPolicyText ?? '')
+    );
+  }, [saved, winbackBody, birthdayBody, cancellationPolicyText]);
+
+  const loyaltyDirty = useMemo(
+    () => loyaltyStampsPerReward !== savedLoyaltyStamps || loyaltyRewardDescription !== savedLoyaltyDesc,
+    [loyaltyStampsPerReward, loyaltyRewardDescription, savedLoyaltyStamps, savedLoyaltyDesc],
+  );
 
   const defaultWelcome = `Welcome to ${salon.name}! Reply with a number:`;
   const defaultAfterHours =
@@ -473,6 +549,120 @@ export function SalonSettingsForm({ initialSettings }: Props) {
       reportError('currentSpecial', 'Save failed — please try again');
     } finally {
       setSavingSpecial(false);
+    }
+  }
+
+  async function handleSaveReactivation(e: React.FormEvent) {
+    e.preventDefault();
+    if (reactivationInactiveDays < 7 || reactivationInactiveDays > 180) {
+      reportError('reactivation', 'Inactive days must be between 7 and 180');
+      return;
+    }
+    if (reactivationDailyLimit < 1 || reactivationDailyLimit > 500) {
+      reportError('reactivation', 'Daily limit must be between 1 and 500');
+      return;
+    }
+    if (reactivationCooldown < 7 || reactivationCooldown > 90) {
+      reportError('reactivation', 'Cooldown must be between 7 and 90 days');
+      return;
+    }
+    setSavingReactivation(true);
+    try {
+      const result = await saveAutomationSection('reactivation', {
+        enabled: reactivationEnabled,
+        inactiveDays: [reactivationInactiveDays],
+        dailyLimit: reactivationDailyLimit,
+        cooldownDays: reactivationCooldown,
+      });
+      if (result.salon) {
+        applySalon(result.salon);
+        reportSuccess('reactivation', 'Win-back settings saved');
+      } else {
+        reportError('reactivation', result.error ?? 'Save failed');
+      }
+    } catch {
+      reportError('reactivation', 'Save failed — please try again');
+    } finally {
+      setSavingReactivation(false);
+    }
+  }
+
+  async function handleSaveSlotInterval(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingSlotInterval(true);
+    try {
+      const result = await saveAutomationSection('booking', { slotIntervalMin });
+      if (result.salon) {
+        applySalon(result.salon);
+        reportSuccess('slotInterval', 'Slot interval saved');
+      } else {
+        reportError('slotInterval', result.error ?? 'Save failed');
+      }
+    } catch {
+      reportError('slotInterval', 'Save failed — please try again');
+    } finally {
+      setSavingSlotInterval(false);
+    }
+  }
+
+  async function handleSaveMessaging(e: React.FormEvent) {
+    e.preventDefault();
+    if (winbackBody.length > 1600) {
+      reportError('messaging', 'Win-back message must be 1600 characters or fewer');
+      return;
+    }
+    if (birthdayBody.length > 1600) {
+      reportError('messaging', 'Birthday message must be 1600 characters or fewer');
+      return;
+    }
+    if (cancellationPolicyText.length > 2000) {
+      reportError('messaging', 'Cancellation policy must be 2000 characters or fewer');
+      return;
+    }
+    setSavingMessaging(true);
+    try {
+      const result = await saveAutomationSection('messaging', {
+        winbackBody: winbackBody.trim(),
+        birthdayBody: birthdayBody.trim(),
+        cancellationPolicyText: cancellationPolicyText.trim(),
+      });
+      if (result.salon) {
+        applySalon(result.salon);
+        reportSuccess('messaging', 'Message templates saved');
+      } else {
+        reportError('messaging', result.error ?? 'Save failed');
+      }
+    } catch {
+      reportError('messaging', 'Save failed — please try again');
+    } finally {
+      setSavingMessaging(false);
+    }
+  }
+
+  async function handleSaveLoyalty(e: React.FormEvent) {
+    e.preventDefault();
+    if (!Number.isInteger(loyaltyStampsPerReward) || loyaltyStampsPerReward < 1 || loyaltyStampsPerReward > 100) {
+      reportError('loyalty', 'Stamps per reward must be between 1 and 100');
+      return;
+    }
+    if (loyaltyRewardDescription.length > 200) {
+      reportError('loyalty', 'Reward description must be 200 characters or fewer');
+      return;
+    }
+    setSavingLoyalty(true);
+    try {
+      const result = await saveLoyaltyProgram(loyaltyStampsPerReward, loyaltyRewardDescription);
+      if (result.error) {
+        reportError('loyalty', result.error);
+      } else {
+        setSavedLoyaltyStamps(result.stampsPerReward ?? loyaltyStampsPerReward);
+        setSavedLoyaltyDesc(result.rewardDescription ?? loyaltyRewardDescription);
+        reportSuccess('loyalty', 'Loyalty programme saved');
+      }
+    } catch {
+      reportError('loyalty', 'Save failed — please try again');
+    } finally {
+      setSavingLoyalty(false);
     }
   }
 
@@ -1182,6 +1372,246 @@ export function SalonSettingsForm({ initialSettings }: Props) {
           </div>
         </form>
       </section>
+
+      <Separator />
+
+      {/* Win-back / reactivation */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Win-back campaign</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Automatically message inactive customers on WhatsApp to bring them back. Only sent to customers who have accepted marketing.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveReactivation(e)} className="space-y-4 max-w-lg">
+          <div className={cn('rounded-lg border p-4 transition-colors', reactivationEnabled ? 'border-green-600/25 bg-green-600/5' : 'border-muted bg-muted/20')}>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={reactivationEnabled}
+                onChange={(e) => setReactivationEnabled(e.target.checked)}
+                className="mt-1 size-4 rounded border-input accent-primary"
+              />
+              <div>
+                <p className="text-sm font-medium">Win-back enabled</p>
+                <p className="text-xs text-muted-foreground">Runs daily — message consented customers who haven&apos;t visited recently.</p>
+              </div>
+            </label>
+          </div>
+          {reactivationEnabled && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="reactivation-days">Inactive after (days)</Label>
+                <Input
+                  id="reactivation-days"
+                  type="number"
+                  min={7}
+                  max={180}
+                  value={reactivationInactiveDays}
+                  onChange={(e) => setReactivationInactiveDays(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Min days since last visit before messaging.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reactivation-limit">Daily cap</Label>
+                <Input
+                  id="reactivation-limit"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={reactivationDailyLimit}
+                  onChange={(e) => setReactivationDailyLimit(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Max customers messaged per day.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reactivation-cooldown">Cooldown (days)</Label>
+                <Input
+                  id="reactivation-cooldown"
+                  type="number"
+                  min={7}
+                  max={90}
+                  value={reactivationCooldown}
+                  onChange={(e) => setReactivationCooldown(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Days before re-sending to same customer.</p>
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingReactivation || !reactivationDirty}>
+                {savingReactivation ? 'Saving…' : 'Save win-back settings'}
+              </Button>
+              {reactivationDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
+            </div>
+            <SectionSaveFeedback feedback={getSection('reactivation')} />
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Slot interval */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Booking slot interval</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Controls how granular the time picker is when customers book. Shorter intervals show more options; longer intervals simplify scheduling.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveSlotInterval(e)} className="space-y-4 max-w-sm">
+          <div className="space-y-2">
+            <Label>Slot interval</Label>
+            <div className="flex flex-wrap gap-2">
+              {[5, 10, 15, 30, 60].map((min) => (
+                <button
+                  key={min}
+                  type="button"
+                  onClick={() => setSlotIntervalMin(min)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-sm border transition-colors',
+                    slotIntervalMin === min
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background border-input hover:border-ring',
+                  )}
+                >
+                  {min === 60 ? '1 hour' : `${min} min`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingSlotInterval || !slotIntervalDirty}>
+                {savingSlotInterval ? 'Saving…' : 'Save slot interval'}
+              </Button>
+              {slotIntervalDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
+            </div>
+            <SectionSaveFeedback feedback={getSection('slotInterval')} />
+          </div>
+        </form>
+      </section>
+
+      <Separator />
+
+      {/* Message templates */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Campaign message templates</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Customise automatic WhatsApp messages. Use <code className="font-mono text-xs bg-muted px-1 rounded">{'{name}'}</code> for the customer&apos;s first name and <code className="font-mono text-xs bg-muted px-1 rounded">{'{salon}'}</code> for your salon name. Leave blank to use the smart default.
+          </p>
+        </div>
+        <form onSubmit={(e) => void handleSaveMessaging(e)} className="space-y-4 max-w-lg">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="winback-body">Win-back message</Label>
+              <span className={`text-xs tabular-nums ${winbackBody.length > 1600 ? 'text-destructive' : 'text-muted-foreground'}`}>{winbackBody.length}/1600</span>
+            </div>
+            <textarea
+              id="winback-body"
+              value={winbackBody}
+              onChange={(e) => setWinbackBody(e.target.value)}
+              rows={3}
+              maxLength={1700}
+              placeholder="Hey {name}! We miss you at {salon}. It's been a while — reply 1 to book. Reply STOP to opt out."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[72px] focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="birthday-body">Birthday message</Label>
+              <span className={`text-xs tabular-nums ${birthdayBody.length > 1600 ? 'text-destructive' : 'text-muted-foreground'}`}>{birthdayBody.length}/1600</span>
+            </div>
+            <textarea
+              id="birthday-body"
+              value={birthdayBody}
+              onChange={(e) => setBirthdayBody(e.target.value)}
+              rows={3}
+              maxLength={1700}
+              placeholder="Happy birthday {name}! 🎂 From all of us at {salon} — reply BIRTHDAY for a special treat."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[72px] focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="cancellation-policy">Cancellation policy</Label>
+              <span className={`text-xs tabular-nums ${cancellationPolicyText.length > 2000 ? 'text-destructive' : 'text-muted-foreground'}`}>{cancellationPolicyText.length}/2000</span>
+            </div>
+            <textarea
+              id="cancellation-policy"
+              value={cancellationPolicyText}
+              onChange={(e) => setCancellationPolicyText(e.target.value)}
+              rows={4}
+              maxLength={2100}
+              placeholder="e.g. Cancellations within 24 hours of your appointment will incur a 50% fee. No-shows will be charged in full."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[96px] focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <p className="text-xs text-muted-foreground">Shown to customers when they request a cancellation via WhatsApp.</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <Button type="submit" size="sm" disabled={savingMessaging || !messagingDirty}>
+                {savingMessaging ? 'Saving…' : 'Save message templates'}
+              </Button>
+              {messagingDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
+            </div>
+            <SectionSaveFeedback feedback={getSection('messaging')} />
+          </div>
+        </form>
+      </section>
+
+      {loyaltyProgram !== undefined && (
+        <>
+          <Separator />
+          <section className="space-y-4">
+            <div>
+              <h3 className="text-base font-semibold">Loyalty programme</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Configure how many stamps customers need to earn a reward and what they receive.
+              </p>
+            </div>
+            <form onSubmit={(e) => void handleSaveLoyalty(e)} className="space-y-4 max-w-sm">
+              <div className="space-y-2">
+                <Label htmlFor="stamps-per-reward">Stamps needed for a reward</Label>
+                <Input
+                  id="stamps-per-reward"
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={loyaltyStampsPerReward}
+                  onChange={(e) => setLoyaltyStampsPerReward(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">Default: 10. Customers earn one stamp per completed visit.</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="reward-description">Reward description</Label>
+                  <span className={`text-xs tabular-nums ${loyaltyRewardDescription.length > 200 ? 'text-destructive' : 'text-muted-foreground'}`}>{loyaltyRewardDescription.length}/200</span>
+                </div>
+                <Input
+                  id="reward-description"
+                  value={loyaltyRewardDescription}
+                  onChange={(e) => setLoyaltyRewardDescription(e.target.value)}
+                  placeholder="e.g. Free haircut of your choice"
+                  maxLength={210}
+                />
+                <p className="text-xs text-muted-foreground">Shown to customers when they check their loyalty balance on WhatsApp.</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-3">
+                  <Button type="submit" size="sm" disabled={savingLoyalty || !loyaltyDirty}>
+                    {savingLoyalty ? 'Saving…' : 'Save loyalty settings'}
+                  </Button>
+                  {loyaltyDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
+                </div>
+                <SectionSaveFeedback feedback={getSection('loyalty')} />
+              </div>
+            </form>
+          </section>
+        </>
+      )}
     </div>
   );
 }

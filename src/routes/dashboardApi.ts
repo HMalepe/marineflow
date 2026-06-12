@@ -3122,6 +3122,60 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  // ─── Loyalty program settings (Item 36, 39) ──────────────────────────
+  app.get('/loyalty/program', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const prog = await db.loyaltyProgram.findFirst({ where: { salonId: user.salonId } });
+      if (!prog) return { stampsPerReward: 10, rewardDescription: '' };
+      return {
+        stampsPerReward: prog.stampsPerReward,
+        rewardDescription: prog.rewardDescription ?? '',
+      };
+    });
+  });
+
+  app.patch<{ Body: { stampsPerReward?: number; rewardDescription?: string } }>(
+    '/loyalty/program',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { stampsPerReward, rewardDescription } = request.body ?? {};
+
+        if (stampsPerReward !== undefined) {
+          if (!Number.isInteger(stampsPerReward) || stampsPerReward < 1 || stampsPerReward > 100) {
+            reply.code(400);
+            return { error: 'Stamps per reward must be between 1 and 100' };
+          }
+        }
+        if (rewardDescription !== undefined && rewardDescription.length > 200) {
+          reply.code(400);
+          return { error: 'Reward description must be 200 characters or fewer' };
+        }
+
+        const db = getTenantDb();
+        let prog = await db.loyaltyProgram.findFirst({ where: { salonId: user.salonId } });
+        if (!prog) {
+          reply.code(404);
+          return { error: 'No loyalty programme found — enable loyalty in bot settings first' };
+        }
+
+        prog = await db.loyaltyProgram.update({
+          where: { id: prog.id },
+          data: {
+            ...(stampsPerReward !== undefined ? { stampsPerReward } : {}),
+            ...(rewardDescription !== undefined ? { rewardDescription: rewardDescription.trim() } : {}),
+          },
+        });
+
+        return {
+          stampsPerReward: prog.stampsPerReward,
+          rewardDescription: prog.rewardDescription ?? '',
+        };
+      });
+    },
+  );
+
   // ─── No-show by staff/service (Item 27) ───────────────────────────────
   app.get('/analytics/no-show-patterns', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
