@@ -941,6 +941,19 @@ async function processInboundWhatsApp(
   if (WHATSAPP_MENU_STEPS.includes(conv.step)) {
     try {
       conv = await reloadConversation(conv.id);
+      // AI assist runs first — catches negative sentiment and natural language inputs.
+      // Numeric menu choices pass through unhandled and fall to handleMenu below.
+      const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
+      if (aiResult.negativeSentiment) {
+        await escalateNegativeSentiment(conv, text);
+        return;
+      }
+      if (aiResult.handled && aiResult.reply) {
+        await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
+        syncConvContext(conv, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
+        await reply(conv, aiResult.reply);
+        return;
+      }
       await handleMenu(conv, text);
       if ((ctx(conv).errorCount ?? 0) > 0) {
         await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
