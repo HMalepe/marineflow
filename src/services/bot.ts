@@ -959,55 +959,14 @@ async function processInboundWhatsApp(
     return;
   }
 
-  const aiSteps: ConversationStep[] = [ConversationStep.FAQ];
-  const menuHandlerSteps: ConversationStep[] = [
+  // AI assist runs first for menu/greeting/idle/faq steps — catches negative sentiment
+  // and handles natural language before falling through to structured menu routing.
+  const aiSteps: ConversationStep[] = [
     ConversationStep.GREETING,
     ConversationStep.MENU,
     ConversationStep.IDLE,
+    ConversationStep.FAQ,
   ];
-  const bookingFlowSteps: ConversationStep[] = [
-    ConversationStep.COLLECT_FIRST_NAME,
-    ConversationStep.COLLECT_LAST_NAME,
-    ConversationStep.COLLECT_EMAIL,
-    ConversationStep.COLLECT_DATE_OF_BIRTH,
-    ConversationStep.BOOKING_POPIA_CONSENT,
-    ConversationStep.PICK_BRANCH,
-    ConversationStep.PICK_SERVICE,
-    ConversationStep.PICK_STAFF,
-    ConversationStep.PICK_DATE,
-    ConversationStep.PICK_SLOT,
-    ConversationStep.CONFIRM_BOOKING,
-  ];
-  if (bookingFlowSteps.includes(conv.step)) {
-    try {
-      await routeConversation(conv, text);
-    } catch (err) {
-      logger.error({ err, convId: conv.id, step: conv.step }, 'booking_flow_error');
-      if (!hasPendingOutboundForConv(conv.id)) {
-        await reply(
-          conv,
-          'Sorry — something went wrong while booking. Reply *MENU* to start again.',
-        );
-      }
-    }
-    return;
-  }
-  if (menuHandlerSteps.includes(conv.step)) {
-    try {
-      await handleMenu(conv, text);
-    } catch (err) {
-      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
-      if (!hasPendingOutboundForConv(conv.id)) {
-        await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
-        syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-        await replyMenu(conv);
-      }
-    }
-    if ((ctx(conv).errorCount ?? 0) > 0) {
-      await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
-    }
-    return;
-  }
   if (aiSteps.includes(conv.step)) {
     const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
     // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
@@ -1017,6 +976,7 @@ async function processInboundWhatsApp(
     }
     if (aiResult.handled && aiResult.reply) {
       await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
+      syncConvContext(conv, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
       await reply(conv, aiResult.reply);
       return;
     }
