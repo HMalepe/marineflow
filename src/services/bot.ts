@@ -955,9 +955,11 @@ async function processInboundWhatsApp(
         await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
       }
     } catch (err) {
-      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_navigation_error');
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ err, errMsg, convId: conv.id, step: conv.step }, 'menu_navigation_error');
       await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
       syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await reply(conv, `⚠️ [DEBUG] Menu error: ${errMsg.slice(0, 200)}`);
       await replyMenu(conv);
     }
     return;
@@ -970,9 +972,11 @@ async function processInboundWhatsApp(
         await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
       }
     } catch (err) {
-      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ err, errMsg, convId: conv.id, step: conv.step }, 'menu_handler_error');
       await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
       syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await reply(conv, `⚠️ [DEBUG] Menu error: ${errMsg.slice(0, 200)}`);
       await replyMenu(conv);
     }
     return;
