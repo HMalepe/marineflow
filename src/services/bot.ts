@@ -8,6 +8,7 @@ import {
   type Staff,
 } from '@prisma/client';
 import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
+import { prisma } from '../lib/prisma.js';
 import {
   assertTenantActive,
   resolveTenantForInbound,
@@ -229,9 +230,22 @@ function ctx(conv: Conversation): BotContext {
   return (conv.context ?? {}) as BotContext;
 }
 
+/** undefined in patch = delete key (Prisma Json rejects undefined values). */
+function applyContextPatch(base: BotContext, patch: Partial<BotContext>): BotContext {
+  const next: BotContext = { ...base };
+  for (const [key, value] of Object.entries(patch) as [keyof BotContext, unknown][]) {
+    if (value === undefined) {
+      delete next[key];
+    } else {
+      (next as Record<string, unknown>)[key as string] = value;
+    }
+  }
+  return next;
+}
+
 async function saveCtx(convId: string, patch: Partial<BotContext>, step?: ConversationStep) {
   const conv = await getTenantDb().conversation.findUniqueOrThrow({ where: { id: convId } });
-  const next = { ...ctx(conv), ...patch };
+  const next = applyContextPatch(ctx(conv), patch);
   await getTenantDb().conversation.update({
     where: { id: convId },
     data: {
@@ -496,11 +510,31 @@ export async function handleInboundWhatsApp(input: {
     });
   } catch (err) {
     logger.error({ err, tenantId: tenant.id, waId }, 'bot_transaction_failed');
-    await sendTenantWhatsApp(
-      tenant.id,
-      waId,
-      'Sorry — we hit a technical glitch. Please try again in a moment or reply MENU.',
-    );
+    // Last resort — send the menu without persisting (avoid alarming the customer)
+    try {
+      const salon = await prisma.salon.findUnique({
+        where: { id: tenant.id },
+        select: {
+          name: true,
+          welcomeMessage: true,
+          botLoyaltyEnabled: true,
+          metadata: true,
+          openTime: true,
+          closeTime: true,
+          timezone: true,
+          whatsappPhoneId: true,
+          addressLine: true,
+          phoneDisplay: true,
+          parkingNotes: true,
+          accessibility: true,
+        },
+      });
+      if (salon) {
+        await sendTenantWhatsApp(tenant.id, waId, mainMenu(salon as Salon));
+      }
+    } catch (fallbackErr) {
+      logger.error({ err: fallbackErr }, 'bot_fallback_menu_failed');
+    }
   } finally {
     if (lockAcquired) {
       await redis.del(lockKey).catch(() => {});
