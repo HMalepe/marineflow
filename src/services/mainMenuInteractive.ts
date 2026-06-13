@@ -7,7 +7,7 @@ import {
 import type { InteractiveList } from '../lib/integrations/messaging/types.js';
 import {
   buildMainMenuText,
-  MAIN_MENU_CATEGORIES,
+  MAIN_MENU_ITEMS,
   MAIN_MENU_ROW_IDS,
   menuWelcomeLine,
   salonDisplayName,
@@ -22,20 +22,18 @@ export {
 };
 
 /**
- * Build the main menu as a Meta Cloud API interactive list (6 categories).
- * Row ids "1"–"6" match text-menu routing in handleMenu().
+ * Build the main menu as a Meta Cloud API interactive list.
+ * Row ids "1"–"7" match text-menu routing in handleMenu().
  */
 export function buildMainMenuInteractive(salon: SalonMenuInput): InteractiveList {
   const welcome =
     menuWelcomeLine(salon).replace('Reply with a number:', 'Tap below to get started.');
 
-  const rows: InteractiveList['sections'][0]['rows'] = MAIN_MENU_CATEGORIES.map(
-    (cat, index) => ({
-      id: String(index + 1),
-      title: truncateListField(cat.label, 24),
-      description: truncateListField(subMenuDescription(cat.id), 72),
-    }),
-  );
+  const rows: InteractiveList['sections'][0]['rows'] = MAIN_MENU_ITEMS.map((item, index) => ({
+    id: String(index + 1),
+    title: truncateListField(item.label, 24),
+    description: truncateListField(mainMenuRowDescription(item), 72),
+  }));
 
   return normalizeInteractiveList({
     type: 'list',
@@ -46,10 +44,13 @@ export function buildMainMenuInteractive(salon: SalonMenuInput): InteractiveList
   });
 }
 
-function subMenuDescription(categoryId: (typeof MAIN_MENU_CATEGORIES)[number]['id']): string {
-  switch (categoryId) {
-    case 'appointments':
-      return 'Book, view, reschedule, cancel';
+function mainMenuRowDescription(item: (typeof MAIN_MENU_ITEMS)[number]): string {
+  if (item.kind === 'direct') {
+    return item.action === 'book' ? 'Schedule a new visit' : '';
+  }
+  switch (item.id) {
+    case 'my_appointments':
+      return 'View, reschedule, cancel';
     case 'services':
       return 'Hair, nails, massage, beauty, prices';
     case 'rewards':

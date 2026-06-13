@@ -11,32 +11,60 @@ export function salonDisplayName(salon: Pick<SalonMenuInput, 'name' | 'tradingNa
 }
 
 export type MenuCategoryId =
-  | 'appointments'
+  | 'my_appointments'
   | 'services'
   | 'rewards'
   | 'promotions'
   | 'about'
   | 'support';
 
-export const MAIN_MENU_CATEGORIES: Array<{ id: MenuCategoryId; label: string }> = [
-  { id: 'appointments', label: 'Appointments' },
-  { id: 'services', label: 'Services' },
-  { id: 'rewards', label: 'Rewards' },
-  { id: 'promotions', label: 'Promotions' },
-  { id: 'about', label: 'About Us' },
-  { id: 'support', label: 'Support' },
+/** @deprecated legacy context value — maps to my_appointments */
+export type LegacyMenuCategoryId = 'appointments';
+
+export type MainMenuDirectAction = 'book';
+
+export type MainMenuItem =
+  | { kind: 'direct'; action: MainMenuDirectAction; label: string }
+  | { kind: 'category'; id: MenuCategoryId; label: string };
+
+export const MAIN_MENU_ITEMS: MainMenuItem[] = [
+  { kind: 'direct', action: 'book', label: 'Book an appointment' },
+  { kind: 'category', id: 'my_appointments', label: 'My appointments' },
+  { kind: 'category', id: 'services', label: 'Services' },
+  { kind: 'category', id: 'rewards', label: 'Rewards' },
+  { kind: 'category', id: 'promotions', label: 'Promotions' },
+  { kind: 'category', id: 'about', label: 'About Us' },
+  { kind: 'category', id: 'support', label: 'Support' },
 ];
 
-export const MAIN_MENU_ROW_IDS = ['1', '2', '3', '4', '5', '6'] as const;
+export const MAIN_MENU_ROW_IDS = ['1', '2', '3', '4', '5', '6', '7'] as const;
 
 const SUB_MENUS: Record<MenuCategoryId, string[]> = {
-  appointments: ['Book', 'View', 'Reschedule', 'Cancel'],
+  my_appointments: ['View', 'Reschedule', 'Cancel'],
   services: ['Hair', 'Nails', 'Massage', 'Beauty', 'Prices'],
   rewards: ['My Points', 'Redeem', 'Referrals', 'Coupons'],
   promotions: ['Current Specials', 'Packages', 'Gift Vouchers'],
   about: ['Hours', 'Location', 'Contact', 'Team'],
   support: ['FAQ', 'Leave Review', 'Report Issue', 'Speak To Reception'],
 };
+
+const CATEGORY_LABELS: Record<MenuCategoryId, string> = {
+  my_appointments: 'My appointments',
+  services: 'Services',
+  rewards: 'Rewards',
+  promotions: 'Promotions',
+  about: 'About Us',
+  support: 'Support',
+};
+
+/** @deprecated use MAIN_MENU_ITEMS */
+export const MAIN_MENU_CATEGORIES = MAIN_MENU_ITEMS.filter(
+  (item): item is Extract<MainMenuItem, { kind: 'category' }> => item.kind === 'category',
+);
+
+export type MainMenuSelection =
+  | { kind: 'direct'; action: MainMenuDirectAction }
+  | { kind: 'category'; id: MenuCategoryId };
 
 export function menuWelcomeLine(salon: SalonMenuInput): string {
   const custom = salon.welcomeMessage?.trim();
@@ -46,7 +74,7 @@ export function menuWelcomeLine(salon: SalonMenuInput): string {
 
 export function buildMainMenuText(salon: SalonMenuInput): string {
   const welcome = menuWelcomeLine(salon);
-  const lines = MAIN_MENU_CATEGORIES.map((cat, i) => `${i + 1} — ${cat.label}`);
+  const lines = MAIN_MENU_ITEMS.map((item, i) => `${i + 1} — ${item.label}`);
   const meta =
     typeof salon.metadata === 'object' && salon.metadata
       ? (salon.metadata as Record<string, unknown>)
@@ -56,18 +84,27 @@ export function buildMainMenuText(salon: SalonMenuInput): string {
   return [welcome, ...lines, '', 'Reply BACK anytime for this menu.'].join('\n') + specialLine;
 }
 
-export function buildSubMenuText(categoryId: MenuCategoryId): string {
-  const category = MAIN_MENU_CATEGORIES.find((c) => c.id === categoryId);
-  const items = SUB_MENUS[categoryId];
-  const title = category?.label ?? 'Menu';
+export function buildSubMenuText(categoryId: MenuCategoryId | LegacyMenuCategoryId): string {
+  const normalized = normalizeMenuCategoryId(categoryId);
+  if (!normalized) return buildMainMenuText({ name: 'Salon' });
+  const title = CATEGORY_LABELS[normalized];
+  const items = SUB_MENUS[normalized];
   const lines = items.map((label, i) => `${i + 1} — ${label}`);
   return [`*${title}*`, ...lines, '', 'Reply BACK for main menu.'].join('\n');
 }
 
-export function parseMainMenuChoice(text: string): MenuCategoryId | null {
+export function parseMainMenuSelection(text: string): MainMenuSelection | null {
   const n = parseInt(text.trim(), 10);
-  if (!Number.isFinite(n) || n < 1 || n > MAIN_MENU_CATEGORIES.length) return null;
-  return MAIN_MENU_CATEGORIES[n - 1]!.id;
+  if (!Number.isFinite(n) || n < 1 || n > MAIN_MENU_ITEMS.length) return null;
+  const item = MAIN_MENU_ITEMS[n - 1]!;
+  if (item.kind === 'direct') return { kind: 'direct', action: item.action };
+  return { kind: 'category', id: item.id };
+}
+
+/** @deprecated use parseMainMenuSelection */
+export function parseMainMenuChoice(text: string): MenuCategoryId | null {
+  const sel = parseMainMenuSelection(text);
+  return sel?.kind === 'category' ? sel.id : null;
 }
 
 export function parseSubMenuChoice(text: string): number | null {
@@ -87,9 +124,16 @@ export const SERVICE_CATEGORY_ALIASES: Record<ServiceCategoryKey, string[]> = {
   beauty: ['beauty', 'facial', 'makeup', 'wax', 'skin', 'brow', 'lash'],
 };
 
+export function normalizeMenuCategoryId(
+  value: unknown,
+): MenuCategoryId | null {
+  if (value === 'appointments') return 'my_appointments';
+  return isMenuCategoryId(value) ? value : null;
+}
+
 export function isMenuCategoryId(value: unknown): value is MenuCategoryId {
   return (
-    value === 'appointments' ||
+    value === 'my_appointments' ||
     value === 'services' ||
     value === 'rewards' ||
     value === 'promotions' ||

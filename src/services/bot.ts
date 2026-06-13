@@ -35,12 +35,13 @@ import { scheduleConversationActivity } from '../lib/inngest/functions/conversat
 import {
   buildMainMenuText,
   buildSubMenuText,
-  isMenuCategoryId,
-  parseMainMenuChoice,
+  normalizeMenuCategoryId,
+  parseMainMenuSelection,
   parseSubMenuChoice,
   salonDisplayName,
   SERVICE_CATEGORY_ALIASES,
   type MenuCategoryId,
+  type LegacyMenuCategoryId,
   type ServiceCategoryKey,
 } from '../lib/hierarchicalMenu.js';
 import {
@@ -122,8 +123,8 @@ export type BotContext = Record<string, unknown> & {
    * preferred stylist) changes between menu render and reply.
    */
   staffOrderIds?: string[];
-  /** Hierarchical main-menu sub-section (appointments, services, …). */
-  menuCategory?: MenuCategoryId;
+  /** Hierarchical main-menu sub-section (my_appointments, services, …). */
+  menuCategory?: MenuCategoryId | LegacyMenuCategoryId;
   /** When set, PICK_SERVICE only shows these service ids (from Services submenu). */
   serviceFilterIds?: string[];
   /** Hint for manage-booking submenu (view / reschedule / cancel). */
@@ -1809,15 +1810,24 @@ async function menuActionLeaveReview(
 
 async function handleSubMenuChoice(
   conv: Conversation & { customer: Customer; salon: Salon },
-  category: MenuCategoryId,
+  category: MenuCategoryId | LegacyMenuCategoryId,
   choice: number,
 ): Promise<void> {
+  // Legacy submenu had Book as option 1 under "Appointments"
+  if (category === 'appointments') {
+    if (choice === 1) return menuActionStartBooking(conv);
+    if (choice === 2) return menuActionViewBookings(conv, 'view');
+    if (choice === 3) return menuActionViewBookings(conv, 'reschedule');
+    if (choice === 4) return menuActionViewBookings(conv, 'cancel');
+    await reply(conv, 'Invalid choice. Reply BACK for main menu.');
+    return;
+  }
+
   switch (category) {
-    case 'appointments':
-      if (choice === 1) return menuActionStartBooking(conv);
-      if (choice === 2) return menuActionViewBookings(conv, 'view');
-      if (choice === 3) return menuActionViewBookings(conv, 'reschedule');
-      if (choice === 4) return menuActionViewBookings(conv, 'cancel');
+    case 'my_appointments':
+      if (choice === 1) return menuActionViewBookings(conv, 'view');
+      if (choice === 2) return menuActionViewBookings(conv, 'reschedule');
+      if (choice === 3) return menuActionViewBookings(conv, 'cancel');
       break;
     case 'services':
       if (choice === 1) return menuActionShowServiceCategory(conv, 'hair');
@@ -1885,8 +1895,10 @@ async function handleMenu(
     return;
   }
 
-  const activeCategory = ctx(conv).menuCategory;
-  if (isMenuCategoryId(activeCategory)) {
+  const rawCategory = ctx(conv).menuCategory;
+  const activeCategory =
+    rawCategory === 'appointments' ? 'appointments' : normalizeMenuCategoryId(rawCategory);
+  if (activeCategory) {
     const subChoice = parseSubMenuChoice(trimmed);
     if (subChoice != null) {
       await handleSubMenuChoice(conv, activeCategory, subChoice);
@@ -1896,10 +1908,14 @@ async function handleMenu(
     return;
   }
 
-  const mainCategory = parseMainMenuChoice(trimmed);
-  if (mainCategory) {
-    await saveCtx(conv.id, { menuCategory: mainCategory }, ConversationStep.MENU);
-    await reply(conv, buildSubMenuText(mainCategory));
+  const selection = parseMainMenuSelection(trimmed);
+  if (selection?.kind === 'direct' && selection.action === 'book') {
+    await menuActionStartBooking(conv);
+    return;
+  }
+  if (selection?.kind === 'category') {
+    await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
+    await reply(conv, buildSubMenuText(selection.id));
     return;
   }
 

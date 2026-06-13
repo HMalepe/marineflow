@@ -141,7 +141,7 @@ describe('buildCloudInteractivePayload', () => {
       sections: [
         expect.objectContaining({
           title: 'Choose section',
-          rows: expect.arrayContaining([expect.objectContaining({ id: '1', title: 'Appointments' })]),
+          rows: expect.arrayContaining([expect.objectContaining({ id: '1', title: 'Book an appointment' })]),
         }),
       ],
     });

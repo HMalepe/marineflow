@@ -3,7 +3,7 @@ import {
   buildMainMenuText,
   buildSubMenuText,
   menuWelcomeLine,
-  parseMainMenuChoice,
+  parseMainMenuSelection,
   salonDisplayName,
 } from './hierarchicalMenu.js';
 
@@ -29,20 +29,22 @@ describe('hierarchicalMenu', () => {
     ).toBe('Hi from our team!');
   });
 
-  it('builds six top-level categories', () => {
+  it('leads with Book an appointment on the main menu', () => {
     const text = buildMainMenuText(salon);
-    expect(text).toContain('1 — Appointments');
-    expect(text).toContain('6 — Support');
+    expect(text).toContain('1 — Book an appointment');
+    expect(text).toContain('2 — My appointments');
+    expect(text).not.toContain('1 — Appointments');
     expect(text).not.toContain('MarineFlow Demo');
   });
 
-  it('builds sub-menus for each category', () => {
-    expect(buildSubMenuText('appointments')).toContain('1 — Book');
-    expect(buildSubMenuText('support')).toContain('4 — Speak To Reception');
+  it('builds my appointments sub-menu without duplicate book option', () => {
+    expect(buildSubMenuText('my_appointments')).toContain('1 — View');
+    expect(buildSubMenuText('my_appointments')).not.toContain('Book');
   });
 
-  it('parses main menu choices', () => {
-    expect(parseMainMenuChoice('3')).toBe('rewards');
-    expect(parseMainMenuChoice('99')).toBeNull();
+  it('parses main menu selections', () => {
+    expect(parseMainMenuSelection('1')).toEqual({ kind: 'direct', action: 'book' });
+    expect(parseMainMenuSelection('3')).toEqual({ kind: 'category', id: 'services' });
+    expect(parseMainMenuSelection('99')).toBeNull();
   });
 });
