@@ -578,15 +578,29 @@ async function processInboundWhatsApp(
     });
   }
 
-  await getTenantDb().message.create({
-    data: {
-      conversationId: conv.id,
-      customerId: customer.id,
-      direction: MessageDirection.INBOUND,
-      body: text,
-      providerSid: messageSid,
-    },
-  });
+  // Use upsert to avoid P2002 on providerSid if the same wamid arrives twice (Meta retries)
+  if (messageSid) {
+    await getTenantDb().message.upsert({
+      where: { providerSid: messageSid },
+      create: {
+        conversationId: conv.id,
+        customerId: customer.id,
+        direction: MessageDirection.INBOUND,
+        body: text,
+        providerSid: messageSid,
+      },
+      update: {},
+    });
+  } else {
+    await getTenantDb().message.create({
+      data: {
+        conversationId: conv.id,
+        customerId: customer.id,
+        direction: MessageDirection.INBOUND,
+        body: text,
+      },
+    });
+  }
 
   await getTenantDb().conversation.update({
     where: { id: conv.id },
