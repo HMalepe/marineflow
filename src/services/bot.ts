@@ -8,6 +8,7 @@ import {
   type Staff,
 } from '@prisma/client';
 import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
+import { prisma } from '../lib/prisma.js';
 import {
   assertTenantActive,
   resolveTenantForInbound,
