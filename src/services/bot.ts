@@ -531,11 +531,12 @@ async function processInboundWhatsApp(
     });
   }
 
-  let conv = await getTenantDb().conversation.findUnique({
+  let conv: ConvWithRelations;
+  const existingConv = await getTenantDb().conversation.findUnique({
     where: { salonId_customerId: { salonId: salon.id, customerId: customer.id } },
     include: { customer: true, salon: true },
   });
-  if (!conv) {
+  if (!existingConv) {
     conv = await getTenantDb().conversation.create({
       data: {
         salonId: salon.id,
@@ -547,7 +548,7 @@ async function processInboundWhatsApp(
     });
   } else {
     conv = await getTenantDb().conversation.findUniqueOrThrow({
-      where: { id: conv.id },
+      where: { id: existingConv.id },
       include: { customer: true, salon: true },
     });
   }
