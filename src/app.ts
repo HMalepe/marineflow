@@ -211,10 +211,16 @@ export async function buildApp() {
           ? request.headers['x-hub-signature-256']
           : undefined;
 
-      if (!signature || !verifyWebhookRawBuffer(buf, signature)) {
-        logger.warn({ hasSig: !!signature }, 'meta_webhook_signature_failed');
+      if (signature && !verifyWebhookRawBuffer(buf, signature)) {
+        logger.warn({ hasSig: true }, 'meta_webhook_signature_failed');
         return reply.code(401).send({ error: 'invalid_signature' });
       }
+      if (!signature && env.META_APP_SECRET) {
+        // Secret configured but no signature header — reject to prevent unsigned forgeries
+        logger.warn({ hasSig: false }, 'meta_webhook_missing_signature');
+        return reply.code(401).send({ error: 'missing_signature' });
+      }
+      // No secret configured → accept without verification (dev / initial setup)
 
       let parsed: unknown;
       try {
