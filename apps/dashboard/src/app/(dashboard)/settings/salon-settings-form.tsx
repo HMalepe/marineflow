@@ -42,30 +42,43 @@ import {
 
 const WHATSAPP_LIMIT = 4096;
 
-function BookingLinkCopy({ slug }: { slug: string }) {
+function BookingLinkCopy({ slug, phoneDisplay }: { slug: string; phoneDisplay: string | null }) {
   const [copied, setCopied] = useState(false);
-  const url = `https://wa.me/27000000000?text=Hi%2C+I%27d+like+to+book+at+${encodeURIComponent(slug)}`;
+  // Derive E.164 digits from phoneDisplay (strip non-digits, add country code if needed)
+  const e164 = phoneDisplay
+    ? phoneDisplay.replace(/\D/g, '').replace(/^0/, '27')
+    : '';
+  const url = e164
+    ? `https://wa.me/${e164}?text=${encodeURIComponent(`Hi, I'd like to book`)}`
+    : `https://wa.me/?text=${encodeURIComponent(`Hi, I'd like to book at ${slug}`)}`;
   return (
-    <div className="flex items-center gap-2 max-w-md">
-      <input
-        readOnly
-        value={url}
-        className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono text-muted-foreground select-all truncate"
-        onClick={(e) => (e.target as HTMLInputElement).select()}
-      />
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={() => {
-          void navigator.clipboard.writeText(url).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-          });
-        }}
-      >
-        {copied ? 'Copied!' : 'Copy'}
-      </Button>
+    <div className="space-y-2 max-w-md">
+      {!e164 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Add your phone number in the Location section to generate a complete booking link.
+        </p>
+      )}
+      <div className="flex items-center gap-2">
+        <input
+          readOnly
+          value={url}
+          className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono text-muted-foreground select-all truncate"
+          onClick={(e) => (e.target as HTMLInputElement).select()}
+        />
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            void navigator.clipboard.writeText(url).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            });
+          }}
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -813,7 +826,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             Share this link with customers to let them start a WhatsApp booking conversation.
           </p>
         </div>
-        <BookingLinkCopy slug={salon.slug} />
+        <BookingLinkCopy slug={salon.slug} phoneDisplay={salon.phoneDisplay ?? null} />
       </section>
 
       <Separator />

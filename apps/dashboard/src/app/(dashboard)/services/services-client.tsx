@@ -218,14 +218,17 @@ export function ServicesClient({ token }: Props) {
   }
 
   async function handleReorder(serviceId: string, direction: 'up' | 'down') {
+    // Assign sequential sort orders first to eliminate gaps/ties, then swap
     const sorted = [...services].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-    const idx = sorted.findIndex((s) => s.id === serviceId);
+    const normalised = sorted.map((s, i) => ({ ...s, sortOrder: i * 10 }));
+    const idx = normalised.findIndex((s) => s.id === serviceId);
     if (idx < 0) return;
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= sorted.length) return;
-    const a = sorted[idx];
-    const b = sorted[swapIdx];
-    const aOrder = b.sortOrder === a.sortOrder ? (direction === 'up' ? a.sortOrder - 1 : a.sortOrder + 1) : b.sortOrder;
+    if (swapIdx < 0 || swapIdx >= normalised.length) return;
+    const a = normalised[idx]!;
+    const b = normalised[swapIdx]!;
+    // Swap their sort orders
+    const aOrder = b.sortOrder;
     const bOrder = a.sortOrder;
     try {
       await Promise.all([
@@ -236,7 +239,7 @@ export function ServicesClient({ token }: Props) {
         prev.map((s) => s.id === a.id ? { ...s, sortOrder: aOrder } : s.id === b.id ? { ...s, sortOrder: bOrder } : s),
       );
     } catch {
-      // silent — list will refresh on next load
+      void loadServices(true); // re-sync on failure
     }
   }
 

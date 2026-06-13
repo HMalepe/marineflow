@@ -3793,17 +3793,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   // ─── Appointment bulk complete (Item 50) ─────────────────────────────
-  app.post<{ Body: { appointmentIds: string[] } }>(
+  app.post<{ Body: { ids: string[] } }>(
     '/appointments/bulk-complete',
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
-        const { appointmentIds } = request.body ?? {};
-        if (!Array.isArray(appointmentIds) || appointmentIds.length === 0) {
+        const { ids } = request.body ?? {};
+        if (!Array.isArray(ids) || ids.length === 0) {
           reply.code(400);
-          return { error: 'appointment_ids_required' };
+          return { error: 'ids_required' };
         }
-        if (appointmentIds.length > 50) {
+        if (ids.length > 50) {
           reply.code(400);
           return { error: 'max_50_appointments_per_bulk' };
         }
@@ -3812,7 +3812,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const now = new Date();
         const result = await db.appointment.updateMany({
           where: {
-            id: { in: appointmentIds },
+            id: { in: ids },
             salonId: user.salonId,
             status: { in: ['CONFIRMED', 'CONFIRMED_PAID'] },
             start: { lte: now },
@@ -3820,7 +3820,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           data: { status: 'COMPLETED', completedAt: now },
         });
 
-        return { updated: result.count };
+        return { completed: result.count, skipped: ids.length - result.count };
       });
     },
   );
@@ -3855,9 +3855,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   // ─── Webhook Subscriptions ───────────────────────────────────────────
   app.get('/webhooks', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const subs = await db.webhookSubscription.findMany({
+        where: { salonId: user.salonId },
         orderBy: { createdAt: 'desc' },
         include: { _count: { select: { deliveries: true } } },
       });
@@ -3908,19 +3909,23 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     '/webhooks/:id',
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
-      return withUserTenant(request, reply, async () => {
+      return withUserTenant(request, reply, async (user) => {
         const { id } = request.params as { id: string };
         const db = getTenantDb();
-        await db.webhookSubscription.delete({ where: { id } }).catch(() => null);
+        // Guard: only delete subscriptions belonging to this salon
+        await db.webhookSubscription.deleteMany({ where: { id, salonId: user.salonId } });
         return { ok: true };
       });
     },
   );
 
   app.get('/webhooks/:id/deliveries', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const { id } = request.params as { id: string };
       const db = getTenantDb();
+      // Verify subscription belongs to this salon before returning deliveries
+      const sub = await db.webhookSubscription.findFirst({ where: { id, salonId: user.salonId } });
+      if (!sub) { reply.code(404); return { error: 'not_found' }; }
       const deliveries = await db.webhookDelivery.findMany({
         where: { subscriptionId: id },
         orderBy: { createdAt: 'desc' },

@@ -87,9 +87,11 @@ function getDisplayName(c: CustomerDetail): string {
 }
 
 function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  const parts = trimmed.split(/\s+/);
+  if (parts.length >= 2) return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase() || '?';
+  return trimmed.slice(0, 2).toUpperCase();
 }
 
 function formatPhone(raw: string): string {
@@ -238,7 +240,10 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       .filter((a) => a.status === 'COMPLETED')
       .map((a) => {
         const d = new Date(a.start);
-        const week = Math.floor(d.getTime() / (7 * 24 * 3600 * 1000));
+        // ISO week number: DST-safe, uses year*100+week so no cross-year collisions
+        const jan4 = new Date(d.getFullYear(), 0, 4);
+        const startOfWeek1 = new Date(jan4.getTime() - ((jan4.getDay() || 7) - 1) * 86400000);
+        const week = d.getFullYear() * 100 + Math.floor((d.getTime() - startOfWeek1.getTime()) / (7 * 86400000)) + 1;
         return week;
       })
       .sort((a, b) => b - a);

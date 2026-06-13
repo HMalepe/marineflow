@@ -315,7 +315,7 @@ export function AnalyticsClient({ token }: Props) {
             <KpiCard label="This month revenue"  value={formatCurrency(currentMonthRevenue(data.revenue))} />
             <KpiCard label="Bookings (30 days)"  value={last30DaysBookings(data.dailyBookings)} />
             <KpiCard label="Retention rate"      value={retentionRate(data.retention)} />
-            <KpiCard label="Active customers"    value={data.retention.length > 0 ? data.retention[data.retention.length - 1]!.unique_customers : 0} />
+            <KpiCard label="Active customers"    value={data.retention.at(-1)?.unique_customers ?? 0} />
           </div>
 
           {/* Daily bar chart */}
@@ -725,7 +725,7 @@ export function AnalyticsClient({ token }: Props) {
                             {c.failed}
                           </td>
                           <td className="px-4 py-3 text-xs text-muted-foreground">
-                            {date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                            {date ? (() => { const d = new Date(date); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' }); })() : '—'}
                           </td>
                         </tr>
                       );
@@ -788,8 +788,7 @@ function last30DaysBookings(daily: DailyBooking[]): number {
 }
 
 function retentionRate(retention: RetentionSummary[]): string {
-  if (retention.length === 0) return '—';
-  const latest = retention[retention.length - 1]!;
-  if (latest.unique_customers === 0) return '—';
+  const latest = retention.at(-1);
+  if (!latest || latest.unique_customers === 0) return '—';
   return `${Math.round((latest.returning_customers / latest.unique_customers) * 100)}%`;
 }
