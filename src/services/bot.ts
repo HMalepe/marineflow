@@ -8,7 +8,6 @@ import {
   type Staff,
 } from '@prisma/client';
 import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
-import { prisma } from '../lib/prisma.js';
 import {
   assertTenantActive,
   resolveTenantForInbound,
@@ -515,31 +514,17 @@ export async function handleInboundWhatsApp(input: {
       await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
     });
   } catch (err) {
-    logger.error({ err, tenantId: tenant.id, waId }, 'bot_transaction_failed');
-    // Last resort — send the menu without persisting (avoid alarming the customer)
+    const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
+    logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
+    // Last resort — send an error notice so users know something went wrong (not a silent menu)
     try {
-      const salon = await prisma.salon.findUnique({
-        where: { id: tenant.id },
-        select: {
-          name: true,
-          welcomeMessage: true,
-          botLoyaltyEnabled: true,
-          metadata: true,
-          openTime: true,
-          closeTime: true,
-          timezone: true,
-          whatsappPhoneId: true,
-          addressLine: true,
-          phoneDisplay: true,
-          parkingNotes: true,
-          accessibility: true,
-        },
-      });
-      if (salon) {
-        await sendTenantWhatsApp(tenant.id, waId, buildMainMenuText(salon as Salon));
-      }
+      await sendTenantWhatsApp(
+        tenant.id,
+        waId,
+        'Sorry, something went wrong on our end. Please try again in a moment.\n\nReply *MENU* to restart.',
+      );
     } catch (fallbackErr) {
-      logger.error({ err: fallbackErr }, 'bot_fallback_menu_failed');
+      logger.error({ err: fallbackErr }, 'bot_fallback_send_failed');
     }
   } finally {
     if (lockAcquired) {
@@ -704,7 +689,7 @@ async function processInboundWhatsApp(
   conv = recovery.conv;
 
   const lower = text.toLowerCase();
-  if (lower === 'undo' || lower === 'back') {
+  if (lower === 'undo' || lower === 'back' || lower === 'menu') {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyMenu(conv);
     return;
@@ -1911,6 +1896,7 @@ async function handleMenu(
 
   const selection = parseMainMenuSelection(trimmed);
   if (selection?.kind === 'direct' && selection.action === 'book') {
+    await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
     await menuActionStartBooking(conv);
     return;
   }
@@ -1920,6 +1906,7 @@ async function handleMenu(
     return;
   }
 
+  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
   await replyMenu(conv);
 }
 
