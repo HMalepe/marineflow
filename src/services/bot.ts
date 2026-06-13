@@ -1825,9 +1825,10 @@ async function handleSubMenuChoice(
 
   switch (category) {
     case 'my_appointments':
-      if (choice === 1) return menuActionViewBookings(conv, 'view');
-      if (choice === 2) return menuActionViewBookings(conv, 'reschedule');
-      if (choice === 3) return menuActionViewBookings(conv, 'cancel');
+      if (choice === 1) return menuActionStartBooking(conv);
+      if (choice === 2) return menuActionViewBookings(conv, 'view');
+      if (choice === 3) return menuActionViewBookings(conv, 'reschedule');
+      if (choice === 4) return menuActionViewBookings(conv, 'cancel');
       break;
     case 'services':
       if (choice === 1) return menuActionShowServiceCategory(conv, 'hair');

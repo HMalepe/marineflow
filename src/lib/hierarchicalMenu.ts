@@ -29,7 +29,7 @@ export type MainMenuItem =
 
 export const MAIN_MENU_ITEMS: MainMenuItem[] = [
   { kind: 'direct', action: 'book', label: 'Book an appointment' },
-  { kind: 'category', id: 'my_appointments', label: 'My appointments' },
+  { kind: 'category', id: 'my_appointments', label: 'My Bookings' },
   { kind: 'category', id: 'services', label: 'Services' },
   { kind: 'category', id: 'rewards', label: 'Rewards' },
   { kind: 'category', id: 'promotions', label: 'Promotions' },
@@ -40,7 +40,7 @@ export const MAIN_MENU_ITEMS: MainMenuItem[] = [
 export const MAIN_MENU_ROW_IDS = ['1', '2', '3', '4', '5', '6', '7'] as const;
 
 const SUB_MENUS: Record<MenuCategoryId, string[]> = {
-  my_appointments: ['View', 'Reschedule', 'Cancel'],
+  my_appointments: ['Book', 'View', 'Reschedule', 'Cancel'],
   services: ['Hair', 'Nails', 'Massage', 'Beauty', 'Prices'],
   rewards: ['My Points', 'Redeem', 'Referrals', 'Coupons'],
   promotions: ['Current Specials', 'Packages', 'Gift Vouchers'],
@@ -49,7 +49,7 @@ const SUB_MENUS: Record<MenuCategoryId, string[]> = {
 };
 
 const CATEGORY_LABELS: Record<MenuCategoryId, string> = {
-  my_appointments: 'My appointments',
+  my_appointments: 'My Bookings',
   services: 'Services',
   rewards: 'Rewards',
   promotions: 'Promotions',

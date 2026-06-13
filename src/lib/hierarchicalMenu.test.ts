@@ -32,14 +32,14 @@ describe('hierarchicalMenu', () => {
   it('leads with Book an appointment on the main menu', () => {
     const text = buildMainMenuText(salon);
     expect(text).toContain('1 — Book an appointment');
-    expect(text).toContain('2 — My appointments');
+    expect(text).toContain('2 — My Bookings');
     expect(text).not.toContain('1 — Appointments');
     expect(text).not.toContain('MarineFlow Demo');
   });
 
-  it('builds my appointments sub-menu without duplicate book option', () => {
-    expect(buildSubMenuText('my_appointments')).toContain('1 — View');
-    expect(buildSubMenuText('my_appointments')).not.toContain('Book');
+  it('builds My Bookings sub-menu with Book as first option', () => {
+    expect(buildSubMenuText('my_appointments')).toContain('1 — Book');
+    expect(buildSubMenuText('my_appointments')).toContain('2 — View');
   });
 
   it('parses main menu selections', () => {
