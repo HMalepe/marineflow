@@ -59,6 +59,8 @@ export interface SalonAutomations {
   booking: {
     /** Slot interval in minutes — controls how granular the time picker is */
     slotIntervalMin: number;
+    /** Minutes before a HELD appointment is auto-released if payment not received. 0 = no auto-release. */
+    holdTimeoutMin: number;
   };
   messaging: {
     winbackBody: string;
@@ -122,6 +124,7 @@ export const DEFAULT_AUTOMATIONS: SalonAutomations = {
   },
   booking: {
     slotIntervalMin: 15,
+    holdTimeoutMin: 30,
   },
   messaging: {
     winbackBody: '',
@@ -336,6 +339,7 @@ export function parseAutomationsFromMetadata(metadata: unknown): SalonAutomation
         const v = clampInt(bookingRaw.slotIntervalMin, 5, 60, 15);
         return [5, 10, 15, 30, 60].includes(v) ? v : 15;
       })(),
+      holdTimeoutMin: clampInt(bookingRaw.holdTimeoutMin, 0, 240, 30),
     },
     messaging: {
       winbackBody:

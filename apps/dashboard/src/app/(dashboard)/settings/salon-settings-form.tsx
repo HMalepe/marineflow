@@ -179,6 +179,9 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const [slotIntervalMin, setSlotIntervalMin] = useState(
     initialSettings.automations?.booking?.slotIntervalMin ?? 15,
   );
+  const [holdTimeoutMin, setHoldTimeoutMin] = useState(
+    initialSettings.automations?.booking?.holdTimeoutMin ?? 30,
+  );
   const [savingSlotInterval, setSavingSlotInterval] = useState(false);
 
   // Phase 4 — message templates
@@ -232,6 +235,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     setReactivationDailyLimit(s.automations?.reactivation?.dailyLimit ?? 50);
     setReactivationCooldown(s.automations?.reactivation?.cooldownDays ?? 30);
     setSlotIntervalMin(s.automations?.booking?.slotIntervalMin ?? 15);
+    setHoldTimeoutMin(s.automations?.booking?.holdTimeoutMin ?? 30);
     setWinbackBody(s.automations?.messaging?.winbackBody ?? '');
     setBirthdayBody(s.automations?.messaging?.birthdayBody ?? '');
     setCancellationPolicyText(s.automations?.messaging?.cancellationPolicyText ?? '');
@@ -308,8 +312,10 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   }, [saved, reactivationEnabled, reactivationInactiveDays, reactivationDailyLimit, reactivationCooldown]);
 
   const slotIntervalDirty = useMemo(
-    () => slotIntervalMin !== (saved.automations?.booking?.slotIntervalMin ?? 15),
-    [saved, slotIntervalMin],
+    () =>
+      slotIntervalMin !== (saved.automations?.booking?.slotIntervalMin ?? 15) ||
+      holdTimeoutMin !== (saved.automations?.booking?.holdTimeoutMin ?? 30),
+    [saved, slotIntervalMin, holdTimeoutMin],
   );
 
   const messagingDirty = useMemo(() => {
@@ -591,7 +597,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     e.preventDefault();
     setSavingSlotInterval(true);
     try {
-      const result = await saveAutomationSection('booking', { slotIntervalMin });
+      const result = await saveAutomationSection('booking', { slotIntervalMin, holdTimeoutMin });
       if (result.salon) {
         applySalon(result.salon);
         reportSuccess('slotInterval', 'Slot interval saved');
@@ -1481,10 +1487,29 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
               ))}
             </div>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="hold-timeout">Hold timeout (minutes)</Label>
+            <p className="text-xs text-muted-foreground">
+              Held appointments are auto-cancelled after this many minutes if payment is not received. Set to 0 to disable auto-release.
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                id="hold-timeout"
+                type="number"
+                min={0}
+                max={240}
+                step={5}
+                value={holdTimeoutMin}
+                onChange={(e) => setHoldTimeoutMin(Math.max(0, Math.min(240, parseInt(e.target.value) || 0)))}
+                className="w-24"
+              />
+              <span className="text-sm text-muted-foreground">min{holdTimeoutMin === 0 ? ' (disabled)' : ''}</span>
+            </div>
+          </div>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Button type="submit" size="sm" disabled={savingSlotInterval || !slotIntervalDirty}>
-                {savingSlotInterval ? 'Saving…' : 'Save slot interval'}
+                {savingSlotInterval ? 'Saving…' : 'Save booking settings'}
               </Button>
               {slotIntervalDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
             </div>

@@ -39,6 +39,12 @@ interface Service {
   durationMin: number;
   bufferMin: number;
   active: boolean;
+  category?: { id: string; name: string } | null;
+}
+
+interface ServiceCategory {
+  id: string;
+  name: string;
 }
 
 interface ServiceForm {
@@ -117,6 +123,14 @@ export function ServicesClient({ token }: Props) {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback();
 
+  // Service categories
+  const [categories, setCategories] = useState<ServiceCategory[]>([]);
+  const [catInput, setCatInput] = useState('');
+  const [catSaving, setCatSaving] = useState(false);
+  const [catDeletingId, setCatDeletingId] = useState<string | null>(null);
+  const [catEditId, setCatEditId] = useState<string | null>(null);
+  const [catEditName, setCatEditName] = useState('');
+
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
   }, []);
@@ -143,9 +157,63 @@ export function ServicesClient({ token }: Props) {
     }
   }, [token, showToast]);
 
+  const loadCategories = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ categories: ServiceCategory[] }>('/service-categories', {}, token);
+      setCategories(data.categories ?? []);
+    } catch {
+      // non-critical
+    }
+  }, [token]);
+
   useEffect(() => {
     void loadServices();
-  }, [loadServices]);
+    void loadCategories();
+  }, [loadServices, loadCategories]);
+
+  async function handleAddCategory(e: React.FormEvent) {
+    e.preventDefault();
+    const name = catInput.trim();
+    if (!name) return;
+    setCatSaving(true);
+    try {
+      await apiFetch('/service-categories', { method: 'POST', body: JSON.stringify({ name }) }, token);
+      setCatInput('');
+      void loadCategories();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to add category', 'error');
+    } finally {
+      setCatSaving(false);
+    }
+  }
+
+  async function handleRenameCategory(id: string) {
+    const name = catEditName.trim();
+    if (!name) return;
+    setCatSaving(true);
+    try {
+      await apiFetch(`/service-categories/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }, token);
+      setCatEditId(null);
+      void loadCategories();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to rename category', 'error');
+    } finally {
+      setCatSaving(false);
+    }
+  }
+
+  async function handleDeleteCategory(id: string) {
+    setCatDeletingId(id);
+    try {
+      await apiFetch(`/service-categories/${id}`, { method: 'DELETE' }, token);
+      void loadCategories();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Failed to delete category', 'error');
+    } finally {
+      setCatDeletingId(null);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -350,6 +418,61 @@ export function ServicesClient({ token }: Props) {
         <StatCard label="Inactive" value={inactiveCount} />
       </div>
 
+      {/* Service categories */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Service categories</CardTitle>
+          <p className="text-sm text-muted-foreground">Organise services into categories for cleaner menus.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <form onSubmit={(e) => void handleAddCategory(e)} className="flex gap-2 max-w-sm">
+            <Input
+              placeholder="New category name…"
+              value={catInput}
+              onChange={(e) => setCatInput(e.target.value)}
+              maxLength={80}
+            />
+            <Button type="submit" size="sm" disabled={catSaving || !catInput.trim()}>Add</Button>
+          </form>
+          {categories.length === 0 && (
+            <p className="text-sm text-muted-foreground">No categories yet.</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat) => (
+              <div key={cat.id} className="flex items-center gap-1 rounded-full border bg-muted/40 pl-3 pr-1 py-1">
+                {catEditId === cat.id ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={catEditName}
+                      onChange={(e) => setCatEditName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') void handleRenameCategory(cat.id); if (e.key === 'Escape') setCatEditId(null); }}
+                      className="text-xs bg-transparent border-b border-primary outline-none w-28"
+                      maxLength={80}
+                    />
+                    <button type="button" onClick={() => void handleRenameCategory(cat.id)} disabled={catSaving} className="text-xs text-primary hover:underline px-1">Save</button>
+                    <button type="button" onClick={() => setCatEditId(null)} className="text-xs text-muted-foreground hover:underline px-1">Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs font-medium">{cat.name}</span>
+                    <button type="button" onClick={() => { setCatEditId(cat.id); setCatEditName(cat.name); }} className="ml-1 text-muted-foreground hover:text-foreground text-xs px-1">✏</button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteCategory(cat.id)}
+                      disabled={catDeletingId === cat.id}
+                      className="text-muted-foreground hover:text-destructive text-xs px-1"
+                    >
+                      {catDeletingId === cat.id ? '…' : '×'}
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -428,8 +551,11 @@ export function ServicesClient({ token }: Props) {
                 >
                   <TableCell>
                     <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium">{service.name}</span>
+                        {service.category && (
+                          <Badge variant="outline" className="text-[10px] font-normal">{service.category.name}</Badge>
+                        )}
                         {!service.active && (
                           <Badge variant="secondary" className="text-[10px]">
                             Hidden

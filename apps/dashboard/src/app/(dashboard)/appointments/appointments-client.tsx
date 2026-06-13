@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { WaivePenaltyButton } from './waive-penalty-button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, ApiError } from '@/lib/api';
+import { CheckSquare, Loader2 } from 'lucide-react';
 
 interface WaitlistEntry {
   id: string;
@@ -78,6 +80,9 @@ export function AppointmentsClient({
 }) {
   const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkCompleting, setBulkCompleting] = useState(false);
+  const [bulkToast, setBulkToast] = useState<string | null>(null);
 
   const loadWaitlist = useCallback(async () => {
     if (!token) return;
@@ -90,6 +95,31 @@ export function AppointmentsClient({
   }, [token]);
 
   useEffect(() => { void loadWaitlist(); }, [loadWaitlist]);
+
+  const completableIds = upcoming
+    .filter((a) => (a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID') && new Date(a.start) <= new Date())
+    .map((a) => a.id);
+
+  async function handleBulkComplete() {
+    if (bulkSelected.size === 0) return;
+    setBulkCompleting(true);
+    try {
+      const ids = [...bulkSelected];
+      const res = await apiFetch<{ completed: number; skipped: number }>(
+        '/appointments/bulk-complete',
+        { method: 'POST', body: JSON.stringify({ ids }) },
+        token,
+      );
+      setBulkSelected(new Set());
+      setBulkToast(`${res.completed} appointment${res.completed === 1 ? '' : 's'} marked complete${res.skipped > 0 ? ` (${res.skipped} skipped)` : ''}`);
+      setTimeout(() => setBulkToast(null), 4000);
+    } catch (e) {
+      setBulkToast(e instanceof ApiError ? e.message : 'Bulk complete failed');
+      setTimeout(() => setBulkToast(null), 4000);
+    } finally {
+      setBulkCompleting(false);
+    }
+  }
 
   function applyFilter(list: AppointmentData[]): AppointmentData[] {
     if (depositFilter === 'all') return list;
@@ -106,13 +136,40 @@ export function AppointmentsClient({
 
   return (
     <div className="space-y-6">
+      {bulkToast && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-foreground text-background px-4 py-2 text-sm shadow-lg">
+          {bulkToast}
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Appointments</h1>
           <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
         </div>
-        {/* Deposit filter */}
-        <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+        <div className="flex items-center gap-2 flex-wrap">
+          {completableIds.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-dashed p-1.5 bg-muted/40">
+              <span className="text-xs text-muted-foreground px-1">
+                {bulkSelected.size > 0 ? `${bulkSelected.size} selected` : `${completableIds.length} completable`}
+              </span>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline"
+                onClick={() => setBulkSelected(bulkSelected.size === completableIds.length ? new Set() : new Set(completableIds))}
+              >
+                {bulkSelected.size === completableIds.length ? 'Deselect all' : 'Select all'}
+              </button>
+              {bulkSelected.size > 0 && (
+                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => void handleBulkComplete()} disabled={bulkCompleting}>
+                  {bulkCompleting ? <Loader2 className="size-3 animate-spin" /> : <CheckSquare className="size-3" />}
+                  Mark complete
+                </Button>
+              )}
+            </div>
+          )}
+          {/* Deposit filter */}
+          <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
           {(['all', 'pending', 'paid'] as DepositFilter[]).map((f) => (
             <button
               key={f}
@@ -126,6 +183,7 @@ export function AppointmentsClient({
               {f === 'all' ? 'All' : f === 'pending' ? 'Deposit pending' : 'Deposit paid'}
             </button>
           ))}
+          </div>
         </div>
       </div>
 
@@ -138,9 +196,28 @@ export function AppointmentsClient({
             <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
           )}
           <div className="space-y-3">
-            {filteredUpcoming.map((appt) => (
-              <AppointmentRow key={appt.id} appt={appt} showRisk token={token} />
-            ))}
+            {filteredUpcoming.map((appt) => {
+              const isCompletable = completableIds.includes(appt.id);
+              return (
+                <div key={appt.id} className="flex items-start gap-2">
+                  {isCompletable && (
+                    <input
+                      type="checkbox"
+                      className="mt-4 size-4 cursor-pointer accent-primary shrink-0"
+                      checked={bulkSelected.has(appt.id)}
+                      onChange={(e) => {
+                        const next = new Set(bulkSelected);
+                        if (e.target.checked) next.add(appt.id); else next.delete(appt.id);
+                        setBulkSelected(next);
+                      }}
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <AppointmentRow appt={appt} showRisk token={token} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

@@ -53,6 +53,7 @@ export interface SalonSettings {
     };
     booking?: {
       slotIntervalMin?: number;
+      holdTimeoutMin?: number;
     };
     messaging?: {
       winbackBody?: string;

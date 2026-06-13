@@ -458,10 +458,12 @@ model Staff {
 }
 
 model StaffService {
-  staffId   String
-  serviceId String
-  staff     Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  staffId          String
+  serviceId        String
+  staff            Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  service          Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  /** Override the service's base price for this staff member. Null = use service default. */
+  priceCentsOverride Int?
 
   @@id([staffId, serviceId])
 }

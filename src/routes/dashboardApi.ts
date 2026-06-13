@@ -2381,6 +2381,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const db = getTenantDb();
       const services = await db.service.findMany({
         where: { deletedAt: null },
+        include: { category: { select: { id: true, name: true } } },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       });
       return { services };
@@ -3563,6 +3564,227 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'customer_not_found' };
         }
         return result;
+      });
+    },
+  );
+
+  // ─── Bulk customer CSV export (Item 49) ──────────────────────────────
+  app.get(
+    '/customers/export-csv',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const customers = await db.customer.findMany({
+          where: { salonId: user.salonId, deletedAt: null },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            displayName: true,
+            email: true,
+            waId: true,
+            marketingConsentStatus: true,
+            bookingCount: true,
+            noShowCount: true,
+            loyaltyStamps: true,
+            createdAt: true,
+            lastInteractionAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        const escape = (v: unknown): string => {
+          const s = v == null ? '' : String(v);
+          if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+          return s;
+        };
+
+        const headers = ['ID', 'First name', 'Last name', 'Display name', 'Email', 'WhatsApp', 'Marketing consent', 'Bookings', 'No-shows', 'Loyalty stamps', 'Joined', 'Last interaction'];
+        const rows = customers.map((c) => [
+          c.id,
+          c.firstName,
+          c.lastName,
+          c.displayName,
+          c.email,
+          c.waId,
+          c.marketingConsentStatus,
+          c.bookingCount,
+          c.noShowCount,
+          c.loyaltyStamps,
+          c.createdAt.toISOString().slice(0, 10),
+          c.lastInteractionAt?.toISOString().slice(0, 10) ?? '',
+        ]);
+
+        const csv = [headers, ...rows].map((row) => row.map(escape).join(',')).join('\n');
+        reply.header('Content-Type', 'text/csv; charset=utf-8');
+        reply.header('Content-Disposition', 'attachment; filename="customers.csv"');
+        return reply.send(csv);
+      });
+    },
+  );
+
+  // ─── Service categories CRUD (Item 47) ───────────────────────────────
+  app.get('/service-categories', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const categories = await db.serviceCategory.findMany({
+        where: { salonId: user.salonId },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      });
+      return { categories };
+    });
+  });
+
+  app.post<{ Body: { name: string } }>(
+    '/service-categories',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { name } = request.body ?? {};
+        if (!name?.trim()) { reply.code(400); return { error: 'name_required' }; }
+        const db = getTenantDb();
+        const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const existing = await db.serviceCategory.findFirst({ where: { salonId: user.salonId, slug } });
+        const finalSlug = existing ? `${slug}-${Date.now()}` : slug;
+        const cat = await db.serviceCategory.create({
+          data: { salonId: user.salonId, name: name.trim(), slug: finalSlug },
+        });
+        return { category: cat };
+      });
+    },
+  );
+
+  app.patch<{ Params: { id: string }; Body: { name?: string; sortOrder?: number } }>(
+    '/service-categories/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const cat = await db.serviceCategory.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
+        if (!cat) { reply.code(404); return { error: 'not_found' }; }
+        const { name, sortOrder } = request.body ?? {};
+        const updated = await db.serviceCategory.update({
+          where: { id: cat.id },
+          data: {
+            ...(name ? { name: name.trim() } : {}),
+            ...(sortOrder !== undefined ? { sortOrder } : {}),
+          },
+        });
+        return { category: updated };
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/service-categories/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const cat = await db.serviceCategory.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
+        if (!cat) { reply.code(404); return { error: 'not_found' }; }
+        // Unlink services from this category before deleting
+        await db.service.updateMany({ where: { categoryId: cat.id }, data: { categoryId: null } });
+        await db.serviceCategory.delete({ where: { id: cat.id } });
+        return { ok: true };
+      });
+    },
+  );
+
+  // ─── Staff service price override (Item 41) ───────────────────────────
+  app.patch<{
+    Params: { staffId: string; serviceId: string };
+    Body: { priceCentsOverride: number | null };
+  }>(
+    '/staff/:staffId/services/:serviceId/price',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { staffId, serviceId } = request.params;
+        const { priceCentsOverride } = request.body ?? {};
+
+        const link = await db.staffService.findFirst({ where: { staffId, serviceId } });
+        if (!link) { reply.code(404); return { error: 'staff_service_not_found' }; }
+
+        // Verify staff belongs to this salon
+        const staff = await db.staff.findFirst({ where: { id: staffId, salonId: user.salonId } });
+        if (!staff) { reply.code(403); return { error: 'forbidden' }; }
+
+        if (priceCentsOverride !== null && priceCentsOverride !== undefined) {
+          if (!Number.isFinite(priceCentsOverride) || priceCentsOverride < 0) {
+            reply.code(400);
+            return { error: 'invalid_price' };
+          }
+        }
+
+        const updated = await db.staffService.update({
+          where: { staffId_serviceId: { staffId, serviceId } },
+          data: { priceCentsOverride: priceCentsOverride ?? null },
+        });
+        return { priceCentsOverride: updated.priceCentsOverride };
+      });
+    },
+  );
+
+  // ─── Appointment bulk complete (Item 50) ─────────────────────────────
+  app.post<{ Body: { appointmentIds: string[] } }>(
+    '/appointments/bulk-complete',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { appointmentIds } = request.body ?? {};
+        if (!Array.isArray(appointmentIds) || appointmentIds.length === 0) {
+          reply.code(400);
+          return { error: 'appointment_ids_required' };
+        }
+        if (appointmentIds.length > 50) {
+          reply.code(400);
+          return { error: 'max_50_appointments_per_bulk' };
+        }
+
+        const db = getTenantDb();
+        const now = new Date();
+        const result = await db.appointment.updateMany({
+          where: {
+            id: { in: appointmentIds },
+            salonId: user.salonId,
+            status: { in: ['CONFIRMED', 'CONFIRMED_PAID'] },
+            start: { lte: now },
+          },
+          data: { status: 'COMPLETED', completedAt: now },
+        });
+
+        return { updated: result.count };
+      });
+    },
+  );
+
+  // ─── Hold timeout — auto-release HELD appointments (Item 46) ─────────
+  // This endpoint is called by a cron job (or can be triggered manually)
+  app.post(
+    '/appointments/release-stale-holds',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const automations = parseAutomationsFromMetadata(
+          (await db.salon.findUniqueOrThrow({ where: { id: user.salonId }, select: { metadata: true } })).metadata,
+        );
+        const timeoutMin = automations.booking.holdTimeoutMin;
+        if (timeoutMin <= 0) return { released: 0 };
+
+        const cutoff = new Date(Date.now() - timeoutMin * 60_000);
+        const result = await db.appointment.updateMany({
+          where: {
+            salonId: user.salonId,
+            status: 'HELD',
+            createdAt: { lte: cutoff },
+          },
+          data: { status: 'CANCELLED' },
+        });
+        return { released: result.count };
       });
     },
   );
