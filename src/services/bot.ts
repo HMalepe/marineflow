@@ -1037,11 +1037,11 @@ async function processInboundWhatsApp(
         err instanceof Prisma.PrismaClientKnownRequestError &&
         (err.code === 'P2021' || err.code === 'P2002');
       if (isInfraError) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        logger.error({ err, errMsg, code: (err as Prisma.PrismaClientKnownRequestError).code, step: conv.step }, 'route_conversation_infra_error');
+        const errCode = (err as Prisma.PrismaClientKnownRequestError).code;
+        logger.error({ err, code: errCode, step: conv.step }, 'route_conversation_infra_error');
         await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
         syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-        await reply(conv, `⚠️ [DEBUG] Infra error (${(err as Prisma.PrismaClientKnownRequestError).code}) at step ${conv.step}: ${errMsg.slice(0, 180)}`);
+        await reply(conv, "Sorry, something went wrong. Let's start again!");
         await replyMenu(conv);
         return;
       }
@@ -1093,11 +1093,12 @@ async function processInboundWhatsApp(
           'bot_escalated_to_staff',
         );
       } else {
-        // First failure — show menu without alarming copy
+        // First failure — inform user and show menu
         await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU).catch(
           () => {},
         );
         syncConvContext(conv, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU);
+        await reply(conv, "Sorry, something went wrong. Let's start fresh:");
         await replyMenu(conv);
       }
     } catch (innerErr) {
