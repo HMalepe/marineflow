@@ -7,7 +7,6 @@ import {
 import {
   buildMainMenuInteractive,
   MAIN_MENU_ROW_IDS_WITH_LOYALTY,
-  MAIN_MENU_ROW_IDS_WITHOUT_LOYALTY,
   validateInteractiveListPayload,
 } from '../../../services/mainMenuInteractive.js';
 
@@ -127,7 +126,7 @@ describe('buildCloudInteractivePayload', () => {
   it('maps main menu to Meta Graph API shape', () => {
     const interactive = buildMainMenuInteractive({
       name: 'Test Salon',
-      botLoyaltyEnabled: false,
+      tradingName: 'Test Salon',
     });
     const payload = buildCloudInteractivePayload(interactive);
 
@@ -138,11 +137,11 @@ describe('buildCloudInteractivePayload', () => {
     expect(inner.header).toBeUndefined();
     expect(inner.footer).toEqual({ text: interactive.footer });
     expect(inner.action).toMatchObject({
-      button: 'Choose option',
+      button: 'Main menu',
       sections: [
         expect.objectContaining({
-          title: 'Main menu',
-          rows: expect.arrayContaining([expect.objectContaining({ id: '1' })]),
+          title: 'Choose section',
+          rows: expect.arrayContaining([expect.objectContaining({ id: '1', title: 'Appointments' })]),
         }),
       ],
     });
@@ -187,35 +186,26 @@ describe('buildCloudInteractivePayload', () => {
 
 describe('buildMainMenuInteractive — production edge cases', () => {
   it('always validates after normalization', () => {
-    for (const botLoyaltyEnabled of [true, false]) {
-      const interactive = buildMainMenuInteractive({
-        name: 'Salon 💇‍♀️'.repeat(20),
-        welcomeMessage: 'Welcome 👋 '.repeat(500),
-        botLoyaltyEnabled,
-      });
-      expect(validateInteractiveListPayload(interactive)).toEqual([]);
-    }
+    const interactive = buildMainMenuInteractive({
+      name: 'Salon 💇‍♀️'.repeat(20),
+      tradingName: 'Salon',
+      welcomeMessage: 'Welcome 👋 '.repeat(500),
+    });
+    expect(validateInteractiveListPayload(interactive)).toEqual([]);
   });
 
-  it('row ids match text menu numbering with and without loyalty', () => {
-    const withLoyalty = buildMainMenuInteractive({
+  it('row ids match six top-level categories', () => {
+    const ids = buildMainMenuInteractive({
       name: 'A',
-      botLoyaltyEnabled: true,
-    }).sections[0]!.rows.map((r: { id: string }) => r.id);
-    const withoutLoyalty = buildMainMenuInteractive({
-      name: 'A',
-      botLoyaltyEnabled: false,
+      tradingName: 'A',
     }).sections[0]!.rows.map((r: { id: string }) => r.id);
 
-    expect(withLoyalty).toEqual([...MAIN_MENU_ROW_IDS_WITH_LOYALTY]);
-    expect(withoutLoyalty).toEqual([...MAIN_MENU_ROW_IDS_WITHOUT_LOYALTY]);
+    expect(ids).toEqual([...MAIN_MENU_ROW_IDS_WITH_LOYALTY]);
   });
 
-  it('stays within WhatsApp 10-row cap in both configurations', () => {
-    for (const botLoyaltyEnabled of [true, false]) {
-      const rows = buildMainMenuInteractive({ name: 'X', botLoyaltyEnabled }).sections[0]!.rows;
-      expect(rows.length).toBeLessThanOrEqual(10);
-      expect(new Set(rows.map((r: { id: string }) => r.id)).size).toBe(rows.length);
-    }
+  it('stays within WhatsApp 10-row cap', () => {
+    const rows = buildMainMenuInteractive({ name: 'X', tradingName: 'X' }).sections[0]!.rows;
+    expect(rows.length).toBeLessThanOrEqual(10);
+    expect(new Set(rows.map((r: { id: string }) => r.id)).size).toBe(rows.length);
   });
 });

@@ -5,65 +5,68 @@ import {
   validateInteractiveListPayload,
 } from '../lib/integrations/messaging/interactiveList.js';
 import type { InteractiveList } from '../lib/integrations/messaging/types.js';
+import {
+  buildMainMenuText,
+  MAIN_MENU_CATEGORIES,
+  MAIN_MENU_ROW_IDS,
+  menuWelcomeLine,
+  salonDisplayName,
+  type SalonMenuInput,
+} from '../lib/hierarchicalMenu.js';
 
 export {
   salonUsesCloudInteractiveMenu,
   truncateListField,
   validateInteractiveListPayload,
+  MAIN_MENU_ROW_IDS,
 };
 
-/** Row ids align with numbered text menu choices for handleMenu() routing. */
-export const MAIN_MENU_ROW_IDS_WITH_LOYALTY = ['1', '2', '3', '4', '5', '6', '7', '8', '0'] as const;
-export const MAIN_MENU_ROW_IDS_WITHOUT_LOYALTY = ['1', '2', '4', '5', '6', '7', '8', '0'] as const;
-
 /**
- * Build the main menu as a Meta Cloud API interactive list.
- * Row ids match numeric text-menu choices ("1", "2", …) so handleMenu() works unchanged.
+ * Build the main menu as a Meta Cloud API interactive list (6 categories).
+ * Row ids "1"–"6" match text-menu routing in handleMenu().
  */
-export function buildMainMenuInteractive(salon: {
-  name: string;
-  welcomeMessage?: string | null;
-  botLoyaltyEnabled: boolean;
-}): InteractiveList {
+export function buildMainMenuInteractive(salon: SalonMenuInput): InteractiveList {
   const welcome =
-    salon.welcomeMessage?.trim() ||
-    `Welcome to ${salon.name}! Tap below to get started.`;
+    menuWelcomeLine(salon).replace('Reply with a number:', 'Tap below to get started.');
 
-  const rows: InteractiveList['sections'][0]['rows'] = [
-    {
-      id: '1',
-      title: 'Book appointment',
-      description: 'Schedule a new visit',
-    },
-    {
-      id: '2',
-      title: 'My bookings',
-      description: 'View, cancel or reschedule',
-    },
-  ];
-
-  if (salon.botLoyaltyEnabled) {
-    rows.push({
-      id: '3',
-      title: 'My rewards',
-      description: 'Loyalty stamps & rewards',
-    });
-  }
-
-  rows.push(
-    { id: '4', title: 'FAQs', description: 'Common questions answered' },
-    { id: '5', title: 'Rate experience', description: 'Tell us how we did' },
-    { id: '6', title: 'Contact us', description: 'Phone, email & support' },
-    { id: '7', title: 'Business hours', description: 'Opening times' },
-    { id: '8', title: 'Find us', description: 'Address & directions' },
-    { id: '0', title: 'Something else', description: 'Ask our AI assistant' },
+  const rows: InteractiveList['sections'][0]['rows'] = MAIN_MENU_CATEGORIES.map(
+    (cat, index) => ({
+      id: String(index + 1),
+      title: truncateListField(cat.label, 24),
+      description: truncateListField(subMenuDescription(cat.id), 72),
+    }),
   );
 
   return normalizeInteractiveList({
     type: 'list',
     body: welcome,
-    footer: 'Powered by MarineFlow',
-    button: 'Choose option',
-    sections: [{ title: 'Main menu', rows }],
+    footer: truncateListField(`Powered by ${salonDisplayName(salon)}`, 60),
+    button: 'Main menu',
+    sections: [{ title: 'Choose section', rows }],
   });
 }
+
+function subMenuDescription(categoryId: (typeof MAIN_MENU_CATEGORIES)[number]['id']): string {
+  switch (categoryId) {
+    case 'appointments':
+      return 'Book, view, reschedule, cancel';
+    case 'services':
+      return 'Hair, nails, massage, beauty, prices';
+    case 'rewards':
+      return 'Points, redeem, referrals, coupons';
+    case 'promotions':
+      return 'Specials, packages, gift vouchers';
+    case 'about':
+      return 'Hours, location, contact, team';
+    case 'support':
+      return 'FAQ, review, report issue, reception';
+    default:
+      return '';
+  }
+}
+
+/** @deprecated use MAIN_MENU_ROW_IDS — kept for test compatibility */
+export const MAIN_MENU_ROW_IDS_WITH_LOYALTY = [...MAIN_MENU_ROW_IDS];
+export const MAIN_MENU_ROW_IDS_WITHOUT_LOYALTY = [...MAIN_MENU_ROW_IDS];
+
+export { buildMainMenuText, salonDisplayName };

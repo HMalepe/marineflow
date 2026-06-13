@@ -1,6 +1,7 @@
 import { ConversationStep, MessageDirection } from '@prisma/client';
 import { inngest } from '../client.js';
 import { prisma } from '../../prisma.js';
+import { buildMainMenuText } from '../../hierarchicalMenu.js';
 import { sendWithFallback } from '../../../services/channelRouter.js';
 import { logger } from '../../logger.js';
 
@@ -109,21 +110,17 @@ export const conversationInactivity = inngest.createFunction(
         if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
         if (await hasInboundSince(conversationId, activityAt)) return;
 
-        // Build the menu (respects loyalty toggle)
-        const salonName = salon.tradingName ?? salon.name;
-        const menuWelcome =
-          salon.welcomeMessage?.trim() ||
-          `Welcome to ${salonName}! Reply with a number:`;
-        const menuItems = [
-          '1 — Book an appointment',
-          '2 — My bookings',
-          ...(salon.botLoyaltyEnabled ? ['3 — My rewards / loyalty'] : []),
-          '4 — FAQs',
-          '5 — File a complaint',
-          '6 — Hours & address',
-          '0 — Talk to a human (we will reply soon)',
-        ];
-        const menu = [menuWelcome, ...menuItems].join('\n');
+        const salonRow = await prisma.salon.findUniqueOrThrow({
+          where: { id: salonId },
+          select: {
+            name: true,
+            tradingName: true,
+            welcomeMessage: true,
+            metadata: true,
+          },
+        });
+
+        const menu = buildMainMenuText(salonRow);
 
         const nudge =
           salon.inactivityMessage2?.trim() ||

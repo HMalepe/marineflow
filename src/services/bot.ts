@@ -33,8 +33,17 @@ import { createDepositCheckoutSession } from './payments.js';
 import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import {
-  buildExtraMenuLines,
-  resolveExtendedMenuActions,
+  buildMainMenuText,
+  buildSubMenuText,
+  isMenuCategoryId,
+  parseMainMenuChoice,
+  parseSubMenuChoice,
+  salonDisplayName,
+  SERVICE_CATEGORY_ALIASES,
+  type MenuCategoryId,
+  type ServiceCategoryKey,
+} from '../lib/hierarchicalMenu.js';
+import {
   afterServiceSelected,
   handleAddonPhase,
   handleReferralMenuItem,
@@ -54,6 +63,8 @@ import {
   parseReviewClaimCommand,
   reviewedClaimErrorMessage,
   resolveGoogleReviewSettings,
+  prepareGoogleReviewFollowUp,
+  isValidGoogleReviewUrl,
 } from './reviewIncentive.js';
 import {
   applyMarketingConsentChoice,
@@ -111,6 +122,12 @@ export type BotContext = Record<string, unknown> & {
    * preferred stylist) changes between menu render and reply.
    */
   staffOrderIds?: string[];
+  /** Hierarchical main-menu sub-section (appointments, services, …). */
+  menuCategory?: MenuCategoryId;
+  /** When set, PICK_SERVICE only shows these service ids (from Services submenu). */
+  serviceFilterIds?: string[];
+  /** Hint for manage-booking submenu (view / reschedule / cancel). */
+  manageBookingHint?: 'view' | 'reschedule' | 'cancel';
   /** True once the AI has given its first answer in the OTHER_QUERY flow */
   otherQueryAnswered?: boolean;
   /** Original question text saved for the ticket if customer says NO */
@@ -141,6 +158,9 @@ const PENDING_PROFILE_CLEAR: Pick<
   | 'negativeSentimentEscalated'
   | 'otherQueryAnswered'
   | 'otherQueryText'
+  | 'menuCategory'
+  | 'serviceFilterIds'
+  | 'manageBookingHint'
 > = {
   pendingFirstName: undefined,
   pendingLastName: undefined,
@@ -149,6 +169,9 @@ const PENDING_PROFILE_CLEAR: Pick<
   negativeSentimentEscalated: undefined,
   otherQueryAnswered: undefined,
   otherQueryText: undefined,
+  menuCategory: undefined,
+  serviceFilterIds: undefined,
+  manageBookingHint: undefined,
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
@@ -312,25 +335,7 @@ async function replyWithMenu(
 }
 
 function mainMenu(salon: Salon): string {
-  const welcome =
-    salon.welcomeMessage?.trim() ||
-    `Welcome to ${salon.name}! Reply with a number:`;
-  const items = [
-    '1 — Book an appointment',
-    '2 — My bookings',
-    ...(salon.botLoyaltyEnabled ? ['3 — My rewards / loyalty'] : []),
-    '4 — FAQs',
-    '5 — Rate my experience',
-    '6 — Contact us',
-    '7 — Business hours',
-    '8 — Find us (address & directions)',
-    ...buildExtraMenuLines(salon),
-    '0 — Something else',
-  ];
-  const meta = typeof salon.metadata === 'object' && salon.metadata ? (salon.metadata as Record<string, unknown>) : {};
-  const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
-  const specialLine = special ? `\n🌟 *Special:* ${special}` : '';
-  return [welcome, ...items].join('\n') + specialLine;
+  return buildMainMenuText(salon);
 }
 
 function parseHmToMin(hm: string): number {
@@ -530,7 +535,7 @@ export async function handleInboundWhatsApp(input: {
         },
       });
       if (salon) {
-        await sendTenantWhatsApp(tenant.id, waId, mainMenu(salon as Salon));
+        await sendTenantWhatsApp(tenant.id, waId, buildMainMenuText(salon as Salon));
       }
     } catch (fallbackErr) {
       logger.error({ err: fallbackErr }, 'bot_fallback_menu_failed');
@@ -1439,257 +1444,462 @@ async function handleBookingPopiaConsent(
   await startBookingFlow({ ...conv, customer: updatedCustomer });
 }
 
-async function handleMenu(
+async function menuActionStartBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
-  text: string,
-) {
+): Promise<void> {
+  await saveCtx(conv.id, {
+    selectedServiceId: undefined,
+    selectedStaffId: undefined,
+    selectedBranchId: undefined,
+    branchOptions: undefined,
+    localDateStr: undefined,
+    slotStartIso: undefined,
+    anyStaff: undefined,
+    managingAppointmentId: undefined,
+    staffOrderIds: undefined,
+    serviceFilterIds: undefined,
+    ...PENDING_PROFILE_CLEAR,
+  });
+
+  if (isProfileIncomplete(conv.customer)) {
+    await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
+    await reply(
+      conv,
+      [
+        'Great — let\'s get you booked! First, we need a few details.',
+        '',
+        'What is your *first name*?',
+        '(Letters only — reply BACK for menu.)',
+      ].join('\n'),
+    );
+    return;
+  }
+
+  await startBookingFlow(conv);
+}
+
+async function menuActionViewBookings(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  hint: 'view' | 'reschedule' | 'cancel' = 'view',
+): Promise<void> {
   const salon = conv.salon;
-  const choiceNum = text.trim();
-  const choice = choiceNum.toUpperCase();
-  const menuExtras = resolveExtendedMenuActions(salon);
+  const now = new Date();
+  const [upcoming, past] = await Promise.all([
+    getTenantDb().appointment.findMany({
+      where: {
+        customerId: conv.customerId,
+        salonId: salon.id,
+        start: { gte: now },
+        status: { in: ['CONFIRMED', 'HELD', 'PENDING_PAYMENT', 'CONFIRMED_PAID'] },
+      },
+      orderBy: { start: 'asc' },
+      include: { service: true, staff: true },
+      take: 10,
+    }),
+    getTenantDb().appointment.findMany({
+      where: {
+        customerId: conv.customerId,
+        salonId: salon.id,
+        start: { lt: now },
+        status: { in: ['COMPLETED', 'CONFIRMED', 'CONFIRMED_PAID'] },
+      },
+      orderBy: { start: 'desc' },
+      include: { service: true, staff: true },
+      take: 20,
+    }),
+  ]);
 
-  if (menuExtras.referral != null && choiceNum === String(menuExtras.referral)) {
-    await handleReferralMenuItem(conv, (body) => reply(conv, body));
-    return;
+  const fmtAppt = (a: typeof upcoming[0], i: number) =>
+    `${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`;
+
+  const lines: string[] = [];
+  if (hint === 'reschedule') lines.push('📅 *Reschedule an appointment*');
+  else if (hint === 'cancel') lines.push('📅 *Cancel an appointment*');
+  else lines.push('📅 *Your appointments*');
+
+  if (upcoming.length > 0) {
+    lines.push('', '*Upcoming:*');
+    upcoming.forEach((a, i) => lines.push(fmtAppt(a, i + 1)));
+  } else {
+    lines.push('', 'No upcoming appointments.');
   }
 
-  if (menuExtras.membership != null && choiceNum === String(menuExtras.membership)) {
-    await handleMembershipMenuItem(conv, (body) => reply(conv, body));
-    return;
-  }
-
-  if (choice === 'REFERRAL') {
-    await handleReferralMenuItem(conv, (body) => reply(conv, body));
-    return;
-  }
-
-  if (choiceNum === '1') {
-    // EC-09/EC-18: Wipe stale booking fields before starting a fresh flow
-    await saveCtx(conv.id, {
-      selectedServiceId: undefined,
-      selectedStaffId: undefined,
-      selectedBranchId: undefined,
-      branchOptions: undefined,
-      localDateStr: undefined,
-      slotStartIso: undefined,
-      anyStaff: undefined,
-      managingAppointmentId: undefined,
-      staffOrderIds: undefined,
-      ...PENDING_PROFILE_CLEAR,
+  if (past.length > 0 && hint === 'view') {
+    lines.push('', '*Past bookings:*');
+    past.forEach((a, i) => {
+      lines.push(`${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`);
     });
+  }
 
-    if (isProfileIncomplete(conv.customer)) {
-      await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
-      await reply(
-        conv,
-        [
-          'Great — let\'s get you booked! First, we need a few details.',
-          '',
-          'What is your *first name*?',
-          '(Letters only — reply BACK for menu.)',
-        ].join('\n'),
-      );
-      return;
-    }
-
-    await startBookingFlow(conv);
+  if (upcoming.length === 0 && past.length === 0) {
+    await replyWithMenu(conv, 'No bookings found yet.');
     return;
   }
 
-  if (choice === '2') {
-    const now = new Date();
-    const [upcoming, past] = await Promise.all([
-      getTenantDb().appointment.findMany({
-        where: {
-          customerId: conv.customerId,
-          salonId: salon.id,
-          start: { gte: now },
-          status: { in: ['CONFIRMED', 'HELD', 'PENDING_PAYMENT', 'CONFIRMED_PAID'] },
-        },
-        orderBy: { start: 'asc' },
-        include: { service: true, staff: true },
-        take: 10,
-      }),
-      getTenantDb().appointment.findMany({
-        where: {
-          customerId: conv.customerId,
-          salonId: salon.id,
-          start: { lt: now },
-          status: { in: ['COMPLETED', 'CONFIRMED', 'CONFIRMED_PAID'] },
-        },
-        orderBy: { start: 'desc' },
-        include: { service: true, staff: true },
-        take: 20,
-      }),
-    ]);
-
-    const fmtAppt = (a: typeof upcoming[0], i: number) =>
-      `${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`;
-
-    const lines: string[] = [];
-
-    if (upcoming.length > 0) {
-      lines.push('📅 *Upcoming appointments:*');
-      upcoming.forEach((a, i) => lines.push(fmtAppt(a, i + 1)));
-    } else {
-      lines.push('No upcoming appointments.');
-    }
-
-    if (past.length > 0) {
-      lines.push('', '📋 *Past bookings:*');
-      past.forEach((a, i) => {
-        lines.push(`${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`);
-      });
-    }
-
-    if (upcoming.length === 0 && past.length === 0) {
-      await replyWithMenu(conv, `No bookings found yet.`);
-      return;
-    }
-
-    if (upcoming.length > 0) {
-      lines.push('', 'Reply CANCEL 1 or RESCHEDULE 1 to manage (use the upcoming number), or BACK.');
-      await saveCtx(conv.id, { manageList: upcoming.map((a) => a.id) }, ConversationStep.MANAGE_BOOKING);
-    } else {
-      lines.push('', 'Reply BACK for menu.');
-      await saveCtx(conv.id, {}, ConversationStep.MENU);
-    }
-
-    await reply(conv, lines.join('\n'));
-    return;
+  if (upcoming.length > 0) {
+    const actionHint =
+      hint === 'cancel'
+        ? 'Reply CANCEL 1 (use the upcoming number) to cancel, or BACK.'
+        : hint === 'reschedule'
+          ? 'Reply RESCHEDULE 1 (use the upcoming number) to reschedule, or BACK.'
+          : 'Reply CANCEL 1 or RESCHEDULE 1 to manage (use the upcoming number), or BACK.';
+    lines.push('', actionHint);
+    await saveCtx(
+      conv.id,
+      { manageList: upcoming.map((a) => a.id), manageBookingHint: hint, menuCategory: undefined },
+      ConversationStep.MANAGE_BOOKING,
+    );
+  } else {
+    lines.push('', 'Reply BACK for menu.');
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
   }
 
-  if (choice === '3' && !salon.botLoyaltyEnabled) {
+  await reply(conv, lines.join('\n'));
+}
+
+async function menuActionLoyaltyBalance(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  emphasizeRedeem = false,
+): Promise<void> {
+  const salon = conv.salon;
+  if (!salon.botLoyaltyEnabled) {
     await replyWithMenu(conv, 'Rewards are not available at this salon right now.');
     return;
   }
 
-  if (choice === '3' && salon.botLoyaltyEnabled) {
-    await ensureLoyaltyProgram(salon.id);
-    const bal = await getStampBalance(salon.id, conv.customerId);
-    const stampsPerReward = bal.stampsPerReward ?? 10;
-    const stamps = bal.stamps ?? 0;
-    const remaining = Math.max(0, stampsPerReward - (stamps % stampsPerReward));
+  await ensureLoyaltyProgram(salon.id);
+  const bal = await getStampBalance(salon.id, conv.customerId);
+  const stampsPerReward = bal.stampsPerReward ?? 10;
+  const stamps = bal.stamps ?? 0;
+  const remaining = Math.max(0, stampsPerReward - (stamps % stampsPerReward));
+  const redeemable = stamps >= stampsPerReward;
+  const progressBar = buildStampBar(stamps % stampsPerReward || (redeemable ? stampsPerReward : 0), stampsPerReward);
 
-    // Predict date of next reward based on average booking frequency
-    const recentBookings = await getTenantDb().appointment.findMany({
-      where: {
-        customerId: conv.customerId,
-        salonId: salon.id,
-        status: { in: ['COMPLETED', 'CONFIRMED', 'CONFIRMED_PAID'] },
-      },
-      orderBy: { start: 'desc' },
-      take: stampsPerReward + 2,
-    });
+  const lines = [
+    `⭐ *Your rewards* — ${salonDisplayName(salon)}`,
+    '',
+    `Points: ${stamps} stamp${stamps === 1 ? '' : 's'}`,
+    progressBar,
+    redeemable
+      ? `\n🎊 You've earned a reward! Reply REDEEM on your next booking to use it.`
+      : `${remaining} more visit${remaining === 1 ? '' : 's'} until your next reward!`,
+    '',
+    emphasizeRedeem && redeemable
+      ? 'Reply 1 under *Appointments › Book* to redeem on your next visit.'
+      : '',
+    'Reply BACK for menu.',
+  ].filter(Boolean);
 
-    let predictionLine = '';
-    if (recentBookings.length >= 2 && remaining > 0) {
-      const intervals: number[] = [];
-      for (let i = 0; i < recentBookings.length - 1; i++) {
-        const msApart = recentBookings[i]!.start.getTime() - recentBookings[i + 1]!.start.getTime();
-        if (msApart > 0) intervals.push(msApart);
-      }
-      if (intervals.length > 0) {
-        const avgIntervalMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-        const predictedMs = Date.now() + remaining * avgIntervalMs;
-        const predictedDate = new Date(predictedMs);
-        predictionLine = `\nAt your current pace, your free cut is estimated around ${fmtDate(predictedDate, salon.timezone)}. 🎉`;
-      }
-    }
+  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.LOYALTY);
+  await reply(conv, lines.join('\n'));
+}
 
-    const redeemable = stamps >= stampsPerReward;
-    const progressBar = buildStampBar(stamps % stampsPerReward || (redeemable ? stampsPerReward : 0), stampsPerReward);
+async function menuActionShowFaqs(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const faqs = await getTenantDb().faqItem.findMany({
+    where: { salonId: conv.salon.id, status: 'APPROVED' },
+    orderBy: { sortOrder: 'asc' },
+    take: 10,
+  });
+  if (faqs.length === 0) {
+    await replyWithMenu(conv, 'No FAQs available yet.');
+    return;
+  }
+  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.FAQ);
+  const lines = faqs.map((f, i) => `${i + 1}. ${f.question}`);
+  await reply(
+    conv,
+    ['FAQs — reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n'),
+  );
+}
 
-    const lines = [
-      `⭐ *Your loyalty card* — ${salon.name}`,
-      '',
-      `Stamps: ${stamps} total`,
-      progressBar,
-      redeemable
-        ? `\n🎊 You've earned a FREE cut! Reply REDEEM to use it on your next booking.`
-        : `${remaining} more cut${remaining === 1 ? '' : 's'} until your FREE one!${predictionLine}`,
-      '',
-      'Reply BACK for menu.',
-    ];
+async function menuActionShowContact(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const salon = conv.salon;
+  const parts = [
+    `📞 *Contact ${salonDisplayName(salon)}*`,
+    salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : null,
+    (salon as unknown as { contactEmail?: string }).contactEmail
+      ? `Email: ${(salon as unknown as { contactEmail?: string }).contactEmail}`
+      : null,
+  ].filter(Boolean);
+  if (parts.length === 1) parts.push('No contact details on file yet.');
+  await reply(conv, parts.join('\n'));
+  await replyMenu(conv);
+}
 
-    await saveCtx(conv.id, {}, ConversationStep.LOYALTY);
-    await reply(conv, lines.join('\n'));
+async function menuActionShowHours(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const salon = conv.salon;
+  const open = salon.openTime ?? '09:00';
+  const close = salon.closeTime ?? '17:00';
+  const isOpen = isWithinBusinessHours(salon);
+  await reply(
+    conv,
+    `🕐 *Business hours*\n\nMon–Sat: ${open} – ${close}\n\nWe are currently ${isOpen ? '✅ open' : '🔴 closed'}.`,
+  );
+  await replyMenu(conv);
+}
+
+async function menuActionShowLocation(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const salon = conv.salon;
+  const address = salon.addressLine ?? 'Address not on file.';
+  const mapsUrl = (salon as unknown as { mapsUrl?: string }).mapsUrl;
+  const lines = [
+    `📍 *Find us*`,
+    address,
+    salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : null,
+    salon.accessibility ? `♿ ${salon.accessibility}` : null,
+  ].filter(Boolean);
+
+  if (mapsUrl) {
+    lines.push('', `📌 Open in maps:\n${mapsUrl}`);
+  } else {
+    const query = encodeURIComponent(`${salonDisplayName(salon)} ${address}`);
+    lines.push('', `📌 Google Maps: https://maps.google.com/?q=${query}`);
+  }
+
+  await reply(conv, lines.join('\n'));
+  await replyMenu(conv);
+}
+
+async function servicesForCategoryKey(salonId: string, key: ServiceCategoryKey) {
+  const aliases = SERVICE_CATEGORY_ALIASES[key];
+  const categories = await getTenantDb().serviceCategory.findMany({ where: { salonId } });
+  const matchedCatIds = categories
+    .filter((c) =>
+      aliases.some(
+        (a) => c.slug.toLowerCase().includes(a) || c.name.toLowerCase().includes(a),
+      ),
+    )
+    .map((c) => c.id);
+
+  return getTenantDb().service.findMany({
+    where: {
+      salonId,
+      active: true,
+      deletedAt: null,
+      OR: [
+        ...(matchedCatIds.length ? [{ categoryId: { in: matchedCatIds } }] : []),
+        ...aliases.map((a) => ({ name: { contains: a, mode: 'insensitive' as const } })),
+      ],
+    },
+    orderBy: { sortOrder: 'asc' },
+  });
+}
+
+async function menuActionShowServiceCategory(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  key: ServiceCategoryKey,
+): Promise<void> {
+  const services = await servicesForCategoryKey(conv.salonId, key);
+  const label = key.charAt(0).toUpperCase() + key.slice(1);
+  if (services.length === 0) {
+    await reply(
+      conv,
+      `No ${label.toLowerCase()} services listed yet.\n\nTry *Services › Prices* or *Appointments › Book*.\nReply BACK for menu.`,
+    );
     return;
   }
 
-  if (choice === '4') {
-    const faqs = await getTenantDb().faqItem.findMany({
-      where: { salonId: salon.id, status: 'APPROVED' },
-      orderBy: { sortOrder: 'asc' },
-      take: 10,
+  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  await saveCtx(
+    conv.id,
+    { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined },
+    ConversationStep.PICK_SERVICE,
+  );
+  await reply(
+    conv,
+    [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
+  );
+}
+
+async function menuActionShowAllPrices(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const services = await getTenantDb().service.findMany({
+    where: { salonId: conv.salonId, active: true, deletedAt: null },
+    orderBy: { sortOrder: 'asc' },
+  });
+  if (services.length === 0) {
+    await replyWithMenu(conv, 'No services listed yet.');
+    return;
+  }
+  const lines = services.map((s) => `• ${sanitize(s.name)} — ${fmtMoney(s.priceCents)}`);
+  await reply(
+    conv,
+    [`*Service prices*`, ...lines, '', 'Reply *Appointments › Book* from the main menu to schedule. Reply BACK.'].join('\n'),
+  );
+}
+
+async function menuActionShowSpecials(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const meta =
+    typeof conv.salon.metadata === 'object' && conv.salon.metadata
+      ? (conv.salon.metadata as Record<string, unknown>)
+      : {};
+  const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
+  const body = special
+    ? `🌟 *Current specials*\n\n${special}\n\nReply BACK for menu.`
+    : `No specials posted right now — check back soon!\n\nReply BACK for menu.`;
+  await reply(conv, body);
+}
+
+async function menuActionShowTeam(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const team = await getTenantDb().staff.findMany({
+    where: { salonId: conv.salonId, active: true, deletedAt: null, isBookable: true },
+    orderBy: { sortOrder: 'asc' },
+    take: 12,
+    select: { name: true, specialties: true },
+  });
+  if (team.length === 0) {
+    await reply(conv, 'Our team list is being updated. Reply BACK for menu.');
+    return;
+  }
+  const lines = team.map((s, i) => {
+    const spec = s.specialties.length ? ` — ${s.specialties.slice(0, 2).join(', ')}` : '';
+    return `${i + 1}. ${sanitize(s.name)}${spec}`;
+  });
+  await reply(conv, [`*Our team*`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
+}
+
+async function menuActionLeaveReview(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const settings = resolveGoogleReviewSettings(conv.salon.metadata);
+  const reviewUrl = conv.salon.googleReviewUrl?.trim();
+  if (settings.enabled && reviewUrl && isValidGoogleReviewUrl(reviewUrl)) {
+    const { body } = await prepareGoogleReviewFollowUp({
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: null,
+      googleReviewUrl: reviewUrl,
+      incentiveEnabled: settings.incentiveEnabled,
+      incentiveCents: settings.incentiveCents,
     });
-    if (faqs.length === 0) {
-      await replyWithMenu(conv, `No FAQs available yet.`);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await reply(conv, body);
+    return;
+  }
+
+  await saveCtx(
+    conv.id,
+    {
+      ratingSubStep: 'stars',
+      ratingStars: undefined,
+      ratingComment: undefined,
+      ratingNps: undefined,
+      menuCategory: undefined,
+    },
+    ConversationStep.RATE_EXPERIENCE,
+  );
+  await reply(
+    conv,
+    '⭐ *Leave a review*\n\nHow would you rate your last visit?\nReply with a number:\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent',
+  );
+}
+
+async function handleSubMenuChoice(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  category: MenuCategoryId,
+  choice: number,
+): Promise<void> {
+  switch (category) {
+    case 'appointments':
+      if (choice === 1) return menuActionStartBooking(conv);
+      if (choice === 2) return menuActionViewBookings(conv, 'view');
+      if (choice === 3) return menuActionViewBookings(conv, 'reschedule');
+      if (choice === 4) return menuActionViewBookings(conv, 'cancel');
+      break;
+    case 'services':
+      if (choice === 1) return menuActionShowServiceCategory(conv, 'hair');
+      if (choice === 2) return menuActionShowServiceCategory(conv, 'nails');
+      if (choice === 3) return menuActionShowServiceCategory(conv, 'massage');
+      if (choice === 4) return menuActionShowServiceCategory(conv, 'beauty');
+      if (choice === 5) return menuActionShowAllPrices(conv);
+      break;
+    case 'rewards':
+      if (choice === 1) return menuActionLoyaltyBalance(conv, false);
+      if (choice === 2) return menuActionLoyaltyBalance(conv, true);
+      if (choice === 3) return handleReferralMenuItem(conv, (body) => reply(conv, body));
+      if (choice === 4) {
+        await menuActionShowSpecials(conv);
+        return;
+      }
+      break;
+    case 'promotions':
+      if (choice === 1) return menuActionShowSpecials(conv);
+      if (choice === 2) return handleMembershipMenuItem(conv, (body) => reply(conv, body));
+      if (choice === 3) {
+        await reply(
+          conv,
+          `🎁 *Gift vouchers*\n\nContact ${salonDisplayName(conv.salon)} to purchase or redeem a gift voucher.${
+            conv.salon.phoneDisplay ? `\nPhone: ${conv.salon.phoneDisplay}` : ''
+          }\n\nReply BACK for menu.`,
+        );
+        return;
+      }
+      break;
+    case 'about':
+      if (choice === 1) return menuActionShowHours(conv);
+      if (choice === 2) return menuActionShowLocation(conv);
+      if (choice === 3) return menuActionShowContact(conv);
+      if (choice === 4) return menuActionShowTeam(conv);
+      break;
+    case 'support':
+      if (choice === 1) return menuActionShowFaqs(conv);
+      if (choice === 2) return menuActionLeaveReview(conv);
+      if (choice === 3) {
+        await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.COMPLAINT);
+        await reply(conv, 'Please describe the issue — our team will follow up shortly.');
+        return;
+      }
+      if (choice === 4) {
+        await saveCtx(conv.id, { otherQueryAnswered: false, ...PENDING_PROFILE_CLEAR }, ConversationStep.OTHER_QUERY);
+        await reply(conv, 'You\'re through to reception — how can we help you today?');
+        return;
+      }
+      break;
+  }
+
+  await reply(conv, 'Invalid choice. Reply BACK for main menu.');
+}
+
+async function handleMenu(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const trimmed = text.trim();
+  const upper = trimmed.toUpperCase();
+
+  if (upper === 'REFERRAL') {
+    await handleReferralMenuItem(conv, (body) => reply(conv, body));
+    return;
+  }
+
+  const activeCategory = ctx(conv).menuCategory;
+  if (isMenuCategoryId(activeCategory)) {
+    const subChoice = parseSubMenuChoice(trimmed);
+    if (subChoice != null) {
+      await handleSubMenuChoice(conv, activeCategory, subChoice);
       return;
     }
-    await saveCtx(conv.id, {}, ConversationStep.FAQ);
-    const lines = faqs.map((f, i) => `${i + 1}. ${f.question}`);
-    await reply(conv, ['FAQs — reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    await reply(conv, buildSubMenuText(activeCategory));
     return;
   }
 
-  if (choice === '5') {
-    await saveCtx(
-      conv.id,
-      { ratingSubStep: 'stars', ratingStars: undefined, ratingComment: undefined, ratingNps: undefined },
-      ConversationStep.RATE_EXPERIENCE,
-    );
-    await reply(conv, '⭐ *Rate your experience*\n\nHow would you rate your last visit?\nReply with a number:\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent');
-    return;
-  }
-
-  if (choice === '6') {
-    const parts = [
-      `📞 *Contact ${salon.name}*`,
-      salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : null,
-      (salon as unknown as { contactEmail?: string }).contactEmail ? `Email: ${(salon as unknown as { contactEmail?: string }).contactEmail}` : null,
-    ].filter(Boolean);
-    if (parts.length === 1) parts.push('No contact details on file yet.');
-    await reply(conv, parts.join('\n'));
-    await replyMenu(conv);
-    return;
-  }
-
-  if (choice === '7') {
-    const open = salon.openTime ?? '09:00';
-    const close = salon.closeTime ?? '17:00';
-    const isOpen = isWithinBusinessHours(salon);
-    await reply(conv, `🕐 *Business hours*\n\nMon–Sat: ${open} – ${close}\n\nWe are currently ${isOpen ? '✅ open' : '🔴 closed'}.`);
-    await replyMenu(conv);
-    return;
-  }
-
-  if (choice === '8') {
-    const address = salon.addressLine ?? 'Address not on file.';
-    const mapsUrl = (salon as unknown as { mapsUrl?: string }).mapsUrl;
-    const lines = [
-      `📍 *Find us*`,
-      address,
-      salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : null,
-      salon.accessibility ? `♿ ${salon.accessibility}` : null,
-    ].filter(Boolean);
-
-    if (mapsUrl) {
-      lines.push('', `📌 Open in maps:\n${mapsUrl}`);
-    } else {
-      // Generate a Google Maps search link from the address
-      const query = encodeURIComponent(`${salon.name} ${address}`);
-      lines.push('', `📌 Google Maps: https://maps.google.com/?q=${query}`);
-    }
-
-    await reply(conv, lines.join('\n'));
-    await replyMenu(conv);
-    return;
-  }
-
-  if (choice === '0') {
-    await saveCtx(conv.id, { otherQueryAnswered: false }, ConversationStep.OTHER_QUERY);
-    await reply(conv, "What can I help you with? Go ahead and ask — I'll do my best to answer. 😊");
+  const mainCategory = parseMainMenuChoice(trimmed);
+  if (mainCategory) {
+    await saveCtx(conv.id, { menuCategory: mainCategory }, ConversationStep.MENU);
+    await reply(conv, buildSubMenuText(mainCategory));
     return;
   }
 
@@ -1751,8 +1961,16 @@ async function handlePickService(
   }
 
   const n = parseInt(text, 10);
+  const filterIds = ctx(conv).serviceFilterIds;
   const services = await getTenantDb().service.findMany({
-    where: { salonId: conv.salonId, active: true },
+    where: {
+      salonId: conv.salonId,
+      active: true,
+      deletedAt: null,
+      ...(Array.isArray(filterIds) && filterIds.length
+        ? { id: { in: filterIds as string[] } }
+        : {}),
+    },
     orderBy: { sortOrder: 'asc' },
   });
   if (!Number.isFinite(n) || n < 1 || n > services.length) {
@@ -3092,10 +3310,6 @@ function sanitize(s: string): string {
 
 function fmtDt(d: Date, zone: string): string {
   return DateTime.fromJSDate(d).setZone(zone).toFormat('ccc dd LLL yyyy HH:mm');
-}
-
-function fmtDate(d: Date, zone: string): string {
-  return DateTime.fromJSDate(d).setZone(zone).toFormat('dd LLL yyyy');
 }
 
 function buildStampBar(earned: number, total: number): string {

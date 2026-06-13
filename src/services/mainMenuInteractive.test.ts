@@ -4,8 +4,7 @@ import { codePointLength } from '../lib/integrations/messaging/interactiveList.j
 import { buildCloudInteractivePayload } from '../lib/integrations/messaging/whatsapp-cloud-impl.js';
 import {
   buildMainMenuInteractive,
-  MAIN_MENU_ROW_IDS_WITH_LOYALTY,
-  MAIN_MENU_ROW_IDS_WITHOUT_LOYALTY,
+  MAIN_MENU_ROW_IDS,
   salonUsesCloudInteractiveMenu,
   truncateListField,
   validateInteractiveListPayload,
@@ -13,55 +12,50 @@ import {
 
 describe('buildMainMenuInteractive', () => {
   const baseSalon = {
-    name: 'Glow Salon',
+    name: 'MarineFlow Demo',
+    tradingName: 'Bontle-Entle',
     welcomeMessage: 'Hi there! How can we help?',
-    botLoyaltyEnabled: true,
   };
 
-  it('produces a valid list payload with loyalty row', () => {
+  it('produces a valid list payload with six categories', () => {
     const interactive = buildMainMenuInteractive(baseSalon);
     expect(interactive.type).toBe('list');
     expect(validateInteractiveListPayload(interactive)).toEqual([]);
-    expect(interactive.sections[0]!.rows.map((r) => r.id)).toContain('3');
+    expect(interactive.sections[0]!.rows).toHaveLength(6);
     expect(interactive.button.length).toBeLessThanOrEqual(20);
   });
 
-  it('omits loyalty row when botLoyaltyEnabled is false', () => {
-    const interactive = buildMainMenuInteractive({ ...baseSalon, botLoyaltyEnabled: false });
-    expect(interactive.sections[0]!.rows.map((r) => r.id)).not.toContain('3');
-    expect(validateInteractiveListPayload(interactive)).toEqual([]);
+  it('uses trading name in footer not internal demo name', () => {
+    const interactive = buildMainMenuInteractive(baseSalon);
+    expect(interactive.footer).toContain('Bontle-Entle');
+    expect(interactive.footer).not.toContain('MarineFlow Demo');
   });
 
   it('uses row ids matching text menu numbers for handleMenu routing', () => {
-    expect(
-      buildMainMenuInteractive(baseSalon).sections[0]!.rows.map((r) => r.id),
-    ).toEqual([...MAIN_MENU_ROW_IDS_WITH_LOYALTY]);
-    expect(
-      buildMainMenuInteractive({ ...baseSalon, botLoyaltyEnabled: false }).sections[0]!.rows.map(
-        (r) => r.id,
-      ),
-    ).toEqual([...MAIN_MENU_ROW_IDS_WITHOUT_LOYALTY]);
+    expect(buildMainMenuInteractive(baseSalon).sections[0]!.rows.map((r) => r.id)).toEqual([
+      ...MAIN_MENU_ROW_IDS,
+    ]);
   });
 
   it('survives extreme salon names and welcome messages', () => {
     const interactive = buildMainMenuInteractive({
       name: 'Salon 💇‍♀️'.repeat(50),
+      tradingName: 'Bontle-Entle',
       welcomeMessage: '🎉 Welcome! '.repeat(300),
-      botLoyaltyEnabled: true,
     });
     expect(codePointLength(interactive.body)).toBeLessThanOrEqual(1024);
     expect(validateInteractiveListPayload(interactive)).toEqual([]);
     expect(buildCloudInteractivePayload(interactive).type).toBe('interactive');
   });
 
-  it('falls back to default welcome when welcomeMessage is blank whitespace', () => {
+  it('falls back to trading name when welcomeMessage is blank', () => {
     const interactive = buildMainMenuInteractive({
-      name: 'Neat Cuts',
+      name: 'Neat Cuts Internal',
+      tradingName: 'Neat Cuts',
       welcomeMessage: '   \n\t  ',
-      botLoyaltyEnabled: false,
     });
     expect(interactive.body).toContain('Neat Cuts');
-    expect(interactive.body).toContain('Tap below');
+    expect(interactive.body).not.toContain('Internal');
   });
 });
 
@@ -93,19 +87,17 @@ describe('validateInteractiveListPayload', () => {
 });
 
 describe('end-to-end menu payload contract', () => {
-  it('Graph API payload round-trips validation for loyalty on/off', () => {
-    for (const botLoyaltyEnabled of [true, false] as const) {
-      const interactive: InteractiveList = buildMainMenuInteractive({
-        name: 'Contract Test',
-        botLoyaltyEnabled,
-      });
-      expect(validateInteractiveListPayload(interactive)).toEqual([]);
-      const cloud = buildCloudInteractivePayload(interactive);
-      expect(cloud.type).toBe('interactive');
-      const rows = (cloud.interactive as { action: { sections: { rows: { id: string }[] }[] } })
-        .action.sections[0]!.rows;
-      expect(rows.every((r) => r.id.length <= 200)).toBe(true);
-      expect(rows.every((r) => Object.keys(r).length >= 2)).toBe(true);
-    }
+  it('Graph API payload round-trips validation', () => {
+    const interactive: InteractiveList = buildMainMenuInteractive({
+      name: 'Contract Test',
+      tradingName: 'Contract Test',
+    });
+    expect(validateInteractiveListPayload(interactive)).toEqual([]);
+    const cloud = buildCloudInteractivePayload(interactive);
+    expect(cloud.type).toBe('interactive');
+    const rows = (cloud.interactive as { action: { sections: { rows: { id: string }[] }[] } })
+      .action.sections[0]!.rows;
+    expect(rows.every((r) => r.id.length <= 200)).toBe(true);
+    expect(rows.every((r) => Object.keys(r).length >= 2)).toBe(true);
   });
 });
