@@ -609,7 +609,13 @@ export async function handleInboundWhatsApp(input: {
   const lockKey = `conv:lock:${tenant.id}:${waId}`;
   let lockAcquired = false;
   try {
-    const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
+    let acquired: string | null = null;
+    try {
+      acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
+    } catch {
+      // Redis unavailable — skip deduplication, process anyway
+      acquired = 'OK';
+    }
     lockAcquired = acquired === 'OK';
     if (!lockAcquired) {
       logger.warn({ tenantId: tenant.id, waId }, 'concurrent_message_blocked');
@@ -745,14 +751,14 @@ async function processInboundWhatsApp(
     data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
   });
 
-  await getTenantDb().analyticsEvent.create({
+  getTenantDb().analyticsEvent.create({
     data: {
       salonId: salon.id,
       customerId: customer.id,
       type: 'whatsapp_inbound',
       payload: { len: text.length },
     },
-  });
+  }).catch((err) => logger.warn({ err }, 'analytics_event_create_failed'));
 
   // Notify the dashboard SSE stream — fire-and-forget, must not block the transaction
   emitMessageReceived(salon.id, customer.id, text).catch((err) =>
