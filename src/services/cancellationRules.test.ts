@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { DateTime } from 'luxon';
-import { checkCancellationAllowed, formatHoursUntil } from './cancellationRules.js';
+import { checkCancellationAllowed } from './cancellationRules.js';
 
 const TZ = 'Africa/Johannesburg';
 const emptyMeta = {};

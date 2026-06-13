@@ -19,11 +19,10 @@ export const noShowFollowUp = inngest.createFunction(
     triggers: [{ event: 'appointment/no_show.followup' }],
   },
   async ({ event }) => {
-    const { appointmentId, salonId, customerId, customerWaId } = event.data as {
+    const { appointmentId, salonId, customerId } = event.data as {
       appointmentId: string;
       salonId: string;
       customerId: string;
-      customerWaId: string;
     };
 
     const data = await withJobTenant(salonId, () =>
@@ -105,7 +104,7 @@ export const noShowFollowUp = inngest.createFunction(
           customerId,
           appointmentId,
           type: 'no_show_followup_sent',
-          payload: { delivered: result === 'sent' || result === 'delivered', channel: 'whatsapp' },
+          payload: { delivered: !!result.providerMessageId, channel: 'whatsapp' },
         },
       }),
     );

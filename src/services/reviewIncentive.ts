@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
@@ -242,7 +242,7 @@ export async function claimReviewIncentive(params: {
   }
 
   let credited = false;
-  await db.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const updated = await tx.reviewIncentiveClaim.updateMany({
       where: { id: claim!.id, claimedAt: null, expiresAt: { gt: now } },
       data: { claimedAt: now },

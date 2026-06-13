@@ -398,7 +398,7 @@ export function mergeAutomationsIntoMetadata(
   automations: SalonAutomations,
 ): Prisma.InputJsonValue {
   const base = isRecord(existing) ? { ...existing } : {};
-  return { ...base, automations } as Prisma.InputJsonValue;
+  return { ...base, automations } as unknown as Prisma.InputJsonValue;
 }
 
 /** Visit numbers that should trigger a referral nudge (1, then every 5th thereafter). */

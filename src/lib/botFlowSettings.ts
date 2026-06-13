@@ -133,7 +133,7 @@ export function mergeBotFlowIntoMetadata(
     ...base,
     botFlowOrder: order,
     botCustomFlows: customFlows,
-  } as Prisma.InputJsonValue;
+  } as unknown as Prisma.InputJsonValue;
 }
 
 export function newCustomFlowId(): string {

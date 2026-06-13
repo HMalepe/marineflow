@@ -324,7 +324,7 @@ export async function onBookingConfirmed(appt: {
   id: string;
   salonId: string;
   start: Date;
-  status: string;
+  status: import('@prisma/client').AppointmentStatus;
   salon: Pick<Salon, 'metadata' | 'timezone'>;
 }): Promise<void> {
   if (appt.start.getTime() <= Date.now()) return;

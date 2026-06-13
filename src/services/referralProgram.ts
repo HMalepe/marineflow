@@ -102,7 +102,6 @@ export async function maybeSendReferralPrompt(params: {
   if (!ref) return false;
 
   const reward = (ref.rewardCents / 100).toFixed(0);
-  const salonName = ref.salonName;
   const body =
     `Hey ${customer.firstName ?? 'there'}! 🙌\n\n` +
     `Know someone who needs a fresh cut? Refer a friend with code *${ref.code.code}* — ` +

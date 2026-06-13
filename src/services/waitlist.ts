@@ -1,3 +1,4 @@
+import { type Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { sendWithFallback } from './channelRouter.js';
 import { logger } from '../lib/logger.js';
@@ -128,7 +129,7 @@ export async function notifyWaitlistOnCancel(params: {
         await db.conversation.update({
           where: { id: conv.id },
           data: {
-            context: { ...existingCtx, waitlistClaim: claim },
+            context: { ...existingCtx, waitlistClaim: claim } as unknown as Prisma.InputJsonValue,
             step: 'MENU',
           },
         });

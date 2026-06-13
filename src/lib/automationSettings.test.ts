@@ -3,8 +3,6 @@ import {
   DEFAULT_AUTOMATIONS,
   parseAutomationsFromMetadata,
   validateAutomationsPayload,
-  shouldPromptReferral,
-  expandReferralPromptVisits,
 } from './automationSettings.js';
 
 describe('automationSettings', () => {

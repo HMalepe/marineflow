@@ -3,7 +3,6 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import type { Service, Staff, TimeOff, Appointment } from '@prisma/client';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 
-const SLOT_STEP_MIN = 15;
 
 export type Slot = { start: Date; end: Date };
 

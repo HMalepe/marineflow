@@ -53,6 +53,7 @@ import {
   validateWeeklyHoursSettings,
   type WeeklyHoursSettings,
 } from '../lib/businessHours.js';
+import { DEFAULT_BUSINESS_HOURS } from '../lib/salonDefaults.js';
 import {
   mergeAutomationsIntoMetadata,
   parseAutomationsFromMetadata,
@@ -2045,9 +2046,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           _sum: { delta: true },
         }),
         // Item 28: CLV = total paid across all invoices
-        db.invoice.aggregate({
-          where: { customerId: customer.id, status: 'PAID' },
-          _sum: { totalCents: true },
+        db.payment.aggregate({
+          where: { customerId: customer.id, status: 'SUCCEEDED' },
+          _sum: { amountCents: true },
         }),
       ]);
 
@@ -2066,7 +2067,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         noShowRisk: normalizeNoShowRisk(customer.noShowRisk),
         createdAt: customer.createdAt,
         loyaltyStamps: loyaltySum._sum.delta ?? 0,
-        lifetimeValueCents: clvAgg._sum.totalCents ?? 0,
+        lifetimeValueCents: clvAgg._sum?.amountCents ?? 0,
         tags: customer.tags,
         dateOfBirth: customer.dateOfBirth?.toISOString().slice(0, 10) ?? null,
         appointments: appointments.map((a) => ({
@@ -2240,7 +2241,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             lastName: primary.lastName || secondary.lastName || null,
             displayName: primary.displayName || secondary.displayName || null,
             email: primary.email || secondary.email || null,
-            waId: mergedWaId,
+            waId: mergedWaId ?? undefined,
             noShowCount: primary.noShowCount + secondary.noShowCount,
             bookingCount: primary.bookingCount + secondary.bookingCount,
           },
@@ -3651,7 +3652,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             marketingConsentStatus: true,
             bookingCount: true,
             noShowCount: true,
-            loyaltyStamps: true,
+            loyaltyStampsCached: true,
             createdAt: true,
             lastInteractionAt: true,
           },
@@ -3675,7 +3676,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           c.marketingConsentStatus,
           c.bookingCount,
           c.noShowCount,
-          c.loyaltyStamps,
+          c.loyaltyStampsCached,
           c.createdAt.toISOString().slice(0, 10),
           c.lastInteractionAt?.toISOString().slice(0, 10) ?? '',
         ]);
@@ -3817,7 +3818,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             status: { in: ['CONFIRMED', 'CONFIRMED_PAID'] },
             start: { lte: now },
           },
-          data: { status: 'COMPLETED', completedAt: now },
+          data: { status: 'COMPLETED' },
         });
 
         return { completed: result.count, skipped: ids.length - result.count };

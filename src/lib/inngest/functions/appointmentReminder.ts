@@ -64,7 +64,7 @@ export const appointmentReminder = inngest.createFunction(
       return { skipped: true, reason: 'already_sent' };
     }
 
-    const sendResult = await step.run('send-reminder', async () => {
+    await step.run('send-reminder', async () => {
       const startDate = new Date(appt.start as unknown as string);
       const startFormatted = startDate.toLocaleString('en-ZA', {
         timeZone: appt.salon.timezone,

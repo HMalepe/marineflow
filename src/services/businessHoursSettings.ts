@@ -86,7 +86,7 @@ export async function saveWeeklyHoursSettings(
       metadata: {
         ...existingMeta,
         hourOverrides: settings.holidayOverrides,
-      } as Prisma.InputJsonValue,
+      } as unknown as Prisma.InputJsonValue,
     },
   });
 
