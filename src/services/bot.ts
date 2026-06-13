@@ -924,10 +924,10 @@ async function processInboundWhatsApp(
     } catch (err) {
       logger.error({ err, convId: conv.id, step: conv.step }, 'booking_flow_error');
       if (!hasPendingOutboundForConv(conv.id)) {
-        await reply(
-          conv,
-          'Sorry — something went wrong while booking. Reply *MENU* to start again.',
-        );
+        await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU).catch(() => {});
+        syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+        await reply(conv, 'Sorry — something went wrong with your booking. Starting fresh:');
+        await replyMenu(conv);
       }
     }
     return;
@@ -1529,7 +1529,8 @@ async function startBookingFlow(
   }
 
   if (branches.length === 1) {
-    await saveCtx(conv.id, { selectedBranchId: branches[0].id });
+    await saveCtx(conv.id, { selectedBranchId: branches[0].id }, ConversationStep.PICK_SERVICE);
+    syncConvContext(conv, { selectedBranchId: branches[0].id }, ConversationStep.PICK_SERVICE);
   }
 
   const services = await loadActiveServicesForBooking(salon.id);
@@ -1730,8 +1731,8 @@ async function menuActionStartBooking(
     });
 
     if (isProfileIncomplete(customer)) {
-      await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
-      syncConvContext(conv, {}, ConversationStep.COLLECT_FIRST_NAME);
+      await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
+      syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
       await reply(
         conv,
         [
@@ -1991,11 +1992,9 @@ async function menuActionShowServiceCategory(
   }
 
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  await saveCtx(
-    conv.id,
-    { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined },
-    ConversationStep.PICK_SERVICE,
-  );
+  const filterPatch = { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined };
+  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
   await reply(
     conv,
     [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
@@ -2605,6 +2604,7 @@ async function handlePickSlot(
     { slotStartIso: slot.start.toISOString() },
     ConversationStep.CONFIRM_BOOKING,
   );
+  syncConvContext(conv, { slotStartIso: slot.start.toISOString() }, ConversationStep.CONFIRM_BOOKING);
   const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
   await reply(
     conv,
@@ -2624,8 +2624,10 @@ async function handleConfirm(
 ) {
   // EC-03: accept natural affirmations, not just exact "yes"/"y"
   if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(text.trim())) {
-    await reply(conv, 'Booking not confirmed. Reply YES to confirm, or BACK to return to menu.');
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+    await reply(conv, 'Booking not confirmed — no worries!');
+    await replyMenu(conv);
     return;
   }
 
