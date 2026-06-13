@@ -34,6 +34,8 @@ import { scheduleConversationActivity } from '../lib/inngest/functions/conversat
 import {
   buildMainMenuText,
   buildSubMenuText,
+  isMenuNavigationInput,
+  isValidSubMenuChoice,
   normalizeMenuCategoryId,
   parseMainMenuSelection,
   parseSubMenuChoice,
@@ -278,12 +280,109 @@ async function saveCtx(convId: string, patch: Partial<BotContext>, step?: Conver
   });
 }
 
+function syncConvContext(
+  conv: Conversation,
+  patch: Partial<BotContext>,
+  step?: ConversationStep,
+): void {
+  conv.context = applyContextPatch(ctx(conv), patch) as object;
+  if (step) conv.step = step;
+}
+
+type PendingOutbound = {
+  salonId: string;
+  convId: string;
+  customerId: string;
+  waId: string;
+  body: string;
+  interactive?: ReturnType<typeof buildMainMenuInteractive>;
+};
+
+/** When set, reply() queues WhatsApp sends until after the DB transaction commits. */
+let pendingOutbound: PendingOutbound[] | null = null;
+
+type PendingWelcomeJourney = {
+  salonId: string;
+  customerId: string;
+  isFirstInteraction: boolean;
+  waId: string;
+};
+
+let pendingWelcomeJourney: PendingWelcomeJourney | null = null;
+
+function startOutboundDeferral(): void {
+  pendingOutbound = [];
+}
+
+async function recordOutboundMessage(
+  msg: PendingOutbound,
+  providerSid: string,
+): Promise<void> {
+  await getTenantDb().message.create({
+    data: {
+      conversationId: msg.convId,
+      customerId: msg.customerId,
+      direction: MessageDirection.OUTBOUND,
+      body: msg.body,
+      providerSid,
+    },
+  });
+  await getTenantDb().conversation.update({
+    where: { id: msg.convId },
+    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+  });
+}
+
+async function deliverOutboundNow(
+  msg: PendingOutbound,
+): Promise<void> {
+  try {
+    const { result } = await sendWithFallback({
+      salonId: msg.salonId,
+      to: msg.waId,
+      body: msg.body,
+      interactive: msg.interactive,
+    });
+    const providerSid = result.providerMessageId ?? null;
+    if (!providerSid) {
+      logger.error({ to: msg.waId, salonId: msg.salonId }, 'reply_send_no_provider_id');
+      return;
+    }
+    await withTenantContext(msg.salonId, async () => {
+      await recordOutboundMessage(msg, providerSid);
+    });
+  } catch (err) {
+    logger.error({ err, to: msg.waId, salonId: msg.salonId }, 'reply_send_failed');
+  }
+}
+
+async function flushPendingOutbound(): Promise<void> {
+  const queue = pendingOutbound;
+  pendingOutbound = null;
+  if (!queue?.length) return;
+  for (const msg of queue) {
+    await deliverOutboundNow(msg);
+  }
+}
+
 async function reply(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
   outboundSid?: string | null,
   sendOptions?: { interactive?: ReturnType<typeof buildMainMenuInteractive> },
 ) {
+  if (!outboundSid && pendingOutbound) {
+    pendingOutbound.push({
+      salonId: conv.salonId,
+      convId: conv.id,
+      customerId: conv.customerId,
+      waId: conv.customer.waId,
+      body: text,
+      interactive: sendOptions?.interactive,
+    });
+    return;
+  }
+
   let providerSid: string | null = outboundSid ?? null;
   if (!providerSid) {
     try {
@@ -303,26 +402,31 @@ async function reply(
       return;
     }
   }
-  await getTenantDb().message.create({
-    data: {
-      conversationId: conv.id,
+  await recordOutboundMessage(
+    {
+      salonId: conv.salonId,
+      convId: conv.id,
       customerId: conv.customerId,
-      direction: MessageDirection.OUTBOUND,
+      waId: conv.customer.waId,
       body: text,
-      providerSid,
+      interactive: sendOptions?.interactive,
     },
-  });
-  await getTenantDb().conversation.update({
-    where: { id: conv.id },
-    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
-  });
+    providerSid,
+  );
 }
 
 async function replyMenu(conv: Conversation & { customer: Customer; salon: Salon }) {
+  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU).catch(() => {});
+  syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
   const body = mainMenu(conv.salon);
-  const interactive = salonUsesCloudInteractiveMenu(conv.salon.whatsappPhoneId)
-    ? buildMainMenuInteractive(conv.salon)
-    : undefined;
+  let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
+  try {
+    interactive = salonUsesCloudInteractiveMenu(conv.salon.whatsappPhoneId)
+      ? buildMainMenuInteractive(conv.salon)
+      : undefined;
+  } catch (err) {
+    logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
+  }
   await reply(conv, body, null, interactive ? { interactive } : undefined);
 }
 
@@ -510,19 +614,52 @@ export async function handleInboundWhatsApp(input: {
       logger.warn({ tenantId: tenant.id, waId }, 'concurrent_message_blocked');
       return;
     }
-    await withTenantContext(tenant.id, async () => {
-      await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
-    });
+    startOutboundDeferral();
+    try {
+      await withTenantContext(tenant.id, async () => {
+        await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
+      });
+    } finally {
+      await flushPendingOutbound();
+      if (pendingWelcomeJourney) {
+        const job = pendingWelcomeJourney;
+        pendingWelcomeJourney = null;
+        void withTenantContext(job.salonId, () =>
+          sendWelcomeJourneyIfNeeded({
+            salonId: job.salonId,
+            customerId: job.customerId,
+            isFirstInteraction: job.isFirstInteraction,
+            send: (body) => sendTenantWhatsApp(job.salonId, job.waId, body),
+          }),
+        ).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
+      }
+    }
   } catch (err) {
     const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
     logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
     // Last resort — send an error notice so users know something went wrong (not a silent menu)
     try {
-      await sendTenantWhatsApp(
-        tenant.id,
-        waId,
-        'Sorry, something went wrong on our end. Please try again in a moment.\n\nReply *MENU* to restart.',
-      );
+      const salon = await prisma.salon.findUnique({
+        where: { id: tenant.id },
+        select: {
+          name: true,
+          tradingName: true,
+          welcomeMessage: true,
+          botLoyaltyEnabled: true,
+          metadata: true,
+          openTime: true,
+          closeTime: true,
+          timezone: true,
+          whatsappPhoneId: true,
+          addressLine: true,
+          phoneDisplay: true,
+          parkingNotes: true,
+          accessibility: true,
+        },
+      });
+      if (salon) {
+        await sendTenantWhatsApp(tenant.id, waId, buildMainMenuText(salon as Salon));
+      }
     } catch (fallbackErr) {
       logger.error({ err: fallbackErr }, 'bot_fallback_send_failed');
     }
@@ -631,12 +768,12 @@ async function processInboundWhatsApp(
 
   const isFirstEverMessage = conv.messageCount === 0;
   if (isFirstEverMessage) {
-    void sendWelcomeJourneyIfNeeded({
+    pendingWelcomeJourney = {
       salonId: salon.id,
       customerId: customer.id,
       isFirstInteraction: customer.bookingCount === 0,
-      send: (body) => reply(conv, body),
-    }).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
+      waId,
+    };
   }
 
   if (salon.status !== 'ACTIVE' && salon.status !== 'TRIAL') {
@@ -705,6 +842,13 @@ async function processInboundWhatsApp(
   const lower = text.toLowerCase();
   if (lower === 'undo' || lower === 'back' || lower === 'menu') {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+
+  if (isConversationWakeMessage(text)) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyMenu(conv);
     return;
   }
@@ -788,12 +932,45 @@ async function processInboundWhatsApp(
     return;
   }
 
-  const aiSteps: ConversationStep[] = [
+  const aiSteps: ConversationStep[] = [ConversationStep.FAQ];
+  const menuHandlerSteps: ConversationStep[] = [
     ConversationStep.GREETING,
     ConversationStep.MENU,
     ConversationStep.IDLE,
-    ConversationStep.FAQ,
   ];
+  if (
+    menuHandlerSteps.includes(conv.step) &&
+    isMenuNavigationInput(ctx(conv).menuCategory, text)
+  ) {
+    try {
+      await handleMenu(conv, text);
+      if ((ctx(conv).errorCount ?? 0) > 0) {
+        await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
+      }
+    } catch (err) {
+      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_navigation_error');
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyMenu(conv);
+    }
+    return;
+  }
+
+  if (menuHandlerSteps.includes(conv.step)) {
+    try {
+      await handleMenu(conv, text);
+      if ((ctx(conv).errorCount ?? 0) > 0) {
+        await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
+      }
+    } catch (err) {
+      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyMenu(conv);
+    }
+    return;
+  }
+
   if (aiSteps.includes(conv.step)) {
     const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
     // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
@@ -823,7 +1000,8 @@ async function processInboundWhatsApp(
         err instanceof Prisma.PrismaClientKnownRequestError &&
         (err.code === 'P2021' || err.code === 'P2002');
       if (isInfraError) {
-        await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+        await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
+        syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
         await replyMenu(conv);
         return;
       }
@@ -833,7 +1011,9 @@ async function processInboundWhatsApp(
 
       if (errorCount >= 2) {
         // Escalate: move to HANDOFF, notify user, open a ticket, ping dashboard
-        await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.HANDOFF);
+        await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.HANDOFF).catch(
+          () => {},
+        );
 
         await reply(
           conv,
@@ -859,7 +1039,7 @@ async function processInboundWhatsApp(
               },
             },
           },
-        });
+        }).catch(() => {});
 
         // Push a real-time alert to every dashboard tab watching this salon
         emitBotEscalation(conv.salonId, conv.customerId, conv.id, {
@@ -873,12 +1053,16 @@ async function processInboundWhatsApp(
           'bot_escalated_to_staff',
         );
       } else {
-        // First failure — soft recovery, keep counting
-        await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU);
-        await replyWithMenu(conv, `Sorry, something went wrong on our end. Let's start over.`);
+        // First failure — show menu without alarming copy
+        await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU).catch(
+          () => {},
+        );
+        syncConvContext(conv, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU);
+        await replyMenu(conv);
       }
     } catch (innerErr) {
       logger.error({ innerErr }, 'error_recovery_failed');
+      await replyMenu(conv).catch(() => {});
     }
   }
 }
@@ -1883,6 +2067,21 @@ async function handleSubMenuChoice(
   await reply(conv, 'Invalid choice. Reply BACK for main menu.');
 }
 
+async function handleMainMenuSelection(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  selection: NonNullable<ReturnType<typeof parseMainMenuSelection>>,
+): Promise<void> {
+  if (selection.kind === 'direct' && selection.action === 'book') {
+    await menuActionStartBooking(conv);
+    return;
+  }
+  if (selection.kind === 'category') {
+    await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
+    syncConvContext(conv, { menuCategory: selection.id }, ConversationStep.MENU);
+    await reply(conv, buildSubMenuText(selection.id));
+  }
+}
+
 async function handleMenu(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -1900,8 +2099,15 @@ async function handleMenu(
     rawCategory === 'appointments' ? 'appointments' : normalizeMenuCategoryId(rawCategory);
   if (activeCategory) {
     const subChoice = parseSubMenuChoice(trimmed);
-    if (subChoice != null) {
+    if (subChoice != null && isValidSubMenuChoice(activeCategory, subChoice)) {
       await handleSubMenuChoice(conv, activeCategory, subChoice);
+      return;
+    }
+    const mainSelection = parseMainMenuSelection(trimmed);
+    if (mainSelection) {
+      await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
+      syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
+      await handleMainMenuSelection(conv, mainSelection);
       return;
     }
     await reply(conv, buildSubMenuText(activeCategory));
@@ -1909,18 +2115,11 @@ async function handleMenu(
   }
 
   const selection = parseMainMenuSelection(trimmed);
-  if (selection?.kind === 'direct' && selection.action === 'book') {
-    await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
-    await menuActionStartBooking(conv);
-    return;
-  }
-  if (selection?.kind === 'category') {
-    await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
-    await reply(conv, buildSubMenuText(selection.id));
+  if (selection) {
+    await handleMainMenuSelection(conv, selection);
     return;
   }
 
-  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
   await replyMenu(conv);
 }
 

@@ -113,6 +113,42 @@ export function parseSubMenuChoice(text: string): number | null {
   return n;
 }
 
+const LEGACY_APPOINTMENTS_SUB_COUNT = 4;
+
+export function getSubMenuItemCount(
+  category: MenuCategoryId | LegacyMenuCategoryId,
+): number {
+  if (category === 'appointments') return LEGACY_APPOINTMENTS_SUB_COUNT;
+  return SUB_MENUS[category]?.length ?? 0;
+}
+
+export function isValidSubMenuChoice(
+  category: MenuCategoryId | LegacyMenuCategoryId,
+  choice: number,
+): boolean {
+  return choice >= 1 && choice <= getSubMenuItemCount(category);
+}
+
+/** True when input should be handled by handleMenu() instead of AI free-text. */
+export function isMenuNavigationInput(menuCategory: unknown, text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  if (trimmed.toUpperCase() === 'REFERRAL') return true;
+
+  const activeCategory =
+    menuCategory === 'appointments'
+      ? ('appointments' as LegacyMenuCategoryId)
+      : normalizeMenuCategoryId(menuCategory);
+
+  if (activeCategory) {
+    const sub = parseSubMenuChoice(trimmed);
+    if (sub != null && isValidSubMenuChoice(activeCategory, sub)) return true;
+    return parseMainMenuSelection(trimmed) !== null;
+  }
+
+  return parseMainMenuSelection(trimmed) !== null;
+}
+
 /** Service category keywords for submenu filtering. */
 export const SERVICE_CATEGORY_KEYS = ['hair', 'nails', 'massage', 'beauty'] as const;
 export type ServiceCategoryKey = (typeof SERVICE_CATEGORY_KEYS)[number];

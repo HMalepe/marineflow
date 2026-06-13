@@ -1,6 +1,7 @@
 import { ConversationStep, MessageDirection, type Conversation, type Customer, type Salon } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { isConversationWakeMessage } from '../lib/conversationWake.js';
 import { isAnthropicConfigured, orchestrateConversation, semanticSearch, claudeText } from '../lib/integrations/ai/index.js';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
 import { logger } from '../lib/logger.js';
@@ -168,7 +169,11 @@ export async function tryAiAssist(
   if (!isAnthropicConfigured()) return { handled: false };
 
   const trimmed = inboundText.trim();
-  if (!trimmed || /^(yes|y|no|back|undo|0|[1-6])$/i.test(trimmed)) {
+  if (
+    !trimmed ||
+    isConversationWakeMessage(trimmed) ||
+    /^(yes|y|no|back|undo|0|[1-7])$/i.test(trimmed)
+  ) {
     return { handled: false };
   }
 
@@ -194,7 +199,7 @@ export async function tryAiAssist(
           handled: true,
           reply: `${ai.reply}\n\n${mainMenuText}`,
           step: ConversationStep.MENU,
-          contextPatch: { quickPickOptions: undefined },
+          contextPatch: { quickPickOptions: undefined, menuCategory: undefined },
         };
 
       case 'hours': {
@@ -208,6 +213,7 @@ export async function tryAiAssist(
           handled: true,
           reply: `${ai.reply}\n\n${lines.join('\n')}\n\n${mainMenuText}`,
           step: ConversationStep.MENU,
+          contextPatch: { menuCategory: undefined },
         };
       }
 
@@ -241,6 +247,7 @@ export async function tryAiAssist(
             handled: true,
             reply: `${ai.reply}\n\n${mainMenuText}`,
             step: ConversationStep.MENU,
+            contextPatch: { menuCategory: undefined },
           };
         }
 
@@ -256,6 +263,7 @@ export async function tryAiAssist(
             handled: true,
             reply: `${ai.reply}\n\nI couldn't find open slots right now — reply 1 on the menu to pick dates manually, or 0 to speak to our team.\n\n${mainMenuText}`,
             step: ConversationStep.MENU,
+            contextPatch: { menuCategory: undefined },
           };
         }
 
@@ -287,6 +295,7 @@ export async function tryAiAssist(
           handled: true,
           reply: `${ai.reply}\n\n${mainMenuText}`,
           step: ConversationStep.MENU,
+          contextPatch: { menuCategory: undefined },
         };
     }
   } catch (err) {

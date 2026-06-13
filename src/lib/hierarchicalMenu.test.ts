@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildMainMenuText,
   buildSubMenuText,
+  isMenuNavigationInput,
+  isValidSubMenuChoice,
   menuWelcomeLine,
   parseMainMenuSelection,
   salonDisplayName,
@@ -45,6 +47,24 @@ describe('hierarchicalMenu', () => {
   it('parses main menu selections', () => {
     expect(parseMainMenuSelection('1')).toEqual({ kind: 'direct', action: 'book' });
     expect(parseMainMenuSelection('3')).toEqual({ kind: 'category', id: 'services' });
+    expect(parseMainMenuSelection('7')).toEqual({ kind: 'category', id: 'support' });
     expect(parseMainMenuSelection('99')).toBeNull();
+  });
+
+  it('validates sub-menu choices per category', () => {
+    expect(isValidSubMenuChoice('services', 5)).toBe(true);
+    expect(isValidSubMenuChoice('services', 6)).toBe(false);
+    expect(isValidSubMenuChoice('my_appointments', 3)).toBe(true);
+  });
+
+  it('detects menu navigation input', () => {
+    expect(isMenuNavigationInput(undefined, '1')).toBe(true);
+    expect(isMenuNavigationInput(undefined, '7')).toBe(true);
+    expect(isMenuNavigationInput(undefined, 'hello')).toBe(false);
+    expect(isMenuNavigationInput('services', '1')).toBe(true);
+    expect(isMenuNavigationInput('services', '6')).toBe(true);
+    expect(isMenuNavigationInput('services', '7')).toBe(true);
+    expect(isMenuNavigationInput('services', '99')).toBe(false);
+    expect(isMenuNavigationInput('services', 'REFERRAL')).toBe(true);
   });
 });
