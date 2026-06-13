@@ -131,8 +131,14 @@ export function isValidSubMenuChoice(
 
 /** True when input should be handled by handleMenu() instead of AI free-text. */
 export function isMenuNavigationInput(menuCategory: unknown, text: string): boolean {
+  return isWhatsAppMenuInput(text, menuCategory);
+}
+
+/** WhatsApp bot menu/booking input — must not be blocked by dashboard consent or follow-up flows. */
+export function isWhatsAppMenuInput(text: string, menuCategory?: unknown): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
+  if (/^(back|menu|undo)$/i.test(trimmed)) return true;
   if (trimmed.toUpperCase() === 'REFERRAL') return true;
 
   const activeCategory =

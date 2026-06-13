@@ -36,6 +36,7 @@ import {
   buildMainMenuText,
   buildSubMenuText,
   isValidSubMenuChoice,
+  isWhatsAppMenuInput,
   normalizeMenuCategoryId,
   parseMainMenuSelection,
   parseSubMenuChoice,
@@ -195,6 +196,43 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
 
 function isProfileIncomplete(customer: Customer): boolean {
   return !customer.firstName || !customer.lastName || !customer.email || !customer.dateOfBirth;
+}
+
+const WHATSAPP_MENU_STEPS: ConversationStep[] = [
+  ConversationStep.GREETING,
+  ConversationStep.MENU,
+  ConversationStep.IDLE,
+];
+
+const WHATSAPP_BOOKING_STEPS: ConversationStep[] = [
+  ConversationStep.COLLECT_FIRST_NAME,
+  ConversationStep.COLLECT_LAST_NAME,
+  ConversationStep.COLLECT_EMAIL,
+  ConversationStep.COLLECT_DATE_OF_BIRTH,
+  ConversationStep.BOOKING_POPIA_CONSENT,
+  ConversationStep.PICK_BRANCH,
+  ConversationStep.PICK_SERVICE,
+  ConversationStep.PICK_STAFF,
+  ConversationStep.PICK_DATE,
+  ConversationStep.PICK_SLOT,
+  ConversationStep.CONFIRM_BOOKING,
+];
+
+async function loadActiveServicesForBooking(salonId: string) {
+  try {
+    return await getTenantDb().service.findMany({
+      where: { salonId, active: true, deletedAt: null },
+      orderBy: { sortOrder: 'asc' },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+      return getTenantDb().service.findMany({
+        where: { salonId, active: true },
+        orderBy: { sortOrder: 'asc' },
+      });
+    }
+    throw err;
+  }
 }
 
 /** Parse DD/MM/YYYY or YYYY-MM-DD.  Returns null for unrecognised formats or impossible dates. */
@@ -859,16 +897,16 @@ async function processInboundWhatsApp(
     return;
   }
 
-  const consentHandled = await handleMarketingConsentFlow(conv, text);
-  if (consentHandled) return;
-
   const recovery = await tryRecoverFromSilentHandoff(conv, text);
   if (recovery.handled) return;
   conv = recovery.conv;
 
   const lower = text.toLowerCase();
+
+  // ── WhatsApp core flows (always win over dashboard marketing / follow-up settings) ──
   if (lower === 'undo' || lower === 'back' || lower === 'menu') {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyMenu(conv);
     return;
   }
@@ -879,6 +917,49 @@ async function processInboundWhatsApp(
     await replyMenu(conv);
     return;
   }
+
+  if (WHATSAPP_BOOKING_STEPS.includes(conv.step)) {
+    try {
+      await routeConversation(conv, text);
+    } catch (err) {
+      logger.error({ err, convId: conv.id, step: conv.step }, 'booking_flow_error');
+      if (!hasPendingOutboundForConv(conv.id)) {
+        await reply(
+          conv,
+          'Sorry — something went wrong while booking. Reply *MENU* to start again.',
+        );
+      }
+    }
+    return;
+  }
+
+  if (conv.step === ConversationStep.MARKETING_CONSENT) {
+    await handleMarketingConsentFlow(conv, text);
+    return;
+  }
+
+  if (WHATSAPP_MENU_STEPS.includes(conv.step)) {
+    try {
+      conv = await reloadConversation(conv.id);
+      await handleMenu(conv, text);
+      if ((ctx(conv).errorCount ?? 0) > 0) {
+        await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
+      }
+    } catch (err) {
+      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
+      if (!hasPendingOutboundForConv(conv.id)) {
+        await reply(
+          conv,
+          'Something went wrong. Reply *MENU* to see the menu and try again.',
+        );
+      }
+    }
+    return;
+  }
+
+  // Dashboard marketing consent — never blocks menu numbers or booking navigation
+  const consentHandled = await handleMarketingConsentFlow(conv, text);
+  if (consentHandled) return;
 
   const waitlistHandled = await tryHandleWaitlistReply(conv, text, {
     reply: (body) => reply(conv, body),
@@ -960,54 +1041,6 @@ async function processInboundWhatsApp(
   }
 
   const aiSteps: ConversationStep[] = [ConversationStep.FAQ];
-  const menuHandlerSteps: ConversationStep[] = [
-    ConversationStep.GREETING,
-    ConversationStep.MENU,
-    ConversationStep.IDLE,
-  ];
-  const bookingFlowSteps: ConversationStep[] = [
-    ConversationStep.COLLECT_FIRST_NAME,
-    ConversationStep.COLLECT_LAST_NAME,
-    ConversationStep.COLLECT_EMAIL,
-    ConversationStep.COLLECT_DATE_OF_BIRTH,
-    ConversationStep.BOOKING_POPIA_CONSENT,
-    ConversationStep.PICK_BRANCH,
-    ConversationStep.PICK_SERVICE,
-    ConversationStep.PICK_STAFF,
-    ConversationStep.PICK_DATE,
-    ConversationStep.PICK_SLOT,
-    ConversationStep.CONFIRM_BOOKING,
-  ];
-  if (bookingFlowSteps.includes(conv.step)) {
-    try {
-      await routeConversation(conv, text);
-    } catch (err) {
-      logger.error({ err, convId: conv.id, step: conv.step }, 'booking_flow_error');
-      if (!hasPendingOutboundForConv(conv.id)) {
-        await reply(
-          conv,
-          'Sorry — something went wrong while booking. Reply *MENU* to start again.',
-        );
-      }
-    }
-    return;
-  }
-  if (menuHandlerSteps.includes(conv.step)) {
-    try {
-      await handleMenu(conv, text);
-    } catch (err) {
-      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
-      if (!hasPendingOutboundForConv(conv.id)) {
-        await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
-        syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-        await replyMenu(conv);
-      }
-    }
-    if ((ctx(conv).errorCount ?? 0) > 0) {
-      await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
-    }
-    return;
-  }
   if (aiSteps.includes(conv.step)) {
     const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
     // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
@@ -1037,11 +1070,12 @@ async function processInboundWhatsApp(
         err instanceof Prisma.PrismaClientKnownRequestError &&
         (err.code === 'P2021' || err.code === 'P2002');
       if (isInfraError) {
-        const errCode = (err as Prisma.PrismaClientKnownRequestError).code;
-        logger.error({ err, code: errCode, step: conv.step }, 'route_conversation_infra_error');
+        logger.error(
+          { err, code: (err as Prisma.PrismaClientKnownRequestError).code, step: conv.step },
+          'route_conversation_infra_error',
+        );
         await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
         syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-        await reply(conv, "Sorry, something went wrong. Let's start again!");
         await replyMenu(conv);
         return;
       }
@@ -1293,6 +1327,10 @@ async function handleMarketingConsentFlow(
   // Owner can disable the POPIA consent prompt — skip the whole flow
   if (!salon.botAskMarketingConsent) return false;
 
+  // WhatsApp menu/booking navigation always takes priority over dashboard consent
+  if (isWhatsAppMenuInput(text, ctx(conv).menuCategory)) return false;
+  if (isConversationWakeMessage(text)) return false;
+
   if (isGlobalMarketingOptOut(text)) {
     if (status !== 'DECLINED') {
       await applyMarketingConsentChoice({
@@ -1481,10 +1519,7 @@ async function startBookingFlow(
     await saveCtx(conv.id, { selectedBranchId: branches[0].id });
   }
 
-  const services = await getTenantDb().service.findMany({
-    where: { salonId: salon.id, active: true, deletedAt: null },
-    orderBy: { sortOrder: 'asc' },
-  });
+  const services = await loadActiveServicesForBooking(salon.id);
   if (services.length === 0) {
     await replyWithMenu(conv, `No services configured yet. Please contact the salon.`);
     return;
@@ -1673,38 +1708,41 @@ async function handleBookingPopiaConsent(
 async function menuActionStartBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
-  await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-  syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-
-  const customer = await getTenantDb().customer.findUniqueOrThrow({
-    where: { id: conv.customerId },
-  });
-
-  if (isProfileIncomplete(customer)) {
-    await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
-    syncConvContext(conv, {}, ConversationStep.COLLECT_FIRST_NAME);
-    await reply(
-      conv,
-      [
-        'Great — let\'s get you booked! First, we need a few details.',
-        '',
-        'What is your *first name*?',
-        '(Letters only — reply BACK for menu.)',
-      ].join('\n'),
-    );
-    return;
-  }
-
   try {
+    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+
+    const customer = await getTenantDb().customer.findUniqueOrThrow({
+      where: { id: conv.customerId },
+    });
+
+    if (isProfileIncomplete(customer)) {
+      await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
+      syncConvContext(conv, {}, ConversationStep.COLLECT_FIRST_NAME);
+      await reply(
+        conv,
+        [
+          'Great — let\'s get you booked! First, we need a few details.',
+          '',
+          'What is your *first name*?',
+          '(Letters only — reply BACK for menu.)',
+        ].join('\n'),
+      );
+      return;
+    }
+
     await startBookingFlow({ ...conv, customer });
   } catch (err) {
-    logger.error({ err, convId: conv.id }, 'start_booking_flow_failed');
+    logger.error({ err, convId: conv.id }, 'menu_action_start_booking_failed');
     if (!hasPendingOutboundForConv(conv.id)) {
       await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
       syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-      await replyWithMenu(
+      const phone = conv.salon.phoneDisplay?.trim();
+      await reply(
         conv,
-        'Sorry — we could not start your booking. Please try again or contact the salon.',
+        phone
+          ? `We couldn't start your booking just now. Please try again or call us on ${phone}.`
+          : 'We couldn\'t start your booking just now. Please try again in a moment.',
       );
     }
   }
@@ -2165,11 +2203,29 @@ async function handleMenu(
 
   const selection = parseMainMenuSelection(trimmed);
   if (selection) {
-    await handleMainMenuSelection(conv, selection);
+    try {
+      await handleMainMenuSelection(conv, selection);
+    } catch (err) {
+      logger.error({ err, convId: conv.id, selection }, 'main_menu_selection_failed');
+      if (!hasPendingOutboundForConv(conv.id)) {
+        await reply(
+          conv,
+          'That option isn\'t available right now. Reply *MENU* to try again.',
+        );
+      }
+    }
     return;
   }
 
-  await replyMenu(conv);
+  if (isConversationWakeMessage(trimmed) || upper === 'MENU' || upper === 'BACK') {
+    await replyMenu(conv);
+    return;
+  }
+
+  await reply(
+    conv,
+    'Reply with a menu number (1–7), or type *MENU* to see the menu again.',
+  );
 }
 
 /**
