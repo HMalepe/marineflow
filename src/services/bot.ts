@@ -1011,8 +1011,11 @@ async function processInboundWhatsApp(
         err instanceof Prisma.PrismaClientKnownRequestError &&
         (err.code === 'P2021' || err.code === 'P2002');
       if (isInfraError) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logger.error({ err, errMsg, code: (err as Prisma.PrismaClientKnownRequestError).code, step: conv.step }, 'route_conversation_infra_error');
         await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
         syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+        await reply(conv, `⚠️ [DEBUG] Infra error (${(err as Prisma.PrismaClientKnownRequestError).code}) at step ${conv.step}: ${errMsg.slice(0, 180)}`);
         await replyMenu(conv);
         return;
       }
