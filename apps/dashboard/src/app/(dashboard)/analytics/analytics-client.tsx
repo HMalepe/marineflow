@@ -108,6 +108,17 @@ interface StaffRevRow {
   noShows: number;
 }
 
+interface CampaignRow {
+  id: string;
+  name: string;
+  status: string;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  totalRecipients: number;
+  delivered: number;
+  failed: number;
+}
+
 interface Props {
   token: string;
 }
@@ -121,6 +132,7 @@ export function AnalyticsClient({ token }: Props) {
   const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [loyalty, setLoyalty]   = useState<LoyaltyKpi | null>(null);
   const [staffRevenue, setStaffRevenue] = useState<StaffRevRow[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [noShowByStaff, setNoShowByStaff] = useState<NoShowRow[]>([]);
   const [noShowByService, setNoShowByService] = useState<NoShowRow[]>([]);
   const [funnel, setFunnel]     = useState<FunnelStep[]>([]);
@@ -131,7 +143,7 @@ export function AnalyticsClient({ token }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData] = await Promise.all([
+      const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData, campaignData] = await Promise.all([
         apiFetch<AnalyticsData>('/analytics/overview', {}, token),
         apiFetch<MonthlyReport>('/analytics/monthly-report', {}, token).catch(() => null),
         apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
@@ -139,6 +151,7 @@ export function AnalyticsClient({ token }: Props) {
         apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
         apiFetch<OptOutData>('/analytics/opt-outs', {}, token).catch(() => null),
         apiFetch<{ staff: StaffRevRow[] }>('/analytics/staff-revenue', {}, token).catch(() => null),
+        apiFetch<{ campaigns: CampaignRow[] }>('/campaigns', {}, token).catch(() => null),
       ]);
       setData(overview);
       setReport(monthlyReport);
@@ -148,6 +161,7 @@ export function AnalyticsClient({ token }: Props) {
       setFunnel(funnelData?.steps ?? []);
       setOptOuts(optOutData);
       setStaffRevenue(staffRevData?.staff ?? []);
+      setCampaigns((campaignData?.campaigns ?? []).slice(0, 10));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load analytics');
     } finally {
@@ -234,6 +248,25 @@ export function AnalyticsClient({ token }: Props) {
           </div>
         </div>
       )}
+
+      {/* Cancellation rate alert */}
+      {!loading && data && (() => {
+        const totals = data.dailyBookings.reduce(
+          (acc, d) => ({ bookings: acc.bookings + d.total_bookings, cancelled: acc.cancelled + d.cancelled }),
+          { bookings: 0, cancelled: 0 },
+        );
+        const cancelRate = totals.bookings > 5 ? Math.round((totals.cancelled / totals.bookings) * 100) : 0;
+        if (cancelRate < 30) return null;
+        return (
+          <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 px-4 py-3 flex items-start gap-3">
+            <span className="text-rose-600 font-bold text-sm mt-0.5">⚠</span>
+            <div className="text-sm">
+              <span className="font-semibold text-rose-700 dark:text-rose-400">High cancellation rate: {cancelRate}%</span>
+              <span className="text-muted-foreground ml-2">({totals.cancelled} of {totals.bookings} bookings in the last 30 days). Consider reviewing your cancellation policy.</span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Monthly Report Card */}
       {!loading && report && (
@@ -643,6 +676,60 @@ export function AnalyticsClient({ token }: Props) {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          {/* Campaign history */}
+          {campaigns.length > 0 && (
+            <section>
+              <h2 className="text-base font-semibold mb-3">Recent campaigns</h2>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-left">
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Campaign</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Status</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Recipients</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Delivered</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Failed</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {campaigns.map((c) => {
+                      const date = c.sentAt ?? c.scheduledAt;
+                      const deliverPct = c.totalRecipients > 0 ? Math.round((c.delivered / c.totalRecipients) * 100) : null;
+                      return (
+                        <tr key={c.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 font-medium max-w-[200px] truncate">{c.name}</td>
+                          <td className="px-4 py-3">
+                            <span className={cn(
+                              'text-[10px] font-medium px-1.5 py-0.5 rounded uppercase tracking-wide',
+                              c.status === 'SENT' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' :
+                              c.status === 'SENDING' ? 'bg-blue-100 text-blue-700' :
+                              c.status === 'SCHEDULED' ? 'bg-amber-100 text-amber-700' :
+                              c.status === 'FAILED' ? 'bg-red-100 text-red-700' :
+                              'bg-muted text-muted-foreground',
+                            )}>
+                              {c.status.toLowerCase()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right tabular-nums">{c.totalRecipients}</td>
+                          <td className="px-4 py-3 text-right tabular-nums">
+                            {c.delivered}
+                            {deliverPct !== null && <span className="text-muted-foreground text-xs ml-1">({deliverPct}%)</span>}
+                          </td>
+                          <td className={cn('px-4 py-3 text-right tabular-nums', c.failed > 0 && 'text-rose-600 dark:text-rose-400')}>
+                            {c.failed}
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {date ? new Date(date).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' }) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -54,6 +54,7 @@ interface CustomerDetail {
   loyaltyStamps: number;
   lifetimeValueCents: number;
   tags: string[];
+  dateOfBirth: string | null;
   appointments: AppointmentSummary[];
   messages: MessageSummary[];
 }
@@ -188,6 +189,9 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
   const [tagInput, setTagInput] = useState('');
   const [tagSaving, setTagSaving] = useState(false);
   const [tagError, setTagError] = useState<string | null>(null);
+  const [dob, setDob] = useState(customer.dateOfBirth ?? '');
+  const [dobSaving, setDobSaving] = useState(false);
+  const [dobSaved, setDobSaved] = useState(false);
 
   async function saveTags(nextTags: string[]) {
     setTagSaving(true);
@@ -213,6 +217,40 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
   function handleRemoveTag(tag: string) {
     void saveTags(tags.filter((t) => t !== tag));
   }
+
+  async function handleSaveDob(e: React.FormEvent) {
+    e.preventDefault();
+    setDobSaving(true);
+    try {
+      await apiFetch(`/customers/${customer.id}`, { method: 'PATCH', body: JSON.stringify({ dateOfBirth: dob || null }) }, token);
+      setDobSaved(true);
+      setTimeout(() => setDobSaved(false), 2500);
+    } catch {
+      // silent
+    } finally {
+      setDobSaving(false);
+    }
+  }
+
+  // Compute visit streak (consecutive calendar weeks with at least one completed visit)
+  const visitStreak = (() => {
+    const completedDates = customer.appointments
+      .filter((a) => a.status === 'COMPLETED')
+      .map((a) => {
+        const d = new Date(a.start);
+        const week = Math.floor(d.getTime() / (7 * 24 * 3600 * 1000));
+        return week;
+      })
+      .sort((a, b) => b - a);
+    const unique = [...new Set(completedDates)];
+    if (unique.length === 0) return 0;
+    let streak = 1;
+    for (let i = 0; i < unique.length - 1; i++) {
+      if (unique[i]! - unique[i + 1]! === 1) streak++;
+      else break;
+    }
+    return streak;
+  })();
 
   const name = getDisplayName(customer);
   const gradient = avatarGradient(customer.waId ?? customer.id);
@@ -341,6 +379,14 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
             value={`R${Math.round(customer.lifetimeValueCents / 100).toLocaleString('en-ZA')}`}
           />
         )}
+        {visitStreak >= 2 && (
+          <StatPill
+            icon={TrendingUp}
+            label="Week streak"
+            value={visitStreak}
+            sub="consecutive weeks"
+          />
+        )}
       </div>
 
       {/* Tabs */}
@@ -416,6 +462,27 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               </>
             ) : (
               <p className="text-sm text-muted-foreground">No appointments yet</p>
+            )}
+          </div>
+
+          {/* Date of birth */}
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Birthday</p>
+            <form onSubmit={(e) => void handleSaveDob(e)} className="flex items-center gap-2">
+              <input
+                type="date"
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <Button type="submit" size="sm" className="h-7 text-xs" disabled={dobSaving}>
+                {dobSaved ? 'Saved ✓' : dobSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </form>
+            {dob && (
+              <p className="text-xs text-muted-foreground">
+                {new Date(dob).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' })}
+              </p>
             )}
           </div>
 

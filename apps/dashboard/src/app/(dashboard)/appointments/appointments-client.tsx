@@ -44,6 +44,7 @@ export interface AppointmentData {
   payments: { id: string; amountCents: number; status: string }[];
   notes: string | null;
   cancellationReason: string | null;
+  branch: { id: string; name: string } | null;
 }
 
 const ACTIONABLE_STATUSES = new Set([
@@ -378,6 +379,9 @@ function AppointmentRow({
           </span>
           {isFormerStaff && (
             <span className="ml-1 text-[10px] text-muted-foreground italic">(former)</span>
+          )}
+          {appt.branch && (
+            <span className="ml-2 text-[10px] bg-muted rounded px-1.5 py-0.5 font-medium">{appt.branch.name}</span>
           )}
         </p>
         {/* Reminder status pills */}

@@ -18,6 +18,7 @@ interface CustomerDetail {
   loyaltyStamps: number;
   lifetimeValueCents: number;
   tags: string[];
+  dateOfBirth: string | null;
   appointments: {
     id: string;
     start: string;

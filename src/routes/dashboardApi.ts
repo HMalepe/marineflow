@@ -758,6 +758,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         include: {
           service: true,
           staff: true,
+          branch: { select: { id: true, name: true } },
           customer: {
             select: {
               displayName: true,
@@ -2066,6 +2067,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         createdAt: customer.createdAt,
         loyaltyStamps: loyaltySum._sum.delta ?? 0,
         lifetimeValueCents: clvAgg._sum.totalCents ?? 0,
+        tags: customer.tags,
+        dateOfBirth: customer.dateOfBirth?.toISOString().slice(0, 10) ?? null,
         appointments: appointments.map((a) => ({
           id: a.id,
           start: a.start,
@@ -2091,6 +2094,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       marketingConsent?: boolean;
       marketingConsentStatus?: MarketingConsentStatus;
       preferredStaffId?: string | null;
+      dateOfBirth?: string | null;
     };
   }>(
     '/customers/:id',
@@ -2109,6 +2113,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const data: Record<string, unknown> = {};
         if (request.body.tags !== undefined) data.tags = request.body.tags;
         if (request.body.notes !== undefined) data.notes = request.body.notes;
+        if (request.body.dateOfBirth !== undefined) {
+          data.dateOfBirth = request.body.dateOfBirth ? new Date(request.body.dateOfBirth) : null;
+        }
         if (request.body.preferredStaffId !== undefined) {
           // Must reference a non-deleted staff member of THIS salon — otherwise
           // a bad/cross-tenant id would 500 on the FK or leak a foreign reference.
