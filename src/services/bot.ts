@@ -1752,12 +1752,11 @@ async function menuActionStartBooking(
       await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
       syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
       const phone = conv.salon.phoneDisplay?.trim();
-      await reply(
-        conv,
-        phone
-          ? `We couldn't start your booking just now. Please try again or call us on ${phone}.`
-          : 'We couldn\'t start your booking just now. Please try again in a moment.',
-      );
+      const msg = phone
+        ? `We couldn't start your booking just now. Please try again or call us on ${phone}.`
+        : "We couldn't start your booking just now. Please try again in a moment.";
+      await reply(conv, msg);
+      await replyMenu(conv);
     }
   }
 }
@@ -2330,8 +2329,8 @@ async function continueAfterServicePick(
   if (!conv.salon.botAllowStaffPick) {
     const { staffList: availableStaff } = await getStaffListWithPreference(conv, service.id);
     if (availableStaff.length === 0) {
-      await replyWithMenu(conv, `No staff available for this service yet.`);
-      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyWithMenu(conv, `No one is available for that service right now. Try another service or contact the salon.`);
       return;
     }
     const assignedStaff = availableStaff[0]!;
@@ -2346,8 +2345,8 @@ async function continueAfterServicePick(
 
   const { staffList: staff, preferredId } = await getStaffListWithPreference(conv, service.id);
   if (staff.length === 0) {
-    await replyWithMenu(conv, `No staff available for this service yet.`);
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyWithMenu(conv, `No one is available for that service right now. Try another service or contact the salon.`);
     return;
   }
   await saveCtx(
