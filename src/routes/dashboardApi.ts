@@ -286,6 +286,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           googleReviewUrl: true,
           metadata: true,
           slug: true,
+          whatsappPhoneId: true,
+          twilioWhatsAppFrom: true,
         },
       });
       const flow = parseBotFlowSettingsFromMetadata(salon.metadata);
@@ -380,6 +382,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       parkingNotes?: string | null;
       googleReviewUrl?: string | null;
       currentSpecial?: string | null;
+      whatsappPhoneId?: string | null;
     };
   }>(
     '/settings',
@@ -419,6 +422,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           parkingNotes,
           googleReviewUrl,
           currentSpecial,
+          whatsappPhoneId,
         } = request.body;
 
         if (logoUrl !== undefined && logoUrl !== null) {
@@ -626,6 +630,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(parkingNotes !== undefined && { parkingNotes: parkingNotes?.trim() || null }),
             ...(googleReviewUrl !== undefined && {
               googleReviewUrl: googleReviewUrl?.trim().replace(/[\r\n\t]/g, '') || null,
+            }),
+            ...(whatsappPhoneId !== undefined && {
+              whatsappPhoneId: whatsappPhoneId?.trim() || null,
             }),
           },
           select: {

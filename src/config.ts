@@ -29,6 +29,7 @@ const envSchema = z.object({
   META_APP_SECRET: z.string().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   META_ACCESS_TOKEN: z.string().optional(),
+  META_PHONE_NUMBER_ID: z.string().optional(),
   META_API_VERSION: z.string().default('v21.0'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),

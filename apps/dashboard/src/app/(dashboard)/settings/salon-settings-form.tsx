@@ -22,6 +22,7 @@ import {
   saveReminderSettings,
   saveAutomationSection,
   saveLoyaltyProgram,
+  saveWhatsAppConfig,
   type SalonSettings,
 } from './actions';
 import { ConversationFlowSection } from './conversation-flow-section';
@@ -239,6 +240,9 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const [savedLoyaltyStamps, setSavedLoyaltyStamps] = useState(loyaltyProgram?.stampsPerReward ?? 10);
   const [savedLoyaltyDesc, setSavedLoyaltyDesc] = useState(loyaltyProgram?.rewardDescription ?? '');
   const [savingLoyalty, setSavingLoyalty] = useState(false);
+
+  const [whatsappPhoneId, setWhatsappPhoneId] = useState(initialSettings.whatsappPhoneId ?? '');
+  const [savingWhatsappPhoneId, setSavingWhatsappPhoneId] = useState(false);
 
   const [savingDisplayName, setSavingDisplayName] = useState(false);
   const [savingMessages, setSavingMessages] = useState(false);
@@ -827,6 +831,48 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
           </p>
         </div>
         <BookingLinkCopy slug={salon.slug} phoneDisplay={salon.phoneDisplay ?? null} />
+      </section>
+
+      <Separator />
+
+      {/* WhatsApp Cloud API Phone Number ID */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">WhatsApp Cloud API — Phone Number ID</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Found in Meta Business Manager → WhatsApp → API Setup. Required for the bot to receive and send messages via Meta Cloud API.
+          </p>
+        </div>
+        <form
+          className="flex gap-2 items-end"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setSavingWhatsappPhoneId(true);
+            const result = await saveWhatsAppConfig(whatsappPhoneId || null);
+            setSavingWhatsappPhoneId(false);
+            if (result.salon) {
+              setWhatsappPhoneId(result.salon.whatsappPhoneId ?? '');
+            }
+          }}
+        >
+          <div className="flex-1 space-y-1">
+            <Label htmlFor="whatsappPhoneId">Phone Number ID</Label>
+            <Input
+              id="whatsappPhoneId"
+              placeholder="e.g. 123456789012345"
+              value={whatsappPhoneId}
+              onChange={(e) => setWhatsappPhoneId(e.target.value)}
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={savingWhatsappPhoneId}>
+            {savingWhatsappPhoneId ? 'Saving…' : 'Save'}
+          </Button>
+        </form>
+        {!whatsappPhoneId && (
+          <p className="text-xs text-destructive font-medium">
+            ⚠️ Phone Number ID is not set — the bot cannot receive WhatsApp messages until this is configured.
+          </p>
+        )}
       </section>
 
       <Separator />

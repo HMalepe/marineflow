@@ -37,6 +37,8 @@ export interface SalonSettings {
   parkingNotes: string | null;
   googleReviewUrl: string | null;
   currentSpecial: string | null;
+  whatsappPhoneId: string | null;
+  twilioWhatsAppFrom: string | null;
   automations?: {
     googleReview?: {
       incentiveEnabled?: boolean;
@@ -352,6 +354,20 @@ export async function saveBotActive(botActive: boolean): Promise<{ salon?: Salon
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
       body: JSON.stringify({ botActive }),
+    }, token);
+    return { salon: data.salon };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Save failed' };
+  }
+}
+
+export async function saveWhatsAppConfig(whatsappPhoneId: string | null): Promise<{ salon?: SalonSettings; error?: string }> {
+  const token = await getToken();
+  if (!token) return { error: 'Not authenticated' };
+  try {
+    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
+      method: 'PATCH',
+      body: JSON.stringify({ whatsappPhoneId: whatsappPhoneId?.trim() || null }),
     }, token);
     return { salon: data.salon };
   } catch (e) {

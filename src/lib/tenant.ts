@@ -81,9 +81,20 @@ export async function resolveTenantForInbound(input: {
   if (input.metaPhoneNumberId) {
     const byMeta = await resolveTenantFromMetaPhoneId(input.metaPhoneNumberId);
     if (byMeta) return byMeta;
+
+    // Env-level fallback: if META_PHONE_NUMBER_ID matches the inbound phone ID,
+    // route to the default salon. Allows single-tenant deployments that haven't
+    // yet stored whatsappPhoneId in the DB to keep working.
+    if (env.META_PHONE_NUMBER_ID && input.metaPhoneNumberId === env.META_PHONE_NUMBER_ID) {
+      const fallback = await findSalonBySlug(env.DEFAULT_SALON_SLUG);
+      if (fallback) return fallback;
+    }
+
     // metaPhoneNumberId provided but matched no salon — do not fall through
     // to Twilio or the default, to prevent cross-tenant routing.
-    if (!input.twilioTo) return null;
+    // Skip Twilio lookup if twilioTo is the same Meta phone ID (not an E.164 address).
+    const isSameAsMetaId = input.twilioTo === input.metaPhoneNumberId;
+    if (!input.twilioTo || isSameAsMetaId) return null;
   }
   if (input.twilioTo) {
     const byTwilio = await resolveTenantFromTwilioAddress(input.twilioTo);
