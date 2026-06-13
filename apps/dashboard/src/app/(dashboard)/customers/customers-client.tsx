@@ -126,10 +126,13 @@ function consentDot(status: Customer['marketingConsentStatus']) {
   return <span className="size-2 rounded-full bg-amber-400 shrink-0" title="Awaiting POPIA consent" />;
 }
 
+type ConsentFilter = 'all' | 'opted-out';
+
 export function CustomersClient({ token }: Props) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [consentFilter, setConsentFilter] = useState<ConsentFilter>('all');
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -189,8 +192,15 @@ export function CustomersClient({ token }: Props) {
     }
   };
 
-  const groups = useMemo(() => groupByPhone(customers), [customers]);
+  const allGroups = useMemo(() => groupByPhone(customers), [customers]);
+  const groups = useMemo(
+    () => consentFilter === 'opted-out'
+      ? allGroups.filter((g) => g.primary.marketingConsentStatus === 'DECLINED')
+      : allGroups,
+    [allGroups, consentFilter],
+  );
   const duplicateCount = useMemo(() => groups.filter((g) => g.duplicates.length > 0).length, [groups]);
+  const optedOutCount = useMemo(() => allGroups.filter((g) => g.primary.marketingConsentStatus === 'DECLINED').length, [allGroups]);
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -204,6 +214,15 @@ export function CustomersClient({ token }: Props) {
               <span className="ml-2 text-amber-600 font-medium">
                 · {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} found
               </span>
+            )}
+            {!loading && optedOutCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setConsentFilter(consentFilter === 'opted-out' ? 'all' : 'opted-out')}
+                className={`ml-2 font-medium hover:underline ${consentFilter === 'opted-out' ? 'text-slate-700 dark:text-slate-300 underline' : 'text-slate-500'}`}
+              >
+                · {optedOutCount} opted out
+              </button>
             )}
           </p>
         </div>

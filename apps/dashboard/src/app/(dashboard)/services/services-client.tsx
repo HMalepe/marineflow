@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ interface Service {
   durationMin: number;
   bufferMin: number;
   active: boolean;
+  sortOrder: number;
   category?: { id: string; name: string } | null;
 }
 
@@ -212,6 +214,29 @@ export function ServicesClient({ token }: Props) {
       showToast(err instanceof ApiError ? err.message : 'Failed to delete category', 'error');
     } finally {
       setCatDeletingId(null);
+    }
+  }
+
+  async function handleReorder(serviceId: string, direction: 'up' | 'down') {
+    const sorted = [...services].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const idx = sorted.findIndex((s) => s.id === serviceId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const a = sorted[idx];
+    const b = sorted[swapIdx];
+    const aOrder = b.sortOrder === a.sortOrder ? (direction === 'up' ? a.sortOrder - 1 : a.sortOrder + 1) : b.sortOrder;
+    const bOrder = a.sortOrder;
+    try {
+      await Promise.all([
+        apiFetch(`/services/${a.id}/sort-order`, { method: 'PATCH', body: JSON.stringify({ sortOrder: aOrder }) }, token),
+        apiFetch(`/services/${b.id}/sort-order`, { method: 'PATCH', body: JSON.stringify({ sortOrder: bOrder }) }, token),
+      ]);
+      setServices((prev) =>
+        prev.map((s) => s.id === a.id ? { ...s, sortOrder: aOrder } : s.id === b.id ? { ...s, sortOrder: bOrder } : s),
+      );
+    } catch {
+      // silent — list will refresh on next load
     }
   }
 
@@ -594,6 +619,23 @@ export function ServicesClient({ token }: Props) {
                     </Button>
                   </TableCell>
                   <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        title="Move up"
+                        onClick={(e) => { e.stopPropagation(); void handleReorder(service.id, 'up'); }}
+                        className="p-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Move down"
+                        onClick={(e) => { e.stopPropagation(); void handleReorder(service.id, 'down'); }}
+                        className="p-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -606,6 +648,7 @@ export function ServicesClient({ token }: Props) {
                     >
                       Delete
                     </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

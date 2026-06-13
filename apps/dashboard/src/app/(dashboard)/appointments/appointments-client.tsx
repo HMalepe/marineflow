@@ -42,6 +42,8 @@ export interface AppointmentData {
     bookingCount?: number;
   };
   payments: { id: string; amountCents: number; status: string }[];
+  notes: string | null;
+  cancellationReason: string | null;
 }
 
 const ACTIONABLE_STATUSES = new Set([
@@ -186,6 +188,8 @@ export function AppointmentsClient({
           </div>
         </div>
       </div>
+
+      <TodaySchedule appointments={[...upcoming, ...past]} />
 
       <Card>
         <CardHeader>
@@ -394,6 +398,16 @@ function AppointmentRow({
         {appt.depositForfeited && (
           <span className="text-[10px] text-destructive font-medium">⚠ Deposit forfeited (no-show)</span>
         )}
+        {/* Cancellation reason */}
+        {appt.cancellationReason && (
+          <span className="text-[10px] text-muted-foreground italic">
+            Reason: {appt.cancellationReason.replace(/_/g, ' ').toLowerCase()}
+          </span>
+        )}
+        {/* Notes */}
+        {appt.notes && (
+          <p className="text-xs text-muted-foreground border-l-2 border-muted pl-2 italic mt-1 line-clamp-2">{appt.notes}</p>
+        )}
       </div>
       <div className="text-right space-y-1 shrink-0">
         <p className="text-sm whitespace-nowrap">
@@ -429,5 +443,58 @@ function AppointmentRow({
         </div>
       </div>
     </div>
+  );
+}
+
+function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
+  const today = new Date();
+  const todayStr = today.toDateString();
+  const todayAppts = appointments
+    .filter((a) => new Date(a.start).toDateString() === todayStr)
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+
+  if (todayAppts.length === 0) return null;
+
+  return (
+    <Card className="border-primary/20 bg-primary/[0.03]">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <span className="size-2 rounded-full bg-primary inline-block" />
+          Today — {today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}
+          <span className="ml-auto text-xs font-normal text-muted-foreground">{todayAppts.length} appointment{todayAppts.length === 1 ? '' : 's'}</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {todayAppts.map((a) => {
+            const startTime = new Date(a.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+            const isPast = new Date(a.start) < new Date();
+            return (
+              <div
+                key={a.id}
+                className={`shrink-0 rounded-lg border p-3 min-w-[160px] max-w-[200px] space-y-1 ${
+                  isPast ? 'opacity-60 bg-muted/40' : 'bg-card'
+                }`}
+              >
+                <p className="text-xs font-bold tabular-nums">{startTime}</p>
+                <p className="text-sm font-medium truncate">{a.service.name}</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {a.customer.displayName ?? a.customer.waId}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{a.staff.displayName ?? a.staff.name}</p>
+                <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                  a.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' :
+                  a.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
+                  a.status === 'NO_SHOW' ? 'bg-amber-100 text-amber-700' :
+                  'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                }`}>
+                  {a.status.replace(/_/g, ' ').toLowerCase()}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

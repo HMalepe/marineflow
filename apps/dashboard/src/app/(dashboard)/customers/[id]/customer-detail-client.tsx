@@ -12,10 +12,15 @@ import {
   MessageSquare,
   Phone,
   Star,
+  Tag,
   TrendingUp,
   User,
+  X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { apiFetch, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface AppointmentSummary {
@@ -48,6 +53,7 @@ interface CustomerDetail {
   createdAt: string;
   loyaltyStamps: number;
   lifetimeValueCents: number;
+  tags: string[];
   appointments: AppointmentSummary[];
   messages: MessageSummary[];
 }
@@ -176,8 +182,37 @@ function MessageBubble({ m }: { m: MessageSummary }) {
   );
 }
 
-export function CustomerDetailClient({ customer }: { customer: CustomerDetail }) {
+export function CustomerDetailClient({ customer, token }: { customer: CustomerDetail; token: string }) {
   const [tab, setTab] = useState<Tab>('overview');
+  const [tags, setTags] = useState<string[]>(customer.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
+  const [tagSaving, setTagSaving] = useState(false);
+  const [tagError, setTagError] = useState<string | null>(null);
+
+  async function saveTags(nextTags: string[]) {
+    setTagSaving(true);
+    setTagError(null);
+    try {
+      await apiFetch(`/customers/${customer.id}`, { method: 'PATCH', body: JSON.stringify({ tags: nextTags }) }, token);
+      setTags(nextTags);
+    } catch (e) {
+      setTagError(e instanceof ApiError ? e.message : 'Failed to save tag');
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
+  function handleAddTag(e: React.FormEvent) {
+    e.preventDefault();
+    const t = tagInput.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!t || tags.includes(t) || tags.length >= 20) return;
+    void saveTags([...tags, t]);
+    setTagInput('');
+  }
+
+  function handleRemoveTag(tag: string) {
+    void saveTags(tags.filter((t) => t !== tag));
+  }
 
   const name = getDisplayName(customer);
   const gradient = avatarGradient(customer.waId ?? customer.id);
@@ -382,6 +417,43 @@ export function CustomerDetailClient({ customer }: { customer: CustomerDetail })
             ) : (
               <p className="text-sm text-muted-foreground">No appointments yet</p>
             )}
+          </div>
+
+          {/* Tags */}
+          <div className="rounded-xl border bg-card p-4 space-y-3 sm:col-span-2">
+            <div className="flex items-center gap-2">
+              <Tag className="size-3.5 text-muted-foreground" />
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {tags.map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-muted border px-2.5 py-0.5 text-xs font-medium">
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    disabled={tagSaving}
+                    className="text-muted-foreground hover:text-destructive transition-colors ml-0.5"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </span>
+              ))}
+              {tags.length === 0 && <p className="text-xs text-muted-foreground">No tags yet</p>}
+            </div>
+            <form onSubmit={handleAddTag} className="flex gap-2 max-w-xs">
+              <Input
+                placeholder="Add tag…"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                maxLength={40}
+                className="h-7 text-xs"
+              />
+              <Button type="submit" size="sm" className="h-7 text-xs" disabled={tagSaving || !tagInput.trim()}>
+                Add
+              </Button>
+            </form>
+            {tagError && <p className="text-xs text-destructive">{tagError}</p>}
           </div>
         </div>
       )}

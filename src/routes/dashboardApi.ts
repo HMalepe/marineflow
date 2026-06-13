@@ -284,6 +284,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           parkingNotes: true,
           googleReviewUrl: true,
           metadata: true,
+          slug: true,
         },
       });
       const flow = parseBotFlowSettingsFromMetadata(salon.metadata);
@@ -2562,6 +2563,26 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── Service sort order (Item 56) ────────────────────────────
+  app.patch<{ Params: { id: string }; Body: { sortOrder: number } }>(
+    '/services/:id/sort-order',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { sortOrder } = request.body;
+        if (typeof sortOrder !== 'number' || !Number.isInteger(sortOrder) || sortOrder < 0) {
+          reply.code(400);
+          return { error: 'sortOrder must be a non-negative integer' };
+        }
+        const svc = await db.service.findFirst({ where: { id: request.params.id, salonId: user.salonId, deletedAt: null } });
+        if (!svc) { reply.code(404); return { error: 'not_found' }; }
+        await db.service.update({ where: { id: svc.id }, data: { sortOrder } });
+        return { ok: true };
+      });
+    },
+  );
+
   // ── FAQ CRUD ────────────────────────────────────────────────
 
   app.get('/faqs', async (request, reply) => {
@@ -3281,6 +3302,42 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: { salonId: user.salonId, marketingConsentStatus: 'DECLINED', deletedAt: null },
       });
       return { byMonth: rows, totalOptedOut: total };
+    });
+  });
+
+  // ─── Staff Revenue Analytics (Item 52) ────────────────────────────────
+  app.get('/analytics/staff-revenue', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const safeQuery = async <T>(sql: string, ...args: unknown[]): Promise<T[]> => {
+        try { return await db.$queryRawUnsafe<T[]>(sql, ...args); } catch { return []; }
+      };
+      const rows = await safeQuery<{
+        staffId: string;
+        staffName: string;
+        bookings: number;
+        completed: number;
+        revenueCents: number;
+        noShows: number;
+      }>(
+        `SELECT
+          su.id AS "staffId",
+          COALESCE(su."displayName", su.name) AS "staffName",
+          COUNT(a.id)::int AS bookings,
+          COUNT(a.id) FILTER (WHERE a.status = 'COMPLETED')::int AS completed,
+          COALESCE(SUM(s."priceCents") FILTER (WHERE a.status = 'COMPLETED'), 0)::int AS "revenueCents",
+          COUNT(a.id) FILTER (WHERE a.status = 'NO_SHOW')::int AS "noShows"
+         FROM "StaffUser" su
+         LEFT JOIN "Appointment" a ON a."staffId" = su.id
+           AND a."salonId" = $1
+           AND a."start" >= NOW() - INTERVAL '30 days'
+         LEFT JOIN "Service" s ON s.id = a."serviceId"
+         WHERE su."salonId" = $1 AND su.active = true
+         GROUP BY su.id, su."displayName", su.name
+         ORDER BY "revenueCents" DESC`,
+        user.salonId,
+      );
+      return { staff: rows };
     });
   });
 

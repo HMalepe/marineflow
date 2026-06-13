@@ -6,6 +6,7 @@ import { apiFetch, ApiError } from '@/lib/api';
 export interface SalonSettings {
   id: string;
   name: string;
+  slug: string;
   tradingName: string | null;
   logoUrl: string | null;
   timezone: string;

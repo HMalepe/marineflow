@@ -42,6 +42,34 @@ import {
 
 const WHATSAPP_LIMIT = 4096;
 
+function BookingLinkCopy({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const url = `https://wa.me/27000000000?text=Hi%2C+I%27d+like+to+book+at+${encodeURIComponent(slug)}`;
+  return (
+    <div className="flex items-center gap-2 max-w-md">
+      <input
+        readOnly
+        value={url}
+        className="flex-1 rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono text-muted-foreground select-all truncate"
+        onClick={(e) => (e.target as HTMLInputElement).select()}
+      />
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          void navigator.clipboard.writeText(url).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          });
+        }}
+      >
+        {copied ? 'Copied!' : 'Copy'}
+      </Button>
+    </div>
+  );
+}
+
 export type { SalonSettings };
 
 type PreviewMode = 'welcome' | 'afterHours';
@@ -773,6 +801,19 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
           </Button>
           <SectionSaveFeedback feedback={getSection('displayName')} />
         </form>
+      </section>
+
+      <Separator />
+
+      {/* Booking link */}
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">Booking link</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Share this link with customers to let them start a WhatsApp booking conversation.
+          </p>
+        </div>
+        <BookingLinkCopy slug={salon.slug} />
       </section>
 
       <Separator />

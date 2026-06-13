@@ -17,6 +17,7 @@ interface CustomerDetail {
   createdAt: string;
   loyaltyStamps: number;
   lifetimeValueCents: number;
+  tags: string[];
   appointments: {
     id: string;
     start: string;
@@ -52,5 +53,5 @@ export default async function CustomerDetailPage({
     );
   }
 
-  return <CustomerDetailClient customer={customer} />;
+  return <CustomerDetailClient customer={customer} token={token ?? ''} />;
 }

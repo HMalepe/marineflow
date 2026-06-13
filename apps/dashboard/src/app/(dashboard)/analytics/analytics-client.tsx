@@ -99,6 +99,15 @@ interface OptOutData {
   totalOptedOut: number;
 }
 
+interface StaffRevRow {
+  staffId: string;
+  staffName: string;
+  bookings: number;
+  completed: number;
+  revenueCents: number;
+  noShows: number;
+}
+
 interface Props {
   token: string;
 }
@@ -111,6 +120,7 @@ export function AnalyticsClient({ token }: Props) {
   const [sendingReport, setSendingReport] = useState(false);
   const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [loyalty, setLoyalty]   = useState<LoyaltyKpi | null>(null);
+  const [staffRevenue, setStaffRevenue] = useState<StaffRevRow[]>([]);
   const [noShowByStaff, setNoShowByStaff] = useState<NoShowRow[]>([]);
   const [noShowByService, setNoShowByService] = useState<NoShowRow[]>([]);
   const [funnel, setFunnel]     = useState<FunnelStep[]>([]);
@@ -121,13 +131,14 @@ export function AnalyticsClient({ token }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData] = await Promise.all([
+      const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData] = await Promise.all([
         apiFetch<AnalyticsData>('/analytics/overview', {}, token),
         apiFetch<MonthlyReport>('/analytics/monthly-report', {}, token).catch(() => null),
         apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
         apiFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>('/analytics/no-show-patterns', {}, token).catch(() => null),
         apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
         apiFetch<OptOutData>('/analytics/opt-outs', {}, token).catch(() => null),
+        apiFetch<{ staff: StaffRevRow[] }>('/analytics/staff-revenue', {}, token).catch(() => null),
       ]);
       setData(overview);
       setReport(monthlyReport);
@@ -136,6 +147,7 @@ export function AnalyticsClient({ token }: Props) {
       setNoShowByService(noShowData?.byService ?? []);
       setFunnel(funnelData?.steps ?? []);
       setOptOuts(optOutData);
+      setStaffRevenue(staffRevData?.staff ?? []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load analytics');
     } finally {
@@ -598,6 +610,41 @@ export function AnalyticsClient({ token }: Props) {
                     </div>
                   </div>
                 )}
+              </div>
+            </section>
+          )}
+
+          {/* Staff revenue — last 30 days */}
+          {staffRevenue.length > 0 && (
+            <section>
+              <h2 className="text-base font-semibold mb-3">Staff performance — last 30 days</h2>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/50 text-left">
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Staff</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Bookings</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Completed</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Revenue</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">No-shows</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {staffRevenue.map((row) => (
+                      <tr key={row.staffId} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 font-medium">{row.staffName}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{row.bookings}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">{row.completed}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-medium">
+                          R {Math.round(row.revenueCents / 100).toLocaleString('en-ZA')}
+                        </td>
+                        <td className={cn('px-4 py-3 text-right tabular-nums', row.noShows > 0 && 'text-rose-600 dark:text-rose-400')}>
+                          {row.noShows}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </section>
           )}
