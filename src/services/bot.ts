@@ -35,7 +35,6 @@ import { scheduleConversationActivity } from '../lib/inngest/functions/conversat
 import {
   buildMainMenuText,
   buildSubMenuText,
-  isMenuNavigationInput,
   isValidSubMenuChoice,
   normalizeMenuCategoryId,
   parseMainMenuSelection,
@@ -175,6 +174,23 @@ const PENDING_PROFILE_CLEAR: Pick<
   menuCategory: undefined,
   serviceFilterIds: undefined,
   manageBookingHint: undefined,
+};
+
+const BOOKING_CTX_CLEAR: Partial<BotContext> = {
+  selectedServiceId: undefined,
+  selectedStaffId: undefined,
+  selectedBranchId: undefined,
+  branchOptions: undefined,
+  localDateStr: undefined,
+  slotStartIso: undefined,
+  anyStaff: undefined,
+  managingAppointmentId: undefined,
+  staffOrderIds: undefined,
+  serviceFilterIds: undefined,
+  quickPickOptions: undefined,
+  manageList: undefined,
+  addonPhase: undefined,
+  ...PENDING_PROFILE_CLEAR,
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
@@ -366,6 +382,10 @@ async function flushPendingOutbound(): Promise<void> {
   }
 }
 
+function hasPendingOutboundForConv(convId: string): boolean {
+  return pendingOutbound?.some((m) => m.convId === convId) ?? false;
+}
+
 async function reply(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -417,7 +437,7 @@ async function reply(
 }
 
 async function replyMenu(conv: Conversation & { customer: Customer; salon: Salon }) {
-  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU).catch(() => {});
+  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
   syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
   const body = mainMenu(conv.salon);
   let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
@@ -945,43 +965,49 @@ async function processInboundWhatsApp(
     ConversationStep.MENU,
     ConversationStep.IDLE,
   ];
-  if (
-    menuHandlerSteps.includes(conv.step) &&
-    isMenuNavigationInput(ctx(conv).menuCategory, text)
-  ) {
+  const bookingFlowSteps: ConversationStep[] = [
+    ConversationStep.COLLECT_FIRST_NAME,
+    ConversationStep.COLLECT_LAST_NAME,
+    ConversationStep.COLLECT_EMAIL,
+    ConversationStep.COLLECT_DATE_OF_BIRTH,
+    ConversationStep.BOOKING_POPIA_CONSENT,
+    ConversationStep.PICK_BRANCH,
+    ConversationStep.PICK_SERVICE,
+    ConversationStep.PICK_STAFF,
+    ConversationStep.PICK_DATE,
+    ConversationStep.PICK_SLOT,
+    ConversationStep.CONFIRM_BOOKING,
+  ];
+  if (bookingFlowSteps.includes(conv.step)) {
     try {
-      await handleMenu(conv, text);
-      if ((ctx(conv).errorCount ?? 0) > 0) {
-        await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
-      }
+      await routeConversation(conv, text);
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      logger.error({ err, errMsg, convId: conv.id, step: conv.step }, 'menu_navigation_error');
-      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
-      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-      await reply(conv, `⚠️ [DEBUG] Menu error: ${errMsg.slice(0, 200)}`);
-      await replyMenu(conv);
+      logger.error({ err, convId: conv.id, step: conv.step }, 'booking_flow_error');
+      if (!hasPendingOutboundForConv(conv.id)) {
+        await reply(
+          conv,
+          'Sorry — something went wrong while booking. Reply *MENU* to start again.',
+        );
+      }
     }
     return;
   }
-
   if (menuHandlerSteps.includes(conv.step)) {
     try {
       await handleMenu(conv, text);
-      if ((ctx(conv).errorCount ?? 0) > 0) {
-        await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
-      }
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      logger.error({ err, errMsg, convId: conv.id, step: conv.step }, 'menu_handler_error');
-      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
-      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-      await reply(conv, `⚠️ [DEBUG] Menu error: ${errMsg.slice(0, 200)}`);
-      await replyMenu(conv);
+      logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
+      if (!hasPendingOutboundForConv(conv.id)) {
+        await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
+        syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+        await replyMenu(conv);
+      }
+    }
+    if ((ctx(conv).errorCount ?? 0) > 0) {
+      await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
     }
     return;
   }
-
   if (aiSteps.includes(conv.step)) {
     const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
     // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
@@ -1455,7 +1481,7 @@ async function startBookingFlow(
   }
 
   const services = await getTenantDb().service.findMany({
-    where: { salonId: salon.id, active: true },
+    where: { salonId: salon.id, active: true, deletedAt: null },
     orderBy: { sortOrder: 'asc' },
   });
   if (services.length === 0) {
@@ -1464,6 +1490,7 @@ async function startBookingFlow(
   }
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
   await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, {}, ConversationStep.PICK_SERVICE);
   // Item 29: funnel entry tracking
   void getTenantDb().analyticsEvent.create({
     data: { salonId: salon.id, customerId: conv.customerId, type: 'funnel_pick_service' },
@@ -1645,22 +1672,16 @@ async function handleBookingPopiaConsent(
 async function menuActionStartBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
-  await saveCtx(conv.id, {
-    selectedServiceId: undefined,
-    selectedStaffId: undefined,
-    selectedBranchId: undefined,
-    branchOptions: undefined,
-    localDateStr: undefined,
-    slotStartIso: undefined,
-    anyStaff: undefined,
-    managingAppointmentId: undefined,
-    staffOrderIds: undefined,
-    serviceFilterIds: undefined,
-    ...PENDING_PROFILE_CLEAR,
+  await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+  syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+
+  const customer = await getTenantDb().customer.findUniqueOrThrow({
+    where: { id: conv.customerId },
   });
 
-  if (isProfileIncomplete(conv.customer)) {
+  if (isProfileIncomplete(customer)) {
     await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
+    syncConvContext(conv, {}, ConversationStep.COLLECT_FIRST_NAME);
     await reply(
       conv,
       [
@@ -1674,12 +1695,17 @@ async function menuActionStartBooking(
   }
 
   try {
-    await startBookingFlow(conv);
+    await startBookingFlow({ ...conv, customer });
   } catch (err) {
-    logger.error({ err, convId: conv.id }, 'startBookingFlow_failed');
-    const errMsg = err instanceof Error ? err.message : String(err);
-    await saveCtx(conv.id, {}, ConversationStep.MENU).catch(() => {});
-    await replyWithMenu(conv, `⚠️ [DEBUG] Booking flow error: ${errMsg.slice(0, 200)}`);
+    logger.error({ err, convId: conv.id }, 'start_booking_flow_failed');
+    if (!hasPendingOutboundForConv(conv.id)) {
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyWithMenu(
+        conv,
+        'Sorry — we could not start your booking. Please try again or contact the salon.',
+      );
+    }
   }
 }
 
@@ -2100,6 +2126,7 @@ async function handleMainMenuSelection(
     await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
     syncConvContext(conv, { menuCategory: selection.id }, ConversationStep.MENU);
     await reply(conv, buildSubMenuText(selection.id));
+    return;
   }
 }
 
