@@ -1337,8 +1337,46 @@ async function handleMarketingConsentFlow(
   const salon = conv.salon;
   const status = conv.customer.marketingConsentStatus;
 
-  // Owner can disable the POPIA consent prompt — skip the whole flow
-  if (!salon.botAskMarketingConsent) return false;
+  // Marketing consent gate is disabled — chatbot booking flow takes priority.
+  // Only process explicit STOP/START opt-out and opt-in commands.
+  const consentGateEnabled = false;
+
+  if (!consentGateEnabled || !salon.botAskMarketingConsent) {
+    // Still honour global STOP opt-out (legal requirement)
+    if (isGlobalMarketingOptOut(text)) {
+      if (status !== 'DECLINED') {
+        await applyMarketingConsentChoice({
+          customerId: conv.customerId,
+          salonId: salon.id,
+          choice: 'decline',
+          source: 'whatsapp_stop',
+        });
+        void getTenantDb().analyticsEvent.create({
+          data: {
+            salonId: salon.id,
+            customerId: conv.customerId,
+            type: 'marketing_opt_out',
+            payload: { source: 'whatsapp_stop' },
+          },
+        }).catch(() => {});
+      }
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyWithMenu(conv, buildConsentStopMessage());
+      return true;
+    }
+    if (status === 'DECLINED' && isGlobalMarketingOptIn(text)) {
+      await applyMarketingConsentChoice({
+        customerId: conv.customerId,
+        salonId: salon.id,
+        choice: 'accept',
+        source: 'whatsapp_opt_in',
+      });
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyWithMenu(conv, buildConsentAcceptedMessage());
+      return true;
+    }
+    return false;
+  }
 
   // WhatsApp menu/booking navigation always takes priority over dashboard consent
   if (isWhatsAppMenuInput(text, ctx(conv).menuCategory)) return false;
