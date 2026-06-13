@@ -16,9 +16,9 @@ import {
 import { salonUsesCloudInteractiveMenu } from '../lib/integrations/messaging/interactiveList.js';
 import { sendWithFallback } from './channelRouter.js';
 import { buildMainMenuInteractive } from './mainMenuInteractive.js';
-import { sendWhatsAppReply } from '../lib/twilio.js';
 import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
+import { isConversationWakeMessage, staffHandoffExpired } from '../lib/conversationWake.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { DateTime } from 'luxon';
@@ -257,6 +257,10 @@ async function reply(
         interactive: sendOptions?.interactive,
       });
       providerSid = result.providerMessageId ?? null;
+      if (!providerSid) {
+        logger.error({ to: conv.customer.waId, salonId: conv.salonId }, 'reply_send_no_provider_id');
+        return;
+      }
     } catch (err) {
       logger.error({ err, to: conv.customer.waId }, 'reply_send_failed');
       return;
@@ -365,6 +369,79 @@ function isHumanHandoffRequest(text: string): boolean {
   );
 }
 
+type ConvWithRelations = Conversation & { customer: Customer; salon: Salon };
+
+async function sendTenantWhatsApp(salonId: string, waId: string, body: string): Promise<void> {
+  try {
+    const { result } = await sendWithFallback({ salonId, to: waId, body });
+    if (!result.providerMessageId) {
+      logger.error({ salonId, waId }, 'tenant_whatsapp_send_no_provider_id');
+    }
+  } catch (err) {
+    logger.error({ err, salonId, waId }, 'tenant_whatsapp_send_failed');
+  }
+}
+
+async function reloadConversation(convId: string): Promise<ConvWithRelations> {
+  return getTenantDb().conversation.findUniqueOrThrow({
+    where: { id: convId },
+    include: { customer: true, salon: true },
+  });
+}
+
+/**
+ * Recover from silent HANDOFF states (staff claimed, sentiment escalation).
+ * Returns handled=true when the bot intentionally stays silent or already replied.
+ */
+async function tryRecoverFromSilentHandoff(
+  conv: ConvWithRelations,
+  text: string,
+): Promise<{ handled: boolean; conv: ConvWithRelations }> {
+  const c = ctx(conv);
+  const isSilentStep =
+    conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED;
+  if (!isSilentStep) return { handled: false, conv };
+
+  if (c.handoffByStaff) {
+    const expired = staffHandoffExpired(conv.lastMessageAt);
+    const wake = isConversationWakeMessage(text);
+    if (!expired && !wake) {
+      logger.info({ convId: conv.id }, 'bot_silent_handoff');
+      return { handled: true, conv };
+    }
+    logger.info({ convId: conv.id, expired, wake }, 'bot_handoff_auto_release');
+    await saveCtx(
+      conv.id,
+      { handoffByStaff: undefined, ...PENDING_PROFILE_CLEAR },
+      ConversationStep.MENU,
+    );
+    const updated = await reloadConversation(conv.id);
+    if (wake) {
+      await replyMenu(updated);
+      return { handled: true, conv: updated };
+    }
+    return { handled: false, conv: updated };
+  }
+
+  if (c.negativeSentimentEscalated) {
+    if (isConversationWakeMessage(text)) {
+      logger.info({ convId: conv.id }, 'bot_sentiment_handoff_wake');
+      await saveCtx(
+        conv.id,
+        { negativeSentimentEscalated: undefined, ...PENDING_PROFILE_CLEAR },
+        ConversationStep.MENU,
+      );
+      const updated = await reloadConversation(conv.id);
+      await replyMenu(updated);
+      return { handled: true, conv: updated };
+    }
+    logger.info({ convId: conv.id }, 'bot_silent_sentiment_handoff');
+    return { handled: true, conv };
+  }
+
+  return { handled: false, conv };
+}
+
 export async function handleInboundWhatsApp(input: {
   from: string;
   body: string;
@@ -389,7 +466,8 @@ export async function handleInboundWhatsApp(input: {
     assertTenantActive(tenant);
   } catch {
     logger.warn({ tenantId: tenant.id, status: tenant.status }, 'bot_tenant_inactive');
-    await sendWhatsAppReply(
+    await sendTenantWhatsApp(
+      tenant.id,
       waId,
       'This business is not accepting bookings right now. Please try again later.',
     );
@@ -397,7 +475,7 @@ export async function handleInboundWhatsApp(input: {
   }
 
   if (!(await rateLimitOrReject(waId))) {
-    await sendWhatsAppReply(waId, 'Too many messages — please wait a minute and try again.');
+    await sendTenantWhatsApp(tenant.id, waId, 'Too many messages — please wait a minute and try again.');
     return;
   }
 
@@ -416,6 +494,13 @@ export async function handleInboundWhatsApp(input: {
     await withTenantContext(tenant.id, async () => {
       await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
     });
+  } catch (err) {
+    logger.error({ err, tenantId: tenant.id, waId }, 'bot_transaction_failed');
+    await sendTenantWhatsApp(
+      tenant.id,
+      waId,
+      'Sorry — we hit a technical glitch. Please try again in a moment or reply MENU.',
+    );
   } finally {
     if (lockAcquired) {
       await redis.del(lockKey).catch(() => {});
@@ -572,6 +657,10 @@ async function processInboundWhatsApp(
 
   const consentHandled = await handleMarketingConsentFlow(conv, text);
   if (consentHandled) return;
+
+  const recovery = await tryRecoverFromSilentHandoff(conv, text);
+  if (recovery.handled) return;
+  conv = recovery.conv;
 
   const lower = text.toLowerCase();
   if (lower === 'undo' || lower === 'back') {

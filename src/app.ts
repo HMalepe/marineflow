@@ -245,13 +245,17 @@ export async function buildApp() {
         });
         if (recorded === 'duplicate') continue;
 
-        await handleInboundWhatsApp({
-          from: inbound.fromPhoneE164,
-          body: inbound.body,
-          messageSid: inbound.externalId,
-          metaPhoneNumberId: inbound.metaPhoneNumberId,
-          twilioTo: inbound.toAddress,
-        });
+        try {
+          await handleInboundWhatsApp({
+            from: inbound.fromPhoneE164,
+            body: inbound.body,
+            messageSid: inbound.externalId,
+            metaPhoneNumberId: inbound.metaPhoneNumberId,
+            twilioTo: inbound.toAddress,
+          });
+        } catch (botErr: unknown) {
+          logger.error({ err: botErr, externalId: inbound.externalId }, 'meta_bot_error');
+        }
       }
 
       return reply.send({ received: true });

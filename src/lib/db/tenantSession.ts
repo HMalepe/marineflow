@@ -15,9 +15,9 @@ export function getTenantDb(): PrismaTx {
  * Run work scoped to one salon (tenant). Sets Postgres session vars for RLS.
  * All tenant-scoped code in `fn` should use getTenantDb().
  *
- * Timeout is 30s because bot flows include outbound network calls (Twilio/Meta)
- * inside the transaction. Once Inngest handles outbound sends (Week 2+),
- * this can be reduced to 10s.
+ * Timeout is 60s because bot flows include outbound network calls (Twilio/Meta)
+ * and optional AI assist inside the transaction. Once Inngest handles outbound
+ * sends, this can be reduced.
  */
 export async function withTenantContext<T>(
   salonId: string,
@@ -31,7 +31,7 @@ export async function withTenantContext<T>(
       await tx.$executeRaw`SELECT set_config('app.current_tenant', ${salonId}, true)`;
       return tenantStore.run(tx, fn);
     },
-    { timeout: 30_000 },
+    { timeout: 60_000 },
   );
 }
 
