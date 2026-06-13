@@ -1670,7 +1670,14 @@ async function menuActionStartBooking(
     return;
   }
 
-  await startBookingFlow(conv);
+  try {
+    await startBookingFlow(conv);
+  } catch (err) {
+    logger.error({ err, convId: conv.id }, 'startBookingFlow_failed');
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await saveCtx(conv.id, {}, ConversationStep.MENU).catch(() => {});
+    await replyWithMenu(conv, `⚠️ [DEBUG] Booking flow error: ${errMsg.slice(0, 200)}`);
+  }
 }
 
 async function menuActionViewBookings(
