@@ -490,6 +490,28 @@ async function reply(
   );
 }
 
+async function sendReceptionistGreeting(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const salon = conv.salon;
+  const salonName = salon.tradingName?.trim() || salon.name;
+  const firstName = conv.customer.firstName?.trim();
+  const timeHour = DateTime.now().setZone(salon.timezone).hour;
+  const timeGreeting =
+    timeHour < 12 ? 'Good morning' : timeHour < 17 ? 'Good afternoon' : 'Good evening';
+
+  const personalised = firstName ? `, ${firstName}` : '';
+
+  await reply(
+    conv,
+    [
+      `${timeGreeting}${personalised}! 👋 Welcome to *${salonName}*.`,
+      '',
+      'How can I help you today? You can ask me anything — whether you\'d like to make a booking, check our prices, find out our hours, or anything else.',
+      '',
+      '_Type *MENU* anytime to see all options._',
+    ].join('\n'),
+  );
+}
+
 async function replyMenu(conv: Conversation & { customer: Customer; salon: Salon }) {
   await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
   syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
@@ -933,7 +955,7 @@ async function processInboundWhatsApp(
   if (isConversationWakeMessage(text)) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    await replyMenu(conv);
+    await sendReceptionistGreeting(conv);
     return;
   }
 
@@ -2301,7 +2323,14 @@ async function handleMenu(
 
   await reply(
     conv,
-    'Reply with a menu number (1–7), or type *MENU* to see the menu again.',
+    [
+      'I\'m not sure I caught that — I\'m best at helping with bookings, prices, and salon info. 😊',
+      '',
+      'Type *MENU* to see everything I can help with, or just ask me something like:',
+      '• "I want to book a haircut"',
+      '• "What are your prices?"',
+      '• "What time do you open?"',
+    ].join('\n'),
   );
 }
 
