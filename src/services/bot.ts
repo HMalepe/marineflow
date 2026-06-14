@@ -1702,8 +1702,35 @@ async function handleCollectDateOfBirth(
   }
 
   const dobStr = `${dob.getFullYear()}-${String(dob.getMonth() + 1).padStart(2, '0')}-${String(dob.getDate()).padStart(2, '0')}`;
-  await saveCtx(conv.id, { pendingDateOfBirth: dobStr }, ConversationStep.BOOKING_POPIA_CONSENT);
-  await reply(conv, buildBookingPopiaConsentMessage());
+
+  // POPIA consent was already granted before name collection — commit profile now.
+  const pending = ctx(conv);
+  const firstName = pending.pendingFirstName as string | undefined;
+  const lastName = pending.pendingLastName as string | undefined;
+  const email = pending.pendingEmail as string | undefined;
+
+  if (!firstName || !lastName || !email) {
+    // Context lost mid-flow — restart from POPIA.
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+    await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
+    return;
+  }
+
+  const db = getTenantDb();
+  await db.customer.update({
+    where: { id: conv.customerId },
+    data: {
+      firstName,
+      lastName,
+      email,
+      dateOfBirth: new Date(dobStr),
+      displayName: `${firstName} ${lastName}`.trim(),
+    },
+  });
+
+  await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
+  const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
+  await startBookingFlow({ ...conv, customer: updatedCustomer });
 }
 
 async function handleBookingPopiaConsent(
@@ -1722,7 +1749,6 @@ async function handleBookingPopiaConsent(
   }
 
   const db = getTenantDb();
-  const pending = ctx(conv);
 
   if (answer === 'NO') {
     // Audit the decline but store NO customer PII.
@@ -1746,58 +1772,27 @@ async function handleBookingPopiaConsent(
     return;
   }
 
-  const firstName = pending.pendingFirstName;
-  const lastName = pending.pendingLastName;
-  const email = pending.pendingEmail;
-  const dobStr = pending.pendingDateOfBirth;
-
-  if (
-    typeof firstName !== 'string' ||
-    typeof lastName !== 'string' ||
-    typeof email !== 'string' ||
-    typeof dobStr !== 'string'
-  ) {
-    // Context was lost (e.g. previous error recovery) — restart collection cleanly.
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
-    await reply(
-      conv,
-      [
-        'Something went wrong — let\'s collect your details again.',
-        '',
-        'What is your *first name*? (Reply BACK for menu.)',
-      ].join('\n'),
-    );
-    return;
-  }
-
-  const dateOfBirth = new Date(dobStr);
-
-  // Both writes share the outer withTenantContext transaction — always consistent.
-  await db.customer.update({
-    where: { id: conv.customerId },
-    data: {
-      firstName,
-      lastName,
-      email,
-      dateOfBirth,
-      displayName: `${firstName} ${lastName}`.trim(),
-    },
-  });
-
+  // POPIA accepted — now collect profile details before booking.
   await db.auditLog.create({
     data: {
       salonId: salon.id,
       action: 'booking_profile_consent_granted',
       entity: 'Customer',
       entityId: conv.customerId,
-      payload: { source: 'whatsapp', emailProvided: true, dobProvided: true },
+      payload: { source: 'whatsapp' },
     },
   });
 
-  await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
-
-  const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
-  await startBookingFlow({ ...conv, customer: updatedCustomer });
+  await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
+  await reply(
+    conv,
+    [
+      'Thank you! Let\'s get your details set up.',
+      '',
+      'What is your *first name*?',
+      '(Letters only — reply BACK for menu.)',
+    ].join('\n'),
+  );
 }
 
 async function menuActionStartBooking(
@@ -1812,17 +1807,9 @@ async function menuActionStartBooking(
     });
 
     if (isProfileIncomplete(customer)) {
-      await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
-      syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
-      await reply(
-        conv,
-        [
-          'Great — let\'s get you booked! First, we need a few details.',
-          '',
-          'What is your *first name*?',
-          '(Letters only — reply BACK for menu.)',
-        ].join('\n'),
-      );
+      await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+      syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+      await reply(conv, buildBookingPopiaConsentMessage());
       return;
     }
 
