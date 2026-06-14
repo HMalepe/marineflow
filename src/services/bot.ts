@@ -40,6 +40,7 @@ import {
   normalizeMenuCategoryId,
   parseMainMenuSelection,
   parseSubMenuChoice,
+  parseFreeTextSupportIntent,
   salonDisplayName,
   SERVICE_CATEGORY_ALIASES,
   type MenuCategoryId,
@@ -149,7 +150,14 @@ export type BotContext = Record<string, unknown> & {
   pendingEmail?: string;
   /** ISO date string YYYY-MM-DD — stored as string to survive JSON round-trip safely. */
   pendingDateOfBirth?: string;
+  /** After profile + POPIA gates, resume the booking path the customer chose (Book vs Services). */
+  bookingResume?: BookingResume;
 };
+
+/** Where to continue after booking profile + POPIA gates complete. */
+export type BookingResume =
+  | { kind: 'default' }
+  | { kind: 'service_filter'; serviceFilterIds: string[]; headerLabel?: string };
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z\s'-]{1,80}$/;
 const PROFILE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1022,6 +1030,13 @@ async function processInboundWhatsApp(
   if (WHATSAPP_MENU_STEPS.includes(conv.step)) {
     try {
       conv = await reloadConversation(conv.id);
+
+      const supportIntent = parseFreeTextSupportIntent(text);
+      if (supportIntent) {
+        await handleFreeTextSupportIntent(conv, supportIntent);
+        return;
+      }
+
       // AI assist runs first — catches negative sentiment and natural language inputs.
       // Numeric menu choices pass through unhandled and fall to handleMenu below.
       const aiResult = await tryAiAssist(conv, text);
@@ -1818,7 +1833,77 @@ async function handleCollectDateOfBirth(
 
   await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
   const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
-  await startBookingFlow({ ...conv, customer: updatedCustomer });
+  await resumeBookingAfterGates({ ...conv, customer: updatedCustomer });
+}
+
+async function showFilteredServicePicker(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  serviceFilterIds: string[],
+  headerLabel?: string,
+): Promise<void> {
+  const services = await getTenantDb().service.findMany({
+    where: {
+      salonId: conv.salonId,
+      active: true,
+      deletedAt: null,
+      id: { in: serviceFilterIds },
+    },
+    orderBy: { sortOrder: 'asc' },
+  });
+  if (services.length === 0) {
+    await replyWithMenu(conv, 'Those services are no longer available. Please choose again from the menu.');
+    return;
+  }
+
+  const label = headerLabel ?? 'Services';
+  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  const filterPatch = {
+    serviceFilterIds: services.map((s) => s.id),
+    menuCategory: undefined,
+  };
+  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
+  await reply(
+    conv,
+    [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
+  );
+}
+
+async function resumeBookingAfterGates(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  const resume = ctx(conv).bookingResume as BookingResume | undefined;
+  await saveCtx(conv.id, { bookingResume: undefined });
+  syncConvContext(conv, { bookingResume: undefined });
+
+  if (resume?.kind === 'service_filter' && resume.serviceFilterIds.length > 0) {
+    await showFilteredServicePicker(conv, resume.serviceFilterIds, resume.headerLabel);
+    return;
+  }
+
+  await startBookingFlow(conv);
+}
+
+/** All booking entry paths (Book, Services, etc.) must go through here for POPIA + profile parity. */
+async function ensureBookingProfileAndPopiaThen(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  resume: BookingResume,
+): Promise<void> {
+  await saveCtx(conv.id, { ...BOOKING_CTX_CLEAR, bookingResume: resume }, ConversationStep.MENU);
+  syncConvContext(conv, { ...BOOKING_CTX_CLEAR, bookingResume: resume }, ConversationStep.MENU);
+
+  const customer = await getTenantDb().customer.findUniqueOrThrow({
+    where: { id: conv.customerId },
+  });
+
+  if (isProfileIncomplete(customer)) {
+    await saveCtx(conv.id, { bookingResume: resume }, ConversationStep.BOOKING_POPIA_CONSENT);
+    syncConvContext(conv, { bookingResume: resume }, ConversationStep.BOOKING_POPIA_CONSENT);
+    await reply(conv, buildBookingPopiaConsentMessage());
+    return;
+  }
+
+  await resumeBookingAfterGates({ ...conv, customer });
 }
 
 async function handleBookingPopiaConsent(
@@ -1852,7 +1937,7 @@ async function handleBookingPopiaConsent(
     const phoneHint = salon.phoneDisplay
       ? ` You can also phone us on ${salon.phoneDisplay} to book.`
       : ' Please contact the salon by phone to book.';
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, bookingResume: undefined }, ConversationStep.MENU);
     await replyWithMenu(
       conv,
       `Understood — we won't store your details without consent.${phoneHint}`,
@@ -1887,21 +1972,7 @@ async function menuActionStartBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
   try {
-    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-    syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-
-    const customer = await getTenantDb().customer.findUniqueOrThrow({
-      where: { id: conv.customerId },
-    });
-
-    if (isProfileIncomplete(customer)) {
-      await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-      syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-      await reply(conv, buildBookingPopiaConsentMessage());
-      return;
-    }
-
-    await startBookingFlow({ ...conv, customer });
+    await ensureBookingProfileAndPopiaThen(conv, { kind: 'default' });
   } catch (err) {
     logger.error({ err, convId: conv.id }, 'menu_action_start_booking_failed');
     if (!hasPendingOutboundForConv(conv.id)) {
@@ -2150,14 +2221,11 @@ async function menuActionShowServiceCategory(
     return;
   }
 
-  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  const filterPatch = { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined };
-  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE);
-  syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
-  await reply(
-    conv,
-    [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
-  );
+  await ensureBookingProfileAndPopiaThen(conv, {
+    kind: 'service_filter',
+    serviceFilterIds: services.map((s) => s.id),
+    headerLabel: label,
+  });
 }
 
 async function menuActionShowAllPrices(
@@ -2340,6 +2408,24 @@ async function handleMainMenuSelection(
   }
 }
 
+async function handleFreeTextSupportIntent(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  intent: NonNullable<ReturnType<typeof parseFreeTextSupportIntent>>,
+): Promise<void> {
+  if (intent === 'leave_review') {
+    await menuActionLeaveReview(conv);
+    return;
+  }
+  if (intent === 'report_issue') {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.COMPLAINT);
+    await reply(conv, 'Please describe the issue — our team will follow up shortly.');
+    return;
+  }
+  await saveCtx(conv.id, { menuCategory: 'support', ...PENDING_PROFILE_CLEAR }, ConversationStep.MENU);
+  syncConvContext(conv, { menuCategory: 'support' }, ConversationStep.MENU);
+  await reply(conv, buildSubMenuText('support'));
+}
+
 async function handleMenu(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -2391,6 +2477,12 @@ async function handleMenu(
 
   if (isConversationWakeMessage(trimmed) || upper === 'MENU' || upper === 'BACK') {
     await replyMenu(conv);
+    return;
+  }
+
+  const supportIntent = parseFreeTextSupportIntent(trimmed);
+  if (supportIntent) {
+    await handleFreeTextSupportIntent(conv, supportIntent);
     return;
   }
 
@@ -2508,6 +2600,23 @@ async function handlePickService(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  const customer = await getTenantDb().customer.findUniqueOrThrow({
+    where: { id: conv.customerId },
+  });
+  if (isProfileIncomplete(customer)) {
+    const filterIds = ctx(conv).serviceFilterIds;
+    await ensureBookingProfileAndPopiaThen(
+      conv,
+      Array.isArray(filterIds) && filterIds.length
+        ? {
+            kind: 'service_filter',
+            serviceFilterIds: filterIds as string[],
+          }
+        : { kind: 'default' },
+    );
+    return;
+  }
+
   const c = ctx(conv);
   if (c.addonPhase) {
     const handled = await handleAddonPhase(conv, text, {

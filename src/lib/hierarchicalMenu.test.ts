@@ -5,6 +5,7 @@ import {
   isMenuNavigationInput,
   isValidSubMenuChoice,
   menuWelcomeLine,
+  parseFreeTextSupportIntent,
   parseMainMenuSelection,
   salonDisplayName,
 } from './hierarchicalMenu.js';
@@ -67,5 +68,15 @@ describe('hierarchicalMenu', () => {
     expect(isMenuNavigationInput('services', '7')).toBe(true);
     expect(isMenuNavigationInput('services', '99')).toBe(false);
     expect(isMenuNavigationInput('services', 'REFERRAL')).toBe(true);
+  });
+
+  it('routes natural-language support phrases to review or issue flows', () => {
+    expect(parseFreeTextSupportIntent('i want to complain')).toBe('leave_review');
+    expect(parseFreeTextSupportIntent('I want to leave a review')).toBe('leave_review');
+    expect(parseFreeTextSupportIntent('rate my visit')).toBe('leave_review');
+    expect(parseFreeTextSupportIntent('report an issue with my booking')).toBe('report_issue');
+    expect(parseFreeTextSupportIntent('support')).toBe('show_support_menu');
+    expect(parseFreeTextSupportIntent('1')).toBeNull();
+    expect(parseFreeTextSupportIntent('hello')).toBeNull();
   });
 });

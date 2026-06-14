@@ -183,3 +183,39 @@ export function isMenuCategoryId(value: unknown): value is MenuCategoryId {
     value === 'support'
   );
 }
+
+export type SupportFreeTextIntent = 'leave_review' | 'report_issue' | 'show_support_menu';
+
+const LEAVE_REVIEW_RE =
+  /\b(leave\s+a?\s*review|write\s+a?\s*review|google\s+review|rate\s+(my|the|your)?\s*(visit|experience|service)?)\b/i;
+
+const COMPLAIN_OR_FEEDBACK_RE =
+  /\b(i\s+)?want\s+to\s+(complain|review|rate|give\s+feedback|share\s+feedback|leave\s+(a\s+)?review)\b/i;
+
+const FEEDBACK_SENTIMENT_RE =
+  /\b(complain|complaint|complaining|unhappy|not\s+happy|disappointed|dissatisfied|bad\s+experience|poor\s+service)\b/i;
+
+const REPORT_ISSUE_RE =
+  /\b(report\s+(an?\s+)?issue|report\s+a?\s*problem|issue\s+with|problem\s+with)\b/i;
+
+/** Natural-language Support / review phrases while on the main menu (not numeric). */
+export function parseFreeTextSupportIntent(text: string): SupportFreeTextIntent | null {
+  const trimmed = text.trim();
+  if (trimmed.length < 3) return null;
+  if (isWhatsAppMenuInput(trimmed)) return null;
+
+  if (REPORT_ISSUE_RE.test(trimmed)) return 'report_issue';
+
+  if (
+    LEAVE_REVIEW_RE.test(trimmed) ||
+    COMPLAIN_OR_FEEDBACK_RE.test(trimmed) ||
+    FEEDBACK_SENTIMENT_RE.test(trimmed) ||
+    /\b(feedback|review|rating)\b/i.test(trimmed)
+  ) {
+    return 'leave_review';
+  }
+
+  if (/^support$/i.test(trimmed)) return 'show_support_menu';
+
+  return null;
+}
