@@ -10,10 +10,12 @@ import { syncSuperAdminPasswordFromEnv } from './lib/syncSuperAdmin.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function deploy(): string {
+  const directUrl = process.env.DIRECT_DATABASE_URL;
   return execSync('npx prisma migrate deploy', {
     encoding: 'utf-8',
     cwd: join(__dirname, '..'),
     stdio: ['pipe', 'pipe', 'pipe'],
+    env: directUrl ? { ...process.env, DATABASE_URL: directUrl } : process.env,
   });
 }
 
@@ -40,8 +42,8 @@ try {
       const toBaseline = readdirSync(migrationsDir)
         .filter((d) => /^\d{14}_/.test(d))
         .sort()
-        // Skip the idempotent guard migration — let deploy run its SQL
-        .filter((d) => !d.includes('ensure_webhook_tables'));
+        // Skip idempotent guard migrations — let deploy run their SQL
+        .filter((d) => !d.includes('ensure_'));
 
       for (const migration of toBaseline) {
         try {
@@ -94,6 +96,14 @@ try {
   console.log('[STARTUP] Column safety net OK (reviewCreditCents + ReviewIncentiveClaim)');
 } catch (colErr) {
   console.error('[STARTUP] Column safety net failed:', colErr);
+}
+
+try {
+  const { ensureSchemaColumns } = await import('./lib/ensureSchema.js');
+  await ensureSchemaColumns();
+  console.log('[STARTUP] Schema column guard OK');
+} catch (e) {
+  console.error('[STARTUP] Schema column guard FAILED — bot may error on Appointment queries:', e);
 }
 
 try {
