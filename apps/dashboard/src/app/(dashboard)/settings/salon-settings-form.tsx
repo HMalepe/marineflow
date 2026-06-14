@@ -242,6 +242,8 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const [savingLoyalty, setSavingLoyalty] = useState(false);
 
   const [whatsappPhoneId, setWhatsappPhoneId] = useState(initialSettings.whatsappPhoneId ?? '');
+  const [savedWhatsappPhoneId, setSavedWhatsappPhoneId] = useState(initialSettings.whatsappPhoneId ?? '');
+  const [whatsappJustSaved, setWhatsappJustSaved] = useState(false);
   const [savingWhatsappPhoneId, setSavingWhatsappPhoneId] = useState(false);
 
   const [savingDisplayName, setSavingDisplayName] = useState(false);
@@ -284,9 +286,16 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     setWinbackBody(s.automations?.messaging?.winbackBody ?? '');
     setBirthdayBody(s.automations?.messaging?.birthdayBody ?? '');
     setCancellationPolicyText(s.automations?.messaging?.cancellationPolicyText ?? '');
+    const phoneId = s.whatsappPhoneId?.trim() ?? '';
+    setWhatsappPhoneId(phoneId);
+    setSavedWhatsappPhoneId(phoneId);
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
+  const whatsappPhoneIdDirty = useMemo(
+    () => whatsappPhoneId.trim() !== savedWhatsappPhoneId.trim(),
+    [savedWhatsappPhoneId, whatsappPhoneId],
+  );
 
   const handleWeekdayHoursChange = useCallback((open: string, close: string) => {
     setOpenTime(open);
@@ -740,6 +749,35 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     }
   }
 
+  async function handleSaveWhatsAppPhoneId(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingWhatsappPhoneId(true);
+    setWhatsappJustSaved(false);
+    try {
+      const result = await saveWhatsAppConfig(whatsappPhoneId || null);
+      if (result.salon) {
+        applySalon(result.salon);
+        const saved = result.salon.whatsappPhoneId?.trim() ?? whatsappPhoneId.trim();
+        setWhatsappPhoneId(saved);
+        setSavedWhatsappPhoneId(saved);
+        setWhatsappJustSaved(true);
+        reportSuccess(
+          'whatsappPhoneId',
+          saved
+            ? 'Phone Number ID saved — WhatsApp Cloud API is configured'
+            : 'Phone Number ID cleared',
+        );
+        router.refresh();
+      } else {
+        reportError('whatsappPhoneId', result.error ?? 'Save failed — please try again');
+      }
+    } catch {
+      reportError('whatsappPhoneId', 'Save failed — please try again');
+    } finally {
+      setSavingWhatsappPhoneId(false);
+    }
+  }
+
   async function handleSaveBot(e: React.FormEvent) {
     e.preventDefault();
     setSavingBot(true);
@@ -837,38 +875,22 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
 
       {/* WhatsApp Cloud API Phone Number ID */}
       <section className="space-y-4">
-        <div>
+        <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-base font-semibold">WhatsApp Cloud API — Phone Number ID</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Found in Meta Business Manager → WhatsApp → API Setup. Required for the bot to receive and send messages via Meta Cloud API.
-          </p>
+          {savedWhatsappPhoneId.trim() ? (
+            <Badge variant="outline" className="border-green-600 text-green-700 dark:text-green-400">
+              Configured
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="border-destructive text-destructive">
+              Not set
+            </Badge>
+          )}
         </div>
-        <form
-          className="flex flex-col gap-2"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setSavingWhatsappPhoneId(true);
-            try {
-              const result = await saveWhatsAppConfig(whatsappPhoneId || null);
-              if (result.salon) {
-                const saved = result.salon.whatsappPhoneId?.trim() ?? whatsappPhoneId.trim();
-                setWhatsappPhoneId(saved);
-                reportSuccess(
-                  'whatsappPhoneId',
-                  saved
-                    ? 'Phone Number ID saved — WhatsApp Cloud API is configured'
-                    : 'Phone Number ID cleared',
-                );
-              } else {
-                reportError('whatsappPhoneId', result.error ?? 'Save failed — please try again');
-              }
-            } catch {
-              reportError('whatsappPhoneId', 'Save failed — please try again');
-            } finally {
-              setSavingWhatsappPhoneId(false);
-            }
-          }}
-        >
+        <p className="text-sm text-muted-foreground">
+          Found in Meta Business Manager → WhatsApp → API Setup. Required for the bot to receive and send messages via Meta Cloud API.
+        </p>
+        <form className="space-y-3" onSubmit={(e) => void handleSaveWhatsAppPhoneId(e)}>
           <div className="flex gap-2 items-end">
             <div className="flex-1 space-y-1">
               <Label htmlFor="whatsappPhoneId">Phone Number ID</Label>
@@ -876,21 +898,49 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 id="whatsappPhoneId"
                 placeholder="e.g. 123456789012345"
                 value={whatsappPhoneId}
-                onChange={(e) => setWhatsappPhoneId(e.target.value)}
+                onChange={(e) => {
+                  setWhatsappPhoneId(e.target.value);
+                  setWhatsappJustSaved(false);
+                }}
                 inputMode="numeric"
                 pattern="\d*"
               />
             </div>
-            <Button type="submit" size="sm" disabled={savingWhatsappPhoneId}>
-              {savingWhatsappPhoneId ? 'Saving…' : 'Save'}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={savingWhatsappPhoneId || (!whatsappPhoneIdDirty && Boolean(savedWhatsappPhoneId.trim()))}
+              variant={whatsappJustSaved ? 'outline' : 'default'}
+              className={whatsappJustSaved ? 'border-green-600 text-green-700 dark:text-green-400' : undefined}
+            >
+              {savingWhatsappPhoneId ? 'Saving…' : whatsappJustSaved ? 'Saved ✓' : 'Save'}
             </Button>
           </div>
-          <SectionSaveFeedback feedback={getSection('whatsappPhoneId')} />
+          <div className="flex flex-wrap items-center gap-3">
+            {whatsappPhoneIdDirty && savedWhatsappPhoneId.trim() && (
+              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+            )}
+            <SectionSaveFeedback feedback={getSection('whatsappPhoneId')} className="flex-1 min-w-[12rem]" />
+          </div>
         </form>
-        {whatsappPhoneId.trim() ? (
-          <p className="text-xs font-medium text-green-600 dark:text-green-400">
-            ✓ Phone Number ID configured — the bot can receive WhatsApp messages via Meta Cloud API.
-          </p>
+        {savedWhatsappPhoneId.trim() ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              'rounded-lg border px-4 py-3 text-sm',
+              whatsappJustSaved
+                ? 'border-green-600 bg-green-50 text-green-800 dark:bg-green-950/40 dark:text-green-300'
+                : 'border-green-200 bg-green-50/80 text-green-800 dark:border-green-900 dark:bg-green-950/20 dark:text-green-300',
+            )}
+          >
+            <p className="font-medium">
+              {whatsappJustSaved ? '✓ Saved successfully' : '✓ Phone Number ID configured'}
+            </p>
+            <p className="mt-1 text-xs opacity-90">
+              ID <span className="font-mono">{savedWhatsappPhoneId}</span> — the bot can receive WhatsApp messages via Meta Cloud API.
+            </p>
+          </div>
         ) : (
           <p className="text-xs text-destructive font-medium">
             ⚠️ Phone Number ID is not set — the bot cannot receive WhatsApp messages until this is configured.
