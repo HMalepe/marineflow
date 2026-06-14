@@ -212,7 +212,7 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
-  return !customer.firstName || !customer.lastName || !customer.email || !customer.dateOfBirth;
+  return !customer.firstName || !customer.email || !customer.dateOfBirth;
 }
 
 const WHATSAPP_MENU_STEPS: ConversationStep[] = [
@@ -988,7 +988,7 @@ async function processInboundWhatsApp(
       conv = await reloadConversation(conv.id);
       // AI assist runs first — catches negative sentiment and natural language inputs.
       // Numeric menu choices pass through unhandled and fall to handleMenu below.
-      const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
+      const aiResult = await tryAiAssist(conv, text);
       if (aiResult.negativeSentiment) {
         await escalateNegativeSentiment(conv, text);
         return;
@@ -1101,7 +1101,7 @@ async function processInboundWhatsApp(
 
   const aiSteps: ConversationStep[] = [ConversationStep.FAQ];
   if (aiSteps.includes(conv.step)) {
-    const aiResult = await tryAiAssist(conv, text, mainMenu(salon));
+    const aiResult = await tryAiAssist(conv, text);
     // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
     if (aiResult.negativeSentiment) {
       await escalateNegativeSentiment(conv, text);
@@ -3302,7 +3302,7 @@ async function handleOtherQuery(
 
   // Try AI assist
   try {
-    const aiResult = await tryAiAssist(conv, text, mainMenu(conv.salon));
+    const aiResult = await tryAiAssist(conv, text);
     // §4.4/§5 — negative sentiment detected: escalate immediately, skip FAQ loop
     if (aiResult.negativeSentiment) {
       await escalateNegativeSentiment(conv, text);
