@@ -123,6 +123,22 @@ interface Props {
   token: string;
 }
 
+function currentMonthStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function offsetMonth(base: string, delta: number): string {
+  const [y, m] = base.split('-').map(Number) as [number, number];
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  return new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+}
+
 export function AnalyticsClient({ token }: Props) {
   const [data, setData]       = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,15 +153,18 @@ export function AnalyticsClient({ token }: Props) {
   const [noShowByService, setNoShowByService] = useState<NoShowRow[]>([]);
   const [funnel, setFunnel]     = useState<FunnelStep[]>([]);
   const [optOuts, setOptOuts]   = useState<OptOutData | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr());
+  const isCurrentMonth = selectedMonth === currentMonthStr();
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
+    const monthQ = `?month=${selectedMonth}`;
     try {
       const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData, campaignData] = await Promise.all([
-        apiFetch<AnalyticsData>('/analytics/overview', {}, token),
-        apiFetch<MonthlyReport>('/analytics/monthly-report', {}, token).catch(() => null),
+        apiFetch<AnalyticsData>(`/analytics/overview${monthQ}`, {}, token),
+        apiFetch<MonthlyReport>(`/analytics/monthly-report${monthQ}`, {}, token).catch(() => null),
         apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
         apiFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>('/analytics/no-show-patterns', {}, token).catch(() => null),
         apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
@@ -169,7 +188,7 @@ export function AnalyticsClient({ token }: Props) {
     }
   }, [token]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, selectedMonth]);
 
   const sendReportToWhatsApp = async () => {
     setSendingReport(true);
@@ -193,18 +212,41 @@ export function AnalyticsClient({ token }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Business performance at a glance.
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground text-sm mt-1">Business performance at a glance.</p>
         </div>
-        {!loading && (
-          <Button variant="outline" size="sm" onClick={load}>
-            Refresh
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Month navigator */}
+          <div className="flex items-center gap-1 rounded-xl border bg-card px-1 py-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setSelectedMonth(offsetMonth(selectedMonth, -1))}
+              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold"
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <span className="px-2 text-sm font-semibold tabular-nums min-w-[140px] text-center">
+              {formatMonthLabel(selectedMonth)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedMonth(offsetMonth(selectedMonth, 1))}
+              disabled={isCurrentMonth}
+              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+          {!loading && (
+            <Button variant="outline" size="sm" onClick={load}>
+              Refresh
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Loading skeleton */}
@@ -237,8 +279,8 @@ export function AnalyticsClient({ token }: Props) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard label="This month revenue" value="R0.00" />
             <KpiCard label="Bookings (30 days)" value="0" />
-            <KpiCard label="Retention rate" value="—" />
-            <KpiCard label="Active customers" value="0" />
+            <KpiCard label="Retention rate"     value="—" />
+            <KpiCard label="Active customers"   value="0" />
           </div>
           <div className="rounded-lg border border-dashed p-10 text-center space-y-2">
             <p className="text-sm font-medium">No activity yet</p>
@@ -312,35 +354,64 @@ export function AnalyticsClient({ token }: Props) {
       {!loading && !error && data && hasAnyData && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard label="This month revenue"  value={formatCurrency(currentMonthRevenue(data.revenue))} />
-            <KpiCard label="Bookings (30 days)"  value={last30DaysBookings(data.dailyBookings)} />
-            <KpiCard label="Retention rate"      value={retentionRate(data.retention)} />
-            <KpiCard label="Active customers"    value={data.retention.at(-1)?.unique_customers ?? 0} />
+            <KpiCard
+              label="This month revenue"
+              value={formatCurrency(currentMonthRevenue(data.revenue))}
+              trend={revenueTrend(data.revenue)}
+            />
+            <KpiCard
+              label="Bookings (30 days)"
+              value={last30DaysBookings(data.dailyBookings)}
+              trend={bookingsTrend(data.dailyBookings)}
+            />
+            <KpiCard label="Retention rate"   value={retentionRate(data.retention)} />
+            <KpiCard label="Active customers" value={data.retention.at(-1)?.unique_customers ?? 0} />
           </div>
 
           {/* Daily bar chart */}
           <section>
-            <h2 className="text-base font-semibold mb-3">Daily bookings — last 30 days</h2>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <h2 className="text-base font-semibold">Daily bookings — last 30 days</h2>
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-emerald-500 inline-block" />Completed</span>
+                <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-rose-400 inline-block" />Cancelled</span>
+                <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-amber-400 inline-block" />No-show</span>
+              </div>
+            </div>
             {data.dailyBookings.length === 0 ? <EmptySection label="No booking data yet." /> : (
-              <div className="border rounded-lg p-4">
-                <div className="flex items-end gap-0.5 h-32">
-                  {data.dailyBookings.slice(-30).map((d, i) => {
-                    const max = Math.max(...data.dailyBookings.slice(-30).map((x) => x.total_bookings), 1);
-                    const pct = (d.total_bookings / max) * 100;
-                    return (
-                      <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
-                        <div
-                          className="w-full bg-primary/70 rounded-t-sm min-h-[2px] transition-colors group-hover:bg-primary"
-                          style={{ height: `${Math.max(pct, 2)}%` }}
-                        />
-                        <span className="absolute -top-6 left-1/2 -translate-x-1/2 hidden group-hover:block text-[10px] bg-popover border rounded px-1.5 py-0.5 whitespace-nowrap z-10 shadow-sm pointer-events-none">
-                          {d.booking_date}: {d.total_bookings}
-                        </span>
-                      </div>
-                    );
-                  })}
+              <div className="border rounded-xl p-4 bg-card">
+                <div className="flex items-end gap-0.5 h-40">
+                  {(() => {
+                    const slice = data.dailyBookings.slice(-30);
+                    const max = Math.max(...slice.map((x) => x.total_bookings), 1);
+                    return slice.map((d, i) => {
+                      const total = d.total_bookings || 0;
+                      const completedPct = total > 0 ? (d.completed / max) * 100 : 0;
+                      const cancelledPct = total > 0 ? (d.cancelled / max) * 100 : 0;
+                      const noShowPct   = total > 0 ? (d.no_shows / max) * 100 : 0;
+                      const emptyPct = Math.max(0, 2 - (completedPct + cancelledPct + noShowPct));
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center justify-end h-full group relative">
+                          <div className="w-full flex flex-col justify-end overflow-hidden rounded-t-sm" style={{ height: `${Math.max(completedPct + cancelledPct + noShowPct, total > 0 ? 3 : 0)}%` }}>
+                            {noShowPct > 0 && <div className="w-full bg-amber-400" style={{ height: `${(noShowPct / (completedPct + cancelledPct + noShowPct)) * 100}%` }} />}
+                            {cancelledPct > 0 && <div className="w-full bg-rose-400" style={{ height: `${(cancelledPct / (completedPct + cancelledPct + noShowPct)) * 100}%` }} />}
+                            {completedPct > 0 && <div className="w-full bg-emerald-500" style={{ height: `${(completedPct / (completedPct + cancelledPct + noShowPct)) * 100}%` }} />}
+                          </div>
+                          {emptyPct > 0 && total === 0 && <div className="w-full bg-muted/40 rounded-t-sm" style={{ height: '3px' }} />}
+                          <span className="absolute -top-8 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col items-center z-10 pointer-events-none">
+                            <span className="bg-popover border rounded-lg px-2 py-1.5 shadow-md text-[10px] whitespace-nowrap space-y-0.5">
+                              <span className="block font-medium">{d.booking_date}</span>
+                              <span className="block text-emerald-600">✓ {d.completed} completed</span>
+                              {d.cancelled > 0 && <span className="block text-rose-500">✕ {d.cancelled} cancelled</span>}
+                              {d.no_shows > 0 && <span className="block text-amber-600">◦ {d.no_shows} no-show</span>}
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                <div className="flex justify-between text-[11px] text-muted-foreground mt-2 pt-2 border-t">
                   <span>{data.dailyBookings.slice(-30)[0]?.booking_date ?? '30 days ago'}</span>
                   <span>Today</span>
                 </div>
@@ -350,29 +421,56 @@ export function AnalyticsClient({ token }: Props) {
 
           {/* Revenue */}
           <section>
-            <h2 className="text-base font-semibold mb-3">Monthly revenue</h2>
+            <h2 className="text-base font-semibold mb-3">Monthly revenue — last 6 months</h2>
             {data.revenue.length === 0 ? <EmptySection label="No revenue data yet." /> : (
-              <div className="border rounded-lg overflow-x-auto">
-                <table className="w-full text-sm min-w-[400px]">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left p-3 font-medium">Month</th>
-                      <th className="text-right p-3 font-medium">Revenue</th>
-                      <th className="text-right p-3 font-medium">Customers</th>
-                      <th className="text-right p-3 font-medium">Invoices</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {data.revenue.slice(-6).reverse().map((r) => (
-                      <tr key={r.month} className="hover:bg-muted/30">
-                        <td className="p-3">{formatMonth(r.month)}</td>
-                        <td className="p-3 text-right font-medium tabular-nums">{formatCurrency(r.total_revenue_cents)}</td>
-                        <td className="p-3 text-right tabular-nums">{r.unique_customers}</td>
-                        <td className="p-3 text-right tabular-nums">{r.invoice_count}</td>
+              <div className="border rounded-xl bg-card overflow-hidden">
+                {/* Bar chart */}
+                <div className="px-4 pt-4 pb-2">
+                  <div className="flex items-end gap-2 h-28">
+                    {(() => {
+                      const slice = data.revenue.slice(-6);
+                      const max = Math.max(...slice.map((r) => r.total_revenue_cents), 1);
+                      return slice.map((r) => {
+                        const pct = (r.total_revenue_cents / max) * 100;
+                        return (
+                          <div key={r.month} className="flex-1 flex flex-col items-center gap-1 h-full group relative justify-end">
+                            <div
+                              className="w-full rounded-t-md bg-primary/60 group-hover:bg-primary transition-colors min-h-[4px]"
+                              style={{ height: `${Math.max(pct, 3)}%` }}
+                            />
+                            <span className="text-[10px] text-muted-foreground">{formatMonth(r.month).split(' ')[0]}</span>
+                            <span className="absolute -top-9 left-1/2 -translate-x-1/2 hidden group-hover:block text-[10px] bg-popover border rounded-lg px-2 py-1 shadow-md whitespace-nowrap z-10 pointer-events-none">
+                              {formatMonth(r.month)}: {formatCurrency(r.total_revenue_cents)}
+                            </span>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+                {/* Table */}
+                <div className="overflow-x-auto border-t">
+                  <table className="w-full text-sm min-w-[400px]">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left p-3 font-medium">Month</th>
+                        <th className="text-right p-3 font-medium">Revenue</th>
+                        <th className="text-right p-3 font-medium">Customers</th>
+                        <th className="text-right p-3 font-medium">Invoices</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y">
+                      {data.revenue.slice(-6).reverse().map((r) => (
+                        <tr key={r.month} className="hover:bg-muted/30">
+                          <td className="p-3">{formatMonth(r.month)}</td>
+                          <td className="p-3 text-right font-medium tabular-nums">{formatCurrency(r.total_revenue_cents)}</td>
+                          <td className="p-3 text-right tabular-nums">{r.unique_customers}</td>
+                          <td className="p-3 text-right tabular-nums">{r.invoice_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </section>
@@ -741,11 +839,16 @@ export function AnalyticsClient({ token }: Props) {
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string | number }) {
+function KpiCard({ label, value, trend }: { label: string; value: string | number; trend?: number | null }) {
   return (
-    <div className="border rounded-lg p-4">
+    <div className="border rounded-xl p-4 bg-card">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-2xl font-bold mt-1 tabular-nums">{value}</p>
+      {trend != null && trend !== 0 && (
+        <p className={cn('text-xs font-medium mt-1 flex items-center gap-0.5', trend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400')}>
+          {trend > 0 ? '↑' : '↓'} {Math.abs(trend)}% vs last month
+        </p>
+      )}
     </div>
   );
 }
@@ -785,6 +888,21 @@ function currentMonthRevenue(revenue: RevenueSummary[]): number {
 
 function last30DaysBookings(daily: DailyBooking[]): number {
   return daily.slice(-30).reduce((sum, d) => sum + d.total_bookings, 0);
+}
+
+function revenueTrend(revenue: RevenueSummary[]): number | null {
+  if (revenue.length < 2) return null;
+  const curr = revenue[revenue.length - 1]!.total_revenue_cents;
+  const prev = revenue[revenue.length - 2]!.total_revenue_cents;
+  if (prev === 0) return null;
+  return Math.round(((curr - prev) / prev) * 100);
+}
+
+function bookingsTrend(daily: DailyBooking[]): number | null {
+  const last30 = daily.slice(-30).reduce((s, d) => s + d.total_bookings, 0);
+  const prev30 = daily.slice(-60, -30).reduce((s, d) => s + d.total_bookings, 0);
+  if (prev30 === 0) return null;
+  return Math.round(((last30 - prev30) / prev30) * 100);
 }
 
 function retentionRate(retention: RetentionSummary[]): string {

@@ -37,6 +37,7 @@ import {
 } from '../services/marketingConsent.js';
 import { recordCustomerNoShow, normalizeNoShowRisk } from '../services/noShowRisk.js';
 import { clampRosterEnd, parseRosterDate } from '../lib/rosterRange.js';
+import { getAvailableSlots } from '../services/slots.js';
 import {
   mergeBotFlowIntoMetadata,
   parseBotFlowSettingsFromMetadata,
@@ -113,6 +114,8 @@ function serializeFaq(item: {
   status: FaqStatus;
   createdAt: Date;
   updatedAt: Date;
+  approvedAt?: Date | null;
+  approvedBy?: string | null;
 }) {
   return {
     id: item.id,
@@ -122,6 +125,8 @@ function serializeFaq(item: {
     status: faqToApiStatus(item.status),
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
+    approvedAt: item.approvedAt?.toISOString() ?? null,
+    approvedBy: item.approvedBy ?? null,
   };
 }
 
@@ -288,6 +293,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           slug: true,
           whatsappPhoneId: true,
           twilioWhatsAppFrom: true,
+          onboardingCompletedAt: true,
         },
       });
       const flow = parseBotFlowSettingsFromMetadata(salon.metadata);
@@ -1836,6 +1842,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           timeOff: {
             where: { start: { lte: clampedTo }, end: { gte: from } },
           },
+          services: { include: { service: { select: { id: true, name: true } } } },
         },
         orderBy: { sortOrder: 'asc' },
       });
@@ -1875,6 +1882,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             end:   t.end.toISOString().slice(0, 10),
             reason: t.reason ?? null,
           })),
+          serviceNames: s.services.map((ss) => ss.service.name),
         })),
       };
     });
@@ -2605,6 +2613,65 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         if (!svc) { reply.code(404); return { error: 'not_found' }; }
         await db.service.update({ where: { id: svc.id }, data: { sortOrder } });
         return { ok: true };
+      });
+    },
+  );
+
+  // ── Service → staff assignment ────────────────────────────────────────
+  app.get<{ Params: { id: string } }>(
+    '/services/:id/staff',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const svc = await db.service.findFirst({ where: { id: request.params.id, salonId: user.salonId, deletedAt: null } });
+        if (!svc) { reply.code(404); return { error: 'not_found' }; }
+        const links = await db.staffService.findMany({
+          where: { serviceId: svc.id },
+          select: { staffId: true },
+        });
+        return { staffIds: links.map((l) => l.staffId) };
+      });
+    },
+  );
+
+  app.put<{ Params: { id: string }; Body: { staffIds: string[] } }>(
+    '/services/:id/staff',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const svc = await db.service.findFirst({ where: { id: request.params.id, salonId: user.salonId, deletedAt: null } });
+        if (!svc) { reply.code(404); return { error: 'not_found' }; }
+        const { staffIds } = request.body ?? {};
+        if (!Array.isArray(staffIds)) { reply.code(400); return { error: 'staffIds_required' }; }
+
+        // Verify all staff belong to this salon
+        const validStaff = await db.staff.findMany({
+          where: { id: { in: staffIds }, salonId: user.salonId, deletedAt: null },
+          select: { id: true },
+        });
+        const validIds = validStaff.map((s) => s.id);
+
+        // Preserve existing price overrides while replacing links
+        const existing = await db.staffService.findMany({
+          where: { serviceId: svc.id },
+          select: { staffId: true, priceCentsOverride: true },
+        });
+        const overrideMap = new Map(existing.map((e) => [e.staffId, e.priceCentsOverride]));
+
+        await db.staffService.deleteMany({ where: { serviceId: svc.id } });
+        if (validIds.length > 0) {
+          await db.staffService.createMany({
+            data: validIds.map((staffId) => ({
+              staffId,
+              serviceId: svc.id,
+              priceCentsOverride: overrideMap.get(staffId) ?? null,
+            })),
+          });
+        }
+
+        return { staffIds: validIds };
       });
     },
   );
@@ -3410,6 +3477,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.delete('/waitlist/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { id } = request.params as { id: string };
+      const db = getTenantDb();
+      const entry = await db.waitlistEntry.findFirst({ where: { id, salonId: user.salonId } });
+      if (!entry) return reply.status(404).send({ error: 'Not found' });
+      await db.waitlistEntry.delete({ where: { id } });
+      return { ok: true };
+    });
+  });
+
   // ─── Subscription & Billing ──────────────────────────────────────────
   app.get('/subscription/plans', async () => {
     return { plans: await getPlans() };
@@ -3719,6 +3797,36 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  // Seed the 7 default barbershop categories if none exist yet for this salon.
+  app.post(
+    '/service-categories/seed-defaults',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.serviceCategory.count({ where: { salonId: user.salonId } });
+        if (existing > 0) return { seeded: false, message: 'Categories already exist' };
+
+        const defaults = [
+          { name: 'Fades & Cuts',  slug: 'fades-cuts',   sortOrder: 1 },
+          { name: 'Beard',          slug: 'beard',         sortOrder: 2 },
+          { name: 'Locs & Braids',  slug: 'locs-braids',  sortOrder: 3 },
+          { name: 'Kids & Teens',   slug: 'kids-teens',   sortOrder: 4 },
+          { name: 'Colour & Tint',  slug: 'colour-tint',  sortOrder: 5 },
+          { name: 'Add-Ons',        slug: 'add-ons',       sortOrder: 6 },
+          { name: 'Other',          slug: 'other',         sortOrder: 7 },
+        ];
+
+        const created = await Promise.all(
+          defaults.map((d) =>
+            db.serviceCategory.create({ data: { salonId: user.salonId, ...d } }),
+          ),
+        );
+        return { seeded: true, categories: created };
+      });
+    },
+  );
+
   app.post<{ Body: { name: string } }>(
     '/service-categories',
     { preHandler: requireRole('OWNER', 'MANAGER') },
@@ -3807,6 +3915,150 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           data: { priceCentsOverride: priceCentsOverride ?? null },
         });
         return { priceCentsOverride: updated.priceCentsOverride };
+      });
+    },
+  );
+
+  // ─── Staff service linking ────────────────────────────────────────────
+  app.put<{
+    Params: { staffId: string };
+    Body: { serviceIds: string[] };
+  }>(
+    '/staff/:staffId/services',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { staffId } = request.params;
+        const { serviceIds } = request.body ?? {};
+
+        const staff = await db.staff.findFirst({ where: { id: staffId, salonId: user.salonId, deletedAt: null } });
+        if (!staff) { reply.code(404); return { error: 'not_found' }; }
+
+        if (!Array.isArray(serviceIds)) { reply.code(400); return { error: 'serviceIds_required' }; }
+
+        // Verify all serviceIds belong to this salon
+        const services = await db.service.findMany({
+          where: { id: { in: serviceIds }, salonId: user.salonId },
+          select: { id: true },
+        });
+        const validIds = new Set(services.map((s) => s.id));
+        const filtered = serviceIds.filter((id) => validIds.has(id));
+
+        // Replace service links, preserving existing price overrides
+        const existing = await db.staffService.findMany({ where: { staffId }, select: { serviceId: true, priceCentsOverride: true } });
+        const existingMap = new Map(existing.map((e) => [e.serviceId, e.priceCentsOverride]));
+
+        await db.staffService.deleteMany({ where: { staffId } });
+        if (filtered.length > 0) {
+          await db.staffService.createMany({
+            data: filtered.map((serviceId) => ({
+              staffId,
+              serviceId,
+              priceCentsOverride: existingMap.get(serviceId) ?? null,
+            })),
+          });
+        }
+
+        const updated = await db.staffService.findMany({
+          where: { staffId },
+          include: { service: { select: { id: true, name: true, priceCents: true } } },
+        });
+        return { services: updated };
+      });
+    },
+  );
+
+  // ─── Available slots for manual booking ──────────────────────────────
+  app.get<{ Querystring: { serviceId: string; staffId: string; date: string } }>(
+    '/appointments/slots',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { serviceId, staffId, date } = request.query;
+        if (!serviceId || !staffId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          reply.code(400);
+          return { error: 'serviceId, staffId and date (YYYY-MM-DD) are required.' };
+        }
+
+        const [service, staff] = await Promise.all([
+          db.service.findFirst({ where: { id: serviceId, salonId: user.salonId, deletedAt: null } }),
+          db.staff.findFirst({ where: { id: staffId, salonId: user.salonId, deletedAt: null } }),
+        ]);
+
+        if (!service || !staff) { reply.code(404); return { error: 'not_found' }; }
+
+        const { slots, tooLong } = await getAvailableSlots({ salonId: user.salonId, service, staff, localDateStr: date });
+        return {
+          tooLong,
+          slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
+        };
+      });
+    },
+  );
+
+  // ─── Staff-initiated manual booking ──────────────────────────────────
+  app.post<{
+    Body: {
+      customerId: string;
+      serviceId: string;
+      staffId: string;
+      startIso: string;
+      notes?: string;
+    };
+  }>(
+    '/appointments',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { customerId, serviceId, staffId, startIso, notes } = request.body ?? {};
+        if (!customerId || !serviceId || !staffId || !startIso) {
+          reply.code(400);
+          return { error: 'missing_fields', message: 'customerId, serviceId, staffId and startIso are required.' };
+        }
+
+        const [customer, service, staff] = await Promise.all([
+          db.customer.findFirst({ where: { id: customerId, salonId: user.salonId } }),
+          db.service.findFirst({ where: { id: serviceId, salonId: user.salonId, deletedAt: null } }),
+          db.staff.findFirst({ where: { id: staffId, salonId: user.salonId, deletedAt: null } }),
+        ]);
+
+        if (!customer) { reply.code(404); return { error: 'customer_not_found' }; }
+        if (!service)  { reply.code(404); return { error: 'service_not_found' }; }
+        if (!staff)    { reply.code(404); return { error: 'staff_not_found' }; }
+
+        const start = new Date(startIso);
+        if (isNaN(start.getTime())) { reply.code(400); return { error: 'invalid_start_time' }; }
+
+        const durationMs = (service.durationMin + (service.bufferMin ?? 0) + (staff.breakMin ?? 0)) * 60_000;
+        const end = new Date(start.getTime() + durationMs);
+
+        const appt = await db.appointment.create({
+          data: {
+            salonId: user.salonId,
+            customerId: customer.id,
+            serviceId: service.id,
+            staffId: staff.id,
+            start,
+            end,
+            status: 'CONFIRMED',
+            notes: notes?.trim() || null,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'appointment_manual_create',
+            entity: 'Appointment',
+            entityId: appt.id,
+          },
+        }).catch(() => {});
+
+        return { appointmentId: appt.id, start: appt.start.toISOString(), end: appt.end.toISOString() };
       });
     },
   );
@@ -3957,6 +4209,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // ─── Conversation / Human-Handoff Management ────────────────────────────
   // These routes let staff reply to customers directly, take over a conversation
   // from the bot, or release it back to the bot.
+
+  /** Return the count of conversations currently in HANDOFF step for the current salon. */
+  app.get('/conversations/handoff-count', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const count = await db.conversation.count({
+        where: { salonId: user.salonId, step: 'HANDOFF' },
+      });
+      return { count };
+    });
+  });
 
   /** List all conversations, HANDOFF ones first so staff see what needs attention. */
   app.get('/conversations', async (request, reply) => {

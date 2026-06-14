@@ -72,7 +72,7 @@ export function TeamPerformanceClient({ token }: Props) {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Crown className="size-7 text-amber-500" />
             Team Performance
           </h1>

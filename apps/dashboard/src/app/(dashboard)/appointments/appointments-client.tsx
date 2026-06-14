@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiFetch, ApiError } from '@/lib/api';
-import { CheckSquare, Loader2 } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckSquare, Clock, Loader2, Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface WaitlistEntry {
   id: string;
@@ -82,10 +83,13 @@ export function AppointmentsClient({
   token: string;
 }) {
   const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
+  const [search, setSearch] = useState('');
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [removingWaitlistId, setRemovingWaitlistId] = useState<string | null>(null);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkCompleting, setBulkCompleting] = useState(false);
   const [bulkToast, setBulkToast] = useState<string | null>(null);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
 
   const loadWaitlist = useCallback(async () => {
     if (!token) return;
@@ -99,12 +103,25 @@ export function AppointmentsClient({
 
   useEffect(() => { void loadWaitlist(); }, [loadWaitlist]);
 
+  async function handleRemoveWaitlist(id: string) {
+    setRemovingWaitlistId(id);
+    try {
+      await apiFetch(`/waitlist/${id}`, { method: 'DELETE' }, token);
+      setWaitlist((prev) => prev.filter((e) => e.id !== id));
+    } catch {
+      // silently ignore — entry will still show, user can retry
+    } finally {
+      setRemovingWaitlistId(null);
+    }
+  }
+
   const completableIds = upcoming
     .filter((a) => (a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID') && new Date(a.start) <= new Date())
     .map((a) => a.id);
 
   async function handleBulkComplete() {
     if (bulkSelected.size === 0) return;
+    setConfirmBulkOpen(false);
     setBulkCompleting(true);
     try {
       const ids = [...bulkSelected];
@@ -125,11 +142,19 @@ export function AppointmentsClient({
   }
 
   function applyFilter(list: AppointmentData[]): AppointmentData[] {
-    if (depositFilter === 'all') return list;
     return list.filter((a) => {
-      const ds = getDepositStatus(a);
-      if (depositFilter === 'paid') return ds === 'paid';
-      if (depositFilter === 'pending') return ds === 'unpaid';
+      if (depositFilter !== 'all') {
+        const ds = getDepositStatus(a);
+        if (depositFilter === 'paid' && ds !== 'paid') return false;
+        if (depositFilter === 'pending' && ds !== 'unpaid') return false;
+      }
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const name = (a.customer.displayName ?? a.customer.waId).toLowerCase();
+        const service = a.service.name.toLowerCase();
+        const staff = a.staff.name.toLowerCase();
+        if (!name.includes(q) && !service.includes(q) && !staff.includes(q)) return false;
+      }
       return true;
     });
   }
@@ -145,12 +170,61 @@ export function AppointmentsClient({
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      {/* Bulk complete confirmation dialog */}
+      {confirmBulkOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmBulkOpen(false)} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-card border shadow-2xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 size-10 rounded-full bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
+                <AlertTriangle className="size-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base">Mark {bulkSelected.size} appointment{bulkSelected.size === 1 ? '' : 's'} complete?</h3>
+                <p className="text-sm text-muted-foreground">This will mark them as completed. This action cannot be undone.</p>
+              </div>
+              <button className="shrink-0 ml-auto text-muted-foreground hover:text-foreground" onClick={() => setConfirmBulkOpen(false)}>
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirmBulkOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={() => void handleBulkComplete()}>
+                <CheckSquare className="size-4 mr-1.5" />
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Appointments</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Appointments</h1>
           <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+          {/* Search */}
+          <div className="relative flex-1 sm:flex-none sm:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Customer, service, staff…"
+              className="pl-8 h-8 text-xs"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
           {completableIds.length > 0 && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed p-1.5 bg-muted/40">
               <span className="text-xs text-muted-foreground px-1">
@@ -164,7 +238,7 @@ export function AppointmentsClient({
                 {bulkSelected.size === completableIds.length ? 'Deselect all' : 'Select all'}
               </button>
               {bulkSelected.size > 0 && (
-                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => void handleBulkComplete()} disabled={bulkCompleting}>
+                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setConfirmBulkOpen(true)} disabled={bulkCompleting}>
                   {bulkCompleting ? <Loader2 className="size-3 animate-spin" /> : <CheckSquare className="size-3" />}
                   Mark complete
                 </Button>
@@ -198,7 +272,19 @@ export function AppointmentsClient({
         </CardHeader>
         <CardContent>
           {filteredUpcoming.length === 0 && (
-            <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="size-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
+                <Calendar className="size-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                {depositFilter !== 'all' ? 'No appointments match this filter' : 'No upcoming appointments'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                {depositFilter !== 'all'
+                  ? 'Try switching the filter above to see all bookings.'
+                  : 'New bookings from WhatsApp will appear here automatically.'}
+              </p>
+            </div>
           )}
           <div className="space-y-3">
             {filteredUpcoming.map((appt) => {
@@ -258,24 +344,30 @@ export function AppointmentsClient({
             </p>
             <div className="space-y-2">
               {waitlist.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between p-3 rounded-lg border gap-3 text-sm">
-                  <div className="space-y-0.5 min-w-0">
+                <div key={entry.id} className="flex items-center gap-3 p-3 rounded-lg border text-sm">
+                  <div className="flex-1 space-y-0.5 min-w-0">
                     <p className="font-medium truncate">{entry.customerName}</p>
                     <p className="text-xs text-muted-foreground">
                       {entry.serviceName ?? 'Any service'}
                       {entry.staffName ? ` · ${entry.staffName}` : ''}
                     </p>
-                  </div>
-                  <div className="text-right shrink-0 space-y-0.5">
                     <p className="text-xs text-muted-foreground">
                       Since {new Date(entry.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                      {entry.expiresAt && ` · Expires ${new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}`}
                     </p>
-                    {entry.expiresAt && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Expires {new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
-                      </p>
-                    )}
                   </div>
+                  <button
+                    onClick={() => void handleRemoveWaitlist(entry.id)}
+                    disabled={removingWaitlistId === entry.id}
+                    title="Remove from waitlist"
+                    className="h-8 w-8 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 shrink-0"
+                  >
+                    {removingWaitlistId === entry.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <X className="w-3.5 h-3.5" />
+                    )}
+                  </button>
                 </div>
               ))}
             </div>
@@ -460,36 +552,50 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
   if (todayAppts.length === 0) return null;
 
   return (
-    <Card className="border-primary/20 bg-primary/[0.03]">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <span className="size-2 rounded-full bg-primary inline-block" />
-          Today — {today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}
-          <span className="ml-auto text-xs font-normal text-muted-foreground">{todayAppts.length} appointment{todayAppts.length === 1 ? '' : 's'}</span>
+    <Card className="border-primary/20 bg-gradient-to-r from-primary/[0.04] to-transparent overflow-hidden">
+      <CardHeader className="pb-2 sm:pb-3">
+        <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+          <span className="relative flex size-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-50" />
+            <span className="relative inline-flex rounded-full size-2.5 bg-primary" />
+          </span>
+          <span>Today — {today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {todayAppts.length} appointment{todayAppts.length === 1 ? '' : 's'}
+          </span>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+      <CardContent className="pt-0">
+        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
           {todayAppts.map((a) => {
             const startTime = new Date(a.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
-            const isPast = new Date(a.start) < new Date();
+            const endTime = new Date(a.end).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+            const isPast = new Date(a.end) < new Date();
+            const isNow = new Date(a.start) <= new Date() && new Date(a.end) > new Date();
             return (
               <div
                 key={a.id}
-                className={`shrink-0 rounded-lg border p-3 min-w-[160px] max-w-[200px] space-y-1 ${
-                  isPast ? 'opacity-60 bg-muted/40' : 'bg-card'
+                className={`shrink-0 rounded-xl border p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-all ${
+                  isNow
+                    ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
+                    : isPast
+                    ? 'opacity-50 bg-muted/30'
+                    : 'bg-card hover:border-primary/30 hover:shadow-sm'
                 }`}
               >
-                <p className="text-xs font-bold tabular-nums">{startTime}</p>
-                <p className="text-sm font-medium truncate">{a.service.name}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {a.customer.displayName ?? a.customer.waId}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">{a.staff.displayName ?? a.staff.name}</p>
-                <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold tabular-nums">{startTime} – {endTime}</p>
+                  {isNow && <span className="text-[9px] font-semibold text-primary uppercase tracking-wide">Now</span>}
+                </div>
+                <p className="text-sm font-semibold truncate leading-tight">{a.service.name}</p>
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground truncate">{a.customer.displayName ?? a.customer.waId}</p>
+                  <p className="text-[11px] text-muted-foreground/70 truncate">{a.staff.displayName ?? a.staff.name}</p>
+                </div>
+                <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   a.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' :
-                  a.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-                  a.status === 'NO_SHOW' ? 'bg-amber-100 text-amber-700' :
+                  a.status === 'CANCELLED' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' :
+                  a.status === 'NO_SHOW' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
                   'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                 }`}>
                   {a.status.replace(/_/g, ' ').toLowerCase()}

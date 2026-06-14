@@ -36,6 +36,13 @@ interface Service {
   category?: { id: string; name: string } | null;
 }
 
+interface StaffBrief {
+  id: string;
+  name: string;
+  displayName: string | null;
+  active: boolean;
+}
+
 interface ServiceCategory {
   id: string;
   name: string;
@@ -120,6 +127,12 @@ export function ServicesClient({ token }: Props) {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback();
 
+  // Staff assignment
+  const [allStaff, setAllStaff] = useState<StaffBrief[]>([]);
+  const [assignedStaffIds, setAssignedStaffIds] = useState<Set<string>>(new Set());
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffSaving, setStaffSaving] = useState(false);
+
   // Service categories
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [catInput, setCatInput] = useState('');
@@ -168,10 +181,51 @@ export function ServicesClient({ token }: Props) {
     }
   }, [token]);
 
+  const loadAllStaff = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ staff: StaffBrief[] }>('/staff', {}, token);
+      setAllStaff((data.staff ?? []).filter((s) => s.active));
+    } catch {
+      // non-critical
+    }
+  }, [token]);
+
+  const loadServiceStaff = useCallback(async (serviceId: string) => {
+    setStaffLoading(true);
+    try {
+      const data = await apiFetch<{ staffIds: string[] }>(`/services/${serviceId}/staff`, {}, token);
+      setAssignedStaffIds(new Set(data.staffIds ?? []));
+    } catch {
+      setAssignedStaffIds(new Set());
+    } finally {
+      setStaffLoading(false);
+    }
+  }, [token]);
+
   useEffect(() => {
     void loadServices();
     void loadCategories();
-  }, [loadServices, loadCategories]);
+    void loadAllStaff();
+  }, [loadServices, loadCategories, loadAllStaff]);
+
+  // Warn before navigating away with unsaved form data
+  const formIsDirty = sheetOpen && (
+    form.name.trim() !== '' ||
+    form.description.trim() !== '' ||
+    form.priceRands !== '' ||
+    form.durationMin !== '60' ||
+    form.bufferMin !== '0'
+  );
+  useEffect(() => {
+    if (!formIsDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [formIsDirty]);
 
   async function handleAddCategory(e: FormEvent) {
     e.preventDefault();
@@ -278,10 +332,13 @@ export function ServicesClient({ token }: Props) {
     setEditingId(service.id);
     setForm(serviceToForm(service));
     setTemplateStep(false);
+    setAssignedStaffIds(new Set());
+    void loadServiceStaff(service.id);
     setSheetOpen(true);
   }
 
-  function closeSheet() {
+  function closeSheet(force = false) {
+    if (!force && formIsDirty && !window.confirm('You have unsaved changes. Close anyway?')) return;
     clearSaveFeedback();
     setSheetOpen(false);
     setEditingId(null);
@@ -293,13 +350,16 @@ export function ServicesClient({ token }: Props) {
   }
 
   function applyTemplate(t: ServiceTemplate) {
+    const matchedCat = categories.find(
+      (c: ServiceCategory) => c.name.toLowerCase() === t.category.toLowerCase(),
+    );
     setForm((f: ServiceForm) => ({
       name: t.name,
       description: t.description,
       priceRands: String(t.suggestedPriceRands),
       durationMin: String(t.suggestedDurationMin),
       bufferMin: '0',
-      categoryId: f.categoryId,
+      categoryId: matchedCat ? matchedCat.id : f.categoryId,
     }));
     setTemplateStep(false);
   }
@@ -348,6 +408,13 @@ export function ServicesClient({ token }: Props) {
           method: 'PATCH',
           body: JSON.stringify(payload),
         }, token);
+        // Save staff assignment
+        if (allStaff.length > 0) {
+          await apiFetch(`/services/${editingId}/staff`, {
+            method: 'PUT',
+            body: JSON.stringify({ staffIds: [...assignedStaffIds] }),
+          }, token);
+        }
       } else {
         await apiFetch('/services', {
           method: 'POST',
@@ -482,7 +549,7 @@ export function ServicesClient({ token }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Services</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Services</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Manage what customers can book via WhatsApp.
           </p>
@@ -779,7 +846,7 @@ export function ServicesClient({ token }: Props) {
         </CardContent>
       </Card>
 
-      <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet()}>
+      <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet(false)}>
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
           {templateStep ? (
             <>
@@ -901,6 +968,38 @@ export function ServicesClient({ token }: Props) {
                     </p>
                   )}
                 </div>
+                {editingId && allStaff.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Who can perform this service</Label>
+                      {staffLoading && <span className="text-xs text-muted-foreground animate-pulse">Loading…</span>}
+                    </div>
+                    <div className="rounded-lg border divide-y">
+                      {allStaff.map((s) => (
+                        <label key={s.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-muted/30 transition-colors">
+                          <input
+                            type="checkbox"
+                            className="size-4 accent-primary"
+                            checked={assignedStaffIds.has(s.id)}
+                            onChange={(e) => {
+                              setAssignedStaffIds((prev) => {
+                                const next = new Set(prev);
+                                if (e.target.checked) next.add(s.id); else next.delete(s.id);
+                                return next;
+                              });
+                            }}
+                          />
+                          <span className="text-sm">{s.displayName ?? s.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                    {assignedStaffIds.size === 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        No staff assigned — this service won&apos;t be bookable via WhatsApp.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <SheetFooter className="px-0 pt-2 flex-col items-stretch gap-2 sm:flex-col">
                   <SaveFormFooter success={saveSuccess} error={saveError}>
                   <div className="flex flex-row justify-end gap-2 flex-wrap">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { WizardStepper } from './wizard-stepper';
 import { StepBusinessInfo } from './steps/step-business-info';
 import { StepBranding } from './steps/step-branding';
@@ -78,9 +78,35 @@ const STEPS = [
   { id: 10, label: 'Go Live' },
 ];
 
+const STORAGE_KEY = 'marineflow_onboarding_v1';
+
+function loadSaved(): { step: number; data: WizardData } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as { step: number; data: WizardData };
+  } catch {
+    return null;
+  }
+}
+
 export default function OnboardingPage() {
-  const [step, setStep] = useState(1);
-  const [data, setData] = useState<WizardData>(INITIAL_DATA);
+  const saved = loadSaved();
+  const [step, setStep] = useState(saved?.step ?? 1);
+  const [data, setData] = useState<WizardData>(saved?.data ?? INITIAL_DATA);
+  const [savedIndicator, setSavedIndicator] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ step, data }));
+      setSavedIndicator(true);
+      const t = setTimeout(() => setSavedIndicator(false), 1500);
+      return () => clearTimeout(t);
+    } catch {
+      // Storage unavailable — silent
+    }
+  }, [step, data]);
 
   function updateData(partial: Partial<WizardData>) {
     setData((prev) => ({ ...prev, ...partial }));
@@ -102,6 +128,9 @@ export default function OnboardingPage() {
           <p className="text-muted-foreground mt-1">
             Step {step} of {STEPS.length}: {STEPS[step - 1]?.label}
           </p>
+          {savedIndicator && (
+            <p className="text-xs text-muted-foreground mt-1 animate-pulse">Progress saved</p>
+          )}
         </div>
 
         <WizardStepper steps={STEPS} currentStep={step} />

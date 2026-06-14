@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Customer {
@@ -152,6 +153,7 @@ function CustomerAvatar({ customer, size = 'md' }: { customer: Customer; size?: 
 export function ConversationsClient({ token, staffName }: Props) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [filter, setFilter] = useState<InboxFilter>('all');
+  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -172,7 +174,15 @@ export function ConversationsClient({ token, staffName }: Props) {
 
   const handoffCount = conversations.filter((c) => c.step === 'HANDOFF').length;
   const visibleConversations = sortConversations(
-    filter === 'handoff' ? conversations.filter((c) => c.step === 'HANDOFF') : conversations,
+    conversations.filter((c) => {
+      if (filter === 'handoff' && c.step !== 'HANDOFF') return false;
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return (
+        customerLabel(c.customer).toLowerCase().includes(q) ||
+        c.customer.waId.toLowerCase().includes(q)
+      );
+    }),
   );
 
   const showError = useCallback((msg: string) => {
@@ -354,7 +364,7 @@ export function ConversationsClient({ token, staffName }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">Conversations</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Conversations</h1>
             <span
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
               title={connected ? 'Live updates connected' : 'Connecting…'}
@@ -427,31 +437,47 @@ export function ConversationsClient({ token, staffName }: Props) {
             showThreadOnMobile && 'hidden md:flex',
           )}
         >
-          <div className="px-4 py-3 border-b space-y-3">
+          <div className="px-4 py-3 border-b space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="font-medium text-sm">Inbox</span>
+              <span className="font-semibold text-sm">Inbox</span>
               {handoffCount > 0 && (
-                <Badge variant="destructive" className="animate-pulse">
+                <Badge variant="destructive" className="animate-pulse text-xs">
                   {handoffCount} need{handoffCount === 1 ? 's' : ''} you
                 </Badge>
               )}
             </div>
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or number…"
+                className="pl-8 h-8 text-xs"
+              />
+            </div>
+            {/* Filters */}
             <div className="flex gap-1">
-              <Button
-                size="sm"
-                variant={filter === 'all' ? 'default' : 'outline'}
+              <button
+                type="button"
                 onClick={() => setFilter('all')}
+                className={cn(
+                  'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  filter === 'all' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                )}
               >
                 All
-              </Button>
-              <Button
-                size="sm"
-                variant={filter === 'handoff' ? 'default' : 'outline'}
+              </button>
+              <button
+                type="button"
                 onClick={() => setFilter('handoff')}
+                className={cn(
+                  'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  filter === 'handoff' ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                )}
               >
-                Needs you
-                {handoffCount > 0 && ` (${handoffCount})`}
-              </Button>
+                Needs you{handoffCount > 0 && ` (${handoffCount})`}
+              </button>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y">

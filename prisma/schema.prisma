@@ -137,6 +137,7 @@ enum ConversationStep {
   HANDOFF
   CLOSED
   BOOKING_RATING
+  CONFIRM_CANCEL
 }
 
 model Salon {

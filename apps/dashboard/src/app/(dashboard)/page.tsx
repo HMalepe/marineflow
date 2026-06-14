@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { Calendar, CheckCircle, Clock, Users, MessageSquare, BarChart2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -198,72 +199,131 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
 async function AppointmentView({ token }: { token: string | null }) {
   let appointments: Appointment[] = [];
   let error: string | null = null;
+  let onboardingDone = true;
 
   try {
-    const data = await apiFetch<{ appointments: Appointment[] }>(
-      '/appointments/today',
-      {},
-      token,
-    );
-    appointments = data.appointments;
+    const [apptData, settingsData] = await Promise.all([
+      apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
+      apiFetch<{ salon: { onboardingCompletedAt: string | null; whatsappPhoneId: string | null } }>('/settings', {}, token),
+    ]);
+    appointments = apptData.appointments;
+    onboardingDone = !!(settingsData.salon.onboardingCompletedAt || settingsData.salon.whatsappPhoneId);
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load';
   }
 
+  const today = new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' });
+  const confirmed = appointments.filter((a) => a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID').length;
+  const pending = appointments.filter((a) => a.status === 'HELD' || a.status === 'PENDING_PAYMENT').length;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Today&apos;s overview</p>
+    <div className="space-y-6 lg:space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground text-sm mt-1">{today}</p>
+        </div>
+        <Link
+          href="/appointments"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline shrink-0"
+        >
+          <Calendar className="w-4 h-4" />
+          View all appointments →
+        </Link>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard title="Today's Appointments" value={appointments.length} />
-        <StatCard
-          title="Confirmed"
-          value={appointments.filter((a) => a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID').length}
-        />
-        <StatCard
-          title="Pending"
-          value={appointments.filter((a) => a.status === 'HELD' || a.status === 'PENDING_PAYMENT').length}
-        />
+      {/* Onboarding banner */}
+      {!onboardingDone && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Finish setting up your account</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Connect WhatsApp, add services and staff to start taking bookings.
+            </p>
+          </div>
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+          >
+            Resume setup →
+          </Link>
+        </div>
+      )}
+
+      {/* KPI row */}
+      <div className="grid gap-3 grid-cols-3 lg:grid-cols-3">
+        <StatCard title="Today&apos;s bookings" value={appointments.length} icon={<Calendar className="w-5 h-5" />} />
+        <StatCard title="Confirmed" value={confirmed} icon={<CheckCircle className="w-5 h-5" />} accent="green" />
+        <StatCard title="Pending payment" value={pending} icon={<Clock className="w-5 h-5" />} accent={pending > 0 ? 'amber' : undefined} />
       </div>
 
+      {/* Quick links — desktop only bonus */}
+      <div className="hidden lg:grid grid-cols-3 gap-4">
+        {[
+          { href: '/customers', icon: <Users className="w-5 h-5" />, label: 'Customers', desc: 'View & search customer records' },
+          { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: 'Conversations', desc: 'WhatsApp inbox & handoffs' },
+          { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: 'Analytics', desc: 'Revenue, bookings & trends' },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="group rounded-xl border bg-card px-5 py-4 flex items-start gap-3.5 hover:border-primary/40 hover:shadow-sm transition-all"
+          >
+            <div className="mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
+              {item.icon}
+            </div>
+            <div>
+              <p className="font-semibold text-sm">{item.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Today's schedule */}
       <Card>
-        <CardHeader>
-          <CardTitle>Today&apos;s Schedule</CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Today&apos;s Schedule</CardTitle>
+            {appointments.length > 0 && (
+              <span className="text-xs text-muted-foreground">{appointments.length} booking{appointments.length === 1 ? '' : 's'}</span>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!error && appointments.length === 0 && (
-            <p className="text-sm text-muted-foreground">No appointments today.</p>
+            <div className="text-center py-8">
+              <Calendar className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm font-medium">No appointments today</p>
+              <p className="text-xs text-muted-foreground mt-1">Enjoy the quiet — or share your booking link to fill the day.</p>
+            </div>
           )}
           {appointments.length > 0 && (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {appointments.map((appt) => (
                 <div
                   key={appt.id}
-                  className="flex items-center justify-between p-3 rounded-lg border"
+                  className="flex items-center gap-3 p-3 rounded-xl border hover:bg-muted/30 transition-colors"
                 >
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">
+                  <div className="text-right shrink-0 w-12">
+                    <p className="text-sm font-semibold tabular-nums">
+                      {new Date(appt.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <div className="w-px h-8 bg-border shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
                       {appt.customer.displayName ?? appt.customer.waId}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {appt.service.name} with {appt.staff.name}
+                    <p className="text-xs text-muted-foreground truncate">
+                      {appt.service.name} · {appt.staff.name}
                     </p>
                   </div>
-                  <div className="text-right space-y-1">
-                    <p className="text-sm">
-                      {new Date(appt.start).toLocaleTimeString('en-ZA', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </p>
-                    <Badge variant={appt.status === 'CONFIRMED' ? 'default' : 'secondary'}>
-                      {appt.status.toLowerCase().replace('_', ' ')}
-                    </Badge>
-                  </div>
+                  <Badge variant={appt.status === 'CONFIRMED' || appt.status === 'CONFIRMED_PAID' ? 'default' : 'secondary'} className="shrink-0 text-[10px]">
+                    {appt.status.replace('_', ' ').toLowerCase()}
+                  </Badge>
                 </div>
               ))}
             </div>
@@ -274,13 +334,21 @@ async function AppointmentView({ token }: { token: string | null }) {
   );
 }
 
-function StatCard({ title, value }: { title: string; value: number }) {
+function StatCard({ title, value, icon, accent }: { title: string; value: number; icon?: React.ReactNode; accent?: 'green' | 'amber' }) {
   return (
-    <Card>
+    <Card className={accent === 'green' && value > 0 ? 'ring-1 ring-green-500/20' : accent === 'amber' && value > 0 ? 'ring-1 ring-amber-500/20' : ''}>
       <CardContent className="pt-4 pb-4">
-        <p className="text-xs text-muted-foreground">{title}</p>
-        <p className="text-2xl font-bold mt-1">{value}</p>
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-xs text-muted-foreground leading-tight">{title}</p>
+          {icon && <span className={`shrink-0 ${accent === 'green' && value > 0 ? 'text-green-500' : accent === 'amber' && value > 0 ? 'text-amber-500' : 'text-muted-foreground/40'}`}>{icon}</span>}
+        </div>
+        <p className={`text-2xl sm:text-3xl font-bold mt-1.5 tabular-nums ${accent === 'green' && value > 0 ? 'text-green-600 dark:text-green-400' : accent === 'amber' && value > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+          {value}
+        </p>
       </CardContent>
     </Card>
   );
 }
+
+// React type for JSX
+import type React from 'react';

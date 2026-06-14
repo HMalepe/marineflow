@@ -60,7 +60,7 @@ export default async function AdminPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Admin Panel</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Panel</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Platform-wide management and monitoring.
         </p>
