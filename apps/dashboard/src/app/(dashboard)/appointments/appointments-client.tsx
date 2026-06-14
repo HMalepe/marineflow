@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiFetch, ApiError } from '@/lib/api';
-import { AlertTriangle, CheckSquare, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckSquare, Clock, Loader2, X } from 'lucide-react';
 
 interface WaitlistEntry {
   id: string;
@@ -243,7 +243,19 @@ export function AppointmentsClient({
         </CardHeader>
         <CardContent>
           {filteredUpcoming.length === 0 && (
-            <p className="text-sm text-muted-foreground">No upcoming appointments.</p>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="size-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
+                <Calendar className="size-6 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
+                {depositFilter !== 'all' ? 'No appointments match this filter' : 'No upcoming appointments'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                {depositFilter !== 'all'
+                  ? 'Try switching the filter above to see all bookings.'
+                  : 'New bookings from WhatsApp will appear here automatically.'}
+              </p>
+            </div>
           )}
           <div className="space-y-3">
             {filteredUpcoming.map((appt) => {

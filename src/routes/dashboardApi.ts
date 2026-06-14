@@ -2603,6 +2603,65 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── Service → staff assignment ────────────────────────────────────────
+  app.get<{ Params: { id: string } }>(
+    '/services/:id/staff',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const svc = await db.service.findFirst({ where: { id: request.params.id, salonId: user.salonId, deletedAt: null } });
+        if (!svc) { reply.code(404); return { error: 'not_found' }; }
+        const links = await db.staffService.findMany({
+          where: { serviceId: svc.id },
+          select: { staffId: true },
+        });
+        return { staffIds: links.map((l) => l.staffId) };
+      });
+    },
+  );
+
+  app.put<{ Params: { id: string }; Body: { staffIds: string[] } }>(
+    '/services/:id/staff',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const svc = await db.service.findFirst({ where: { id: request.params.id, salonId: user.salonId, deletedAt: null } });
+        if (!svc) { reply.code(404); return { error: 'not_found' }; }
+        const { staffIds } = request.body ?? {};
+        if (!Array.isArray(staffIds)) { reply.code(400); return { error: 'staffIds_required' }; }
+
+        // Verify all staff belong to this salon
+        const validStaff = await db.staff.findMany({
+          where: { id: { in: staffIds }, salonId: user.salonId, deletedAt: null },
+          select: { id: true },
+        });
+        const validIds = validStaff.map((s) => s.id);
+
+        // Preserve existing price overrides while replacing links
+        const existing = await db.staffService.findMany({
+          where: { serviceId: svc.id },
+          select: { staffId: true, priceCentsOverride: true },
+        });
+        const overrideMap = new Map(existing.map((e) => [e.staffId, e.priceCentsOverride]));
+
+        await db.staffService.deleteMany({ where: { serviceId: svc.id } });
+        if (validIds.length > 0) {
+          await db.staffService.createMany({
+            data: validIds.map((staffId) => ({
+              staffId,
+              serviceId: svc.id,
+              priceCentsOverride: overrideMap.get(staffId) ?? null,
+            })),
+          });
+        }
+
+        return { staffIds: validIds };
+      });
+    },
+  );
+
   // ── FAQ CRUD ────────────────────────────────────────────────
 
   app.get('/faqs', async (request, reply) => {
@@ -3842,6 +3901,56 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           data: { priceCentsOverride: priceCentsOverride ?? null },
         });
         return { priceCentsOverride: updated.priceCentsOverride };
+      });
+    },
+  );
+
+  // ─── Staff service linking ────────────────────────────────────────────
+  app.put<{
+    Params: { staffId: string };
+    Body: { serviceIds: string[] };
+  }>(
+    '/staff/:staffId/services',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { staffId } = request.params;
+        const { serviceIds } = request.body ?? {};
+
+        const staff = await db.staff.findFirst({ where: { id: staffId, salonId: user.salonId, deletedAt: null } });
+        if (!staff) { reply.code(404); return { error: 'not_found' }; }
+
+        if (!Array.isArray(serviceIds)) { reply.code(400); return { error: 'serviceIds_required' }; }
+
+        // Verify all serviceIds belong to this salon
+        const services = await db.service.findMany({
+          where: { id: { in: serviceIds }, salonId: user.salonId },
+          select: { id: true },
+        });
+        const validIds = new Set(services.map((s) => s.id));
+        const filtered = serviceIds.filter((id) => validIds.has(id));
+
+        // Replace service links, preserving existing price overrides
+        const existing = await db.staffService.findMany({ where: { staffId }, select: { serviceId: true, priceCentsOverride: true } });
+        const existingMap = new Map(existing.map((e) => [e.serviceId, e.priceCentsOverride]));
+
+        await db.staffService.deleteMany({ where: { staffId } });
+        if (filtered.length > 0) {
+          await db.staffService.createMany({
+            data: filtered.map((serviceId) => ({
+              staffId,
+              serviceId,
+              priceCentsOverride: existingMap.get(serviceId) ?? null,
+            })),
+          });
+        }
+
+        const updated = await db.staffService.findMany({
+          where: { staffId },
+          include: { service: { select: { id: true, name: true, priceCents: true } } },
+        });
+        return { services: updated };
       });
     },
   );
