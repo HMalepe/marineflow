@@ -1,4 +1,5 @@
-import { getTenantDb } from '../lib/db/tenantSession.js';
+import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
+import { logger } from '../lib/logger.js';
 import { recordConsent } from './compliance.js';
 
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
@@ -94,6 +95,54 @@ export function isGlobalMarketingOptIn(text: string): boolean {
   return t === 'accept' || t === 'opt in' || t === 'opt-in' || t === 'subscribe';
 }
 
+type PendingConsentAudit = {
+  salonId: string;
+  customerId: string;
+  type: string;
+  granted: boolean;
+  source?: string;
+};
+
+/** Consent audit rows — flushed after the bot DB transaction commits (non-critical). */
+let pendingConsentAudits: PendingConsentAudit[] = [];
+
+function scheduleConsentAudit(params: {
+  salonId: string;
+  customerId: string;
+  status: MarketingConsentStatus;
+  source?: string;
+}): void {
+  if (params.status === 'PENDING') return;
+  pendingConsentAudits.push({
+    salonId: params.salonId,
+    customerId: params.customerId,
+    type: MARKETING_CONSENT_TYPE,
+    granted: params.status === 'ACCEPTED',
+    source: params.source,
+  });
+}
+
+/** Run deferred POPIA audit writes in separate transactions (must not abort bot flows). */
+export async function flushPendingConsentAudits(): Promise<void> {
+  const batch = pendingConsentAudits;
+  pendingConsentAudits = [];
+  for (const audit of batch) {
+    try {
+      await withTenantContext(audit.salonId, () =>
+        recordConsent({
+          salonId: audit.salonId,
+          customerId: audit.customerId,
+          type: audit.type,
+          granted: audit.granted,
+          source: audit.source,
+        }),
+      );
+    } catch (err) {
+      logger.warn({ err, ...audit }, 'deferred_consent_audit_failed');
+    }
+  }
+}
+
 export async function setMarketingConsent(params: {
   customerId: string;
   salonId: string;
@@ -114,14 +163,11 @@ export async function setMarketingConsent(params: {
     },
   });
 
-  if (params.status === 'PENDING') return;
-
-  await recordConsent({
+  scheduleConsentAudit({
     salonId: params.salonId,
     customerId: params.customerId,
-    type: MARKETING_CONSENT_TYPE,
-    granted: accepted,
-    source: params.source ?? 'whatsapp',
+    status: params.status,
+    source: params.source,
   });
 }
 

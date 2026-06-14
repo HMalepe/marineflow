@@ -77,6 +77,7 @@ import {
   buildConsentDeclinedMessage,
   buildConsentStopMessage,
   buildPopiaConsentMessage,
+  flushPendingConsentAudits,
   isGlobalMarketingOptIn,
   isGlobalMarketingOptOut,
   marketingConsentGatePending,
@@ -432,9 +433,16 @@ function applyContextPatch(base: BotContext, patch: Partial<BotContext>): BotCon
   return next;
 }
 
-async function saveCtx(convId: string, patch: Partial<BotContext>, step?: ConversationStep) {
-  const conv = await getTenantDb().conversation.findUniqueOrThrow({ where: { id: convId } });
-  const next = applyContextPatch(ctx(conv), patch);
+async function saveCtx(
+  convId: string,
+  patch: Partial<BotContext>,
+  step?: ConversationStep,
+  baseContext?: BotContext,
+) {
+  const base = baseContext ?? ctx(
+    await getTenantDb().conversation.findUniqueOrThrow({ where: { id: convId } }),
+  );
+  const next = applyContextPatch(base, patch);
   await getTenantDb().conversation.update({
     where: { id: convId },
     data: {
@@ -869,6 +877,7 @@ export async function handleInboundWhatsApp(input: {
       });
     } finally {
       await flushPendingOutbound();
+      await flushPendingConsentAudits();
       if (pendingWelcomeJourney) {
         const job = pendingWelcomeJourney;
         pendingWelcomeJourney = null;
@@ -1581,7 +1590,7 @@ async function handleMarketingConsentFlow(
         },
       }).catch(() => {});
     }
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
     await replyWithMenu(conv, buildConsentStopMessage());
     return true;
   }
@@ -1594,7 +1603,7 @@ async function handleMarketingConsentFlow(
       source: 'whatsapp_opt_in',
     });
     conv.customer.marketingConsentStatus = newStatus;
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
     await replyWithMenu(conv, buildConsentAcceptedMessage());
     return true;
   }
@@ -1604,7 +1613,7 @@ async function handleMarketingConsentFlow(
   }
 
   if (!needsMarketingConsentPrompt(status)) {
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
     await replyMenu(conv);
     return true;
   }
@@ -1618,7 +1627,7 @@ async function handleMarketingConsentFlow(
       source: 'whatsapp',
     });
     conv.customer.marketingConsentStatus = newStatus;
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
     const ack = choice === 'accept' ? buildConsentAcceptedMessage() : buildConsentDeclinedMessage();
     await replyWithMenu(conv, ack);
     return true;

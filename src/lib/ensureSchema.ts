@@ -23,6 +23,7 @@ const SERVICE_COLUMN_GUARDS = [
 const SCHEMA_COLUMN_GUARDS = [
   ...APPOINTMENT_COLUMN_GUARDS,
   ...SERVICE_COLUMN_GUARDS,
+  ...CUSTOMER_COLUMN_GUARDS,
 ] as const;
 
 const SERVICE_ADDON_TABLE_DDL = `
@@ -76,6 +77,16 @@ const CONSENT_RECORD_FKEY_GUARDS = [
       FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $$`,
+] as const;
+
+const CUSTOMER_COLUMN_GUARDS = [
+  `DO $$ BEGIN
+    CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentStatus" "MarketingConsentStatus" NOT NULL DEFAULT 'PENDING'`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentAt" TIMESTAMP(3)`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsent" BOOLEAN NOT NULL DEFAULT false`,
 ] as const;
 
 const CUSTOMER_CAMPAIGN_INDEX_GUARDS = [

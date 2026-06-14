@@ -37,3 +37,12 @@ CREATE INDEX IF NOT EXISTS "Customer_salonId_marketingConsentStatus_idx"
 
 CREATE INDEX IF NOT EXISTS "Customer_salonId_marketingConsentStatus_dateOfBirth_idx"
   ON "Customer"("salonId", "marketingConsentStatus", "dateOfBirth");
+
+DO $$ BEGIN
+  CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentStatus" "MarketingConsentStatus" NOT NULL DEFAULT 'PENDING';
+ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentAt" TIMESTAMP(3);
+ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsent" BOOLEAN NOT NULL DEFAULT false;

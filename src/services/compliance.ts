@@ -360,10 +360,11 @@ export async function recordConsent(params: {
       },
     });
   } catch (err) {
-    if (!isMissingConsentRecordTable(err)) throw err;
     logger.warn(
-      { salonId: params.salonId, customerId: params.customerId, type: params.type },
-      'consent_record_write_skipped_missing_table',
+      { err, salonId: params.salonId, customerId: params.customerId, type: params.type },
+      isMissingConsentRecordTable(err)
+        ? 'consent_record_write_skipped_missing_table'
+        : 'consent_record_write_failed',
     );
     return null;
   }
