@@ -1254,62 +1254,102 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             WhatsApp reminders sent automatically before each confirmed appointment. Helps reduce no-shows.
           </p>
         </div>
-        <form onSubmit={(e) => void handleSaveReminders(e)} className="space-y-4 max-w-lg">
-          <div
+        <form onSubmit={(e) => void handleSaveReminders(e)} className="space-y-5 max-w-lg">
+          {/* Toggle */}
+          <label
             className={cn(
-              'rounded-lg border p-4 transition-colors',
-              reminderEnabled ? 'border-green-600/25 bg-green-600/5' : 'border-muted bg-muted/20',
+              'flex items-center gap-4 rounded-xl border p-4 cursor-pointer transition-colors',
+              reminderEnabled ? 'border-green-600/30 bg-green-600/5' : 'border-border bg-muted/20',
             )}
           >
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={reminderEnabled}
-                onChange={(e) => setReminderEnabled(e.target.checked)}
-                className="mt-1 size-4 rounded border-input accent-primary"
-              />
-              <div>
-                <p className="text-sm font-medium">Reminders enabled</p>
-                <p className="text-xs text-muted-foreground">
-                  {reminderEnabled
-                    ? 'Customers receive a WhatsApp message before each appointment.'
-                    : 'No reminders will be sent.'}
-                </p>
-              </div>
-            </label>
-          </div>
-
-          {reminderEnabled && (
-            <div className="space-y-3">
-              <Label>Send reminder at</Label>
-              <div className="flex flex-wrap gap-2">
-                {[48, 24, 12, 4, 2, 1].map((h) => {
-                  const active = reminderHours.includes(h);
-                  return (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() =>
-                        setReminderHours((prev) =>
-                          active ? prev.filter((x) => x !== h) : [...prev, h],
-                        )
-                      }
-                      className={cn(
-                        'px-3 py-1.5 rounded-full text-sm border transition-colors',
-                        active
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background border-input hover:border-ring',
-                      )}
-                    >
-                      {h === 1 ? '1 hour' : `${h} hours`} before
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Toggle the times you want. At least one must be selected.
+            <div className={cn(
+              'relative shrink-0 w-11 h-6 rounded-full transition-colors',
+              reminderEnabled ? 'bg-green-500' : 'bg-muted-foreground/30',
+            )}>
+              <span className={cn(
+                'absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform',
+                reminderEnabled ? 'translate-x-5' : 'translate-x-0.5',
+              )} />
+              <input type="checkbox" checked={reminderEnabled} onChange={(e) => setReminderEnabled(e.target.checked)} className="sr-only" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{reminderEnabled ? 'Reminders on' : 'Reminders off'}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {reminderEnabled
+                  ? 'Customers will receive WhatsApp reminders before each appointment.'
+                  : 'No automated reminders will be sent.'}
               </p>
             </div>
+          </label>
+
+          {reminderEnabled && (
+            <>
+              {/* Time chips */}
+              <div className="space-y-3">
+                <Label className="text-sm">When to send</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[48, 24, 12, 4, 2, 1].map((h) => {
+                    const active = reminderHours.includes(h);
+                    const label = h >= 24 ? `${h / 24}d` : `${h}h`;
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        onClick={() =>
+                          setReminderHours((prev) =>
+                            active ? prev.filter((x) => x !== h) : [...prev, h],
+                          )
+                        }
+                        className={cn(
+                          'flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border text-xs font-medium transition-all',
+                          active
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : 'bg-card border-border hover:border-ring text-foreground',
+                        )}
+                      >
+                        <span className="text-base font-bold leading-none">{label}</span>
+                        <span className="opacity-70">before</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Timeline strip */}
+                {reminderHours.length > 0 && (
+                  <div className="relative flex items-center gap-0 mt-2">
+                    <div className="absolute inset-y-1/2 left-0 right-0 h-px bg-border -translate-y-1/2" />
+                    <div className="relative z-10 flex items-center justify-between w-full px-1">
+                      {[...reminderHours].sort((a, b) => b - a).map((h) => (
+                        <div key={h} className="flex flex-col items-center gap-1">
+                          <div className="size-2.5 rounded-full bg-primary ring-2 ring-background" />
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            {h >= 24 ? `${h / 24}d` : `${h}h`}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="size-3 rounded-full bg-emerald-500 ring-2 ring-background" />
+                        <span className="text-[10px] text-muted-foreground font-medium">Appt</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Select up to 4 times. At least one required.</p>
+              </div>
+
+              {/* Message preview */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Message preview</p>
+                <div className="rounded-xl border bg-[#ece5dd] dark:bg-[#1a2128] p-4 space-y-2">
+                  <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-2xl rounded-tr-sm px-3.5 py-2.5 max-w-[85%] ml-auto shadow-sm">
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+                      {`Hi ${salonDisplayName ? 'Customer' : 'there'}! Reminder:\n${salonDisplayName || 'Hair Treatment'} service with your stylist\nFri, 14 Jun · 10:00 AM (in ${reminderHours.includes(24) ? '1 day' : reminderHours.includes(2) ? '2 hours' : `${reminderHours[0] ?? 24} hours`})\n\nReply CANCEL or RESCHEDULE to manage your booking.`}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground text-right mt-1">10:23 AM ✓✓</p>
+                  </div>
+                  <p className="text-[11px] text-center text-muted-foreground/60">Sent from your WhatsApp business number</p>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="flex flex-col gap-2">
@@ -1318,7 +1358,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 {savingReminders ? 'Saving…' : 'Save reminder settings'}
               </Button>
               {remindersDirty && (
-                <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+                <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>
               )}
             </div>
             <SectionSaveFeedback feedback={getSection('reminders')} />
