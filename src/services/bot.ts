@@ -131,6 +131,8 @@ export type BotContext = Record<string, unknown> & {
   serviceCategoryOptions?: string[];
   /** When set, PICK_SERVICE only shows these service ids (from Services submenu or chosen category). */
   serviceFilterIds?: string[];
+  /** Current pagination page (0-based) for PICK_SERVICE long lists. */
+  servicePage?: number;
   /** Hint for manage-booking submenu (view / reschedule / cancel). */
   manageBookingHint?: 'view' | 'reschedule' | 'cancel';
   /** True once the AI has given its first answer in the OTHER_QUERY flow */
@@ -1723,14 +1725,11 @@ async function startBookingFlow(
     return;
   }
 
-  // Single category or no categories — show flat list (keep it short with a note if long).
-  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
-  syncConvContext(conv, {}, ConversationStep.PICK_SERVICE);
-  const header = services.length > 8
-    ? `We have ${services.length} services — pick a number:`
-    : 'Pick a service:';
-  await reply(conv, [header, ...lines, '', 'Reply BACK for menu.'].join('\n'));
+  // Single category or no categories — show paginated list (8 per page).
+  const page = 0;
+  await saveCtx(conv.id, { servicePage: page }, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, { servicePage: page }, ConversationStep.PICK_SERVICE);
+  await reply(conv, buildServicePage(services, page));
 }
 
 async function handleCollectFirstName(
@@ -2460,6 +2459,22 @@ function staffMenuLines(staffList: Staff[], preferredId: string | null): string[
   ];
 }
 
+const SVC_PAGE_SIZE = 8;
+
+function buildServicePage(services: { id: string; name: string; priceCents: number }[], page: number): string {
+  const start = page * SVC_PAGE_SIZE;
+  const slice = services.slice(start, start + SVC_PAGE_SIZE);
+  const hasMore = start + SVC_PAGE_SIZE < services.length;
+  const lines = slice.map((s, i) => `${start + i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  const header = page === 0
+    ? (services.length > SVC_PAGE_SIZE ? `We have ${services.length} services. Here are the first ${SVC_PAGE_SIZE}:` : 'Pick a service:')
+    : `Services ${start + 1}–${start + slice.length} of ${services.length}:`;
+  const footer = hasMore
+    ? ['', 'Reply a *number* to pick · *MORE* to see more · *BACK* for menu.']
+    : ['', 'Reply a *number* to pick · *BACK* for menu.'];
+  return [header, ...lines, ...footer].join('\n');
+}
+
 async function handlePickServiceCategory(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -2531,7 +2546,6 @@ async function handlePickService(
     if (handled) return;
   }
 
-  const n = parseInt(text, 10);
   const filterIds = ctx(conv).serviceFilterIds;
   const services = await getTenantDb().service.findMany({
     where: {
@@ -2544,9 +2558,26 @@ async function handlePickService(
     },
     orderBy: { sortOrder: 'asc' },
   });
+
+  // "MORE" — advance to next page
+  if (text.trim().toUpperCase() === 'MORE') {
+    const currentPage = (ctx(conv).servicePage as number | undefined) ?? 0;
+    const nextPage = currentPage + 1;
+    const hasMore = (nextPage + 1) * SVC_PAGE_SIZE < services.length;
+    if (!hasMore && nextPage * SVC_PAGE_SIZE >= services.length) {
+      await reply(conv, `You've seen all ${services.length} services. Reply a number to pick one, or BACK for menu.`);
+      return;
+    }
+    await saveCtx(conv.id, { servicePage: nextPage }, ConversationStep.PICK_SERVICE);
+    syncConvContext(conv, { servicePage: nextPage }, ConversationStep.PICK_SERVICE);
+    await reply(conv, buildServicePage(services, nextPage));
+    return;
+  }
+
+  const n = parseInt(text, 10);
   if (!Number.isFinite(n) || n < 1 || n > services.length) {
-    const svcLines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-    await reply(conv, [`Invalid choice. Pick a number (1–${services.length}):`, ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
+    const page = (ctx(conv).servicePage as number | undefined) ?? 0;
+    await reply(conv, `Please reply with a number (1–${services.length}).\n\n${buildServicePage(services, page)}`);
     return;
   }
   const service = services[n - 1]!;
