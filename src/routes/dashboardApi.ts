@@ -2458,6 +2458,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       durationMin: number;
       bufferMin?: number;
       active?: boolean;
+      depositCents?: number | null;
+      fullPay?: boolean;
     };
   }>(
     '/services',
@@ -2465,7 +2467,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const { name, description, priceCents, durationMin, bufferMin, active } = request.body;
+        const { name, description, priceCents, durationMin, bufferMin, active, depositCents, fullPay } = request.body;
         if (!name?.trim()) {
           reply.code(400);
           return { error: 'name_required' };
@@ -2479,6 +2481,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'invalid_duration' };
         }
 
+        if (depositCents !== undefined && depositCents !== null && (!Number.isFinite(depositCents) || depositCents < 0)) {
+          reply.code(400);
+          return { error: 'invalid_deposit' };
+        }
+
         const service = await db.service.create({
           data: {
             salonId: user.salonId,
@@ -2488,6 +2495,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             durationMin: Math.round(durationMin),
             bufferMin: Math.round(bufferMin ?? 0),
             active: active ?? true,
+            ...(depositCents !== undefined && { depositCents: depositCents === null ? null : Math.round(depositCents) }),
+            ...(fullPay !== undefined && { fullPay }),
           },
         });
 
@@ -2517,6 +2526,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       bufferMin?: number;
       active?: boolean;
       removeFromCatalog?: boolean;
+      depositCents?: number | null;
+      fullPay?: boolean;
     };
   }>(
     '/services/:id',
@@ -2532,7 +2543,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog } =
+        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, depositCents, fullPay } =
           request.body;
 
         if (removeFromCatalog) {
@@ -2565,6 +2576,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_duration' };
         }
+        if (depositCents !== undefined && depositCents !== null && (!Number.isFinite(depositCents) || depositCents < 0)) {
+          reply.code(400);
+          return { error: 'invalid_deposit' };
+        }
 
         const updated = await db.service.update({
           where: { id: existing.id },
@@ -2575,6 +2590,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(durationMin !== undefined && { durationMin: Math.round(durationMin) }),
             ...(bufferMin !== undefined && { bufferMin: Math.round(bufferMin) }),
             ...(active !== undefined && { active }),
+            ...(depositCents !== undefined && { depositCents: depositCents === null ? null : Math.round(depositCents) }),
+            ...(fullPay !== undefined && { fullPay }),
           },
         });
 

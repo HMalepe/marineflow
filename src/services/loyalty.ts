@@ -2,9 +2,16 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import type { Service } from '@prisma/client';
+import { logger } from '../lib/logger.js';
 
-export async function ensureLoyaltyProgram(salonId: string) {
-  return getTenantDb().loyaltyProgram.upsert({
+type Tx = Prisma.TransactionClient;
+
+function loyaltyDb(tx?: Tx) {
+  return tx ?? getTenantDb();
+}
+
+export async function ensureLoyaltyProgram(salonId: string, tx?: Tx) {
+  return loyaltyDb(tx).loyaltyProgram.upsert({
     where: { salonId },
     create: {
       salonId,
@@ -28,8 +35,6 @@ export async function getStampBalance(salonId: string, customerId: string) {
   return { stamps, stampsPerReward: program.stampsPerReward };
 }
 
-type Tx = Prisma.TransactionClient;
-
 /** Inside an appointment transaction: redeem stamps if eligible. */
 export async function redeemForNextBookingTx(
   tx: Tx,
@@ -41,7 +46,13 @@ export async function redeemForNextBookingTx(
 ): Promise<{ redeemed: boolean; note?: string }> {
   if (!input.service.qualifiesLoyalty) return { redeemed: false };
 
-  await ensureLoyaltyProgram(input.salonId);
+  try {
+    await ensureLoyaltyProgram(input.salonId, tx);
+  } catch (err) {
+    logger.warn({ err, salonId: input.salonId }, 'loyalty_program_ensure_failed');
+    return { redeemed: false };
+  }
+
   const program = await tx.loyaltyProgram.findUniqueOrThrow({
     where: { salonId: input.salonId },
   });

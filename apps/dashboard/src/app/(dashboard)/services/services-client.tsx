@@ -34,6 +34,8 @@ interface Service {
   bufferMin: number;
   active: boolean;
   sortOrder: number;
+  depositCents: number | null;
+  fullPay: boolean;
   category?: { id: string; name: string } | null;
 }
 
@@ -56,6 +58,8 @@ interface ServiceForm {
   durationMin: string;
   bufferMin: string;
   categoryId: string;
+  depositRands: string;
+  fullPay: boolean;
 }
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -71,6 +75,8 @@ const emptyForm: ServiceForm = {
   durationMin: '60',
   bufferMin: '0',
   categoryId: '',
+  depositRands: '',
+  fullPay: false,
 };
 
 function formatPrice(cents: number): string {
@@ -92,6 +98,11 @@ function serviceToForm(s: Service): ServiceForm {
     durationMin: String(s.durationMin),
     bufferMin: String(s.bufferMin),
     categoryId: s.category?.id ?? '',
+    depositRands:
+      s.fullPay || s.depositCents == null || s.depositCents === 0
+        ? ''
+        : (s.depositCents / 100).toFixed(2),
+    fullPay: s.fullPay,
   };
 }
 
@@ -403,6 +414,15 @@ export function ServicesClient({ token }: Props) {
       return;
     }
 
+    let depositCents: number | null = null;
+    if (!form.fullPay && form.depositRands.trim() !== '') {
+      depositCents = Math.round((parseFloat(form.depositRands) + Number.EPSILON) * 100);
+      if (!Number.isFinite(depositCents) || depositCents < 0) {
+        reportError('Enter a valid deposit amount in Rands');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const savedName = form.name.trim();
@@ -413,6 +433,8 @@ export function ServicesClient({ token }: Props) {
         durationMin,
         bufferMin,
         categoryId: form.categoryId || null,
+        depositCents,
+        fullPay: form.fullPay,
       };
 
       if (editingId) {
@@ -974,6 +996,45 @@ export function ServicesClient({ token }: Props) {
                       required
                     />
                   </div>
+                </div>
+                <div className="space-y-3 rounded-lg border border-border p-3">
+                  <div>
+                    <p className="text-sm font-medium">Online payment (PayFast)</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      When enabled in Settings → Conversation flow, the WhatsApp bot sends a PayFast link after the customer confirms.
+                    </p>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.fullPay}
+                      onChange={(e) =>
+                        setForm((f: ServiceForm) => ({
+                          ...f,
+                          fullPay: e.target.checked,
+                          depositRands: e.target.checked ? '' : f.depositRands,
+                        }))
+                      }
+                      className="rounded border-input"
+                    />
+                    Require full payment upfront
+                  </label>
+                  {!form.fullPay && (
+                    <div className="space-y-2">
+                      <Label htmlFor="deposit">Booking deposit (R)</Label>
+                      <Input
+                        id="deposit"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.depositRands}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+                          setForm((f: ServiceForm) => ({ ...f, depositRands: e.target.value }))
+                        }
+                        placeholder="e.g. 50.00 — leave empty for no deposit"
+                      />
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="buffer">Buffer after appointment (min)</Label>
