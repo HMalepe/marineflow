@@ -223,7 +223,6 @@ const WHATSAPP_MENU_STEPS: ConversationStep[] = [
 
 const WHATSAPP_BOOKING_STEPS: ConversationStep[] = [
   ConversationStep.COLLECT_FIRST_NAME,
-  ConversationStep.COLLECT_LAST_NAME,
   ConversationStep.COLLECT_EMAIL,
   ConversationStep.COLLECT_DATE_OF_BIRTH,
   ConversationStep.BOOKING_POPIA_CONSENT,
@@ -1502,9 +1501,6 @@ async function routeConversation(
     case ConversationStep.COLLECT_FIRST_NAME:
       await handleCollectFirstName(conv, t);
       break;
-    case ConversationStep.COLLECT_LAST_NAME:
-      await handleCollectLastName(conv, t);
-      break;
     case ConversationStep.COLLECT_EMAIL:
       await handleCollectEmail(conv, t);
       break;
@@ -1642,25 +1638,18 @@ async function handleCollectFirstName(
     return;
   }
 
-  await saveCtx(conv.id, { pendingFirstName: name }, ConversationStep.COLLECT_LAST_NAME);
-  await reply(conv, 'Thanks! What is your *surname*?\n(Letters only — reply BACK for menu.)');
-}
-
-async function handleCollectLastName(
-  conv: Conversation & { customer: Customer; salon: Salon },
-  text: string,
-): Promise<void> {
-  const name = text.trim();
-  if (!PROFILE_NAME_REGEX.test(name)) {
-    await reply(
-      conv,
-      'Please enter a valid surname (letters only, up to 80 characters). Reply BACK for menu.',
-    );
-    return;
-  }
-
-  await saveCtx(conv.id, { pendingLastName: name }, ConversationStep.COLLECT_EMAIL);
-  await reply(conv, 'What is your *email address*?\n(Reply BACK for menu.)');
+  await saveCtx(conv.id, { pendingFirstName: name }, ConversationStep.COLLECT_EMAIL);
+  await reply(
+    conv,
+    [
+      `Nice to meet you, *${name}*! 😊`,
+      '',
+      'What is your *email address*?',
+      '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
+      '',
+      'Reply BACK for menu.',
+    ].join('\n'),
+  );
 }
 
 async function handleCollectEmail(
@@ -1679,7 +1668,13 @@ async function handleCollectEmail(
   await saveCtx(conv.id, { pendingEmail: email }, ConversationStep.COLLECT_DATE_OF_BIRTH);
   await reply(
     conv,
-    'What is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)\n(Reply BACK for menu.)',
+    [
+      'Got it! Last question — what is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
+      '',
+      '_We ask for your DOB for two reasons: some services have different pricing for children vs adults, and we\'d love to send you a little birthday treat! 🎂_',
+      '',
+      'Reply BACK for menu.',
+    ].join('\n'),
   );
 }
 
@@ -1706,10 +1701,9 @@ async function handleCollectDateOfBirth(
   // POPIA consent was already granted before name collection — commit profile now.
   const pending = ctx(conv);
   const firstName = pending.pendingFirstName as string | undefined;
-  const lastName = pending.pendingLastName as string | undefined;
   const email = pending.pendingEmail as string | undefined;
 
-  if (!firstName || !lastName || !email) {
+  if (!firstName || !email) {
     // Context lost mid-flow — restart from POPIA.
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
     await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
@@ -1721,10 +1715,9 @@ async function handleCollectDateOfBirth(
     where: { id: conv.customerId },
     data: {
       firstName,
-      lastName,
       email,
       dateOfBirth: new Date(dobStr),
-      displayName: `${firstName} ${lastName}`.trim(),
+      displayName: firstName,
     },
   });
 
