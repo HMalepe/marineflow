@@ -101,7 +101,7 @@ try {
 try {
   const { ensureSchemaColumns } = await import('./lib/ensureSchema.js');
   await ensureSchemaColumns();
-  console.log('[STARTUP] Schema column guard OK');
+  console.log('[STARTUP] Schema column guard OK (Appointment columns + ServiceAddon table)');
 } catch (e) {
   console.error('[STARTUP] Schema column guard FAILED — bot may error on Appointment queries:', e);
 }

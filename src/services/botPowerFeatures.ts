@@ -13,8 +13,8 @@ import { checkCancellationAllowed } from './cancellationRules.js';
 import { notifyWaitlistOnCancel } from './waitlist.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { validateSlotAvailable } from './slots.js';
-import { getTenantDb } from '../lib/db/tenantSession.js';
 import { logger } from '../lib/logger.js';
+import { getTenantDb } from '../lib/db/tenantSession.js';
 
 export function getSalonAutomations(salon: Pick<Salon, 'metadata'>) {
   return parseAutomationsFromMetadata(salon.metadata);
@@ -138,18 +138,23 @@ export async function afterServiceSelected(
     return;
   }
 
-  const addons = await getAddonsForService(conv.salonId, serviceId);
-  if (!addons.length) {
-    await helpers.continueToStaff();
-    return;
-  }
+  try {
+    const addons = await getAddonsForService(conv.salonId, serviceId);
+    if (!addons.length) {
+      await helpers.continueToStaff();
+      return;
+    }
 
-  await helpers.saveContext({
-    selectedServiceId: serviceId,
-    addonPhase: true,
-    addonOptions: addons.map((a) => a.addonServiceId),
-  });
-  await helpers.reply(formatAddonMenu(addons));
+    await helpers.saveContext({
+      selectedServiceId: serviceId,
+      addonPhase: true,
+      addonOptions: addons.map((a) => a.addonServiceId),
+    });
+    await helpers.reply(formatAddonMenu(addons));
+  } catch (err) {
+    logger.warn({ err, salonId: conv.salonId, serviceId }, 'addon_upsell_skipped');
+    await helpers.continueToStaff();
+  }
 }
 
 export async function handleAddonPhase(
@@ -178,7 +183,15 @@ export async function handleAddonPhase(
     return false;
   }
 
-  const addons = await getAddonsForService(conv.salonId, serviceId);
+  let addons: Awaited<ReturnType<typeof getAddonsForService>>;
+  try {
+    addons = await getAddonsForService(conv.salonId, serviceId);
+  } catch (err) {
+    logger.warn({ err, salonId: conv.salonId, serviceId }, 'addon_phase_lookup_failed');
+    await helpers.saveContext({ addonPhase: undefined });
+    await helpers.continueToStaff();
+    return true;
+  }
   const selected = parseAddonSelection(text, addons);
 
   const hasNumbers = /\d/.test(text);

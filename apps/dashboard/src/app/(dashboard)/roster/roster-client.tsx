@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -14,8 +14,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Copy, Check, X, ClipboardPaste } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Check, X, ClipboardPaste, Plus } from 'lucide-react';
+import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,10 @@ interface StaffMember {
 }
 
 interface Shift { startTime: string; endTime: string }
-interface Props { token: string }
+interface Props {
+  token: string;
+  openAddStaff?: boolean;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -125,7 +128,7 @@ function initials(s: StaffMember) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function RosterClient({ token }: Props) {
+export function RosterClient({ token, openAddStaff = false }: Props) {
   const todayRef = useRef<Date>((() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); return d;
   })());
@@ -141,6 +144,7 @@ export function RosterClient({ token }: Props) {
   // toast
   const [toast, setToast]       = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastTimerRef           = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [addStaffOpen, setAddStaffOpen] = useState(openAddStaff);
 
   const monthEnd = useMemo(() => addDays(getMonthStart(addMonths(month, 1)), -1), [month]);
   const weeks    = useMemo(() => buildCalendarWeeks(month), [month]);
@@ -156,21 +160,35 @@ export function RosterClient({ token }: Props) {
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
 
-  const fetchRoster = useCallback(async (from: Date, to: Date) => {
-    setLoading(true); setError(null);
+  const fetchRoster = useCallback(async (from: Date, to: Date, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const data = await apiFetch<{ staff: StaffMember[] }>(
         `/roster?from=${toIso(from)}&to=${toIso(to)}`, {}, token,
       );
       setStaff(data.staff ?? []);
+      setError(null);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Failed to load roster');
+      if (!silent) {
+        setError(e instanceof ApiError ? e.message : 'Failed to load roster');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [token]);
 
   useEffect(() => { fetchRoster(month, monthEnd); }, [fetchRoster, month, monthEnd]);
+
+  const onLiveUpdate = useCallback(
+    () => {
+      void fetchRoster(month, monthEnd, true);
+    },
+    [fetchRoster, month, monthEnd],
+  );
+  const { connected: liveConnected } = useSalonLiveUpdates(token, onLiveUpdate);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -181,10 +199,21 @@ export function RosterClient({ token }: Props) {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Roster</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <p className="text-muted-foreground text-sm mt-0.5 flex items-center gap-2 flex-wrap">
             Click any date to manage shifts and time off.
+            {liveConnected && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                Live sync
+              </span>
+            )}
           </p>
         </div>
+
+        <Button size="sm" onClick={() => setAddStaffOpen(true)}>
+          <Plus className="w-4 h-4 mr-1" />
+          Add staff
+        </Button>
 
         {/* Copied shift chip */}
         {copiedShift && (
@@ -231,7 +260,13 @@ export function RosterClient({ token }: Props) {
       {!loading && staff.length === 0 && !error && (
         <div className="rounded-xl border border-dashed px-8 py-16 text-center space-y-3">
           <p className="text-muted-foreground">No staff members yet.</p>
-          <Link href="/staff" className={buttonVariants({ size: 'sm' })}>Add staff</Link>
+          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+            Add your team so they appear on the roster and in WhatsApp booking.
+          </p>
+          <Button size="sm" onClick={() => setAddStaffOpen(true)}>
+            <Plus className="w-4 h-4 mr-1" />
+            Add staff
+          </Button>
         </div>
       )}
 
@@ -343,6 +378,17 @@ export function RosterClient({ token }: Props) {
           </div>
         </div>
       )}
+
+      <AddStaffSheet
+        token={token}
+        open={addStaffOpen}
+        onOpenChange={setAddStaffOpen}
+        onCreated={() => {
+          fetchRoster(month, monthEnd);
+          showToast('Staff member added', 'success');
+        }}
+        onError={(msg) => showToast(msg, 'error')}
+      />
 
       {/* Day detail sheet */}
       {selectedDate && (
@@ -655,6 +701,154 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
         <SheetFooter className="mt-6">
           <Button variant="outline" onClick={onClose} className="w-full">Done</Button>
         </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Add staff sheet ──────────────────────────────────────────────────────────
+
+interface AddStaffSheetProps {
+  token: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: () => void;
+  onError: (message: string) => void;
+}
+
+function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddStaffSheetProps) {
+  const [name, setName] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [specialties, setSpecialties] = useState('');
+  const [isBookable, setIsBookable] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function resetForm() {
+    setName('');
+    setDisplayName('');
+    setSpecialties('');
+    setIsBookable(true);
+    setFormError(null);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setFormError('Name is required.');
+      return;
+    }
+
+    const specialtyList = specialties
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    setSaving(true);
+    setFormError(null);
+    try {
+      await apiFetch<{ staff: StaffMember }>(
+        '/staff',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: trimmedName,
+            displayName: displayName.trim() || null,
+            specialties: specialtyList,
+            isBookable,
+          }),
+        },
+        token,
+      );
+      resetForm();
+      onOpenChange(false);
+      onCreated();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to add staff member';
+      setFormError(msg);
+      onError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) resetForm();
+      }}
+    >
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Add staff member</SheetTitle>
+          <SheetDescription>
+            They&apos;ll appear on the roster and as a booking option on WhatsApp when bookable.
+          </SheetDescription>
+        </SheetHeader>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="staff-name">Full name *</Label>
+            <Input
+              id="staff-name"
+              placeholder="e.g. Sarah Ndlovu"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setFormError(null);
+              }}
+              maxLength={80}
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="staff-display">Display name (optional)</Label>
+            <Input
+              id="staff-display"
+              placeholder="Shown to clients — defaults to full name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={80}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="staff-specialties">Specialties (optional)</Label>
+            <Input
+              id="staff-specialties"
+              placeholder="e.g. Braids, Colour, Nails"
+              value={specialties}
+              onChange={(e) => setSpecialties(e.target.value)}
+              maxLength={200}
+            />
+            <p className="text-xs text-muted-foreground">Separate with commas</p>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isBookable}
+              onChange={(e) => setIsBookable(e.target.checked)}
+              className="size-4 rounded border-input accent-primary"
+            />
+            Available for WhatsApp bookings
+          </label>
+
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
+
+          <SheetFooter className="gap-2 sm:gap-0 pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving || !name.trim()}>
+              {saving ? 'Adding…' : 'Add staff'}
+            </Button>
+          </SheetFooter>
+        </form>
       </SheetContent>
     </Sheet>
   );

@@ -1,5 +1,6 @@
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
+import { marketingConsentGatePending } from './marketingConsent.js';
 
 export async function sendWelcomeJourneyIfNeeded(params: {
   salonId: string;
@@ -27,9 +28,16 @@ export async function sendWelcomeJourneyIfNeeded(params: {
       name: true,
       tradingName: true,
       welcomeMessage: true,
+      botAskMarketingConsent: true,
     },
   });
   if (!salon) return false;
+
+  const customer = await db.customer.findUnique({
+    where: { id: params.customerId },
+    select: { marketingConsentStatus: true },
+  });
+  if (!customer) return false;
 
   const automations = parseAutomationsFromMetadata(salon.metadata);
   if (!automations.welcomeJourney.enabled) return false;
@@ -55,10 +63,14 @@ export async function sendWelcomeJourneyIfNeeded(params: {
     }
   }
 
-  parts.push(
-    '',
-    'We will ask for marketing consent in a moment — it helps us send you offers and reminders. You can decline anytime.',
-  );
+  if (marketingConsentGatePending(salon, customer.marketingConsentStatus)) {
+    parts.push(
+      '',
+      'Reply *MENU* to get started. We\'ll ask once about marketing messages (promos & offers) — reply *ACCEPT* or *DECLINE*. Booking updates are always sent.',
+    );
+  } else {
+    parts.push('', 'Reply *MENU* to book, browse services, or get help.');
+  }
 
   await params.send(parts.join('\n'));
 

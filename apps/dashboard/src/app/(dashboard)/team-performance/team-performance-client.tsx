@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Crown, Medal, Star, TrendingUp } from 'lucide-react';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -131,7 +132,7 @@ export function TeamPerformanceClient({ token }: Props) {
                 <tr className="border-b bg-muted/50 text-left">
                   <th className="p-3 font-medium w-12">#</th>
                   <th className="p-3 font-medium">Stylist</th>
-                  <th className="p-3 font-medium hidden sm:table-cell">Bookings</th>
+                  <th className="p-3 font-medium hidden sm:table-cell">{APPOINTMENTS_LABEL}</th>
                   <th className="p-3 font-medium">Revenue</th>
                   <th className="p-3 font-medium hidden md:table-cell">Rating</th>
                   <th className="p-3 font-medium hidden lg:table-cell">Rebook %</th>

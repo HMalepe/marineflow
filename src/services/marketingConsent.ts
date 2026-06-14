@@ -28,7 +28,7 @@ export function buildPopiaConsentMessage(salonName: string): string {
     '',
     'Under POPIA we need your choice about *marketing messages* (promos, offers & salon news on WhatsApp).',
     '',
-    'Service messages (bookings, reminders) are separate — you always get those.',
+    'This is separate from booking — appointment confirmations and reminders are always sent.',
     '',
     'Reply:',
     '• *ACCEPT* — send me marketing & newsletters',
@@ -52,13 +52,12 @@ export function buildConsentStopMessage(): string {
   return 'You\'ve been opted out of marketing messages. Reply ACCEPT if you change your mind.';
 }
 
-/** Parse inbound text as marketing consent choice, if unambiguous. */
+/** Parse inbound text as marketing consent choice — ACCEPT/DECLINE only (not YES/NO; those are for booking POPIA). */
 export function parseMarketingConsentReply(text: string): 'accept' | 'decline' | null {
   const t = text.trim().toLowerCase().replace(/\s+/g, ' ');
 
   const declinePatterns = [
     'decline',
-    'no',
     'stop',
     'unsubscribe',
     'opt out',
@@ -67,12 +66,22 @@ export function parseMarketingConsentReply(text: string): 'accept' | 'decline' |
     'remove',
     'cancel marketing',
   ];
-  const acceptPatterns = ['accept', 'yes', 'opt in', 'opt-in', 'optin', 'subscribe'];
+  const acceptPatterns = ['accept', 'opt in', 'opt-in', 'optin', 'subscribe'];
 
   if (declinePatterns.some((p) => t === p || t.startsWith(`${p} `))) return 'decline';
   if (acceptPatterns.some((p) => t === p || t.startsWith(`${p} `))) return 'accept';
 
   return null;
+}
+
+export function marketingConsentGatePending(
+  salon: { botAskMarketingConsent?: boolean | null },
+  status: MarketingConsentStatus | string | null | undefined,
+): boolean {
+  if (salon.botAskMarketingConsent === false) return false;
+  const parsed = parseMarketingConsentStatus(status);
+  if (parsed) return parsed === 'PENDING';
+  return status == null;
 }
 
 export function isGlobalMarketingOptOut(text: string): boolean {

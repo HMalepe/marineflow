@@ -17,13 +17,19 @@ describe('buildMainMenuInteractive', () => {
     welcomeMessage: 'Hi there! How can we help?',
   };
 
-  it('produces a valid list payload with seven top-level options', () => {
+  it('produces a valid list payload with seven top-level options when loyalty is on', () => {
     const interactive = buildMainMenuInteractive(baseSalon);
     expect(interactive.type).toBe('list');
     expect(validateInteractiveListPayload(interactive)).toEqual([]);
     expect(interactive.sections[0]!.rows).toHaveLength(7);
     expect(interactive.sections[0]!.rows[0]!.title).toBe('Book an appointment');
     expect(interactive.button.length).toBeLessThanOrEqual(20);
+  });
+
+  it('omits Rewards row when loyalty is disabled', () => {
+    const interactive = buildMainMenuInteractive({ ...baseSalon, botLoyaltyEnabled: false });
+    expect(interactive.sections[0]!.rows).toHaveLength(6);
+    expect(interactive.sections[0]!.rows.some((r) => r.title === 'Rewards')).toBe(false);
   });
 
   it('uses trading name in footer not internal demo name', () => {

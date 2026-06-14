@@ -6,6 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiFetch, ApiError } from '@/lib/api';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { AlertTriangle, Calendar, CheckSquare, Clock, Loader2, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
@@ -74,14 +76,16 @@ function getDepositStatus(appt: AppointmentData): 'none' | 'paid' | 'unpaid' {
 }
 
 export function AppointmentsClient({
-  upcoming,
-  past,
+  upcoming: initialUpcoming,
+  past: initialPast,
   token,
 }: {
   upcoming: AppointmentData[];
   past: AppointmentData[];
   token: string;
 }) {
+  const [upcoming, setUpcoming] = useState(initialUpcoming);
+  const [past, setPast] = useState(initialPast);
   const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
   const [search, setSearch] = useState('');
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
@@ -115,6 +119,37 @@ export function AppointmentsClient({
     }
   }
 
+  const refreshAppointments = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ appointments: AppointmentData[] }>('/appointments', {}, token);
+      const now = Date.now();
+      const all = data.appointments ?? [];
+      setUpcoming(
+        all.filter(
+          (a) =>
+            new Date(a.start).getTime() >= now &&
+            a.status !== 'CANCELLED' &&
+            a.status !== 'RESCHEDULED',
+        ),
+      );
+      setPast(all.filter((a) => new Date(a.start).getTime() < now));
+    } catch {
+      // keep last good snapshot
+    }
+  }, [token]);
+
+  const onLiveUpdate = useCallback(
+    (type: string) => {
+      if (type === 'appointment.created' || type === 'appointment.updated') {
+        void refreshAppointments();
+        void loadWaitlist();
+      }
+    },
+    [refreshAppointments, loadWaitlist],
+  );
+  const { connected: liveConnected } = useSalonLiveUpdates(token, onLiveUpdate);
+
   const completableIds = upcoming
     .filter((a) => (a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID') && new Date(a.start) <= new Date())
     .map((a) => a.id);
@@ -133,6 +168,7 @@ export function AppointmentsClient({
       setBulkSelected(new Set());
       setBulkToast(`${res.completed} appointment${res.completed === 1 ? '' : 's'} marked complete${res.skipped > 0 ? ` (${res.skipped} skipped)` : ''}`);
       setTimeout(() => setBulkToast(null), 4000);
+      void refreshAppointments();
     } catch (e) {
       setBulkToast(e instanceof ApiError ? e.message : 'Bulk complete failed');
       setTimeout(() => setBulkToast(null), 4000);
@@ -202,8 +238,16 @@ export function AppointmentsClient({
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Appointments</h1>
-          <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
+          <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2 flex-wrap">
+            View and manage all bookings.
+            {liveConnected && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                Live sync
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           {/* Search */}

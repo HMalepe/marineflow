@@ -31,6 +31,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { apiFetch, ApiError } from '@/lib/api';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 
 interface AppointmentSummary {
@@ -345,7 +346,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
-    { key: 'appointments', label: 'Appointments', count: customer.appointments.length },
+    { key: 'appointments', label: APPOINTMENTS_LABEL, count: customer.appointments.length },
     { key: 'messages', label: 'Messages', count: customer.messages.length },
   ];
 
@@ -464,7 +465,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
         <StatPill icon={CheckCircle2} label="Visits" value={completedVisits} />
         <StatPill
           icon={Calendar}
-          label="Bookings"
+          label={APPOINTMENTS_LABEL}
           value={customer.bookingCount}
           sub={customer.noShowCount > 0 ? `${customer.noShowCount} no-show` : undefined}
         />

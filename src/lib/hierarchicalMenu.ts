@@ -4,6 +4,8 @@ export type SalonMenuInput = {
   tradingName?: string | null;
   welcomeMessage?: string | null;
   metadata?: unknown;
+  /** When false, Rewards is omitted from the main menu (Settings → Conversation flow). */
+  botLoyaltyEnabled?: boolean;
 };
 
 export function salonDisplayName(salon: Pick<SalonMenuInput, 'name' | 'tradingName'>): string {
@@ -39,10 +41,18 @@ export const MAIN_MENU_ITEMS: MainMenuItem[] = [
 
 export const MAIN_MENU_ROW_IDS = ['1', '2', '3', '4', '5', '6', '7'] as const;
 
+/** Main menu rows for this salon — omits Rewards when loyalty is disabled in Settings. */
+export function getMainMenuItems(salon: Pick<SalonMenuInput, 'botLoyaltyEnabled'>): MainMenuItem[] {
+  if (salon.botLoyaltyEnabled === false) {
+    return MAIN_MENU_ITEMS.filter((item) => item.kind !== 'category' || item.id !== 'rewards');
+  }
+  return MAIN_MENU_ITEMS;
+}
+
 const SUB_MENUS: Record<MenuCategoryId, string[]> = {
-  my_appointments: ['Book', 'View', 'Reschedule', 'Cancel'],
+  my_appointments: ['View', 'Reschedule', 'Cancel'],
   services: ['Hair', 'Nails', 'Massage', 'Beauty', 'Prices'],
-  rewards: ['My Points', 'Redeem', 'Referrals', 'Coupons'],
+  rewards: ['My Points', 'Redeem', 'Referrals'],
   promotions: ['Current Specials', 'Packages', 'Gift Vouchers'],
   about: ['Hours', 'Location', 'Contact', 'Team'],
   support: ['FAQ', 'Leave Review', 'Report Issue', 'Speak To Reception'],
@@ -74,7 +84,8 @@ export function menuWelcomeLine(salon: SalonMenuInput): string {
 
 export function buildMainMenuText(salon: SalonMenuInput): string {
   const welcome = menuWelcomeLine(salon);
-  const lines = MAIN_MENU_ITEMS.map((item, i) => `${i + 1} — ${item.label}`);
+  const items = getMainMenuItems(salon);
+  const lines = items.map((item, i) => `${i + 1} — ${item.label}`);
   const meta =
     typeof salon.metadata === 'object' && salon.metadata
       ? (salon.metadata as Record<string, unknown>)
@@ -93,10 +104,14 @@ export function buildSubMenuText(categoryId: MenuCategoryId | LegacyMenuCategory
   return [`*${title}*`, ...lines, '', 'Reply BACK for main menu.'].join('\n');
 }
 
-export function parseMainMenuSelection(text: string): MainMenuSelection | null {
+export function parseMainMenuSelection(
+  text: string,
+  salon: Pick<SalonMenuInput, 'botLoyaltyEnabled'> = {},
+): MainMenuSelection | null {
+  const items = getMainMenuItems(salon);
   const n = parseInt(text.trim(), 10);
-  if (!Number.isFinite(n) || n < 1 || n > MAIN_MENU_ITEMS.length) return null;
-  const item = MAIN_MENU_ITEMS[n - 1]!;
+  if (!Number.isFinite(n) || n < 1 || n > items.length) return null;
+  const item = items[n - 1]!;
   if (item.kind === 'direct') return { kind: 'direct', action: item.action };
   return { kind: 'category', id: item.id };
 }
@@ -130,12 +145,20 @@ export function isValidSubMenuChoice(
 }
 
 /** True when input should be handled by handleMenu() instead of AI free-text. */
-export function isMenuNavigationInput(menuCategory: unknown, text: string): boolean {
-  return isWhatsAppMenuInput(text, menuCategory);
+export function isMenuNavigationInput(
+  menuCategory: unknown,
+  text: string,
+  salon: Pick<SalonMenuInput, 'botLoyaltyEnabled'> = {},
+): boolean {
+  return isWhatsAppMenuInput(text, menuCategory, salon);
 }
 
 /** WhatsApp bot menu/booking input — must not be blocked by dashboard consent or follow-up flows. */
-export function isWhatsAppMenuInput(text: string, menuCategory?: unknown): boolean {
+export function isWhatsAppMenuInput(
+  text: string,
+  menuCategory?: unknown,
+  salon: Pick<SalonMenuInput, 'botLoyaltyEnabled'> = {},
+): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
   if (/^(back|menu|undo)$/i.test(trimmed)) return true;
@@ -149,10 +172,10 @@ export function isWhatsAppMenuInput(text: string, menuCategory?: unknown): boole
   if (activeCategory) {
     const sub = parseSubMenuChoice(trimmed);
     if (sub != null && isValidSubMenuChoice(activeCategory, sub)) return true;
-    return parseMainMenuSelection(trimmed) !== null;
+    return parseMainMenuSelection(trimmed, salon) !== null;
   }
 
-  return parseMainMenuSelection(trimmed) !== null;
+  return parseMainMenuSelection(trimmed, salon) !== null;
 }
 
 /** Service category keywords for submenu filtering. */

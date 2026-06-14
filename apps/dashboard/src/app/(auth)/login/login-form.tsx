@@ -15,6 +15,7 @@ import {
   promptSavePassword,
   resolvePasswordManagerUsername,
 } from '@/lib/password-manager';
+import { postLoginDestination } from '@/lib/post-login-redirect';
 import { PasswordManagerUsernameField } from '@/components/password-manager-username-field';
 import { checkPhone, login, setupPassword } from './actions';
 
@@ -41,6 +42,10 @@ export function LoginForm() {
   const redirect = useMemo(
     () => parseLoginRedirectParams(searchParams),
     [searchParams],
+  );
+  const afterLoginPath = useMemo(
+    () => postLoginDestination(redirect.redirectPath),
+    [redirect.redirectPath],
   );
 
   const tabsId = useId();
@@ -138,7 +143,7 @@ export function LoginForm() {
       const username = resolvePasswordManagerUsername({ email: '', phone: e164 });
       if (username) await promptSavePassword(username, password);
       setPasswordChangedBanner(false);
-      router.push('/');
+      router.push(afterLoginPath);
       router.refresh();
     }
   }
@@ -172,7 +177,7 @@ export function LoginForm() {
     } else {
       const username = resolvePasswordManagerUsername({ email: '', phone: e164 });
       if (username) await promptSavePassword(username, password);
-      router.push('/');
+      router.push(afterLoginPath);
       router.refresh();
     }
   }
@@ -194,7 +199,7 @@ export function LoginForm() {
       const username = resolvePasswordManagerUsername({ email, preferEmail: true });
       if (username) await promptSavePassword(username, password);
       setPasswordChangedBanner(false);
-      router.push('/');
+      router.push(afterLoginPath);
       router.refresh();
     }
   }

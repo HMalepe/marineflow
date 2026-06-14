@@ -116,6 +116,7 @@ export const conversationInactivity = inngest.createFunction(
             name: true,
             tradingName: true,
             welcomeMessage: true,
+            botLoyaltyEnabled: true,
             metadata: true,
           },
         });

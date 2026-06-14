@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,7 +75,7 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
         <KpiCard label="Total Salons" value={metrics.totalSalons} />
         <KpiCard label="Active" value={metrics.activeSalons} />
         <KpiCard label="Customers" value={metrics.totalCustomers.toLocaleString()} />
-        <KpiCard label="Bookings" value={metrics.totalAppointments.toLocaleString()} />
+        <KpiCard label={APPOINTMENTS_LABEL} value={metrics.totalAppointments.toLocaleString()} />
       </div>
 
       {/* Create Salon */}
@@ -121,7 +122,7 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
               <th className="text-left p-3 font-medium">Tier</th>
               <th className="text-right p-3 font-medium">Staff</th>
               <th className="text-right p-3 font-medium">Customers</th>
-              <th className="text-right p-3 font-medium">Bookings</th>
+              <th className="text-right p-3 font-medium">{APPOINTMENTS_LABEL}</th>
               <th className="text-left p-3 font-medium">Created</th>
             </tr>
           </thead>

@@ -52,7 +52,11 @@ export default async function SettingsPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage your account, salon hours, and WhatsApp bot</p>
+        <p className="text-muted-foreground text-sm mt-1">
+          {canEditSalon
+            ? 'Manage your account, salon hours, and WhatsApp bot'
+            : 'Manage your profile and login password'}
+        </p>
       </div>
 
       <Card>
@@ -111,20 +115,22 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Integrations</CardTitle>
-          <CardDescription>Connect external services</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Link
-            href="/settings/webhooks"
-            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-          >
-            Manage Webhooks &rarr;
-          </Link>
-        </CardContent>
-      </Card>
+      {canEditSalon && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Integrations</CardTitle>
+            <CardDescription>Connect external services</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link
+              href="/settings/webhooks"
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+            >
+              Manage Webhooks &rarr;
+            </Link>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

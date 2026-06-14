@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { postLoginDestination } from './lib/post-login-redirect';
 
 const PUBLIC_PATHS = ['/login', '/onboarding'];
 
@@ -9,14 +10,16 @@ export function middleware(request: NextRequest) {
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     if (token) {
-      return NextResponse.redirect(new URL('/', request.url));
+      const destination = postLoginDestination(request.nextUrl.searchParams.get('redirect'));
+      return NextResponse.redirect(new URL(destination, request.url));
     }
     return NextResponse.next();
   }
 
   if (!token) {
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirect', pathname);
+    const returnPath = `${pathname}${request.nextUrl.search}`;
+    loginUrl.searchParams.set('redirect', returnPath);
     return NextResponse.redirect(loginUrl);
   }
 

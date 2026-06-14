@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { Calendar, CheckCircle, Clock, Users, MessageSquare, BarChart2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -115,7 +117,7 @@ async function SuperAdminView({ token }: { token: string | null }) {
           <KpiCard label="Total Salons" value={stats.totalSalons} />
           <KpiCard label="Active Salons" value={stats.activeSalons} />
           <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
-          <KpiCard label="Total Bookings" value={stats.totalAppointments.toLocaleString()} />
+          <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
           <KpiCard label="New This Week" value={stats.recentSignups} />
         </div>
       ) : (
@@ -218,6 +220,7 @@ async function AppointmentView({ token }: { token: string | null }) {
 
   return (
     <div className="space-y-6 lg:space-y-8">
+      {token && <SalonLiveRouterRefresh token={token} />}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
@@ -229,7 +232,7 @@ async function AppointmentView({ token }: { token: string | null }) {
           className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline shrink-0"
         >
           <Calendar className="w-4 h-4" />
-          View all appointments →
+          View all {APPOINTMENTS_LABEL.toLowerCase()} →
         </Link>
       </div>
 

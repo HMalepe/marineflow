@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client';
 
-/** Idempotent ALTERs for columns that may be missing after a P3005 baseline. */
 const APPOINTMENT_COLUMN_GUARDS = [
   'ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "reminder24hSentAt" TIMESTAMP(3)',
   'ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "reminder2hSentAt" TIMESTAMP(3)',
@@ -14,6 +13,55 @@ const APPOINTMENT_COLUMN_GUARDS = [
   'ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "addonServiceIds" TEXT[] DEFAULT ARRAY[]::TEXT[]',
   'ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "csatSentAt" TIMESTAMP(3)',
   'ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "csatScore" INT',
+] as const;
+
+const SERVICE_COLUMN_GUARDS = [
+  'ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3)',
+] as const;
+
+/** Idempotent ALTERs for columns that may be missing after a P3005 baseline. */
+const SCHEMA_COLUMN_GUARDS = [
+  ...APPOINTMENT_COLUMN_GUARDS,
+  ...SERVICE_COLUMN_GUARDS,
+] as const;
+
+const SERVICE_ADDON_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS "ServiceAddon" (
+    "id" TEXT NOT NULL,
+    "salonId" TEXT NOT NULL,
+    "serviceId" TEXT NOT NULL,
+    "addonServiceId" TEXT NOT NULL,
+    "pitchMessage" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ServiceAddon_pkey" PRIMARY KEY ("id")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS "ServiceAddon_serviceId_addonServiceId_key"
+  ON "ServiceAddon"("serviceId", "addonServiceId");
+CREATE INDEX IF NOT EXISTS "ServiceAddon_salonId_idx" ON "ServiceAddon"("salonId");
+CREATE INDEX IF NOT EXISTS "ServiceAddon_serviceId_idx" ON "ServiceAddon"("serviceId");
+`;
+
+const SERVICE_ADDON_FKEY_GUARDS = [
+  `DO $$ BEGIN
+    ALTER TABLE "ServiceAddon"
+      ADD CONSTRAINT "ServiceAddon_salonId_fkey"
+      FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "ServiceAddon"
+      ADD CONSTRAINT "ServiceAddon_serviceId_fkey"
+      FOREIGN KEY ("serviceId") REFERENCES "Service"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "ServiceAddon"
+      ADD CONSTRAINT "ServiceAddon_addonServiceId_fkey"
+      FOREIGN KEY ("addonServiceId") REFERENCES "Service"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
 ] as const;
 
 /**
@@ -30,7 +78,11 @@ export async function ensureSchemaColumns(): Promise<void> {
   });
 
   try {
-    for (const sql of APPOINTMENT_COLUMN_GUARDS) {
+    for (const sql of SCHEMA_COLUMN_GUARDS) {
+      await client.$executeRawUnsafe(sql);
+    }
+    await client.$executeRawUnsafe(SERVICE_ADDON_TABLE_DDL);
+    for (const sql of SERVICE_ADDON_FKEY_GUARDS) {
       await client.$executeRawUnsafe(sql);
     }
   } finally {

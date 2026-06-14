@@ -1,5 +1,7 @@
 /** Helpers for browser password manager integration (save / update prompts). */
 
+import { sanitizePostLoginRedirect } from './post-login-redirect';
+
 export type PasswordManagerUsername =
   | { type: 'email'; value: string }
   | { type: 'phone'; value: string };
@@ -11,6 +13,8 @@ export interface LoginRedirectParams {
   tab: LoginRedirectTab;
   email: string;
   phone: string;
+  /** Path to open after sign-in (from middleware session expiry). */
+  redirectPath: string | null;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -76,7 +80,13 @@ export function parseLoginRedirectParams(
   if (tab === 'email' && !email) tab = phone ? 'whatsapp' : 'whatsapp';
   if (tab === 'whatsapp' && !phone && email) tab = 'email';
 
-  return { passwordChanged, tab, email, phone };
+  return {
+    passwordChanged,
+    tab,
+    email,
+    phone,
+    redirectPath: sanitizePostLoginRedirect(searchParams.get('redirect')),
+  };
 }
 
 export function loginUrlAfterPasswordChange(username: PasswordManagerUsername): string {

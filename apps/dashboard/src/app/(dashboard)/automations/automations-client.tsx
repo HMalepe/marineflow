@@ -1,13 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Bell,
+  Calendar,
   CalendarX,
   Crown,
   Gift,
   Heart,
   Megaphone,
+  MessageSquare,
   RefreshCw,
   Sparkles,
   Star,
@@ -42,6 +45,8 @@ export interface SalonAutomations {
   reactivation: { enabled: boolean; inactiveDays: number[]; dailyLimit: number; cooldownDays: number };
   upselling: { enabled: boolean };
   stylistPerformance: { enabled: boolean; incentiveEnabled: boolean; incentivePercentPerCut: number };
+  booking: { slotIntervalMin: number; holdTimeoutMin: number };
+  messaging: { winbackBody: string; birthdayBody: string; cancellationPolicyText: string };
 }
 
 const DEFAULTS: SalonAutomations = {
@@ -66,6 +71,8 @@ const DEFAULTS: SalonAutomations = {
   reactivation: { enabled: true, inactiveDays: [21, 45, 90, 180], dailyLimit: 50, cooldownDays: 30 },
   upselling: { enabled: true },
   stylistPerformance: { enabled: true, incentiveEnabled: false, incentivePercentPerCut: 10 },
+  booking: { slotIntervalMin: 15, holdTimeoutMin: 30 },
+  messaging: { winbackBody: '', birthdayBody: '', cancellationPolicyText: '' },
 };
 
 interface Props {
@@ -132,6 +139,14 @@ export function AutomationsClient({ token }: Props) {
   const dirty = useMemo(() => JSON.stringify(saved) !== JSON.stringify(draft), [saved, draft]);
 
   async function handleSave() {
+    if (draft.reminders.enabled && draft.reminders.hoursBefore.length === 0) {
+      reportError('automations', 'Select at least one reminder time when reminders are enabled.');
+      return;
+    }
+    if (draft.reminders.hoursBefore.length > 4) {
+      reportError('automations', 'You can select up to 4 reminder times.');
+      return;
+    }
     setSaving(true);
     try {
       const data = await apiFetch<{ salon: { automations: SalonAutomations } }>(
@@ -172,7 +187,11 @@ export function AutomationsClient({ token }: Props) {
             Power Features
           </h1>
           <p className="text-muted-foreground text-sm mt-1 max-w-xl">
-            Premium automations that reduce no-shows, recover revenue, and grow your salon — toggle each feature and save.
+            Single place for reminders, win-back, reviews, booking rules, and campaign copy. Paste your{' '}
+            <Link href="/settings" className="text-primary underline-offset-4 hover:underline">
+              Google review URL in Settings
+            </Link>
+            .
           </p>
         </div>
         <div className="flex flex-col gap-2 items-start sm:items-end">
@@ -201,6 +220,83 @@ export function AutomationsClient({ token }: Props) {
             label="Send appointment reminders"
             description="Customers receive timed reminders with cancel/reschedule options."
           />
+          {draft.reminders.enabled && (
+            <div className="space-y-4 pl-1">
+              <div className="space-y-3">
+                <Label className="text-sm">When to send</Label>
+                <div className="flex flex-wrap gap-2">
+                  {[48, 24, 12, 4, 2, 1].map((h) => {
+                    const active = draft.reminders.hoursBefore.includes(h);
+                    const atCap = !active && draft.reminders.hoursBefore.length >= 4;
+                    const label = h >= 24 ? `${h / 24}d` : `${h}h`;
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        disabled={atCap}
+                        onClick={() => {
+                          const prev = draft.reminders.hoursBefore;
+                          const hours = active
+                            ? prev.filter((x) => x !== h)
+                            : [...prev, h];
+                          patch('reminders', { hoursBefore: hours });
+                        }}
+                        className={cn(
+                          'flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border text-xs font-medium transition-all',
+                          active
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : atCap
+                              ? 'bg-muted/40 border-border text-muted-foreground cursor-not-allowed opacity-60'
+                              : 'bg-card border-border hover:border-ring text-foreground',
+                        )}
+                      >
+                        <span className="text-base font-bold leading-none">{label}</span>
+                        <span className="opacity-70">before</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {draft.reminders.hoursBefore.length > 0 && (
+                  <div className="relative flex items-center gap-0 mt-1 px-1">
+                    <div className="absolute inset-y-1/2 left-0 right-0 h-px bg-border -translate-y-1/2" />
+                    <div className="relative z-10 flex items-center justify-between w-full">
+                      {[...draft.reminders.hoursBefore].sort((a, b) => b - a).map((h) => (
+                        <div key={h} className="flex flex-col items-center gap-1">
+                          <div className="size-2.5 rounded-full bg-primary ring-2 ring-background" />
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            {h >= 24 ? `${h / 24}d` : `${h}h`}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="size-3 rounded-full bg-emerald-500 ring-2 ring-background" />
+                        <span className="text-[10px] text-muted-foreground font-medium">Appt</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Select up to 4 times. At least one required.</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Message preview</p>
+                <div className="rounded-xl border bg-[#ece5dd] dark:bg-[#1a2128] p-4 space-y-2">
+                  <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-2xl rounded-tr-sm px-3.5 py-2.5 max-w-[85%] ml-auto shadow-sm">
+                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
+                      {`Hi there! Reminder:\nYour service with your stylist\nFri, 14 Jun · 10:00 AM (in ${
+                        draft.reminders.hoursBefore.includes(24)
+                          ? '1 day'
+                          : draft.reminders.hoursBefore.includes(2)
+                            ? '2 hours'
+                            : `${[...draft.reminders.hoursBefore].sort((a, b) => a - b)[0] ?? 24} hours`
+                      })\n\nReply CANCEL or RESCHEDULE to manage your booking.`}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground text-right mt-1">10:23 AM ✓✓</p>
+                  </div>
+                  <p className="text-[11px] text-center text-muted-foreground/60">Sent from your WhatsApp business number</p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -294,7 +390,7 @@ export function AutomationsClient({ token }: Props) {
             checked={draft.googleReview.enabled}
             onChange={(v) => patch('googleReview', { enabled: v })}
             label="Request review after appointment"
-            description="Sends your Google review link + optional R50 claim link after each visit (configure in Settings)."
+            description="Sends your Google review link + optional claim link after each visit. Add the review URL under Settings."
           />
           <Toggle
             icon={Star}
@@ -463,6 +559,32 @@ export function AutomationsClient({ token }: Props) {
               }}
             />
           </div>
+          <div className="grid sm:grid-cols-2 gap-4 pl-1">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Daily cap</Label>
+              <Input
+                type="number"
+                min={1}
+                max={500}
+                value={draft.reactivation.dailyLimit}
+                onChange={(e) =>
+                  patch('reactivation', { dailyLimit: parseInt(e.target.value, 10) || 50 })
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Cooldown (days)</Label>
+              <Input
+                type="number"
+                min={7}
+                max={90}
+                value={draft.reactivation.cooldownDays}
+                onChange={(e) =>
+                  patch('reactivation', { cooldownDays: parseInt(e.target.value, 10) || 30 })
+                }
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -516,6 +638,105 @@ export function AutomationsClient({ token }: Props) {
                   incentivePercentPerCut: parseInt(e.target.value, 10) || 0,
                 })
               }
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="size-4" /> Booking slot interval
+          </CardTitle>
+          <CardDescription>How granular the WhatsApp time picker is, and when unpaid holds expire.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs">Slot interval</Label>
+            <div className="flex flex-wrap gap-2">
+              {[5, 10, 15, 30, 60].map((min) => (
+                <button
+                  key={min}
+                  type="button"
+                  onClick={() => patch('booking', { slotIntervalMin: min })}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full text-sm border transition-colors',
+                    draft.booking.slotIntervalMin === min
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background border-input hover:border-ring',
+                  )}
+                >
+                  {min === 60 ? '1 hour' : `${min} min`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-1.5 max-w-xs">
+            <Label className="text-xs">Hold timeout (minutes)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={240}
+              step={5}
+              value={draft.booking.holdTimeoutMin}
+              onChange={(e) =>
+                patch('booking', {
+                  holdTimeoutMin: Math.max(0, Math.min(240, parseInt(e.target.value, 10) || 0)),
+                })
+              }
+            />
+            <p className="text-xs text-muted-foreground">0 = no auto-release for unpaid holds.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="size-4" /> Campaign message templates
+          </CardTitle>
+          <CardDescription>
+            Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Win-back message</Label>
+            <textarea
+              className={cn(
+                'flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+              )}
+              value={draft.messaging.winbackBody}
+              onChange={(e) => patch('messaging', { winbackBody: e.target.value })}
+              maxLength={1600}
+              rows={3}
+              placeholder="Hey {name}! We miss you at {salon}…"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Birthday message</Label>
+            <textarea
+              className={cn(
+                'flex min-h-[72px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+              )}
+              value={draft.messaging.birthdayBody}
+              onChange={(e) => patch('messaging', { birthdayBody: e.target.value })}
+              maxLength={1600}
+              rows={3}
+              placeholder="Happy birthday {name}! 🎂 From all of us at {salon}…"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Cancellation policy</Label>
+            <textarea
+              className={cn(
+                'flex min-h-[96px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm',
+              )}
+              value={draft.messaging.cancellationPolicyText}
+              onChange={(e) => patch('messaging', { cancellationPolicyText: e.target.value })}
+              maxLength={2000}
+              rows={4}
+              placeholder="Cancellations within 24 hours may incur a fee…"
             />
           </div>
         </CardContent>

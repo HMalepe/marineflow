@@ -1,5 +1,6 @@
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { AppointmentsClient, type AppointmentData } from './appointments-client';
 
 export default async function AppointmentsPage() {
@@ -28,7 +29,7 @@ export default async function AppointmentsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Appointments</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
           <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
         </div>
         <p className="text-sm text-destructive">{error}</p>

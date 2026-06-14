@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
+import { CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
+import { CommsPageHint } from '@/components/comms-page-hint';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -364,7 +366,7 @@ export function ConversationsClient({ token, staffName }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Conversations</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
             <span
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
               title={connected ? 'Live updates connected' : 'Connecting…'}
@@ -378,9 +380,7 @@ export function ConversationsClient({ token, staffName }: Props) {
               {connected ? 'Live' : 'Offline'}
             </span>
           </div>
-          <p className="text-muted-foreground text-sm mt-1">
-            WhatsApp inbox — take over when customers need a human.
-          </p>
+          <CommsPageHint active="conversations" />
         </div>
         <Button variant="outline" size="sm" onClick={refreshAll}>
           Refresh

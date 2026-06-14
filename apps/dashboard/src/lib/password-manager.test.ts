@@ -111,6 +111,7 @@ describe('password-manager', () => {
         tab: 'email',
         email: 'owner@salon.com',
         phone: '',
+        redirectPath: null,
       });
     });
 
@@ -124,6 +125,7 @@ describe('password-manager', () => {
         tab: 'whatsapp',
         email: '',
         phone: '+27821234567',
+        redirectPath: null,
       });
     });
 
@@ -142,6 +144,7 @@ describe('password-manager', () => {
         tab: 'whatsapp',
         email: '',
         phone: '',
+        redirectPath: null,
       });
     });
 
@@ -155,6 +158,7 @@ describe('password-manager', () => {
         tab: 'email',
         email: 'a@b.com',
         phone: '',
+        redirectPath: null,
       });
     });
 
@@ -164,7 +168,26 @@ describe('password-manager', () => {
         tab: 'whatsapp',
         email: '',
         phone: '',
+        redirectPath: null,
       });
+    });
+
+    it('parses safe post-login redirect path', () => {
+      expect(
+        parseLoginRedirectParams(params({ redirect: '/settings' })),
+      ).toEqual({
+        passwordChanged: false,
+        tab: 'whatsapp',
+        email: '',
+        phone: '',
+        redirectPath: '/settings',
+      });
+    });
+
+    it('ignores unsafe redirect paths', () => {
+      expect(
+        parseLoginRedirectParams(params({ redirect: 'https://evil.com' })).redirectPath,
+      ).toBeNull();
     });
   });
 

@@ -2,7 +2,7 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { cached, salonServicesKey, salonStaffKey, salonBusinessHoursKey, invalidateCache } from '../lib/cache.js';
 
 /**
- * Cached service list for a salon. TTL 5 minutes.
+ * Cached service list for a salon. TTL 30 seconds (invalidated on every write).
  * Invalidated on service CRUD.
  */
 export async function getCachedServices(salonId: string) {
@@ -10,26 +10,26 @@ export async function getCachedServices(salonId: string) {
     salonServicesKey(salonId),
     () =>
       getTenantDb().service.findMany({
-        where: { salonId, active: true },
+        where: { salonId, active: true, deletedAt: null },
         orderBy: { sortOrder: 'asc' },
         include: { category: true },
       }),
-    300,
+    30,
   );
 }
 
 /**
- * Cached staff list for a salon. TTL 5 minutes.
+ * Cached staff list for a salon. TTL 30 seconds (invalidated on every write).
  */
 export async function getCachedStaff(salonId: string) {
   return cached(
     salonStaffKey(salonId),
     () =>
       getTenantDb().staff.findMany({
-        where: { salonId, active: true, deletedAt: null },
+        where: { salonId, active: true, isBookable: true, deletedAt: null },
         orderBy: { sortOrder: 'asc' },
       }),
-    300,
+    30,
   );
 }
 

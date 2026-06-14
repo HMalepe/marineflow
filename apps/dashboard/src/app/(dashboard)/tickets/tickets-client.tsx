@@ -1,10 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { CommsPageHint } from '@/components/comms-page-hint';
+import { TICKETS_LABEL } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 
 interface Customer {
@@ -168,12 +171,18 @@ export function TicketsClient({ token }: Props) {
   ];
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+    <div className="flex flex-col gap-4 h-[calc(100vh-4rem)]">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{TICKETS_LABEL}</h1>
+        <CommsPageHint active="tickets" />
+      </div>
+
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background">
       {/* Left panel */}
       <div className="w-80 shrink-0 flex flex-col border-r bg-background">
         <div className="p-4 border-b">
           <div className="flex items-center justify-between">
-            <h1 className="font-semibold text-lg">Tickets</h1>
+            <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Queue</h2>
             {openCount > 0 && (
               <span className="text-xs bg-red-100 text-red-700 border border-red-200 rounded-full px-2 py-0.5 font-medium">
                 {openCount} open
@@ -201,7 +210,10 @@ export function TicketsClient({ token }: Props) {
 
         <div className="flex-1 overflow-y-auto divide-y">
           {filtered.length === 0 && (
-            <p className="p-4 text-sm text-muted-foreground">No tickets</p>
+            <p className="p-4 text-sm text-muted-foreground">
+              No support tickets yet. They appear when customers report an issue, leave a complaint, or
+              get a low rating.
+            </p>
           )}
           {filtered.map((ticket) => {
             const badge = STATUS_BADGE[ticket.status] ?? STATUS_BADGE['OPEN']!;
@@ -313,10 +325,17 @@ export function TicketsClient({ token }: Props) {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-          Select a ticket to view the conversation
+        <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-sm p-8 text-center gap-2">
+          <p>Select a ticket to view messages and reply on WhatsApp.</p>
+          <p className="text-xs max-w-sm">
+            Need the live chat thread instead?{' '}
+            <Link href="/conversations" className="text-primary underline-offset-4 hover:underline">
+              Open Conversations
+            </Link>
+          </p>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { logger } from '../lib/logger.js';
 
 export interface ServiceAddonWithDetails {
   id: string;
@@ -19,41 +21,49 @@ export async function getAddonsForService(
   salonId: string,
   serviceId: string,
 ): Promise<ServiceAddonWithDetails[]> {
-  const db = getTenantDb();
-  const rows = await db.serviceAddon.findMany({
-    where: { salonId, serviceId, active: true },
-    include: {
-      addonService: {
-        select: {
-          id: true,
-          name: true,
-          priceCents: true,
-          durationMin: true,
-          description: true,
-          active: true,
-          deletedAt: true,
+  try {
+    const db = getTenantDb();
+    const rows = await db.serviceAddon.findMany({
+      where: { salonId, serviceId, active: true },
+      include: {
+        addonService: {
+          select: {
+            id: true,
+            name: true,
+            priceCents: true,
+            durationMin: true,
+            description: true,
+            active: true,
+            deletedAt: true,
+          },
         },
       },
-    },
-    orderBy: { sortOrder: 'asc' },
-  });
+      orderBy: { sortOrder: 'asc' },
+    });
 
-  return rows
-    .filter((r) => r.addonService.active && !r.addonService.deletedAt)
-    .map((r) => ({
-      id: r.id,
-      serviceId: r.serviceId,
-      addonServiceId: r.addonServiceId,
-      pitchMessage: r.pitchMessage,
-      sortOrder: r.sortOrder,
-      addon: {
-        id: r.addonService.id,
-        name: r.addonService.name,
-        priceCents: r.addonService.priceCents,
-        durationMin: r.addonService.durationMin,
-        description: r.addonService.description,
-      },
-    }));
+    return rows
+      .filter((r) => r.addonService.active && !r.addonService.deletedAt)
+      .map((r) => ({
+        id: r.id,
+        serviceId: r.serviceId,
+        addonServiceId: r.addonServiceId,
+        pitchMessage: r.pitchMessage,
+        sortOrder: r.sortOrder,
+        addon: {
+          id: r.addonService.id,
+          name: r.addonService.name,
+          priceCents: r.addonService.priceCents,
+          durationMin: r.addonService.durationMin,
+          description: r.addonService.description,
+        },
+      }));
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
+      logger.warn({ salonId, serviceId }, 'service_addon_table_missing');
+      return [];
+    }
+    throw err;
+  }
 }
 
 export function formatAddonMenu(addons: ServiceAddonWithDetails[]): string {

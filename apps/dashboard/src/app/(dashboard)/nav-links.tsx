@@ -2,6 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import {
+  ADMIN_NAV_ITEMS,
+  isNavItemActive,
+  SALON_OVERVIEW_ITEM,
+  visibleSalonNavGroups,
+} from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 import type React from 'react';
 
@@ -22,12 +28,17 @@ function NavSection({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-function NavItem({ href, children, badge }: { href: string; children: React.ReactNode; badge?: number }) {
+function NavItemLink({
+  href,
+  children,
+  badge,
+}: {
+  href: string;
+  children: React.ReactNode;
+  badge?: number;
+}) {
   const pathname = usePathname();
-  const isActive =
-    href === '/' ? pathname === '/' :
-    href === '/roster' ? pathname.startsWith('/roster') || pathname.startsWith('/staff') :
-    pathname.startsWith(href);
+  const isActive = isNavItemActive(pathname, href);
 
   return (
     <Link
@@ -54,48 +65,42 @@ export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) 
     return (
       <div className="space-y-4">
         <NavSection label="Platform">
-          <NavItem href="/">Overview</NavItem>
-          <NavItem href="/agency">Salons</NavItem>
-          <NavItem href="/admin">Admin</NavItem>
+          {ADMIN_NAV_ITEMS.filter((i) => ['/', '/agency', '/admin'].includes(i.href)).map((item) => (
+            <NavItemLink key={item.href} href={item.href}>
+              {item.label}
+            </NavItemLink>
+          ))}
         </NavSection>
         <NavSection label="Reports">
-          <NavItem href="/analytics">Analytics</NavItem>
-          <NavItem href="/billing">Billing</NavItem>
+          {ADMIN_NAV_ITEMS.filter((i) => ['/analytics', '/billing'].includes(i.href)).map((item) => (
+            <NavItemLink key={item.href} href={item.href}>
+              {item.label}
+            </NavItemLink>
+          ))}
         </NavSection>
       </div>
     );
   }
 
+  const groups = visibleSalonNavGroups(isOwner);
+
   return (
     <div className="space-y-4">
-      <NavItem href="/">Overview</NavItem>
+      <NavItemLink href={SALON_OVERVIEW_ITEM.href}>{SALON_OVERVIEW_ITEM.label}</NavItemLink>
 
-      <NavSection label="Bookings">
-        <NavItem href="/appointments">Appointments</NavItem>
-        <NavItem href="/roster">Staff Roster</NavItem>
-        <NavItem href="/conversations" badge={handoffCount}>Conversations</NavItem>
-        <NavItem href="/tickets">Tickets</NavItem>
-      </NavSection>
-
-      <NavSection label="Customers">
-        <NavItem href="/customers">Customers</NavItem>
-        <NavItem href="/campaigns">Newsletter</NavItem>
-      </NavSection>
-
-      <NavSection label="Business">
-        <NavItem href="/services">Services</NavItem>
-        <NavItem href="/faqs">Bot FAQs</NavItem>
-        <NavItem href="/analytics">Analytics</NavItem>
-        <NavItem href="/team-performance">Team</NavItem>
-        <NavItem href="/automations">Power Features</NavItem>
-      </NavSection>
-
-      {isOwner && (
-        <NavSection label="Account">
-          <NavItem href="/billing">Billing</NavItem>
-          <NavItem href="/settings">Settings</NavItem>
+      {groups.map((group) => (
+        <NavSection key={group.title} label={group.title}>
+          {group.items.map((item) => (
+            <NavItemLink
+              key={item.href}
+              href={item.href}
+              badge={item.href === '/conversations' ? handoffCount : undefined}
+            >
+              {item.label}
+            </NavItemLink>
+          ))}
         </NavSection>
-      )}
+      ))}
     </div>
   );
 }

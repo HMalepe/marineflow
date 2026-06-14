@@ -1,7 +1,7 @@
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { redirect } from 'next/navigation';
-import { LogoutButton } from './logout-button';
+import { LogoutButton, LogoutIconButton } from './logout-button';
 import { MobileNav } from './mobile-nav';
 import { NavLinks } from './nav-links';
 
@@ -73,12 +73,17 @@ export default async function DashboardLayout({
               </span>
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 leading-none mb-0.5">
               {formatRole(user.role)}
             </p>
             <p className="text-sm font-bold leading-tight truncate">{businessName}</p>
-            <p className="text-[11px] text-muted-foreground leading-tight truncate mt-0.5">{ownerName}</p>
+            <div className="flex items-center gap-0.5 mt-0.5 min-w-0">
+              <p className="text-[11px] text-muted-foreground leading-tight truncate flex-1 min-w-0">
+                {ownerName}
+              </p>
+              <LogoutIconButton />
+            </div>
             {user.phone && (
               <p className="text-[10px] text-muted-foreground/70 mt-0.5 tabular-nums">{user.phone}</p>
             )}
@@ -86,7 +91,7 @@ export default async function DashboardLayout({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="flex-1 p-3 overflow-y-auto space-y-0.5">
           <NavLinks isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
         </nav>
 

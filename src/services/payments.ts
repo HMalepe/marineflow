@@ -3,6 +3,7 @@ import { env } from '../config.js';
 import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
 import { sendWithFallback } from './channelRouter.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
+import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
@@ -164,6 +165,10 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     select: { id: true, salonId: true, start: true, status: true, salon: { select: { metadata: true, timezone: true } } },
   });
   if (confirmed) {
+    notifyAppointmentChangedLater(confirmed.salonId, appointmentId, {
+      status: confirmed.status,
+      source: 'payfast',
+    });
     void scheduleAppointmentReminders({
       id: confirmed.id,
       salonId: confirmed.salonId,

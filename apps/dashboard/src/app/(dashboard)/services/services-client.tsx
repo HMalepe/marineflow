@@ -23,6 +23,7 @@ import { SaveFormFooter } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
+import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 
 interface Service {
   id: string;
@@ -226,6 +227,17 @@ export function ServicesClient({ token }: Props) {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [formIsDirty]);
+
+  const onLiveUpdate = useCallback(
+    (type: string) => {
+      if (type === 'service.catalog_changed') {
+        void loadServices(true);
+        void loadCategories();
+      }
+    },
+    [loadServices, loadCategories],
+  );
+  const { connected: liveConnected } = useSalonLiveUpdates(token, onLiveUpdate);
 
   async function handleAddCategory(e: FormEvent) {
     e.preventDefault();
@@ -471,22 +483,27 @@ export function ServicesClient({ token }: Props) {
     if (!deleteTarget) return;
     const target = deleteTarget;
     setDeleting(true);
-    setDeleteTarget(null); // close sheet immediately so user sees feedback
+    setDeleteTarget(null);
     try {
-      const result = await apiFetch<{ ok: boolean; deactivated?: boolean }>(
+      const result = await apiFetch<{ ok: boolean; deactivated?: boolean; hadAppointments?: boolean }>(
         `/services/${target.id}`,
-        { method: 'DELETE' },
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ removeFromCatalog: true }),
+        },
         token,
       );
+      setServices((prev) => prev.filter((s) => s.id !== target.id));
       showToast(
-        result.deactivated
-          ? `${target.name} has bookings — marked inactive instead`
+        result.deactivated || result.hadAppointments
+          ? `${target.name} removed from bookings (past appointments kept on record)`
           : `${target.name} removed`,
         'success',
       );
-      await loadServices(true);
+      void loadServices(true);
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Delete failed', 'error');
+      void loadServices(true);
     } finally {
       setDeleting(false);
     }
@@ -550,8 +567,14 @@ export function ServicesClient({ token }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Services</h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2 flex-wrap">
             Manage what customers can book via WhatsApp.
+            {liveConnected && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                Live sync
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-2">
@@ -1052,8 +1075,8 @@ export function ServicesClient({ token }: Props) {
             <CardContent className="p-6 space-y-4">
               <h2 id="delete-service-title" className="font-semibold">Remove service?</h2>
               <p className="text-sm text-muted-foreground">
-                You&apos;re about to remove <strong>{deleteTarget.name}</strong>.
-                If it has existing bookings, we&apos;ll hide it from new bookings instead of deleting it.
+                You&apos;re about to remove <strong>{deleteTarget.name}</strong> from WhatsApp and the dashboard.
+                Past bookings stay on record; customers won&apos;t see this service when booking.
               </p>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -278,7 +279,7 @@ export function AnalyticsClient({ token }: Props) {
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard label="This month revenue" value="R0.00" />
-            <KpiCard label="Bookings (30 days)" value="0" />
+            <KpiCard label={`${APPOINTMENTS_LABEL} (30 days)`} value="0" />
             <KpiCard label="Retention rate"     value="—" />
             <KpiCard label="Active customers"   value="0" />
           </div>
@@ -337,7 +338,7 @@ export function AnalyticsClient({ token }: Props) {
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <KpiCard label="Total bookings" value={report.totalBookings} />
+            <KpiCard label={`Total ${APPOINTMENTS_LABEL.toLowerCase()}`} value={report.totalBookings} />
             <KpiCard label="Revenue" value={formatCurrency(report.revenueCents)} />
             <KpiCard label="Top service" value={report.topService ?? '—'} />
             <KpiCard label="No-show rate" value={`${report.noShowPct}%`} />
@@ -360,7 +361,7 @@ export function AnalyticsClient({ token }: Props) {
               trend={revenueTrend(data.revenue)}
             />
             <KpiCard
-              label="Bookings (30 days)"
+              label={`${APPOINTMENTS_LABEL} (30 days)`}
               value={last30DaysBookings(data.dailyBookings)}
               trend={bookingsTrend(data.dailyBookings)}
             />
@@ -754,7 +755,7 @@ export function AnalyticsClient({ token }: Props) {
                   <thead>
                     <tr className="bg-muted/50 text-left">
                       <th className="px-4 py-2.5 font-medium text-muted-foreground">Staff</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Bookings</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">{APPOINTMENTS_LABEL}</th>
                       <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Completed</th>
                       <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Revenue</th>
                       <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">No-shows</th>

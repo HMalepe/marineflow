@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
 import { incrementCustomerBookingCount } from '../services/noShowRisk.js';
+import { notifyAppointmentBookedLater } from '../services/rosterSync.js';
 
 export async function internalRoutes(app: FastifyInstance) {
   app.post<{
@@ -57,6 +58,14 @@ export async function internalRoutes(app: FastifyInstance) {
     });
 
     await incrementCustomerBookingCount(customer.id, prisma).catch(() => {});
+
+    notifyAppointmentBookedLater(salon.id, appt.id, {
+      staffId: staff.id,
+      serviceId: service.id,
+      start: start.toISOString(),
+      status: appt.status,
+      source: 'internal',
+    });
 
     return { appointmentId: appt.id };
   });

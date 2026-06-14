@@ -70,6 +70,12 @@ import {
 } from '../lib/followUpMessages.js';
 import { SEASONAL_CAMPAIGN_TEMPLATES } from '../lib/campaignTemplates.js';
 import { maybeSendReferralPrompt } from '../services/referralProgram.js';
+import {
+  notifyAppointmentChangedLater,
+  syncSalonRosterLater,
+} from '../services/rosterSync.js';
+import { removeServiceFromCatalog } from '../services/serviceCatalog.js';
+import { logger } from '../lib/logger.js';
 
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
 import {
@@ -874,6 +880,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           completedVisits: completedCount,
         }).catch(() => {});
 
+        notifyAppointmentChangedLater(appt.salonId, appt.id, {
+          status: 'COMPLETED',
+          staffId: appt.staffId,
+          source: 'dashboard',
+        });
         return { ok: true };
       });
     },
@@ -959,6 +970,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           }).catch(() => {});
         }
 
+        notifyAppointmentChangedLater(appt.salonId, appt.id, {
+          status: 'NO_SHOW',
+          staffId: appt.staffId,
+          source: 'dashboard',
+        });
         return { ok: true, noShowRisk, depositForfeited: depositWasPaid };
       });
     },
@@ -1021,6 +1037,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             body: `Hi ${firstName_} 😊 Good news — ${salonName} has waived your cancellation fee. We hope to see you again soon!`,
           }).catch(() => {});
         }
+
+        notifyAppointmentChangedLater(user.salonId, appt.id, {
+          penaltyWaived: true,
+          source: 'dashboard',
+        });
 
         return { ok: true };
       });
@@ -1647,6 +1668,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: { id: staff.id },
         include: { workingHours: true },
       });
+      syncSalonRosterLater(user.salonId, 'staff', { staffId: staff.id, action: 'create' });
       return { staff: withHours };
     });
   });
@@ -1695,6 +1717,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           entityId: staff.id,
         },
       });
+      syncSalonRosterLater(user.salonId, 'staff', { staffId: staff.id, action: 'update' });
       return { staff };
     });
   });
@@ -1725,6 +1748,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: existing.id,
           },
         });
+        syncSalonRosterLater(user.salonId, 'staff', { staffId: existing.id, action: 'delete' });
         return { ok: true };
       });
     },
@@ -1789,6 +1813,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             payload: { days: hours.length },
           },
         });
+        syncSalonRosterLater(user.salonId, 'staff', { staffId: id, action: 'schedule' });
         return { hours: updated };
       });
     },
@@ -1938,6 +1963,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           data: { staffId: id, start: startDate, end: endDate, reason: reason?.trim() || null },
         });
 
+        syncSalonRosterLater(user.salonId, 'staff', { staffId: id, action: 'time_off_add' });
         return {
           timeOff: {
             id:     timeOff.id,
@@ -1968,6 +1994,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         await db.timeOff.delete({ where: { id: timeOffId } });
+        syncSalonRosterLater(user.salonId, 'staff', { staffId: id, action: 'time_off_remove' });
         return { ok: true };
       });
     },
@@ -2474,6 +2501,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           },
         });
 
+        syncSalonRosterLater(user.salonId, 'services', { serviceId: service.id, action: 'create' });
         return { service };
       });
     },
@@ -2488,6 +2516,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       durationMin?: number;
       bufferMin?: number;
       active?: boolean;
+      removeFromCatalog?: boolean;
     };
   }>(
     '/services/:id',
@@ -2500,10 +2529,30 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         });
         if (!existing) {
           reply.code(404);
-          return { error: 'not_found' };
+          return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active } = request.body;
+        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog } =
+          request.body;
+
+        if (removeFromCatalog) {
+          try {
+            const result = await removeServiceFromCatalog(db, user, existing.id);
+            return {
+              ok: true,
+              deactivated: result.hadAppointments,
+              hadAppointments: result.hadAppointments,
+            };
+          } catch (err) {
+            const status = (err as { statusCode?: number }).statusCode ?? 500;
+            reply.code(status);
+            return {
+              error: err instanceof Error ? err.message : 'remove_failed',
+              message: 'Could not remove service. Try again or contact support.',
+            };
+          }
+        }
+
         if (name !== undefined && !name.trim()) {
           reply.code(400);
           return { error: 'name_required' };
@@ -2539,6 +2588,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           },
         });
 
+        syncSalonRosterLater(user.salonId, 'services', { serviceId: updated.id, action: 'update' });
         return { service: updated };
       });
     },
@@ -2550,49 +2600,25 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const existing = await db.service.findFirst({
-          where: { id: request.params.id, deletedAt: null },
-        });
-        if (!existing) {
-          reply.code(404);
-          return { error: 'not_found' };
+        try {
+          const result = await removeServiceFromCatalog(db, user, request.params.id);
+          return {
+            ok: true,
+            deactivated: result.hadAppointments,
+            hadAppointments: result.hadAppointments,
+          };
+        } catch (err) {
+          const status = (err as { statusCode?: number }).statusCode ?? 500;
+          reply.code(status);
+          if (status === 404) {
+            return { error: 'not_found', message: 'Service not found.' };
+          }
+          logger.warn({ err, serviceId: request.params.id }, 'service_delete_failed');
+          return {
+            error: 'remove_failed',
+            message: 'Could not remove service. Try again or contact support.',
+          };
         }
-
-        const apptCount = await db.appointment.count({
-          where: { serviceId: existing.id, status: { notIn: ['CANCELLED'] } },
-        });
-        if (apptCount > 0) {
-          await db.service.update({
-            where: { id: existing.id },
-            data: { active: false },
-          });
-          await db.auditLog.create({
-            data: {
-              salonId: user.salonId,
-              actorUserId: user.sub,
-              action: 'service_deactivate',
-              entity: 'Service',
-              entityId: existing.id,
-              payload: { reason: 'has_appointments' },
-            },
-          });
-          return { ok: true, deactivated: true };
-        }
-
-        await db.service.update({
-          where: { id: existing.id },
-          data: { deletedAt: new Date(), active: false },
-        });
-        await db.auditLog.create({
-          data: {
-            salonId: user.salonId,
-            actorUserId: user.sub,
-            action: 'service_delete',
-            entity: 'Service',
-            entityId: existing.id,
-          },
-        });
-        return { ok: true };
       });
     },
   );
@@ -2612,6 +2638,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const svc = await db.service.findFirst({ where: { id: request.params.id, salonId: user.salonId, deletedAt: null } });
         if (!svc) { reply.code(404); return { error: 'not_found' }; }
         await db.service.update({ where: { id: svc.id }, data: { sortOrder } });
+        syncSalonRosterLater(user.salonId, 'services', { serviceId: svc.id, action: 'sort' });
         return { ok: true };
       });
     },
@@ -3841,6 +3868,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const cat = await db.serviceCategory.create({
           data: { salonId: user.salonId, name: name.trim(), slug: finalSlug },
         });
+        syncSalonRosterLater(user.salonId, 'services', { categoryId: cat.id, action: 'category_create' });
         return { category: cat };
       });
     },
@@ -3862,6 +3890,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(sortOrder !== undefined ? { sortOrder } : {}),
           },
         });
+        syncSalonRosterLater(user.salonId, 'services', { categoryId: updated.id, action: 'category_update' });
         return { category: updated };
       });
     },
@@ -3878,6 +3907,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         // Unlink services from this category before deleting
         await db.service.updateMany({ where: { categoryId: cat.id }, data: { categoryId: null } });
         await db.serviceCategory.delete({ where: { id: cat.id } });
+        syncSalonRosterLater(user.salonId, 'services', { categoryId: cat.id, action: 'category_delete' });
         return { ok: true };
       });
     },
@@ -3914,6 +3944,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           where: { staffId_serviceId: { staffId, serviceId } },
           data: { priceCentsOverride: priceCentsOverride ?? null },
         });
+        syncSalonRosterLater(user.salonId, 'services', { staffId, serviceId, action: 'price_override' });
         return { priceCentsOverride: updated.priceCentsOverride };
       });
     },
@@ -4091,6 +4122,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           data: { status: 'COMPLETED' },
         });
 
+        if (result.count > 0) {
+          notifyAppointmentChangedLater(user.salonId, ids.join(','), {
+            status: 'COMPLETED',
+            count: result.count,
+            source: 'dashboard_bulk',
+          });
+        }
+
         return { completed: result.count, skipped: ids.length - result.count };
       });
     },
@@ -4119,6 +4158,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           },
           data: { status: 'CANCELLED' },
         });
+        if (result.count > 0) {
+          notifyAppointmentChangedLater(user.salonId, 'stale-holds', {
+            status: 'CANCELLED',
+            count: result.count,
+            source: 'release_stale_holds',
+          });
+        }
         return { released: result.count };
       });
     },

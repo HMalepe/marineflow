@@ -75,40 +75,13 @@ export interface CustomBotFlow {
 
 export async function saveGoogleReviewSettings(
   googleReviewUrl: string | null,
-  reviewIncentive?: { incentiveEnabled: boolean; incentiveCents: number },
-): Promise<{ salon?: SalonSettings; error?: string }> {
-  const token = await getToken();
-  if (!token) return { error: 'Not authenticated' };
-  try {
-    const body: Record<string, unknown> = { googleReviewUrl };
-    if (reviewIncentive) {
-      body.automations = {
-        googleReview: {
-          incentiveEnabled: reviewIncentive.incentiveEnabled,
-          incentiveCents: reviewIncentive.incentiveCents,
-        },
-      };
-    }
-    const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    }, token);
-    return { salon: data.salon };
-  } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Save failed' };
-  }
-}
-
-export async function saveReminderSettings(
-  enabled: boolean,
-  hoursBefore: number[],
 ): Promise<{ salon?: SalonSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };
   try {
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
-      body: JSON.stringify({ automations: { reminders: { enabled, hoursBefore } } }),
+      body: JSON.stringify({ googleReviewUrl }),
     }, token);
     return { salon: data.salon };
   } catch (e) {

@@ -40,9 +40,31 @@ describe('hierarchicalMenu', () => {
     expect(text).not.toContain('MarineFlow Demo');
   });
 
-  it('builds My Bookings sub-menu with Book as first option', () => {
-    expect(buildSubMenuText('my_appointments')).toContain('1 — Book');
-    expect(buildSubMenuText('my_appointments')).toContain('2 — View');
+  it('builds My Bookings sub-menu without duplicate Book option', () => {
+    const text = buildSubMenuText('my_appointments');
+    expect(text).toContain('1 — View');
+    expect(text).toContain('2 — Reschedule');
+    expect(text).toContain('3 — Cancel');
+    expect(text).not.toMatch(/^\d — Book$/m);
+  });
+
+  it('builds Rewards sub-menu without misleading Coupons entry', () => {
+    const text = buildSubMenuText('rewards');
+    expect(text).toContain('1 — My Points');
+    expect(text).toContain('3 — Referrals');
+    expect(text).not.toContain('Coupons');
+  });
+
+  it('hides Rewards from main menu when loyalty is disabled', () => {
+    const text = buildMainMenuText({ ...salon, botLoyaltyEnabled: false });
+    expect(text).toContain('1 — Book an appointment');
+    expect(text).toContain('4 — Promotions');
+    expect(text).not.toMatch(/^\d — Rewards$/m);
+    expect(parseMainMenuSelection('4', { botLoyaltyEnabled: false })).toEqual({
+      kind: 'category',
+      id: 'promotions',
+    });
+    expect(parseMainMenuSelection('7', { botLoyaltyEnabled: false })).toBeNull();
   });
 
   it('parses main menu selections', () => {
@@ -56,6 +78,9 @@ describe('hierarchicalMenu', () => {
     expect(isValidSubMenuChoice('services', 5)).toBe(true);
     expect(isValidSubMenuChoice('services', 6)).toBe(false);
     expect(isValidSubMenuChoice('my_appointments', 3)).toBe(true);
+    expect(isValidSubMenuChoice('my_appointments', 4)).toBe(false);
+    expect(isValidSubMenuChoice('rewards', 3)).toBe(true);
+    expect(isValidSubMenuChoice('rewards', 4)).toBe(false);
   });
 
   it('detects menu navigation input', () => {

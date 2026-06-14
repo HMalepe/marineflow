@@ -38,6 +38,7 @@ import { SaveFormFooter } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
+import { BOT_FAQS_LABEL } from '@/lib/dashboard-nav';
 import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
 
@@ -575,7 +576,7 @@ export function FaqsClient({ token }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">FAQs</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{BOT_FAQS_LABEL}</h1>
           <p className="text-muted-foreground text-sm mt-1 max-w-xl">
             Manage answers your WhatsApp bot shares. Only approved FAQs appear in the menu and semantic search.
           </p>

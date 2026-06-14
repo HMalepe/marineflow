@@ -31,12 +31,13 @@ import {
 } from './loyalty.js';
 import { createDepositCheckoutSession } from './payments.js';
 import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
+import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import {
   buildMainMenuText,
   buildSubMenuText,
+  getSubMenuItemCount,
   isValidSubMenuChoice,
-  isWhatsAppMenuInput,
   normalizeMenuCategoryId,
   parseMainMenuSelection,
   parseSubMenuChoice,
@@ -78,6 +79,7 @@ import {
   buildPopiaConsentMessage,
   isGlobalMarketingOptIn,
   isGlobalMarketingOptOut,
+  marketingConsentGatePending,
   needsMarketingConsentPrompt,
   parseMarketingConsentReply,
 } from './marketingConsent.js';
@@ -222,7 +224,24 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
-  return !customer.firstName || !customer.dateOfBirth;
+  return !customer.firstName || !customer.email;
+}
+
+/** Max time slots shown in one WhatsApp list (was 8 — too restrictive on busy days). */
+const MAX_SLOT_OPTIONS = 12;
+
+function formatSlotMenuLines(
+  slots: { start: Date }[],
+  timezone: string,
+): string[] {
+  return slots.slice(0, MAX_SLOT_OPTIONS).map((s, i) => {
+    const dt = DateTime.fromJSDate(s.start).setZone(timezone);
+    return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
+  });
+}
+
+function visibleSlotCount(slotCount: number): number {
+  return Math.min(slotCount, MAX_SLOT_OPTIONS);
 }
 
 const WHATSAPP_MENU_STEPS: ConversationStep[] = [
@@ -262,6 +281,67 @@ async function loadActiveServicesForBooking(salonId: string) {
     }
     throw err;
   }
+}
+
+/** Live service list for picker — drops stale filter ids when dashboard catalog changed mid-flow. */
+async function resolveServicesForPicker(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<{ services: Awaited<ReturnType<typeof loadActiveServicesForBooking>>; clearedStaleFilter: boolean }> {
+  const filterIds = ctx(conv).serviceFilterIds;
+  const all = await loadActiveServicesForBooking(conv.salonId);
+  if (!Array.isArray(filterIds) || filterIds.length === 0) {
+    return { services: all, clearedStaleFilter: false };
+  }
+  const filtered = all.filter((s) => (filterIds as string[]).includes(s.id));
+  if (filtered.length > 0) {
+    return { services: filtered, clearedStaleFilter: false };
+  }
+  await saveCtx(conv.id, { serviceFilterIds: undefined });
+  syncConvContext(conv, { serviceFilterIds: undefined });
+  return { services: all, clearedStaleFilter: true };
+}
+
+const APPOINTMENT_DATE_HINT = 'Or type a date DD/MM/YYYY (e.g. 15/06/2026)';
+
+function isoDateFromParts(y: number, m: number, d: number): string | null {
+  const date = new Date(y, m - 1, d);
+  if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+  return null;
+}
+
+/** YYYY-MM-DD → DD/MM/YYYY for customer-facing prompts. */
+function formatDisplayLocalDate(isoDate: string): string {
+  const m = isoDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return isoDate;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
+/** Parse DD/MM/YYYY or YYYY-MM-DD into YYYY-MM-DD for slot lookup. */
+function parseAppointmentLocalDate(text: string): string | null {
+  const t = text.trim();
+  const slash = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) {
+    return isoDateFromParts(
+      parseInt(slash[3]!, 10),
+      parseInt(slash[2]!, 10),
+      parseInt(slash[1]!, 10),
+    );
+  }
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) {
+    return isoDateFromParts(
+      parseInt(iso[1]!, 10),
+      parseInt(iso[2]!, 10),
+      parseInt(iso[3]!, 10),
+    );
+  }
+  return null;
+}
+
+function formatDateMenuLines(isoDates: string[]): string[] {
+  return isoDates.map((d, i) => `${i + 1}. ${formatDisplayLocalDate(d)}`);
 }
 
 /** Parse DD/MM/YYYY or YYYY-MM-DD.  Returns null for unrecognised formats or impossible dates. */
@@ -503,6 +583,21 @@ async function reply(
   );
 }
 
+async function startMarketingConsentGate(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  await saveCtx(conv.id, {}, ConversationStep.MARKETING_CONSENT);
+  syncConvContext(conv, {}, ConversationStep.MARKETING_CONSENT);
+  pendingWelcomeJourney = null;
+  await reply(conv, buildPopiaConsentMessage(salonDisplayName(conv.salon)));
+}
+
+function shouldPromptMarketingConsentBeforeMenu(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): boolean {
+  return marketingConsentGatePending(conv.salon, conv.customer.marketingConsentStatus);
+}
+
 async function sendReceptionistGreeting(conv: Conversation & { customer: Customer; salon: Salon }) {
   const salon = conv.salon;
   const salonName = salon.tradingName?.trim() || salon.name;
@@ -511,19 +606,15 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
   const timeGreeting =
     timeHour < 12 ? 'Good morning' : timeHour < 17 ? 'Good afternoon' : 'Good evening';
 
-  // New customer — no profile yet. Show POPIA first before anything else.
   if (isProfileIncomplete(customer)) {
-    await saveCtx(conv.id, {}, ConversationStep.BOOKING_POPIA_CONSENT);
-    syncConvContext(conv, {}, ConversationStep.BOOKING_POPIA_CONSENT);
     await reply(
       conv,
       [
-        `${timeGreeting}! 👋 Welcome to *${salonName}* — we\'re happy to have you!`,
+        `${timeGreeting}! 👋 Welcome to *${salonName}* — we're happy to have you!`,
         '',
-        'Before we get started, we just need a quick moment for a legal step. 👇',
+        'Reply *MENU* to see our services, book an appointment, or browse FAQs.',
       ].join('\n'),
     );
-    await reply(conv, buildBookingPopiaConsentMessage());
     return;
   }
 
@@ -764,6 +855,11 @@ export async function handleInboundWhatsApp(input: {
     lockAcquired = acquired === 'OK';
     if (!lockAcquired) {
       logger.warn({ tenantId: tenant.id, waId }, 'concurrent_message_blocked');
+      await sendTenantWhatsApp(
+        tenant.id,
+        waId,
+        'Still working on your last message — please wait a moment before sending another. 🙂',
+      );
       return;
     }
     startOutboundDeferral();
@@ -994,7 +1090,7 @@ async function processInboundWhatsApp(
   const lower = text.toLowerCase();
 
   // ── WhatsApp core flows (always win over dashboard marketing / follow-up settings) ──
-  if (lower === 'undo' || lower === 'back' || lower === 'menu') {
+  if (lower === 'menu') {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyMenu(conv);
@@ -1002,8 +1098,12 @@ async function processInboundWhatsApp(
   }
 
   if (isConversationWakeMessage(text)) {
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
+    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
+    if (shouldPromptMarketingConsentBeforeMenu(conv)) {
+      await startMarketingConsentGate(conv);
+      return;
+    }
     await sendReceptionistGreeting(conv);
     return;
   }
@@ -1035,6 +1135,11 @@ async function processInboundWhatsApp(
   if (WHATSAPP_MENU_STEPS.includes(conv.step)) {
     try {
       conv = await reloadConversation(conv.id);
+
+      if (shouldPromptMarketingConsentBeforeMenu(conv)) {
+        await startMarketingConsentGate(conv);
+        return;
+      }
 
       const supportIntent = parseFreeTextSupportIntent(text);
       if (supportIntent) {
@@ -1071,10 +1176,6 @@ async function processInboundWhatsApp(
     }
     return;
   }
-
-  // Dashboard marketing consent — never blocks menu numbers or booking navigation
-  const consentHandled = await handleMarketingConsentFlow(conv, text);
-  if (consentHandled) return;
 
   const waitlistHandled = await tryHandleWaitlistReply(conv, text, {
     reply: (body) => reply(conv, body),
@@ -1461,51 +1562,6 @@ async function handleMarketingConsentFlow(
   const salon = conv.salon;
   const status = conv.customer.marketingConsentStatus;
 
-  // Marketing consent gate is disabled — chatbot booking flow takes priority.
-  // Only process explicit STOP/START opt-out and opt-in commands.
-  const consentGateEnabled = false;
-
-  if (!consentGateEnabled || !salon.botAskMarketingConsent) {
-    // Still honour global STOP opt-out (legal requirement)
-    if (isGlobalMarketingOptOut(text)) {
-      if (status !== 'DECLINED') {
-        await applyMarketingConsentChoice({
-          customerId: conv.customerId,
-          salonId: salon.id,
-          choice: 'decline',
-          source: 'whatsapp_stop',
-        });
-        void getTenantDb().analyticsEvent.create({
-          data: {
-            salonId: salon.id,
-            customerId: conv.customerId,
-            type: 'marketing_opt_out',
-            payload: { source: 'whatsapp_stop' },
-          },
-        }).catch(() => {});
-      }
-      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-      await replyWithMenu(conv, buildConsentStopMessage());
-      return true;
-    }
-    if (status === 'DECLINED' && isGlobalMarketingOptIn(text)) {
-      await applyMarketingConsentChoice({
-        customerId: conv.customerId,
-        salonId: salon.id,
-        choice: 'accept',
-        source: 'whatsapp_opt_in',
-      });
-      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-      await replyWithMenu(conv, buildConsentAcceptedMessage());
-      return true;
-    }
-    return false;
-  }
-
-  // WhatsApp menu/booking navigation always takes priority over dashboard consent
-  if (isWhatsAppMenuInput(text, ctx(conv).menuCategory)) return false;
-  if (isConversationWakeMessage(text)) return false;
-
   if (isGlobalMarketingOptOut(text)) {
     if (status !== 'DECLINED') {
       await applyMarketingConsentChoice({
@@ -1514,7 +1570,6 @@ async function handleMarketingConsentFlow(
         choice: 'decline',
         source: 'whatsapp_stop',
       });
-      // Item 30: track opt-out as analytics event for campaign metrics
       void getTenantDb().analyticsEvent.create({
         data: {
           salonId: salon.id,
@@ -1541,8 +1596,14 @@ async function handleMarketingConsentFlow(
     return true;
   }
 
-  if (!needsMarketingConsentPrompt(status)) {
+  if (!salon.botAskMarketingConsent || conv.step !== ConversationStep.MARKETING_CONSENT) {
     return false;
+  }
+
+  if (!needsMarketingConsentPrompt(status)) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return true;
   }
 
   const choice = parseMarketingConsentReply(text);
@@ -1553,15 +1614,9 @@ async function handleMarketingConsentFlow(
       choice,
       source: 'whatsapp',
     });
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     const ack = choice === 'accept' ? buildConsentAcceptedMessage() : buildConsentDeclinedMessage();
     await replyWithMenu(conv, ack);
-    return true;
-  }
-
-  if (conv.step !== ConversationStep.MARKETING_CONSENT) {
-    await saveCtx(conv.id, {}, ConversationStep.MARKETING_CONSENT);
-    await reply(conv, buildPopiaConsentMessage(salon.tradingName ?? salon.name));
     return true;
   }
 
@@ -1569,11 +1624,17 @@ async function handleMarketingConsentFlow(
   return true;
 }
 
-const BOOKING_FLOW_STEPS = new Set([
-  ConversationStep.PICK_SERVICE,
+const BOOKING_FLOW_STEPS = new Set<ConversationStep>([
+  ConversationStep.COLLECT_FIRST_NAME,
+  ConversationStep.COLLECT_EMAIL,
+  ConversationStep.COLLECT_DATE_OF_BIRTH,
+  ConversationStep.BOOKING_POPIA_CONSENT,
+  ConversationStep.PICK_BRANCH,
   ConversationStep.PICK_SERVICE_CATEGORY,
+  ConversationStep.PICK_SERVICE,
   ConversationStep.PICK_STAFF,
   ConversationStep.PICK_DATE,
+  ConversationStep.PICK_SLOT,
   ConversationStep.CONFIRM_BOOKING,
   ConversationStep.MANAGE_BOOKING,
   ConversationStep.CONFIRM_CANCEL,
@@ -1581,6 +1642,309 @@ const BOOKING_FLOW_STEPS = new Set([
 ]);
 
 const SESSION_STALE_MS = 30 * 60 * 1000; // 30 minutes
+
+function isBackCommand(text: string): boolean {
+  return /^(back|undo)\b/i.test(text.trim());
+}
+
+function isMenuCommand(text: string): boolean {
+  return /^menu$/i.test(text.trim());
+}
+
+async function repromptPickBranch(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const branches = await getTenantDb().branch.findMany({
+    where: { salonId: conv.salonId, isActive: true },
+    orderBy: { sortOrder: 'asc' },
+  });
+  if (branches.length <= 1) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+  const lines = branches.map((b, i) => `${i + 1}. ${b.name}${b.city ? ` (${b.city})` : ''}`);
+  await saveCtx(conv.id, { branchOptions: branches.map((b) => b.id) }, ConversationStep.PICK_BRANCH);
+  syncConvContext(conv, { branchOptions: branches.map((b) => b.id) }, ConversationStep.PICK_BRANCH);
+  await reply(conv, ['Which location?', ...lines, '', 'Reply BACK for main menu.'].join('\n'));
+}
+
+async function repromptPickServiceCategory(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const catIds = (c.serviceCategoryOptions ?? []) as string[];
+  const allServices = await loadActiveServicesForBooking(conv.salonId);
+  const categories = new Map<string, { name: string; sortOrder: number }>();
+  const uncategorised: typeof allServices = [];
+  for (const s of allServices) {
+    if (s.category && catIds.includes(s.category.id)) {
+      categories.set(s.category.id, { name: s.category.name, sortOrder: s.category.sortOrder });
+    } else if (!s.category) {
+      uncategorised.push(s);
+    }
+  }
+  const catList = [...categories.entries()]
+    .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+    .map(([id, cat]) => ({ id, ...cat }));
+  const lines = catList.map((cat, i) => `${i + 1}. ${sanitize(cat.name)}`);
+  if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
+  await reply(
+    conv,
+    ['What type of service are you looking for?', '', ...lines, '', 'Reply BACK to go back.'].join('\n'),
+  );
+}
+
+async function repromptPickService(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const { services, clearedStaleFilter } = await resolveServicesForPicker(conv);
+  if (services.length === 0) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyWithMenu(conv, 'No services are available to book right now.');
+    return;
+  }
+  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  const header = clearedStaleFilter
+    ? 'That service list changed — pick again:'
+    : services.length > 8
+      ? `We have ${services.length} services — pick a number:`
+      : 'Pick a service:';
+  await reply(conv, [header, ...lines, '', 'Reply BACK to go back.'].join('\n'));
+}
+
+async function repromptPickStaff(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const serviceId = c.selectedServiceId as string | undefined;
+  if (!serviceId) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const { staffList, preferredId } = await getStaffListWithPreference(conv, service.id);
+  if (staffList.length === 0) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyWithMenu(conv, `Sorry, no staff are available for *${sanitize(service.name)}* right now.`);
+    return;
+  }
+  await saveCtx(conv.id, { staffOrderIds: staffList.map((s) => s.id) });
+  const header = preferredId
+    ? `Last time you booked with ${sanitize(staffList[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
+    : 'Choose stylist:';
+  await reply(conv, [header, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK to go back.'].join('\n'));
+}
+
+async function repromptPickDate(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const dates = await suggestBookingDates(conv.salonId, 14);
+  if (dates.length === 0) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    const phone = conv.salon.phoneDisplay?.trim();
+    const msg = phone
+      ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
+      : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
+    await replyWithMenu(conv, msg);
+    return;
+  }
+  const lines = formatDateMenuLines(dates.slice(0, 10));
+  await reply(
+    conv,
+    [
+      'Pick a date (next available days):',
+      ...lines,
+      '',
+      APPOINTMENT_DATE_HINT,
+      'Reply BACK to go back.',
+    ].join('\n'),
+  );
+}
+
+async function repromptPickSlot(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const serviceId = c.selectedServiceId as string | undefined;
+  const staffId = c.selectedStaffId as string | undefined;
+  const localDateStr = c.localDateStr as string | undefined;
+  if (!serviceId || !staffId || !localDateStr) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+  const { slots, tooLong } = await getAvailableSlots({
+    salonId: conv.salonId,
+    service,
+    staff,
+    localDateStr,
+  });
+  if (tooLong || slots.length === 0) {
+    await saveCtx(conv.id, { localDateStr: undefined, slotStartIso: undefined }, ConversationStep.PICK_DATE);
+    syncConvContext(conv, { localDateStr: undefined, slotStartIso: undefined }, ConversationStep.PICK_DATE);
+    await repromptPickDate(conv);
+    return;
+  }
+  const lines = formatSlotMenuLines(slots, conv.salon.timezone);
+  const extra =
+    slots.length > MAX_SLOT_OPTIONS
+      ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
+      : '';
+  await reply(conv, ['Pick a time slot:', ...lines, extra, '', 'Reply BACK to choose a different date.'].join('\n'));
+}
+
+/** Step back one level in the booking funnel and re-show the previous prompt. */
+async function goBackOneStep(conv: Conversation & { customer: Customer; salon: Salon }): Promise<void> {
+  switch (conv.step) {
+    case ConversationStep.CONFIRM_BOOKING:
+      await saveCtx(
+        conv.id,
+        { slotStartIso: undefined, quickPickOptions: undefined },
+        ConversationStep.PICK_SLOT,
+      );
+      syncConvContext(conv, { slotStartIso: undefined, quickPickOptions: undefined }, ConversationStep.PICK_SLOT);
+      await repromptPickSlot(conv);
+      return;
+
+    case ConversationStep.PICK_SLOT:
+      await saveCtx(conv.id, { localDateStr: undefined, slotStartIso: undefined }, ConversationStep.PICK_DATE);
+      syncConvContext(conv, { localDateStr: undefined, slotStartIso: undefined }, ConversationStep.PICK_DATE);
+      await repromptPickDate(conv);
+      return;
+
+    case ConversationStep.PICK_DATE:
+      if (conv.salon.botAllowStaffPick) {
+        await saveCtx(
+          conv.id,
+          { selectedStaffId: undefined, anyStaff: undefined, staffOrderIds: undefined },
+          ConversationStep.PICK_STAFF,
+        );
+        syncConvContext(
+          conv,
+          { selectedStaffId: undefined, anyStaff: undefined, staffOrderIds: undefined },
+          ConversationStep.PICK_STAFF,
+        );
+        await repromptPickStaff(conv);
+      } else {
+        await saveCtx(
+          conv.id,
+          { selectedServiceId: undefined, serviceFilterIds: undefined },
+          ConversationStep.PICK_SERVICE,
+        );
+        syncConvContext(
+          conv,
+          { selectedServiceId: undefined, serviceFilterIds: undefined },
+          ConversationStep.PICK_SERVICE,
+        );
+        await repromptPickService(conv);
+      }
+      return;
+
+    case ConversationStep.PICK_STAFF:
+      await saveCtx(conv.id, { selectedServiceId: undefined }, ConversationStep.PICK_SERVICE);
+      syncConvContext(conv, { selectedServiceId: undefined }, ConversationStep.PICK_SERVICE);
+      await repromptPickService(conv);
+      return;
+
+    case ConversationStep.PICK_SERVICE: {
+      const c = ctx(conv);
+      if (Array.isArray(c.serviceFilterIds) && (c.serviceFilterIds as string[]).length > 0) {
+        await saveCtx(conv.id, { serviceFilterIds: undefined }, ConversationStep.PICK_SERVICE_CATEGORY);
+        syncConvContext(conv, { serviceFilterIds: undefined }, ConversationStep.PICK_SERVICE_CATEGORY);
+        await repromptPickServiceCategory(conv);
+        return;
+      }
+      const branchCount = await getTenantDb().branch.count({
+        where: { salonId: conv.salonId, isActive: true },
+      });
+      if (branchCount > 1) {
+        await saveCtx(
+          conv.id,
+          { selectedBranchId: undefined, serviceCategoryOptions: undefined },
+          ConversationStep.PICK_BRANCH,
+        );
+        syncConvContext(
+          conv,
+          { selectedBranchId: undefined, serviceCategoryOptions: undefined },
+          ConversationStep.PICK_BRANCH,
+        );
+        await repromptPickBranch(conv);
+        return;
+      }
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyMenu(conv);
+      return;
+    }
+
+    case ConversationStep.PICK_SERVICE_CATEGORY: {
+      const branchCount = await getTenantDb().branch.count({
+        where: { salonId: conv.salonId, isActive: true },
+      });
+      if (branchCount > 1) {
+        await saveCtx(
+          conv.id,
+          { serviceCategoryOptions: undefined, serviceFilterIds: undefined },
+          ConversationStep.PICK_BRANCH,
+        );
+        syncConvContext(
+          conv,
+          { serviceCategoryOptions: undefined, serviceFilterIds: undefined },
+          ConversationStep.PICK_BRANCH,
+        );
+        await repromptPickBranch(conv);
+        return;
+      }
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyMenu(conv);
+      return;
+    }
+
+    case ConversationStep.PICK_BRANCH:
+      await saveCtx(
+        conv.id,
+        {
+          branchOptions: undefined,
+          selectedBranchId: undefined,
+          serviceCategoryOptions: undefined,
+          serviceFilterIds: undefined,
+        },
+        ConversationStep.MENU,
+      );
+      syncConvContext(
+        conv,
+        {
+          branchOptions: undefined,
+          selectedBranchId: undefined,
+          serviceCategoryOptions: undefined,
+          serviceFilterIds: undefined,
+        },
+        ConversationStep.MENU,
+      );
+      await replyMenu(conv);
+      return;
+
+    case ConversationStep.COLLECT_DATE_OF_BIRTH:
+      await saveCtx(conv.id, { pendingEmail: undefined }, ConversationStep.COLLECT_EMAIL);
+      syncConvContext(conv, { pendingEmail: undefined }, ConversationStep.COLLECT_EMAIL);
+      await reply(
+        conv,
+        [
+          'What is your *email address*?',
+          '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
+          '',
+          'Reply BACK to go back.',
+        ].join('\n'),
+      );
+      return;
+
+    case ConversationStep.COLLECT_EMAIL:
+      await saveCtx(conv.id, { pendingFirstName: undefined }, ConversationStep.COLLECT_FIRST_NAME);
+      syncConvContext(conv, { pendingFirstName: undefined }, ConversationStep.COLLECT_FIRST_NAME);
+      await reply(conv, 'What is your *first name*? (letters only)\n\nReply BACK for main menu.');
+      return;
+
+    case ConversationStep.COLLECT_FIRST_NAME:
+    case ConversationStep.BOOKING_POPIA_CONSENT:
+    default:
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyMenu(conv);
+  }
+}
 
 async function routeConversation(
   conv: Conversation & { customer: Customer; salon: Salon },
@@ -1597,6 +1961,18 @@ async function routeConversation(
     await saveCtx(conv.id, {}, ConversationStep.IDLE);
     syncConvContext(conv, {}, ConversationStep.IDLE);
     await replyWithMenu(conv, '👋 It\'s been a while — your previous session has ended. Here\'s the menu to start fresh:');
+    return;
+  }
+
+  if (isMenuCommand(t)) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+
+  if (isBackCommand(t)) {
+    await goBackOneStep(conv);
     return;
   }
 
@@ -1834,39 +2210,51 @@ async function handleCollectEmail(
   await reply(
     conv,
     [
-      'Got it! Last question — what is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
+      'Almost done!',
       '',
-      '_We ask for your DOB for two reasons: some services have different pricing for children vs adults, and we\'d love to send you a little birthday treat! 🎂_',
+      '*Date of birth* is optional (for birthday treats 🎂).',
+      'Reply DD/MM/YYYY (e.g. 15/06/1990), or *SKIP* to continue booking.',
       '',
       'Reply *SKIP* to skip · *BACK* for menu.',
     ].join('\n'),
   );
 }
 
+async function commitPendingProfileAndContinueBooking(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  data: { firstName: string; email: string; dateOfBirth?: Date },
+): Promise<void> {
+  const db = getTenantDb();
+  await db.customer.update({
+    where: { id: conv.customerId },
+    data: {
+      firstName: data.firstName,
+      email: data.email,
+      ...(data.dateOfBirth ? { dateOfBirth: data.dateOfBirth } : {}),
+      displayName: data.firstName,
+    },
+  });
+  await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
+  const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
+  await startBookingFlow({ ...conv, customer: updatedCustomer });
+}
+
 async function handleCollectDateOfBirth(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ): Promise<void> {
-  const upper = text.trim().toUpperCase();
+  const pending = ctx(conv);
+  const firstName = pending.pendingFirstName as string | undefined;
+  const email = pending.pendingEmail as string | undefined;
 
-  // Allow skipping DOB
-  if (upper === 'SKIP') {
-    const pending = ctx(conv);
-    const firstName = pending.pendingFirstName as string | undefined;
-    const email = pending.pendingEmail as string | undefined;
-    if (!firstName) {
-      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-      await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
-      return;
-    }
-    const db = getTenantDb();
-    await db.customer.update({
-      where: { id: conv.customerId },
-      data: { firstName, ...(email ? { email } : {}), displayName: firstName },
-    });
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
-    const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
-    await startBookingFlow({ ...conv, customer: updatedCustomer });
+  if (!firstName || !email) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+    await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
+    return;
+  }
+
+  if (/^skip$/i.test(text.trim())) {
+    await commitPendingProfileAndContinueBooking(conv, { firstName, email });
     return;
   }
 
@@ -1886,32 +2274,11 @@ async function handleCollectDateOfBirth(
 
   const dobStr = `${dob.getFullYear()}-${String(dob.getMonth() + 1).padStart(2, '0')}-${String(dob.getDate()).padStart(2, '0')}`;
 
-  // POPIA consent was already granted before name collection — commit profile now.
-  const pending = ctx(conv);
-  const firstName = pending.pendingFirstName as string | undefined;
-  const email = pending.pendingEmail as string | undefined;
-
-  if (!firstName) {
-    // Context lost mid-flow — restart from POPIA.
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-    await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
-    return;
-  }
-
-  const db = getTenantDb();
-  await db.customer.update({
-    where: { id: conv.customerId },
-    data: {
-      firstName,
-      ...(email ? { email } : {}),
-      dateOfBirth: new Date(dobStr),
-      displayName: firstName,
-    },
+  await commitPendingProfileAndContinueBooking(conv, {
+    firstName,
+    email,
+    dateOfBirth: new Date(dobStr),
   });
-
-  await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
-  const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
-  await startBookingFlow({ ...conv, customer: updatedCustomer });
 }
 
 async function handleBookingPopiaConsent(
@@ -2358,10 +2725,9 @@ async function handleSubMenuChoice(
 
   switch (category) {
     case 'my_appointments':
-      if (choice === 1) return menuActionStartBooking(conv);
-      if (choice === 2) return menuActionViewBookings(conv, 'view');
-      if (choice === 3) return menuActionViewBookings(conv, 'reschedule');
-      if (choice === 4) return menuActionViewBookings(conv, 'cancel');
+      if (choice === 1) return menuActionViewBookings(conv, 'view');
+      if (choice === 2) return menuActionViewBookings(conv, 'reschedule');
+      if (choice === 3) return menuActionViewBookings(conv, 'cancel');
       break;
     case 'services':
       if (choice === 1) return menuActionShowServiceCategory(conv, 'hair');
@@ -2374,10 +2740,6 @@ async function handleSubMenuChoice(
       if (choice === 1) return menuActionLoyaltyBalance(conv, false);
       if (choice === 2) return menuActionLoyaltyBalance(conv, true);
       if (choice === 3) return handleReferralMenuItem(conv, (body) => reply(conv, body));
-      if (choice === 4) {
-        await menuActionShowSpecials(conv);
-        return;
-      }
       break;
     case 'promotions':
       if (choice === 1) return menuActionShowSpecials(conv);
@@ -2426,6 +2788,10 @@ async function handleMainMenuSelection(
     return;
   }
   if (selection.kind === 'category') {
+    if (selection.id === 'rewards' && !conv.salon.botLoyaltyEnabled) {
+      await replyWithMenu(conv, 'Rewards are not available at this salon right now.');
+      return;
+    }
     await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
     syncConvContext(conv, { menuCategory: selection.id }, ConversationStep.MENU);
     await reply(conv, buildSubMenuText(selection.id));
@@ -2472,18 +2838,23 @@ async function handleMenu(
       await handleSubMenuChoice(conv, activeCategory, subChoice);
       return;
     }
-    const mainSelection = parseMainMenuSelection(trimmed);
+    const mainSelection = parseMainMenuSelection(trimmed, conv.salon);
     if (mainSelection) {
       await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
       syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
       await handleMainMenuSelection(conv, mainSelection);
       return;
     }
-    await reply(conv, buildSubMenuText(activeCategory));
+    const count = getSubMenuItemCount(activeCategory);
+    const hint =
+      subChoice != null
+        ? `That number isn't on this menu — pick 1–${count} below, or reply BACK for the main menu.`
+        : `I didn't recognise that — pick 1–${count} from the list below, or reply BACK for the main menu.`;
+    await reply(conv, [hint, '', buildSubMenuText(activeCategory)].join('\n'));
     return;
   }
 
-  const selection = parseMainMenuSelection(trimmed);
+  const selection = parseMainMenuSelection(trimmed, conv.salon);
   if (selection) {
     try {
       await handleMainMenuSelection(conv, selection);
@@ -2651,18 +3022,7 @@ async function handlePickService(
     if (handled) return;
   }
 
-  const filterIds = ctx(conv).serviceFilterIds;
-  const services = await getTenantDb().service.findMany({
-    where: {
-      salonId: conv.salonId,
-      active: true,
-      deletedAt: null,
-      ...(Array.isArray(filterIds) && filterIds.length
-        ? { id: { in: filterIds as string[] } }
-        : {}),
-    },
-    orderBy: { sortOrder: 'asc' },
-  });
+  const { services, clearedStaleFilter } = await resolveServicesForPicker(conv);
 
   // "MORE" — advance to next page
   if (text.trim().toUpperCase() === 'MORE') {
@@ -2681,8 +3041,15 @@ async function handlePickService(
 
   const n = parseInt(text, 10);
   if (!Number.isFinite(n) || n < 1 || n > services.length) {
-    const page = (ctx(conv).servicePage as number | undefined) ?? 0;
-    await reply(conv, `Please reply with a number (1–${services.length}).\n\n${buildServicePage(services, page)}`);
+    if (clearedStaleFilter) {
+      await saveCtx(conv.id, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
+      syncConvContext(conv, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
+      const svcLines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+      await reply(conv, ['That service list changed — here is what is available now:', ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
+    } else {
+      const page = (ctx(conv).servicePage as number | undefined) ?? 0;
+      await reply(conv, `Please reply with a number (1–${services.length}).\n\n${buildServicePage(services, page)}`);
+    }
     return;
   }
   const service = services[n - 1]!;
@@ -2830,15 +3197,15 @@ async function handlePickStaff(
     { selectedStaffId: staffId, anyStaff: isAny, staffOrderIds: undefined },
     ConversationStep.PICK_DATE,
   );
-  const lines = dates.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
+  const lines = formatDateMenuLines(dates.slice(0, 10));
   await reply(
     conv,
     [
       'Pick a date (next available days):',
       ...lines,
       '',
-      'Or type a date YYYY-MM-DD',
-      'Reply BACK to return to menu.',
+      APPOINTMENT_DATE_HINT,
+      'Reply BACK to go back.',
     ].join('\n'),
   );
 }
@@ -2878,13 +3245,10 @@ async function handlePickDate(
       await replyWithMenu(conv, msg);
       return;
     }
-    const dateLines = suggestions.slice(0, 10).map((d, i) => {
-      const dt = DateTime.fromISO(d).setZone(conv.salon.timezone);
-      return `${i + 1}. ${dt.toFormat('cccc, d MMMM')}`;
-    });
+    const dateLines = formatDateMenuLines(suggestions.slice(0, 10));
     await reply(
       conv,
-      [prefix, ...dateLines, '', '_Or type a specific date — e.g._ *2026-07-15*', 'Reply *BACK* to return to menu.'].join('\n'),
+      [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
     );
   };
 
@@ -2892,13 +3256,13 @@ async function handlePickDate(
   const n = parseInt(text, 10);
   if (Number.isFinite(n) && n >= 1 && n <= Math.min(suggestions.length, 10)) {
     localDateStr = suggestions[n - 1];
-  } else if (/^\d{4}-\d{2}-\d{2}$/.test(text.trim())) {
-    localDateStr = text.trim();
+  } else {
+    localDateStr = parseAppointmentLocalDate(text) ?? undefined;
   }
 
   if (!localDateStr) {
     const prefix = text.trim()
-      ? `I didn't recognise that date. Pick a number below or type a date in *YYYY-MM-DD* format:`
+      ? `I didn't recognise that date. Pick a number below or type a date in DD/MM/YYYY format:`
       : `📅 When would you like to come in? Pick a date:`;
     await showDateList(prefix);
     return;
@@ -2917,7 +3281,7 @@ async function handlePickDate(
     return;
   }
   if (slots.length === 0) {
-    await showDateList(`😔 No openings on that day — it might be fully booked. Here are the next available dates:`);
+    await showDateList(`😔 No openings on ${formatDisplayLocalDate(localDateStr)} — it might be fully booked. Here are the next available dates:`);
     return;
   }
 
@@ -2926,14 +3290,16 @@ async function handlePickDate(
     data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
   }).catch(() => {});
   const localDt = DateTime.fromISO(localDateStr).setZone(conv.salon.timezone);
-  const lines = slots.slice(0, 8).map((s, i) => {
-    const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
-    return `${i + 1}. ${dt.toFormat('HH:mm')}`;
-  });
+  const lines = formatSlotMenuLines(slots, conv.salon.timezone);
+  const extra =
+    slots.length > MAX_SLOT_OPTIONS
+      ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
+      : '';
   await reply(conv, [
     `🗓 *${localDt.toFormat('cccc, d MMMM')}*`,
     'Pick a time:',
     ...lines,
+    extra,
     '',
     'Reply *BACK* to choose a different date.',
   ].join('\n'));
@@ -2970,7 +3336,7 @@ async function handlePickSlot(
         `${sanitize(service.name)} with ${sanitize(staff.name)}`,
         dt.toFormat('cccc, dd LLL yyyy HH:mm'),
         '',
-        `Reply YES to confirm and continue to payment, or BACK.`,
+        `Reply YES to confirm and continue to payment, or BACK to choose another time.`,
       ].join('\n'),
     );
     return;
@@ -3002,12 +3368,10 @@ async function handlePickSlot(
     return;
   }
   const n = parseInt(text, 10);
-  if (!Number.isFinite(n) || n < 1 || n > Math.min(slots.length, 8)) {
-    const slotLines = slots.slice(0, 8).map((s, i) => {
-      const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
-      return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
-    });
-    await reply(conv, [`Invalid choice. Pick a slot number (1–${Math.min(slots.length, 8)}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
+  const maxVisible = visibleSlotCount(slots.length);
+  if (!Number.isFinite(n) || n < 1 || n > maxVisible) {
+    const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
+    await reply(conv, [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
     return;
   }
   const slot = slots[n - 1]!;
@@ -3025,7 +3389,7 @@ async function handlePickSlot(
       `${sanitize(service.name)} with ${sanitize(staff.name)}`,
       dt.toFormat('cccc, dd LLL yyyy HH:mm'),
       '',
-      `Reply YES to confirm, or BACK.`,
+      `Reply YES to confirm, or BACK to choose another time.`,
     ].join('\n'),
   );
 }
@@ -3034,12 +3398,24 @@ async function handleConfirm(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  // EC-03: accept natural affirmations, not just exact "yes"/"y"
-  if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(text.trim())) {
-    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-    syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-    await reply(conv, 'Booking not confirmed — no worries!');
+  const trimmed = text.trim();
+  if (isBackCommand(trimmed)) {
+    await goBackOneStep(conv);
+    return;
+  }
+  if (isMenuCommand(trimmed)) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyMenu(conv);
+    return;
+  }
+
+  // EC-03: accept natural affirmations, not just exact "yes"/"y"
+  if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(trimmed)) {
+    await reply(
+      conv,
+      'No problem — reply *YES* to confirm this booking, or *BACK* to pick a different time.',
+    );
     return;
   }
 
@@ -3091,10 +3467,7 @@ async function handleConfirm(
       const { slots: freshSlots } = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr });
       if (freshSlots.length > 0) {
         await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
-        const slotLines = freshSlots.slice(0, 8).map((s, i) => {
-          const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
-          return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
-        });
+        const slotLines = formatSlotMenuLines(freshSlots, conv.salon.timezone);
         await reply(conv, ['Sorry, that slot was just taken. Please pick another time:', ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
         return;
       }
@@ -3226,6 +3599,25 @@ async function handleConfirm(
     logger.warn({ err, customerId: conv.customerId }, 'booking_count_increment_failed');
   }
 
+  // Notify dashboard + invalidate slot cache immediately — including HELD/deposit bookings.
+  notifyAppointmentBookedLater(conv.salonId, appointment.id, {
+    staffId: staff.id,
+    serviceId: service.id,
+    start: start.toISOString(),
+    status: appointment.status,
+    source: 'whatsapp',
+    rescheduledFromId: reschedulingId ?? null,
+  });
+  if (reschedulingId) {
+    notifyAppointmentChangedLater(conv.salonId, reschedulingId, {
+      status: 'RESCHEDULED',
+      staffId: staff.id,
+      serviceId: service.id,
+      replacedById: appointment.id,
+      source: 'whatsapp',
+    });
+  }
+
   // Item 16: Notify owner on new booking — best-effort, never blocks booking
   void (async () => {
     try {
@@ -3340,11 +3732,15 @@ async function handleConfirm(
     status: appointment.status,
     salon: conv.salon,
   }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+
   if (isFirstBooking) {
     await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
   }
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
-  await reply(conv, 'How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)');
+  await reply(
+    conv,
+    'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
+  );
 }
 
 async function handleBookingRating(
@@ -3352,14 +3748,14 @@ async function handleBookingRating(
   text: string,
 ) {
   const upper = text.trim().toUpperCase();
-  if (upper === 'BACK' || upper === 'MENU' || upper === '0') {
+  if (upper === 'BACK' || upper === 'MENU' || upper === '0' || upper === 'SKIP') {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await replyMenu(conv);
     return;
   }
   const rating = parseInt(text.trim(), 10);
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
-    await reply(conv, 'Please reply with a number between 1 and 5.\n(or type MENU to go back)');
+    await reply(conv, 'Please reply with a number between 1 and 5, or *SKIP* for the menu.');
     return;
   }
   const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
@@ -3507,10 +3903,7 @@ async function handleManageBooking(
     );
 
     const dates = await suggestBookingDates(conv.salonId);
-    const dateLines = dates.slice(0, 10).map((d, i) => {
-      const dt = DateTime.fromISO(d).setZone(conv.salon.timezone);
-      return `${i + 1}. ${dt.toFormat('cccc, d MMMM')}`;
-    });
+    const dateLines = formatDateMenuLines(dates.slice(0, 10));
     await reply(
       conv,
       [
@@ -3519,7 +3912,7 @@ async function handleManageBooking(
         'Pick a new date:',
         ...dateLines,
         '',
-        '_Or type a specific date — e.g._ *2026-07-15*',
+        APPOINTMENT_DATE_HINT,
         'Reply *BACK* to return to menu.',
       ].join('\n'),
     );
@@ -3967,7 +4360,7 @@ async function handlePickBranch(
   await saveCtx(conv.id, { selectedBranchId: branchId }, ConversationStep.PICK_SERVICE);
 
   const services = await getTenantDb().service.findMany({
-    where: { salonId: conv.salon.id, active: true },
+    where: { salonId: conv.salon.id, active: true, deletedAt: null },
     orderBy: { sortOrder: 'asc' },
   });
   // EC-05: guard against empty service list after branch selection
@@ -4011,11 +4404,16 @@ async function handleReschedule(
     data: { status: 'RESCHEDULED' },
   });
 
+  notifyAppointmentChangedLater(conv.salonId, appointmentId, {
+    status: 'RESCHEDULED',
+    source: 'whatsapp',
+  });
+
   await reply(conv, "Got it! Your old booking is cancelled. Let's pick a new time.");
   await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
 
   const services = await getTenantDb().service.findMany({
-    where: { salonId: conv.salon.id, active: true },
+    where: { salonId: conv.salon.id, active: true, deletedAt: null },
     orderBy: { sortOrder: 'asc' },
   });
   const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);

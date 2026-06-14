@@ -1,9 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -19,8 +20,6 @@ import {
   saveInactivityMessages,
   saveGoogleReviewSettings,
   saveCurrentSpecial,
-  saveReminderSettings,
-  saveAutomationSection,
   saveLoyaltyProgram,
   saveWhatsAppConfig,
   type SalonSettings,
@@ -182,57 +181,10 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const [parkingNotes, setParkingNotes] = useState(initialSettings.parkingNotes ?? '');
 
   const [googleReviewUrl, setGoogleReviewUrl] = useState(initialSettings.googleReviewUrl ?? '');
-  const [reviewIncentiveEnabled, setReviewIncentiveEnabled] = useState(
-    initialSettings.automations?.googleReview?.incentiveEnabled ?? true,
-  );
-  const [reviewIncentiveRands, setReviewIncentiveRands] = useState(
-    String((initialSettings.automations?.googleReview?.incentiveCents ?? 5000) / 100),
-  );
   const [savingGoogleReviewUrl, setSavingGoogleReviewUrl] = useState(false);
 
   const [currentSpecial, setCurrentSpecial] = useState(initialSettings.currentSpecial ?? '');
   const [savingSpecial, setSavingSpecial] = useState(false);
-
-  const DEFAULT_REMINDER_HOURS = [24, 2];
-  const [reminderEnabled, setReminderEnabled] = useState(
-    initialSettings.automations?.reminders?.enabled ?? true,
-  );
-  const [reminderHours, setReminderHours] = useState<number[]>(
-    initialSettings.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS,
-  );
-  const [savingReminders, setSavingReminders] = useState(false);
-
-  // Phase 4 — win-back / reactivation settings
-  const [reactivationEnabled, setReactivationEnabled] = useState(
-    initialSettings.automations?.reactivation?.enabled ?? true,
-  );
-  const [reactivationInactiveDays, setReactivationInactiveDays] = useState(
-    (initialSettings.automations?.reactivation?.inactiveDays ?? [21])[0] ?? 21,
-  );
-  const [reactivationDailyLimit, setReactivationDailyLimit] = useState(
-    initialSettings.automations?.reactivation?.dailyLimit ?? 50,
-  );
-  const [reactivationCooldown, setReactivationCooldown] = useState(
-    initialSettings.automations?.reactivation?.cooldownDays ?? 30,
-  );
-  const [savingReactivation, setSavingReactivation] = useState(false);
-
-  // Phase 4 — slot interval
-  const [slotIntervalMin, setSlotIntervalMin] = useState(
-    initialSettings.automations?.booking?.slotIntervalMin ?? 15,
-  );
-  const [holdTimeoutMin, setHoldTimeoutMin] = useState(
-    initialSettings.automations?.booking?.holdTimeoutMin ?? 30,
-  );
-  const [savingSlotInterval, setSavingSlotInterval] = useState(false);
-
-  // Phase 4 — message templates
-  const [winbackBody, setWinbackBody] = useState(initialSettings.automations?.messaging?.winbackBody ?? '');
-  const [birthdayBody, setBirthdayBody] = useState(initialSettings.automations?.messaging?.birthdayBody ?? '');
-  const [cancellationPolicyText, setCancellationPolicyText] = useState(
-    initialSettings.automations?.messaging?.cancellationPolicyText ?? '',
-  );
-  const [savingMessaging, setSavingMessaging] = useState(false);
 
   // Phase 4 — loyalty programme
   const [loyaltyStampsPerReward, setLoyaltyStampsPerReward] = useState(loyaltyProgram?.stampsPerReward ?? 10);
@@ -272,20 +224,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     setMapsUrl(s.mapsUrl ?? '');
     setParkingNotes(s.parkingNotes ?? '');
     setGoogleReviewUrl(s.googleReviewUrl ?? '');
-    setReviewIncentiveEnabled(s.automations?.googleReview?.incentiveEnabled ?? true);
-    setReviewIncentiveRands(String((s.automations?.googleReview?.incentiveCents ?? 5000) / 100));
     setCurrentSpecial(s.currentSpecial ?? '');
-    setReminderEnabled(s.automations?.reminders?.enabled ?? true);
-    setReminderHours(s.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS);
-    setReactivationEnabled(s.automations?.reactivation?.enabled ?? true);
-    setReactivationInactiveDays((s.automations?.reactivation?.inactiveDays ?? [21])[0] ?? 21);
-    setReactivationDailyLimit(s.automations?.reactivation?.dailyLimit ?? 50);
-    setReactivationCooldown(s.automations?.reactivation?.cooldownDays ?? 30);
-    setSlotIntervalMin(s.automations?.booking?.slotIntervalMin ?? 15);
-    setHoldTimeoutMin(s.automations?.booking?.holdTimeoutMin ?? 30);
-    setWinbackBody(s.automations?.messaging?.winbackBody ?? '');
-    setBirthdayBody(s.automations?.messaging?.birthdayBody ?? '');
-    setCancellationPolicyText(s.automations?.messaging?.cancellationPolicyText ?? '');
     const phoneId = s.whatsappPhoneId?.trim() ?? '';
     setWhatsappPhoneId(phoneId);
     setSavedWhatsappPhoneId(phoneId);
@@ -331,55 +270,14 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   }, [saved, addressLine, phoneDisplay, contactEmail, mapsUrl, parkingNotes]);
 
   const googleReviewUrlDirty = useMemo(
-    () =>
-      googleReviewUrl !== (saved.googleReviewUrl ?? '') ||
-      reviewIncentiveEnabled !== (saved.automations?.googleReview?.incentiveEnabled ?? true) ||
-      reviewIncentiveRands !==
-        String((saved.automations?.googleReview?.incentiveCents ?? 5000) / 100),
-    [saved, googleReviewUrl, reviewIncentiveEnabled, reviewIncentiveRands],
+    () => googleReviewUrl !== (saved.googleReviewUrl ?? ''),
+    [saved, googleReviewUrl],
   );
 
   const currentSpecialDirty = useMemo(
     () => currentSpecial !== (saved.currentSpecial ?? ''),
     [saved, currentSpecial],
   );
-
-  const remindersDirty = useMemo(() => {
-    const savedEnabled = saved.automations?.reminders?.enabled ?? true;
-    const savedHours = saved.automations?.reminders?.hoursBefore ?? DEFAULT_REMINDER_HOURS;
-    return (
-      reminderEnabled !== savedEnabled ||
-      JSON.stringify([...reminderHours].sort((a, b) => b - a)) !==
-        JSON.stringify([...savedHours].sort((a, b) => b - a))
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saved, reminderEnabled, reminderHours]);
-
-  const reactivationDirty = useMemo(() => {
-    const a = saved.automations?.reactivation;
-    return (
-      reactivationEnabled !== (a?.enabled ?? true) ||
-      reactivationInactiveDays !== ((a?.inactiveDays ?? [21])[0] ?? 21) ||
-      reactivationDailyLimit !== (a?.dailyLimit ?? 50) ||
-      reactivationCooldown !== (a?.cooldownDays ?? 30)
-    );
-  }, [saved, reactivationEnabled, reactivationInactiveDays, reactivationDailyLimit, reactivationCooldown]);
-
-  const slotIntervalDirty = useMemo(
-    () =>
-      slotIntervalMin !== (saved.automations?.booking?.slotIntervalMin ?? 15) ||
-      holdTimeoutMin !== (saved.automations?.booking?.holdTimeoutMin ?? 30),
-    [saved, slotIntervalMin, holdTimeoutMin],
-  );
-
-  const messagingDirty = useMemo(() => {
-    const m = saved.automations?.messaging;
-    return (
-      winbackBody !== (m?.winbackBody ?? '') ||
-      birthdayBody !== (m?.birthdayBody ?? '') ||
-      cancellationPolicyText !== (m?.cancellationPolicyText ?? '')
-    );
-  }, [saved, winbackBody, birthdayBody, cancellationPolicyText]);
 
   const loyaltyDirty = useMemo(
     () => loyaltyStampsPerReward !== savedLoyaltyStamps || loyaltyRewardDescription !== savedLoyaltyDesc,
@@ -566,20 +464,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       reportError('googleReview', 'Google Review URL must start with https://');
       return;
     }
-    const incentiveRands = parseInt(reviewIncentiveRands, 10);
-    if (reviewIncentiveEnabled && (!Number.isFinite(incentiveRands) || incentiveRands < 1 || incentiveRands > 1000)) {
-      reportError('googleReview', 'Incentive amount must be between R1 and R1000');
-      return;
-    }
     setSavingGoogleReviewUrl(true);
     try {
-      const result = await saveGoogleReviewSettings(trimmed || null, {
-        incentiveEnabled: reviewIncentiveEnabled,
-        incentiveCents: reviewIncentiveEnabled ? incentiveRands * 100 : 0,
-      });
+      const result = await saveGoogleReviewSettings(trimmed || null);
       if (result.salon) {
         applySalon(result.salon);
-        reportSuccess('googleReview', 'Google review settings saved');
+        reportSuccess('googleReview', 'Google review URL saved');
       } else {
         reportError('googleReview', result.error ?? 'Save failed');
       }
@@ -612,93 +502,6 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     }
   }
 
-  async function handleSaveReactivation(e: React.FormEvent) {
-    e.preventDefault();
-    if (reactivationInactiveDays < 7 || reactivationInactiveDays > 180) {
-      reportError('reactivation', 'Inactive days must be between 7 and 180');
-      return;
-    }
-    if (reactivationDailyLimit < 1 || reactivationDailyLimit > 500) {
-      reportError('reactivation', 'Daily limit must be between 1 and 500');
-      return;
-    }
-    if (reactivationCooldown < 7 || reactivationCooldown > 90) {
-      reportError('reactivation', 'Cooldown must be between 7 and 90 days');
-      return;
-    }
-    setSavingReactivation(true);
-    try {
-      const result = await saveAutomationSection('reactivation', {
-        enabled: reactivationEnabled,
-        inactiveDays: [reactivationInactiveDays],
-        dailyLimit: reactivationDailyLimit,
-        cooldownDays: reactivationCooldown,
-      });
-      if (result.salon) {
-        applySalon(result.salon);
-        reportSuccess('reactivation', 'Win-back settings saved');
-      } else {
-        reportError('reactivation', result.error ?? 'Save failed');
-      }
-    } catch {
-      reportError('reactivation', 'Save failed — please try again');
-    } finally {
-      setSavingReactivation(false);
-    }
-  }
-
-  async function handleSaveSlotInterval(e: React.FormEvent) {
-    e.preventDefault();
-    setSavingSlotInterval(true);
-    try {
-      const result = await saveAutomationSection('booking', { slotIntervalMin, holdTimeoutMin });
-      if (result.salon) {
-        applySalon(result.salon);
-        reportSuccess('slotInterval', 'Slot interval saved');
-      } else {
-        reportError('slotInterval', result.error ?? 'Save failed');
-      }
-    } catch {
-      reportError('slotInterval', 'Save failed — please try again');
-    } finally {
-      setSavingSlotInterval(false);
-    }
-  }
-
-  async function handleSaveMessaging(e: React.FormEvent) {
-    e.preventDefault();
-    if (winbackBody.length > 1600) {
-      reportError('messaging', 'Win-back message must be 1600 characters or fewer');
-      return;
-    }
-    if (birthdayBody.length > 1600) {
-      reportError('messaging', 'Birthday message must be 1600 characters or fewer');
-      return;
-    }
-    if (cancellationPolicyText.length > 2000) {
-      reportError('messaging', 'Cancellation policy must be 2000 characters or fewer');
-      return;
-    }
-    setSavingMessaging(true);
-    try {
-      const result = await saveAutomationSection('messaging', {
-        winbackBody: winbackBody.trim(),
-        birthdayBody: birthdayBody.trim(),
-        cancellationPolicyText: cancellationPolicyText.trim(),
-      });
-      if (result.salon) {
-        applySalon(result.salon);
-        reportSuccess('messaging', 'Message templates saved');
-      } else {
-        reportError('messaging', result.error ?? 'Save failed');
-      }
-    } catch {
-      reportError('messaging', 'Save failed — please try again');
-    } finally {
-      setSavingMessaging(false);
-    }
-  }
-
   async function handleSaveLoyalty(e: React.FormEvent) {
     e.preventDefault();
     if (!Number.isInteger(loyaltyStampsPerReward) || loyaltyStampsPerReward < 1 || loyaltyStampsPerReward > 100) {
@@ -723,29 +526,6 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       reportError('loyalty', 'Save failed — please try again');
     } finally {
       setSavingLoyalty(false);
-    }
-  }
-
-  async function handleSaveReminders(e: React.FormEvent) {
-    e.preventDefault();
-    const unique = [...new Set(reminderHours.filter((h) => h > 0 && h <= 168))].sort((a, b) => b - a);
-    if (reminderEnabled && unique.length === 0) {
-      reportError('reminders', 'Add at least one reminder time');
-      return;
-    }
-    setSavingReminders(true);
-    try {
-      const result = await saveReminderSettings(reminderEnabled, unique);
-      if (result.salon) {
-        applySalon(result.salon);
-        reportSuccess('reminders', 'Reminder settings saved');
-      } else {
-        reportError('reminders', result.error ?? 'Save failed');
-      }
-    } catch {
-      reportError('reminders', 'Save failed — please try again');
-    } finally {
-      setSavingReminders(false);
     }
   }
 
@@ -1007,7 +787,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 )}
               />
               <p className="text-xs text-muted-foreground">
-                Sent when a customer chooses &quot;Talk to a human&quot; outside business hours. Bookings, FAQs, and loyalty still work 24/7.
+                Sent when a customer chooses &quot;Talk to a human&quot; outside business hours. Appointments, Bot FAQs, and loyalty still work 24/7.
               </p>
             </div>
             <div className="flex flex-col gap-2">
@@ -1247,12 +1027,30 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
 
       <Separator />
 
-      {/* Google Reviews */}
+      <section className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+        <div>
+          <h3 className="text-base font-semibold">Power Features</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Reminders, win-back, review incentives, booking rules, and campaign templates live in one place — not here.
+          </p>
+        </div>
+        <Link href="/automations" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+          Open Power Features
+        </Link>
+      </section>
+
+      <Separator />
+
+      {/* Google Reviews — URL only; toggles live under Power Features */}
       <section className="space-y-4">
         <div>
           <h3 className="text-base font-semibold">Google Reviews</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            After a visit, customers receive your Google review link via WhatsApp. Enable the incentive to offer a discount for any review — good or bad — with a special claim link.
+            Paste your Google Business review link here. Enable review requests and incentives under{' '}
+            <Link href="/automations" className="text-primary underline-offset-4 hover:underline">
+              Power Features
+            </Link>
+            .
           </p>
         </div>
         <form onSubmit={(e) => void handleSaveGoogleReviewUrl(e)} className="space-y-4 max-w-lg">
@@ -1267,174 +1065,19 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
               maxLength={2048}
             />
             <p className="text-xs text-muted-foreground">
-              Paste your Google Business review link. Find it in Google Business Profile → &quot;Get more reviews&quot;. Leave blank to disable.
+              Find it in Google Business Profile → &quot;Get more reviews&quot;. Leave blank to disable review links.
             </p>
-          </div>
-          <div className="space-y-3 rounded-lg border p-4">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium">Review incentive</p>
-                <p className="text-xs text-muted-foreground">
-                  Customers get a special link to claim their discount after leaving a review.
-                </p>
-              </div>
-              <input
-                id="review-incentive-enabled"
-                type="checkbox"
-                checked={reviewIncentiveEnabled}
-                onChange={(e) => setReviewIncentiveEnabled(e.target.checked)}
-                className="size-4 rounded border-input"
-              />
-            </div>
-            {reviewIncentiveEnabled && (
-              <div className="space-y-2 max-w-xs">
-                <Label htmlFor="review-incentive-rands">Discount amount (R)</Label>
-                <Input
-                  id="review-incentive-rands"
-                  type="number"
-                  min={1}
-                  max={1000}
-                  value={reviewIncentiveRands}
-                  onChange={(e) => setReviewIncentiveRands(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Default R50 — applied automatically on their next booking after they claim via WhatsApp.
-                </p>
-              </div>
-            )}
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3">
               <Button type="submit" size="sm" disabled={savingGoogleReviewUrl || !googleReviewUrlDirty}>
-                {savingGoogleReviewUrl ? 'Saving…' : 'Save review settings'}
+                {savingGoogleReviewUrl ? 'Saving…' : 'Save review URL'}
               </Button>
               {googleReviewUrlDirty && (
                 <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
               )}
             </div>
             <SectionSaveFeedback feedback={getSection('googleReview')} />
-          </div>
-        </form>
-      </section>
-
-      <Separator />
-
-      {/* Appointment reminders */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Appointment reminders</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            WhatsApp reminders sent automatically before each confirmed appointment. Helps reduce no-shows.
-          </p>
-        </div>
-        <form onSubmit={(e) => void handleSaveReminders(e)} className="space-y-5 max-w-lg">
-          {/* Toggle */}
-          <label
-            className={cn(
-              'flex items-center gap-4 rounded-xl border p-4 cursor-pointer transition-colors',
-              reminderEnabled ? 'border-green-600/30 bg-green-600/5' : 'border-border bg-muted/20',
-            )}
-          >
-            <div className={cn(
-              'relative shrink-0 w-11 h-6 rounded-full transition-colors',
-              reminderEnabled ? 'bg-green-500' : 'bg-muted-foreground/30',
-            )}>
-              <span className={cn(
-                'absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform',
-                reminderEnabled ? 'translate-x-5' : 'translate-x-0.5',
-              )} />
-              <input type="checkbox" checked={reminderEnabled} onChange={(e) => setReminderEnabled(e.target.checked)} className="sr-only" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{reminderEnabled ? 'Reminders on' : 'Reminders off'}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {reminderEnabled
-                  ? 'Customers will receive WhatsApp reminders before each appointment.'
-                  : 'No automated reminders will be sent.'}
-              </p>
-            </div>
-          </label>
-
-          {reminderEnabled && (
-            <>
-              {/* Time chips */}
-              <div className="space-y-3">
-                <Label className="text-sm">When to send</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[48, 24, 12, 4, 2, 1].map((h) => {
-                    const active = reminderHours.includes(h);
-                    const label = h >= 24 ? `${h / 24}d` : `${h}h`;
-                    return (
-                      <button
-                        key={h}
-                        type="button"
-                        onClick={() =>
-                          setReminderHours((prev) =>
-                            active ? prev.filter((x) => x !== h) : [...prev, h],
-                          )
-                        }
-                        className={cn(
-                          'flex flex-col items-center gap-0.5 px-4 py-2.5 rounded-xl border text-xs font-medium transition-all',
-                          active
-                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                            : 'bg-card border-border hover:border-ring text-foreground',
-                        )}
-                      >
-                        <span className="text-base font-bold leading-none">{label}</span>
-                        <span className="opacity-70">before</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* Timeline strip */}
-                {reminderHours.length > 0 && (
-                  <div className="relative flex items-center gap-0 mt-2">
-                    <div className="absolute inset-y-1/2 left-0 right-0 h-px bg-border -translate-y-1/2" />
-                    <div className="relative z-10 flex items-center justify-between w-full px-1">
-                      {[...reminderHours].sort((a, b) => b - a).map((h) => (
-                        <div key={h} className="flex flex-col items-center gap-1">
-                          <div className="size-2.5 rounded-full bg-primary ring-2 ring-background" />
-                          <span className="text-[10px] text-muted-foreground font-medium">
-                            {h >= 24 ? `${h / 24}d` : `${h}h`}
-                          </span>
-                        </div>
-                      ))}
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="size-3 rounded-full bg-emerald-500 ring-2 ring-background" />
-                        <span className="text-[10px] text-muted-foreground font-medium">Appt</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">Select up to 4 times. At least one required.</p>
-              </div>
-
-              {/* Message preview */}
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Message preview</p>
-                <div className="rounded-xl border bg-[#ece5dd] dark:bg-[#1a2128] p-4 space-y-2">
-                  <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-2xl rounded-tr-sm px-3.5 py-2.5 max-w-[85%] ml-auto shadow-sm">
-                    <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-                      {`Hi ${salonDisplayName ? 'Customer' : 'there'}! Reminder:\n${salonDisplayName || 'Hair Treatment'} service with your stylist\nFri, 14 Jun · 10:00 AM (in ${reminderHours.includes(24) ? '1 day' : reminderHours.includes(2) ? '2 hours' : `${reminderHours[0] ?? 24} hours`})\n\nReply CANCEL or RESCHEDULE to manage your booking.`}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground text-right mt-1">10:23 AM ✓✓</p>
-                  </div>
-                  <p className="text-[11px] text-center text-muted-foreground/60">Sent from your WhatsApp business number</p>
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" disabled={savingReminders || !remindersDirty}>
-                {savingReminders ? 'Saving…' : 'Save reminder settings'}
-              </Button>
-              {remindersDirty && (
-                <span className="text-xs text-amber-600 dark:text-amber-400">Unsaved changes</span>
-              )}
-            </div>
-            <SectionSaveFeedback feedback={getSection('reminders')} />
           </div>
         </form>
       </section>
@@ -1588,214 +1231,6 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
               )}
             </div>
             <SectionSaveFeedback feedback={getSection('inactivity')} />
-          </div>
-        </form>
-      </section>
-
-      <Separator />
-
-      {/* Win-back / reactivation */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Win-back campaign</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Automatically message inactive customers on WhatsApp to bring them back. Only sent to customers who have accepted marketing.
-          </p>
-        </div>
-        <form onSubmit={(e) => void handleSaveReactivation(e)} className="space-y-4 max-w-lg">
-          <div className={cn('rounded-lg border p-4 transition-colors', reactivationEnabled ? 'border-green-600/25 bg-green-600/5' : 'border-muted bg-muted/20')}>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={reactivationEnabled}
-                onChange={(e) => setReactivationEnabled(e.target.checked)}
-                className="mt-1 size-4 rounded border-input accent-primary"
-              />
-              <div>
-                <p className="text-sm font-medium">Win-back enabled</p>
-                <p className="text-xs text-muted-foreground">Runs daily — message consented customers who haven&apos;t visited recently.</p>
-              </div>
-            </label>
-          </div>
-          {reactivationEnabled && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="reactivation-days">Inactive after (days)</Label>
-                <Input
-                  id="reactivation-days"
-                  type="number"
-                  min={7}
-                  max={180}
-                  value={reactivationInactiveDays}
-                  onChange={(e) => setReactivationInactiveDays(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">Min days since last visit before messaging.</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reactivation-limit">Daily cap</Label>
-                <Input
-                  id="reactivation-limit"
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={reactivationDailyLimit}
-                  onChange={(e) => setReactivationDailyLimit(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">Max customers messaged per day.</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="reactivation-cooldown">Cooldown (days)</Label>
-                <Input
-                  id="reactivation-cooldown"
-                  type="number"
-                  min={7}
-                  max={90}
-                  value={reactivationCooldown}
-                  onChange={(e) => setReactivationCooldown(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">Days before re-sending to same customer.</p>
-              </div>
-            </div>
-          )}
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" disabled={savingReactivation || !reactivationDirty}>
-                {savingReactivation ? 'Saving…' : 'Save win-back settings'}
-              </Button>
-              {reactivationDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
-            </div>
-            <SectionSaveFeedback feedback={getSection('reactivation')} />
-          </div>
-        </form>
-      </section>
-
-      <Separator />
-
-      {/* Slot interval */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Booking slot interval</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Controls how granular the time picker is when customers book. Shorter intervals show more options; longer intervals simplify scheduling.
-          </p>
-        </div>
-        <form onSubmit={(e) => void handleSaveSlotInterval(e)} className="space-y-4 max-w-sm">
-          <div className="space-y-2">
-            <Label>Slot interval</Label>
-            <div className="flex flex-wrap gap-2">
-              {[5, 10, 15, 30, 60].map((min) => (
-                <button
-                  key={min}
-                  type="button"
-                  onClick={() => setSlotIntervalMin(min)}
-                  className={cn(
-                    'px-3 py-1.5 rounded-full text-sm border transition-colors',
-                    slotIntervalMin === min
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-background border-input hover:border-ring',
-                  )}
-                >
-                  {min === 60 ? '1 hour' : `${min} min`}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="hold-timeout">Hold timeout (minutes)</Label>
-            <p className="text-xs text-muted-foreground">
-              Held appointments are auto-cancelled after this many minutes if payment is not received. Set to 0 to disable auto-release.
-            </p>
-            <div className="flex items-center gap-2">
-              <Input
-                id="hold-timeout"
-                type="number"
-                min={0}
-                max={240}
-                step={5}
-                value={holdTimeoutMin}
-                onChange={(e) => setHoldTimeoutMin(Math.max(0, Math.min(240, parseInt(e.target.value) || 0)))}
-                className="w-24"
-              />
-              <span className="text-sm text-muted-foreground">min{holdTimeoutMin === 0 ? ' (disabled)' : ''}</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" disabled={savingSlotInterval || !slotIntervalDirty}>
-                {savingSlotInterval ? 'Saving…' : 'Save booking settings'}
-              </Button>
-              {slotIntervalDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
-            </div>
-            <SectionSaveFeedback feedback={getSection('slotInterval')} />
-          </div>
-        </form>
-      </section>
-
-      <Separator />
-
-      {/* Message templates */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Campaign message templates</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Customise automatic WhatsApp messages. Use <code className="font-mono text-xs bg-muted px-1 rounded">{'{name}'}</code> for the customer&apos;s first name and <code className="font-mono text-xs bg-muted px-1 rounded">{'{salon}'}</code> for your salon name. Leave blank to use the smart default.
-          </p>
-        </div>
-        <form onSubmit={(e) => void handleSaveMessaging(e)} className="space-y-4 max-w-lg">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="winback-body">Win-back message</Label>
-              <span className={`text-xs tabular-nums ${winbackBody.length > 1600 ? 'text-destructive' : 'text-muted-foreground'}`}>{winbackBody.length}/1600</span>
-            </div>
-            <textarea
-              id="winback-body"
-              value={winbackBody}
-              onChange={(e) => setWinbackBody(e.target.value)}
-              rows={3}
-              maxLength={1700}
-              placeholder="Hey {name}! We miss you at {salon}. It's been a while — reply 1 to book. Reply STOP to opt out."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[72px] focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="birthday-body">Birthday message</Label>
-              <span className={`text-xs tabular-nums ${birthdayBody.length > 1600 ? 'text-destructive' : 'text-muted-foreground'}`}>{birthdayBody.length}/1600</span>
-            </div>
-            <textarea
-              id="birthday-body"
-              value={birthdayBody}
-              onChange={(e) => setBirthdayBody(e.target.value)}
-              rows={3}
-              maxLength={1700}
-              placeholder="Happy birthday {name}! 🎂 From all of us at {salon} — reply BIRTHDAY for a special treat."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[72px] focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="cancellation-policy">Cancellation policy</Label>
-              <span className={`text-xs tabular-nums ${cancellationPolicyText.length > 2000 ? 'text-destructive' : 'text-muted-foreground'}`}>{cancellationPolicyText.length}/2000</span>
-            </div>
-            <textarea
-              id="cancellation-policy"
-              value={cancellationPolicyText}
-              onChange={(e) => setCancellationPolicyText(e.target.value)}
-              rows={4}
-              maxLength={2100}
-              placeholder="e.g. Cancellations within 24 hours of your appointment will incur a 50% fee. No-shows will be charged in full."
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y min-h-[96px] focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            <p className="text-xs text-muted-foreground">Shown to customers when they request a cancellation via WhatsApp.</p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-3">
-              <Button type="submit" size="sm" disabled={savingMessaging || !messagingDirty}>
-                {savingMessaging ? 'Saving…' : 'Save message templates'}
-              </Button>
-              {messagingDirty && <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>}
-            </div>
-            <SectionSaveFeedback feedback={getSection('messaging')} />
           </div>
         </form>
       </section>

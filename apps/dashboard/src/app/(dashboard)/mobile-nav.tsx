@@ -2,10 +2,17 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  ADMIN_MOBILE_TAB_ITEMS,
+  adminMobileMoreItems,
+  isNavItemActive,
+  MOBILE_BOTTOM_TAB_ITEMS,
+  mobileMoreNavGroups,
+} from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { LogoutButton } from './logout-button';
+import { LogoutButton, LogoutIconButton } from './logout-button';
 
 // Icons as inline SVG to avoid adding a new dependency
 function HomeIcon({ className }: { className?: string }) {
@@ -85,31 +92,42 @@ interface TabItem {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const ownerTabs: TabItem[] = [
-  { href: '/', label: 'Overview', icon: HomeIcon },
-  { href: '/appointments', label: 'Bookings', icon: CalendarIcon },
-  { href: '/conversations', label: 'Chats', icon: ChatIcon },
-  { href: '/roster', label: 'Roster', icon: PeopleIcon },
-  { href: '/services', label: 'Services', icon: GridIcon },
-];
+const TAB_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  '/': HomeIcon,
+  '/appointments': CalendarIcon,
+  '/conversations': ChatIcon,
+  '/roster': PeopleIcon,
+  '/services': GridIcon,
+  '/agency': PeopleIcon,
+  '/analytics': GridIcon,
+  '/billing': CalendarIcon,
+};
 
-const adminTabs: TabItem[] = [
-  { href: '/', label: 'Overview', icon: HomeIcon },
-  { href: '/agency', label: 'Salons', icon: PeopleIcon },
-  { href: '/analytics', label: 'Analytics', icon: GridIcon },
-  { href: '/billing', label: 'Billing', icon: CalendarIcon },
-];
+function tabsFromNavItems(items: { href: string; label: string }[]): TabItem[] {
+  return items.map((item) => ({
+    ...item,
+    icon: TAB_ICONS[item.href] ?? GridIcon,
+  }));
+}
+
+const ownerTabs = tabsFromNavItems(MOBILE_BOTTOM_TAB_ITEMS);
+const adminTabs = tabsFromNavItems(ADMIN_MOBILE_TAB_ITEMS);
 
 export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCount = 0 }: NavProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const tabs = isAdmin ? adminTabs : ownerTabs;
+  const moreGroups = useMemo(
+    () => (isAdmin ? [{ title: 'Admin', items: adminMobileMoreItems() }] : mobileMoreNavGroups(isOwner)),
+    [isAdmin, isOwner],
+  );
+  const moreActive = moreGroups.some((group) =>
+    group.items.some((item) => isNavItemActive(pathname, item.href)),
+  );
 
   function isActive(href: string) {
-    if (href === '/') return pathname === '/';
-    if (href === '/roster') return pathname.startsWith('/roster') || pathname.startsWith('/staff');
-    return pathname.startsWith(href);
+    return isNavItemActive(pathname, href);
   }
 
   return (
@@ -126,7 +144,8 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
             </span>
           )}
         </div>
-        <span className="font-semibold text-sm truncate flex-1">{businessName}</span>
+        <span className="font-semibold text-sm truncate flex-1 min-w-0">{businessName}</span>
+        <LogoutIconButton className="-mr-1" />
         {/* MarineFlow badge */}
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="relative flex h-1.5 w-1.5">
@@ -179,10 +198,14 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
-          className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+          className={cn(
+            'relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
+            moreActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+          )}
         >
-          <MoreIcon className="size-5" />
+          <MoreIcon className={cn('size-5', moreActive && 'stroke-primary')} />
           More
+          {moreActive && <span className="absolute bottom-0 h-0.5 w-8 bg-primary rounded-full" />}
         </button>
       </nav>
 
@@ -192,26 +215,30 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
           <SheetHeader className="pb-2">
             <SheetTitle className="text-base">More</SheetTitle>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-2 py-2">
-            {!isAdmin && (
-              <>
-                <MoreNavItem href="/tickets" label="Tickets" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/faqs" label="Bot FAQs" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/customers" label="Customers" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/campaigns" label="Newsletter" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/analytics" label="Analytics" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/team-performance" label="Team Performance" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/automations" label="Power Features" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                {isOwner && <MoreNavItem href="/settings" label="Settings" pathname={pathname} onClick={() => setMoreOpen(false)} icon={<SettingsIcon className="size-4" />} />}
-                {isOwner && <MoreNavItem href="/billing" label="Billing" pathname={pathname} onClick={() => setMoreOpen(false)} />}
-              </>
-            )}
-            {isAdmin && (
-              <>
-                <MoreNavItem href="/admin" label="Admin" pathname={pathname} onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/analytics" label="Analytics" pathname={pathname} onClick={() => setMoreOpen(false)} />
-              </>
-            )}
+          <div className="space-y-4 py-2">
+            {moreGroups.map((group) => (
+              <div key={group.title}>
+                <p className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  {group.title}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {group.items.map((item) => (
+                    <MoreNavItem
+                      key={item.href}
+                      href={item.href}
+                      label={item.label}
+                      pathname={pathname}
+                      onClick={() => setMoreOpen(false)}
+                      icon={
+                        item.href === '/settings' ? (
+                          <SettingsIcon className="size-4" />
+                        ) : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
           <div className="pt-4 border-t mt-2">
             <LogoutButton />
@@ -235,7 +262,7 @@ function MoreNavItem({
   onClick: () => void;
   icon?: React.ReactNode;
 }) {
-  const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
+  const active = isNavItemActive(pathname, href);
   return (
     <Link
       href={href}

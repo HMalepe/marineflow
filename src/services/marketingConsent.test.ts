@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPopiaConsentMessage,
+  marketingConsentGatePending,
   parseMarketingConsentReply,
   parseMarketingConsentStatus,
   isGlobalMarketingOptIn,
@@ -9,11 +10,17 @@ import {
 import { validateCampaignMedia } from './campaigns.js';
 
 describe('parseMarketingConsentReply', () => {
-  it('accepts explicit accept/decline keywords', () => {
+  it('accepts explicit ACCEPT/DECLINE keywords', () => {
     expect(parseMarketingConsentReply('ACCEPT')).toBe('accept');
-    expect(parseMarketingConsentReply('yes')).toBe('accept');
     expect(parseMarketingConsentReply('DECLINE')).toBe('decline');
     expect(parseMarketingConsentReply('stop')).toBe('decline');
+  });
+
+  it('does not treat YES/NO as marketing consent (reserved for booking POPIA)', () => {
+    expect(parseMarketingConsentReply('yes')).toBeNull();
+    expect(parseMarketingConsentReply('YES')).toBeNull();
+    expect(parseMarketingConsentReply('no')).toBeNull();
+    expect(parseMarketingConsentReply('NO')).toBeNull();
   });
 
   it('rejects ambiguous numeric or single-letter replies', () => {
@@ -52,6 +59,17 @@ describe('buildPopiaConsentMessage', () => {
     expect(msg).toContain('MYDATA');
     expect(msg).toContain('DELETE');
     expect(msg).toContain('POPIA');
+  });
+});
+
+describe('marketingConsentGatePending', () => {
+  it('is true when dashboard toggle on and status pending', () => {
+    expect(marketingConsentGatePending({ botAskMarketingConsent: true }, 'PENDING')).toBe(true);
+  });
+
+  it('is false when toggle off or already decided', () => {
+    expect(marketingConsentGatePending({ botAskMarketingConsent: false }, 'PENDING')).toBe(false);
+    expect(marketingConsentGatePending({ botAskMarketingConsent: true }, 'ACCEPTED')).toBe(false);
   });
 });
 

@@ -1,4 +1,5 @@
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { syncSalonRosterLater } from './rosterSync.js';
 import type { Prisma } from '@prisma/client';
 import { DEFAULT_BUSINESS_HOURS } from '../lib/salonDefaults.js';
 import {
@@ -92,6 +93,8 @@ export async function saveWeeklyHoursSettings(
 
   if (options.syncRoster !== false) {
     await syncAllStaffWorkingHours(salonId, rows);
+    syncSalonRosterLater(salonId, 'staff', { action: 'business_hours_update' });
+    syncSalonRosterLater(salonId, 'availability', { action: 'business_hours_update' });
   }
 
   return settings;

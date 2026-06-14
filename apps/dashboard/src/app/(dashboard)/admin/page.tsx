@@ -1,4 +1,5 @@
 import { getToken } from '@/lib/auth';
+import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { AdminSalonList } from './admin-salon-list';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
@@ -71,7 +72,7 @@ export default async function AdminPage() {
         <KpiCard label="Total Salons" value={stats.totalSalons} />
         <KpiCard label="Active" value={stats.activeSalons} />
         <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
-        <KpiCard label="Total Bookings" value={stats.totalAppointments.toLocaleString()} />
+        <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
         <KpiCard label="New (7d)" value={stats.recentSignups} />
       </div>
 

@@ -10,6 +10,8 @@ interface EventStreamOptions {
 const EVENT_TYPES = [
   'appointment.created',
   'appointment.updated',
+  'service.catalog_changed',
+  'staff.roster_changed',
   'message.received',
   'bot.escalation',
 ];
