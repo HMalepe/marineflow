@@ -42,6 +42,7 @@ interface StaffMember {
   isBookable: boolean;
   workingHours: WorkingHour[];
   timeOff: TimeOffBlock[];
+  serviceNames?: string[];
 }
 
 interface Shift { startTime: string; endTime: string }
@@ -236,13 +237,22 @@ export function RosterClient({ token }: Props) {
 
       {/* Staff legend */}
       {!loading && staff.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-3">
           {staff.map((s) => (
-            <div key={s.id} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <div className={cn('w-5 h-5 rounded-full text-white flex items-center justify-center text-[10px] font-bold', avatarColor(s.name))}>
+            <div key={s.id} className="flex items-start gap-2 rounded-xl border bg-card px-3 py-2 min-w-0">
+              <div className={cn('size-7 rounded-full text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5', avatarColor(s.name))}>
                 {initials(s)}
               </div>
-              {s.displayName ?? s.name}
+              <div className="min-w-0">
+                <p className="text-xs font-semibold leading-tight truncate">{s.displayName ?? s.name}</p>
+                {s.serviceNames && s.serviceNames.length > 0 ? (
+                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">
+                    {s.serviceNames.join(' · ')}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-tight mt-0.5">No services linked</p>
+                )}
+              </div>
             </div>
           ))}
         </div>

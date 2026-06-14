@@ -36,6 +36,16 @@ export default async function DashboardLayout({
   const isOwner = user.role === 'OWNER';
   const isAdmin = user.role === 'SUPER_ADMIN';
 
+  let handoffCount = 0;
+  try {
+    if (token && !isAdmin) {
+      const hd = await apiFetch<{ count: number }>('/conversations/handoff-count', {}, token);
+      handoffCount = hd.count ?? 0;
+    }
+  } catch {
+    // badge is non-critical
+  }
+
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
       {/* Mobile header + bottom nav */}
@@ -44,6 +54,7 @@ export default async function DashboardLayout({
         isOwner={isOwner}
         businessName={businessName}
         logoUrl={logoUrl}
+        handoffCount={handoffCount}
       />
 
       {/* Sidebar (desktop only) */}
@@ -76,7 +87,7 @@ export default async function DashboardLayout({
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5">
-          <NavLinks isAdmin={isAdmin} isOwner={isOwner} />
+          <NavLinks isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
         </nav>
 
         {/* Product watermark */}

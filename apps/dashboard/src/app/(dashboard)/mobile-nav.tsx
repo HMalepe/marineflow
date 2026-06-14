@@ -76,6 +76,7 @@ interface NavProps {
   isOwner: boolean;
   businessName: string;
   logoUrl: string | null;
+  handoffCount?: number;
 }
 
 interface TabItem {
@@ -99,7 +100,7 @@ const adminTabs: TabItem[] = [
   { href: '/billing', label: 'Billing', icon: CalendarIcon },
 ];
 
-export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps) {
+export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCount = 0 }: NavProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -150,6 +151,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t flex items-stretch safe-area-pb">
         {tabs.map((tab) => {
           const active = isActive(tab.href);
+          const showBadge = tab.href === '/conversations' && handoffCount > 0;
           return (
             <Link
               key={tab.href}
@@ -159,7 +161,14 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
                 active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <tab.icon className={cn('size-5 transition-transform', active && 'scale-110')} />
+              <div className="relative">
+                <tab.icon className={cn('size-5 transition-transform', active && 'scale-110')} />
+                {showBadge && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
+                    {handoffCount > 9 ? '9+' : handoffCount}
+                  </span>
+                )}
+              </div>
               <span className={cn('transition-all', active && 'font-semibold')}>{tab.label}</span>
               {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" />}
             </Link>

@@ -37,6 +37,7 @@ import {
 } from '../services/marketingConsent.js';
 import { recordCustomerNoShow, normalizeNoShowRisk } from '../services/noShowRisk.js';
 import { clampRosterEnd, parseRosterDate } from '../lib/rosterRange.js';
+import { getAvailableSlots } from '../services/slots.js';
 import {
   mergeBotFlowIntoMetadata,
   parseBotFlowSettingsFromMetadata,
@@ -1830,6 +1831,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           timeOff: {
             where: { start: { lte: clampedTo }, end: { gte: from } },
           },
+          services: { include: { service: { select: { id: true, name: true } } } },
         },
         orderBy: { sortOrder: 'asc' },
       });
@@ -1869,6 +1871,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             end:   t.end.toISOString().slice(0, 10),
             reason: t.reason ?? null,
           })),
+          serviceNames: s.services.map((ss) => ss.service.name),
         })),
       };
     });
@@ -3955,6 +3958,100 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  // ─── Available slots for manual booking ──────────────────────────────
+  app.get<{ Querystring: { serviceId: string; staffId: string; date: string } }>(
+    '/appointments/slots',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { serviceId, staffId, date } = request.query;
+        if (!serviceId || !staffId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          reply.code(400);
+          return { error: 'serviceId, staffId and date (YYYY-MM-DD) are required.' };
+        }
+
+        const [service, staff] = await Promise.all([
+          db.service.findFirst({ where: { id: serviceId, salonId: user.salonId, deletedAt: null } }),
+          db.staff.findFirst({ where: { id: staffId, salonId: user.salonId, deletedAt: null } }),
+        ]);
+
+        if (!service || !staff) { reply.code(404); return { error: 'not_found' }; }
+
+        const { slots, tooLong } = await getAvailableSlots({ salonId: user.salonId, service, staff, localDateStr: date });
+        return {
+          tooLong,
+          slots: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
+        };
+      });
+    },
+  );
+
+  // ─── Staff-initiated manual booking ──────────────────────────────────
+  app.post<{
+    Body: {
+      customerId: string;
+      serviceId: string;
+      staffId: string;
+      startIso: string;
+      notes?: string;
+    };
+  }>(
+    '/appointments',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const { customerId, serviceId, staffId, startIso, notes } = request.body ?? {};
+        if (!customerId || !serviceId || !staffId || !startIso) {
+          reply.code(400);
+          return { error: 'missing_fields', message: 'customerId, serviceId, staffId and startIso are required.' };
+        }
+
+        const [customer, service, staff] = await Promise.all([
+          db.customer.findFirst({ where: { id: customerId, salonId: user.salonId } }),
+          db.service.findFirst({ where: { id: serviceId, salonId: user.salonId, deletedAt: null } }),
+          db.staff.findFirst({ where: { id: staffId, salonId: user.salonId, deletedAt: null } }),
+        ]);
+
+        if (!customer) { reply.code(404); return { error: 'customer_not_found' }; }
+        if (!service)  { reply.code(404); return { error: 'service_not_found' }; }
+        if (!staff)    { reply.code(404); return { error: 'staff_not_found' }; }
+
+        const start = new Date(startIso);
+        if (isNaN(start.getTime())) { reply.code(400); return { error: 'invalid_start_time' }; }
+
+        const durationMs = (service.durationMin + (service.bufferMin ?? 0) + (staff.breakMin ?? 0)) * 60_000;
+        const end = new Date(start.getTime() + durationMs);
+
+        const appt = await db.appointment.create({
+          data: {
+            salonId: user.salonId,
+            customerId: customer.id,
+            serviceId: service.id,
+            staffId: staff.id,
+            start,
+            end,
+            status: 'CONFIRMED',
+            notes: notes?.trim() || null,
+          },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'appointment_manual_create',
+            entity: 'Appointment',
+            entityId: appt.id,
+          },
+        }).catch(() => {});
+
+        return { appointmentId: appt.id, start: appt.start.toISOString(), end: appt.end.toISOString() };
+      });
+    },
+  );
+
   // ─── Appointment bulk complete (Item 50) ─────────────────────────────
   app.post<{ Body: { ids: string[] } }>(
     '/appointments/bulk-complete',
@@ -4101,6 +4198,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // ─── Conversation / Human-Handoff Management ────────────────────────────
   // These routes let staff reply to customers directly, take over a conversation
   // from the bot, or release it back to the bot.
+
+  /** Return the count of conversations currently in HANDOFF step for the current salon. */
+  app.get('/conversations/handoff-count', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const count = await db.conversation.count({
+        where: { salonId: user.salonId, step: 'HANDOFF' },
+      });
+      return { count };
+    });
+  });
 
   /** List all conversations, HANDOFF ones first so staff see what needs attention. */
   app.get('/conversations', async (request, reply) => {

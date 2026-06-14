@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiFetch, ApiError } from '@/lib/api';
-import { AlertTriangle, Calendar, CheckSquare, Clock, Loader2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckSquare, Clock, Loader2, Search, X } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 interface WaitlistEntry {
   id: string;
@@ -82,6 +83,7 @@ export function AppointmentsClient({
   token: string;
 }) {
   const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
+  const [search, setSearch] = useState('');
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [removingWaitlistId, setRemovingWaitlistId] = useState<string | null>(null);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
@@ -140,11 +142,19 @@ export function AppointmentsClient({
   }
 
   function applyFilter(list: AppointmentData[]): AppointmentData[] {
-    if (depositFilter === 'all') return list;
     return list.filter((a) => {
-      const ds = getDepositStatus(a);
-      if (depositFilter === 'paid') return ds === 'paid';
-      if (depositFilter === 'pending') return ds === 'unpaid';
+      if (depositFilter !== 'all') {
+        const ds = getDepositStatus(a);
+        if (depositFilter === 'paid' && ds !== 'paid') return false;
+        if (depositFilter === 'pending' && ds !== 'unpaid') return false;
+      }
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        const name = (a.customer.displayName ?? a.customer.waId).toLowerCase();
+        const service = a.service.name.toLowerCase();
+        const staff = a.staff.name.toLowerCase();
+        if (!name.includes(q) && !service.includes(q) && !staff.includes(q)) return false;
+      }
       return true;
     });
   }
@@ -195,7 +205,26 @@ export function AppointmentsClient({
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Appointments</h1>
           <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+          {/* Search */}
+          <div className="relative flex-1 sm:flex-none sm:w-56">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Customer, service, staff…"
+              className="pl-8 h-8 text-xs"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
           {completableIds.length > 0 && (
             <div className="flex items-center gap-2 rounded-lg border border-dashed p-1.5 bg-muted/40">
               <span className="text-xs text-muted-foreground px-1">

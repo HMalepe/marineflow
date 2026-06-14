@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -8,9 +8,11 @@ import {
   CheckCircle2,
   Clock,
   DollarSign,
+  Loader2,
   Mail,
   MessageSquare,
   Phone,
+  Plus,
   Star,
   Tag,
   TrendingUp,
@@ -20,6 +22,14 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { apiFetch, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
@@ -185,6 +195,9 @@ function MessageBubble({ m }: { m: MessageSummary }) {
   );
 }
 
+interface ServiceBrief { id: string; name: string; priceCents: number; durationMin: number }
+interface StaffBrief { id: string; name: string; displayName: string | null }
+
 export function CustomerDetailClient({ customer, token }: { customer: CustomerDetail; token: string }) {
   const [tab, setTab] = useState<Tab>('overview');
   const [tags, setTags] = useState<string[]>(customer.tags ?? []);
@@ -194,6 +207,67 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
   const [dob, setDob] = useState(customer.dateOfBirth ?? '');
   const [dobSaving, setDobSaving] = useState(false);
   const [dobSaved, setDobSaved] = useState(false);
+
+  // Manual booking sheet
+  const [bookingOpen, setBookingOpen] = useState(false);
+  const [bServices, setBServices] = useState<ServiceBrief[]>([]);
+  const [bStaff, setBStaff] = useState<StaffBrief[]>([]);
+  const [bServiceId, setBServiceId] = useState('');
+  const [bStaffId, setBStaffId] = useState('');
+  const [bDate, setBDate] = useState('');
+  const [bSlots, setBSlots] = useState<{ start: string; end: string }[]>([]);
+  const [bSlotIso, setBSlotIso] = useState('');
+  const [bNotes, setBNotes] = useState('');
+  const [bSlotsLoading, setBSlotsLoading] = useState(false);
+  const [bSaving, setBSaving] = useState(false);
+  const [bError, setBError] = useState<string | null>(null);
+  const [bSuccess, setBSuccess] = useState(false);
+
+  const loadBookingData = useCallback(async () => {
+    try {
+      const [svcData, staffData] = await Promise.all([
+        apiFetch<{ services: ServiceBrief[] }>('/services', {}, token),
+        apiFetch<{ staff: StaffBrief[] }>('/staff', {}, token),
+      ]);
+      setBServices((svcData.services ?? []).filter((s: ServiceBrief & { active?: boolean }) => s.active !== false));
+      setBStaff((staffData.staff ?? []).filter((s: StaffBrief & { active?: boolean; isBookable?: boolean }) => s.active !== false && s.isBookable !== false));
+    } catch { /* non-critical */ }
+  }, [token]);
+
+  useEffect(() => {
+    if (bookingOpen && bServices.length === 0) void loadBookingData();
+  }, [bookingOpen, bServices.length, loadBookingData]);
+
+  useEffect(() => {
+    if (!bServiceId || !bStaffId || !bDate) { setBSlots([]); setBSlotIso(''); return; }
+    setBSlotsLoading(true);
+    setBSlots([]);
+    setBSlotIso('');
+    void apiFetch<{ slots: { start: string; end: string }[]; tooLong: boolean }>(
+      `/appointments/slots?serviceId=${bServiceId}&staffId=${bStaffId}&date=${bDate}`, {}, token,
+    ).then((d) => {
+      setBSlots(d.slots ?? []);
+    }).catch(() => {}).finally(() => setBSlotsLoading(false));
+  }, [bServiceId, bStaffId, bDate, token]);
+
+  async function handleBookingSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bServiceId || !bStaffId || !bSlotIso) return;
+    setBSaving(true);
+    setBError(null);
+    try {
+      await apiFetch('/appointments', {
+        method: 'POST',
+        body: JSON.stringify({ customerId: customer.id, serviceId: bServiceId, staffId: bStaffId, startIso: bSlotIso, notes: bNotes }),
+      }, token);
+      setBSuccess(true);
+      setTimeout(() => { setBookingOpen(false); setBSuccess(false); setBServiceId(''); setBStaffId(''); setBDate(''); setBSlots([]); setBSlotIso(''); setBNotes(''); }, 1500);
+    } catch (err) {
+      setBError(err instanceof ApiError ? err.message : 'Booking failed — please try again');
+    } finally {
+      setBSaving(false);
+    }
+  }
 
   async function saveTags(nextTags: string[]) {
     setTagSaving(true);
@@ -373,6 +447,14 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
                 WhatsApp
               </a>
             )}
+            <button
+              type="button"
+              onClick={() => setBookingOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
+            >
+              <Plus className="size-3.5" />
+              Book appointment
+            </button>
           </div>
         </div>
       </div>
@@ -596,6 +678,130 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
           )}
         </div>
       )}
+
+      {/* Manual booking sheet */}
+      <Sheet open={bookingOpen} onOpenChange={setBookingOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          <SheetHeader className="mb-4">
+            <SheetTitle>Book appointment</SheetTitle>
+            <SheetDescription>Schedule a new appointment for {name}</SheetDescription>
+          </SheetHeader>
+
+          {bSuccess ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <CheckCircle2 className="size-12 text-green-500" />
+              <p className="font-semibold text-lg">Booking confirmed!</p>
+            </div>
+          ) : (
+            <form onSubmit={handleBookingSubmit} className="space-y-5">
+              {/* Service */}
+              <div className="space-y-1.5">
+                <Label htmlFor="b-service">Service</Label>
+                <select
+                  id="b-service"
+                  value={bServiceId}
+                  onChange={(e) => { setBServiceId(e.target.value); setBSlots([]); setBSlotIso(''); }}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Select a service…</option>
+                  {bServices.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} · {s.durationMin}min · R{Math.round(s.priceCents / 100)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Staff */}
+              <div className="space-y-1.5">
+                <Label htmlFor="b-staff">Staff member</Label>
+                <select
+                  id="b-staff"
+                  value={bStaffId}
+                  onChange={(e) => { setBStaffId(e.target.value); setBSlots([]); setBSlotIso(''); }}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Select staff…</option>
+                  {bStaff.map((s) => (
+                    <option key={s.id} value={s.id}>{s.displayName ?? s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Date */}
+              <div className="space-y-1.5">
+                <Label htmlFor="b-date">Date</Label>
+                <Input
+                  id="b-date"
+                  type="date"
+                  value={bDate}
+                  min={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => { setBDate(e.target.value); setBSlots([]); setBSlotIso(''); }}
+                />
+              </div>
+
+              {/* Slots */}
+              {(bServiceId && bStaffId && bDate) && (
+                <div className="space-y-1.5">
+                  <Label>Available times</Label>
+                  {bSlotsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                      <Loader2 className="size-4 animate-spin" /> Loading slots…
+                    </div>
+                  ) : bSlots.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2">No availability on this date.</p>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2">
+                      {bSlots.map((slot) => {
+                        const label = new Date(slot.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+                        return (
+                          <button
+                            key={slot.start}
+                            type="button"
+                            onClick={() => setBSlotIso(slot.start)}
+                            className={cn(
+                              'rounded-lg border py-2 text-sm font-medium transition-colors',
+                              bSlotIso === slot.start
+                                ? 'bg-primary text-primary-foreground border-primary'
+                                : 'bg-card hover:bg-muted',
+                            )}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Notes */}
+              <div className="space-y-1.5">
+                <Label htmlFor="b-notes">Notes (optional)</Label>
+                <textarea
+                  id="b-notes"
+                  value={bNotes}
+                  onChange={(e) => setBNotes(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. bring own shampoo, sensitive scalp…"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              {bError && <p className="text-sm text-destructive">{bError}</p>}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={!bServiceId || !bStaffId || !bSlotIso || bSaving}
+              >
+                {bSaving && <Loader2 className="size-4 mr-2 animate-spin" />}
+                Confirm booking
+              </Button>
+            </form>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
