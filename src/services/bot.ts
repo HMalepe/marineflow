@@ -149,6 +149,8 @@ export type BotContext = Record<string, unknown> & {
   pendingEmail?: string;
   /** ISO date string YYYY-MM-DD — stored as string to survive JSON round-trip safely. */
   pendingDateOfBirth?: string;
+  /** Appointment ID pending customer confirmation before cancel fires. */
+  pendingCancelApptId?: string;
 };
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z\s'-]{1,80}$/;
@@ -1600,6 +1602,9 @@ async function routeConversation(
     case ConversationStep.MANAGE_BOOKING:
       await handleManageBooking(conv, t);
       break;
+    case ConversationStep.CONFIRM_CANCEL:
+      await handleConfirmCancel(conv, t);
+      break;
     case ConversationStep.RESCHEDULE:
       await handleReschedule(conv, t);
       break;
@@ -2729,10 +2734,13 @@ async function handlePickDate(
       await replyWithMenu(conv, msg);
       return;
     }
-    const dateLines = suggestions.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
+    const dateLines = suggestions.slice(0, 10).map((d, i) => {
+      const dt = DateTime.fromISO(d).setZone(conv.salon.timezone);
+      return `${i + 1}. ${dt.toFormat('cccc, d MMMM')}`;
+    });
     await reply(
       conv,
-      [prefix, ...dateLines, '', 'Or type a date YYYY-MM-DD', 'Reply BACK to return to menu.'].join('\n'),
+      [prefix, ...dateLines, '', '_Or type a specific date — e.g._ *2026-07-15*', 'Reply *BACK* to return to menu.'].join('\n'),
     );
   };
 
@@ -2762,20 +2770,26 @@ async function handlePickDate(
     return;
   }
   if (slots.length === 0) {
-    await showDateList(`No openings on ${localDateStr}. Please choose another date:`);
+    await showDateList(`😔 No openings on that day — it might be fully booked. Here are the next available dates:`);
     return;
   }
 
   await saveCtx(conv.id, { localDateStr }, ConversationStep.PICK_SLOT);
-  // Item 29: funnel progression tracking
   void getTenantDb().analyticsEvent.create({
     data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
   }).catch(() => {});
+  const localDt = DateTime.fromISO(localDateStr).setZone(conv.salon.timezone);
   const lines = slots.slice(0, 8).map((s, i) => {
     const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
-    return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
+    return `${i + 1}. ${dt.toFormat('HH:mm')}`;
   });
-  await reply(conv, ['Pick a time slot:', ...lines, '', 'Reply BACK to choose a different date.'].join('\n'));
+  await reply(conv, [
+    `🗓 *${localDt.toFormat('cccc, d MMMM')}*`,
+    'Pick a time:',
+    ...lines,
+    '',
+    'Reply *BACK* to choose a different date.',
+  ].join('\n'));
 }
 
 async function handlePickSlot(
@@ -3253,7 +3267,7 @@ async function handleManageBooking(
   if (cancelMatch) {
     const idx = parseInt(cancelMatch[1]!, 10);
     if (!Number.isFinite(idx) || idx < 1 || idx > ids.length) {
-      await reply(conv, 'Invalid booking number.');
+      await reply(conv, 'Invalid booking number. Please try again, or reply *BACK* to go back.');
       return;
     }
     const id = ids[idx - 1]!;
@@ -3271,7 +3285,6 @@ async function handleManageBooking(
       appointment: appt,
     });
     if (!cancelCheck.ok) {
-      // Record penalty attempted so the dashboard can surface it — tenant context is live here
       if (cancelCheck.penaltyApplies) {
         void getTenantDb().appointment.update({
           where: { id: appt.id },
@@ -3282,34 +3295,23 @@ async function handleManageBooking(
       return;
     }
 
-    await getTenantDb().appointment.update({
-      where: { id: appt.id },
-      data: {
-        status: 'CANCELLED',
-        cancellationReason: 'CUSTOMER_REQUEST',
-        cancelledAt: new Date(),
-        cancelledBy: 'customer',
-      },
-    });
-
-    await afterAppointmentCancelled({
-      salonId: conv.salonId,
-      salon: conv.salon,
-      serviceId: appt.serviceId,
-      staffId: appt.staffId,
-      start: appt.start,
-    });
-    await getTenantDb().analyticsEvent.create({
-      data: {
-        salonId: conv.salonId,
-        customerId: conv.customerId,
-        appointmentId: appt.id,
-        type: 'booking_cancel',
-        payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp' },
-      },
-    });
-    await replyWithMenu(conv, `Cancelled ${sanitize(appt.service.name)} with ${sanitize(appt.staff.name)}.`);
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    // Show confirmation before cancelling — prevent accidental cancellations
+    const dt = DateTime.fromJSDate(appt.start).setZone(conv.salon.timezone);
+    const friendlyDate = dt.toFormat('cccc, d MMMM') + ' at ' + dt.toFormat('HH:mm');
+    await saveCtx(conv.id, { pendingCancelApptId: appt.id }, ConversationStep.CONFIRM_CANCEL);
+    await reply(
+      conv,
+      [
+        `⚠️ *Are you sure you want to cancel?*`,
+        '',
+        `📋 *${sanitize(appt.service.name)}*`,
+        `👤 with ${sanitize(appt.staff.name)}`,
+        `📅 ${friendlyDate}`,
+        '',
+        'Reply *YES* to confirm cancellation',
+        'Reply *NO* to keep your booking',
+      ].join('\n'),
+    );
     return;
   }
 
@@ -3351,29 +3353,108 @@ async function handleManageBooking(
     );
 
     const dates = await suggestBookingDates(conv.salonId);
-    const dateLines = dates.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
+    const dateLines = dates.slice(0, 10).map((d, i) => {
+      const dt = DateTime.fromISO(d).setZone(conv.salon.timezone);
+      return `${i + 1}. ${dt.toFormat('cccc, d MMMM')}`;
+    });
     await reply(
       conv,
       [
-        `Rescheduling ${appt.service.name} with ${appt.staff.name}.`,
+        `🔄 Rescheduling *${sanitize(appt.service.name)}* with ${sanitize(appt.staff.name)}.`,
+        '',
         'Pick a new date:',
         ...dateLines,
         '',
-        'Or type a date YYYY-MM-DD',
-        'Reply BACK to cancel and return to menu.',
+        '_Or type a specific date — e.g._ *2026-07-15*',
+        'Reply *BACK* to return to menu.',
       ].join('\n'),
     );
     return;
   }
 
-  await reply(conv, 'Use: CANCEL 1 or RESCHEDULE 1 (number from your list), or BACK.');
+  await reply(conv, [
+    "I didn't get that. Here's what you can do:",
+    '',
+    '• *CANCEL 1* — cancel booking number 1',
+    '• *RESCHEDULE 1* — reschedule booking number 1',
+    '• *BACK* — return to main menu',
+  ].join('\n'));
+}
+
+async function handleConfirmCancel(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const lower = text.trim().toLowerCase();
+  const apptId = ctx(conv).pendingCancelApptId as string | undefined;
+
+  if (lower === 'no' || lower === 'n') {
+    await saveCtx(conv.id, { pendingCancelApptId: undefined }, ConversationStep.MENU);
+    await reply(conv, "No problem! Your booking is still on. 😊\n\n_Type *MENU* to see your options._");
+    return;
+  }
+
+  if (lower !== 'yes' && lower !== 'y') {
+    await reply(conv, 'Reply *YES* to confirm cancellation, or *NO* to keep your booking.');
+    return;
+  }
+
+  if (!apptId) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+
+  const appt = await getTenantDb().appointment.findFirst({
+    where: { id: apptId, customerId: conv.customerId },
+    include: { service: true, staff: true },
+  });
+  if (!appt) {
+    await saveCtx(conv.id, { pendingCancelApptId: undefined }, ConversationStep.MENU);
+    await replyWithMenu(conv, 'Booking not found — it may have already been cancelled.');
+    return;
+  }
+
+  await getTenantDb().appointment.update({
+    where: { id: appt.id },
+    data: {
+      status: 'CANCELLED',
+      cancellationReason: 'CUSTOMER_REQUEST',
+      cancelledAt: new Date(),
+      cancelledBy: 'customer',
+    },
+  });
+
+  await afterAppointmentCancelled({
+    salonId: conv.salonId,
+    salon: conv.salon,
+    serviceId: appt.serviceId,
+    staffId: appt.staffId,
+    start: appt.start,
+  });
+
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: appt.id,
+      type: 'booking_cancel',
+      payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp' },
+    },
+  }).catch(() => {});
+
+  await saveCtx(conv.id, { pendingCancelApptId: undefined }, ConversationStep.MENU);
+  await replyWithMenu(
+    conv,
+    `✅ Your *${sanitize(appt.service.name)}* appointment has been cancelled. We hope to see you again soon! 😊`,
+  );
 }
 
 async function handleComplaint(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  await getTenantDb().ticket.create({
+  const ticket = await getTenantDb().ticket.create({
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
@@ -3383,7 +3464,11 @@ async function handleComplaint(
     },
   });
   await saveCtx(conv.id, {}, ConversationStep.MENU);
-  await replyWithMenu(conv, `Thanks — we logged your complaint and will respond shortly.`);
+  const refId = ticket.id.slice(0, 8).toUpperCase();
+  await replyWithMenu(
+    conv,
+    `✅ Your complaint has been logged (ref: *#${refId}*). A member of our team will follow up with you soon — thank you for letting us know. 🙏`,
+  );
 }
 
 // ─── Other / Something Else ────────────────────────────────────────────

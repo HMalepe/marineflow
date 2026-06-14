@@ -221,32 +221,46 @@ export function AutomationsClient({ token }: Props) {
           />
           <div className="grid sm:grid-cols-2 gap-4 pl-1">
             <div className="space-y-1.5">
-              <Label className="text-xs">Reschedule up to (hours before)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={168}
-                value={draft.cancellation.rescheduleHoursBefore}
-                onChange={(e) => patch('cancellation', { rescheduleHoursBefore: parseInt(e.target.value, 10) || 12 })}
-              />
+              <Label className="text-xs font-medium">Rescheduling deadline</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={168}
+                  className="w-24"
+                  value={draft.cancellation.rescheduleHoursBefore}
+                  onChange={(e) => patch('cancellation', { rescheduleHoursBefore: parseInt(e.target.value, 10) || 12 })}
+                />
+                <span className="text-sm text-muted-foreground">hours before appointment</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                e.g. {draft.cancellation.rescheduleHoursBefore}h = customers can reschedule up to {draft.cancellation.rescheduleHoursBefore >= 24 ? `${Math.round(draft.cancellation.rescheduleHoursBefore / 24)} day${draft.cancellation.rescheduleHoursBefore >= 48 ? 's' : ''}` : `${draft.cancellation.rescheduleHoursBefore} hours`} before
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Cancel up to (hours before)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={168}
-                value={draft.cancellation.cancelHoursBefore}
-                onChange={(e) => patch('cancellation', { cancelHoursBefore: parseInt(e.target.value, 10) || 24 })}
-              />
+              <Label className="text-xs font-medium">Cancellation deadline</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={168}
+                  className="w-24"
+                  value={draft.cancellation.cancelHoursBefore}
+                  onChange={(e) => patch('cancellation', { cancelHoursBefore: parseInt(e.target.value, 10) || 24 })}
+                />
+                <span className="text-sm text-muted-foreground">hours before appointment</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                After this window closes, cancellations are considered &quot;late&quot;
+              </p>
             </div>
           </div>
           <Toggle
             icon={CalendarX}
             checked={draft.cancellation.forfeitDepositOnLateCancel}
             onChange={(v) => patch('cancellation', { forfeitDepositOnLateCancel: v })}
-            label="Forfeit deposit on late cancellation"
-            description="Late cancels forfeit deposit unless you use Emergency Waive on the appointment."
+            label={`Forfeit deposit on late cancellation (< ${draft.cancellation.cancelHoursBefore}h notice)`}
+            description="If a customer cancels after the deadline above, their deposit is kept. Use the 'Waive penalty' button on the appointment if you want to make an exception."
           />
         </CardContent>
       </Card>

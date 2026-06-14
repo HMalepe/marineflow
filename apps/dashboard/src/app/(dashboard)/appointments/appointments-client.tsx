@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiFetch, ApiError } from '@/lib/api';
-import { CheckSquare, Loader2 } from 'lucide-react';
+import { AlertTriangle, CheckSquare, Loader2, X } from 'lucide-react';
 
 interface WaitlistEntry {
   id: string;
@@ -86,6 +86,7 @@ export function AppointmentsClient({
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkCompleting, setBulkCompleting] = useState(false);
   const [bulkToast, setBulkToast] = useState<string | null>(null);
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
 
   const loadWaitlist = useCallback(async () => {
     if (!token) return;
@@ -105,6 +106,7 @@ export function AppointmentsClient({
 
   async function handleBulkComplete() {
     if (bulkSelected.size === 0) return;
+    setConfirmBulkOpen(false);
     setBulkCompleting(true);
     try {
       const ids = [...bulkSelected];
@@ -145,9 +147,39 @@ export function AppointmentsClient({
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-3 flex-wrap">
+      {/* Bulk complete confirmation dialog */}
+      {confirmBulkOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmBulkOpen(false)} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl bg-card border shadow-2xl p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 size-10 rounded-full bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
+                <AlertTriangle className="size-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-base">Mark {bulkSelected.size} appointment{bulkSelected.size === 1 ? '' : 's'} complete?</h3>
+                <p className="text-sm text-muted-foreground">This will mark them as completed. This action cannot be undone.</p>
+              </div>
+              <button className="shrink-0 ml-auto text-muted-foreground hover:text-foreground" onClick={() => setConfirmBulkOpen(false)}>
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirmBulkOpen(false)}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={() => void handleBulkComplete()}>
+                <CheckSquare className="size-4 mr-1.5" />
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Appointments</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Appointments</h1>
           <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -164,7 +196,7 @@ export function AppointmentsClient({
                 {bulkSelected.size === completableIds.length ? 'Deselect all' : 'Select all'}
               </button>
               {bulkSelected.size > 0 && (
-                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => void handleBulkComplete()} disabled={bulkCompleting}>
+                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setConfirmBulkOpen(true)} disabled={bulkCompleting}>
                   {bulkCompleting ? <Loader2 className="size-3 animate-spin" /> : <CheckSquare className="size-3" />}
                   Mark complete
                 </Button>
@@ -460,36 +492,50 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
   if (todayAppts.length === 0) return null;
 
   return (
-    <Card className="border-primary/20 bg-primary/[0.03]">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <span className="size-2 rounded-full bg-primary inline-block" />
-          Today — {today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}
-          <span className="ml-auto text-xs font-normal text-muted-foreground">{todayAppts.length} appointment{todayAppts.length === 1 ? '' : 's'}</span>
+    <Card className="border-primary/20 bg-gradient-to-r from-primary/[0.04] to-transparent overflow-hidden">
+      <CardHeader className="pb-2 sm:pb-3">
+        <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+          <span className="relative flex size-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-50" />
+            <span className="relative inline-flex rounded-full size-2.5 bg-primary" />
+          </span>
+          <span>Today — {today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            {todayAppts.length} appointment{todayAppts.length === 1 ? '' : 's'}
+          </span>
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+      <CardContent className="pt-0">
+        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
           {todayAppts.map((a) => {
             const startTime = new Date(a.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
-            const isPast = new Date(a.start) < new Date();
+            const endTime = new Date(a.end).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+            const isPast = new Date(a.end) < new Date();
+            const isNow = new Date(a.start) <= new Date() && new Date(a.end) > new Date();
             return (
               <div
                 key={a.id}
-                className={`shrink-0 rounded-lg border p-3 min-w-[160px] max-w-[200px] space-y-1 ${
-                  isPast ? 'opacity-60 bg-muted/40' : 'bg-card'
+                className={`shrink-0 rounded-xl border p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-all ${
+                  isNow
+                    ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
+                    : isPast
+                    ? 'opacity-50 bg-muted/30'
+                    : 'bg-card hover:border-primary/30 hover:shadow-sm'
                 }`}
               >
-                <p className="text-xs font-bold tabular-nums">{startTime}</p>
-                <p className="text-sm font-medium truncate">{a.service.name}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {a.customer.displayName ?? a.customer.waId}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">{a.staff.displayName ?? a.staff.name}</p>
-                <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold tabular-nums">{startTime} – {endTime}</p>
+                  {isNow && <span className="text-[9px] font-semibold text-primary uppercase tracking-wide">Now</span>}
+                </div>
+                <p className="text-sm font-semibold truncate leading-tight">{a.service.name}</p>
+                <div className="space-y-0.5">
+                  <p className="text-xs text-muted-foreground truncate">{a.customer.displayName ?? a.customer.waId}</p>
+                  <p className="text-[11px] text-muted-foreground/70 truncate">{a.staff.displayName ?? a.staff.name}</p>
+                </div>
+                <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${
                   a.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' :
-                  a.status === 'CANCELLED' ? 'bg-red-100 text-red-700' :
-                  a.status === 'NO_SHOW' ? 'bg-amber-100 text-amber-700' :
+                  a.status === 'CANCELLED' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' :
+                  a.status === 'NO_SHOW' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :
                   'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                 }`}>
                   {a.status.replace(/_/g, ' ').toLowerCase()}
