@@ -20,7 +20,7 @@ import { PasswordManagerUsernameField } from '@/components/password-manager-user
 import { checkPhone, login, setupPassword } from './actions';
 
 type LoginTab = 'whatsapp' | 'email';
-type PhoneStep = 'number' | 'login' | 'setup';
+type PhoneStep = 'entry' | 'setup';
 
 function validateStrongPassword(password: string): string | null {
   if (password.length < 8) return 'Password must be at least 8 characters';
@@ -53,9 +53,7 @@ export function LoginForm() {
   const phoneRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<LoginTab>(redirect.tab);
-  const [phoneStep, setPhoneStep] = useState<PhoneStep>(
-    redirect.phone ? 'login' : 'number',
-  );
+  const [phoneStep, setPhoneStep] = useState<PhoneStep>('entry');
   const [phoneDisplay, setPhoneDisplay] = useState(
     redirect.phone ? e164ToLocalDisplay(redirect.phone) : '',
   );
@@ -78,7 +76,7 @@ export function LoginForm() {
   );
 
   useEffect(() => {
-    if (redirect.phone && phoneStep === 'login') {
+    if (redirect.phone && phoneStep === 'entry') {
       void checkPhone(redirect.phone).then((result) => {
         if (!('error' in result)) setSalonName(result.salonName);
       });
@@ -87,7 +85,7 @@ export function LoginForm() {
 
   function switchTab(mode: LoginTab) {
     setTab(mode);
-    setPhoneStep('number');
+    setPhoneStep('entry');
     setSalonName(null);
     setError(null);
     requestAnimationFrame(() => {
@@ -103,7 +101,7 @@ export function LoginForm() {
     return formatSaPhone(phoneDisplay);
   }
 
-  async function handleCheckPhone(e: React.FormEvent) {
+  async function handlePhoneEntry(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -115,27 +113,31 @@ export function LoginForm() {
       return;
     }
 
-    const result = await checkPhone(phoneE164());
-    if ('error' in result) {
-      setError(result.error);
+    const e164 = phoneE164();
+    const password = (new FormData(e.currentTarget).get('password') as string) ?? '';
+
+    const check = await checkPhone(e164);
+    if ('error' in check) {
+      setError(check.error);
       setLoading(false);
       return;
     }
 
-    setSalonName(result.salonName);
-    setPhoneStep(result.status === 'setup' ? 'setup' : 'login');
-    setLoading(false);
-  }
+    setSalonName(check.salonName);
 
-  async function handlePhoneLogin(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
+    if (check.status === 'setup') {
+      setPhoneStep('setup');
+      setLoading(false);
+      return;
+    }
 
-    const password = new FormData(e.currentTarget).get('password') as string;
-    const e164 = phoneE164();
+    if (!password.trim()) {
+      setError('Enter your password');
+      setLoading(false);
+      return;
+    }
+
     const result = await login({ method: 'phone', phone: e164, password });
-
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -205,7 +207,7 @@ export function LoginForm() {
   }
 
   function backToPhoneEntry() {
-    setPhoneStep('number');
+    setPhoneStep('entry');
     setSalonName(null);
     setError(null);
   }
@@ -276,6 +278,7 @@ export function LoginForm() {
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <PasswordInput
+                    key="email-password"
                     id="password"
                     name="password"
                     required
@@ -291,8 +294,14 @@ export function LoginForm() {
                   {loading ? 'Signing in…' : 'Sign in'}
                 </Button>
               </form>
-            ) : phoneStep === 'number' ? (
-              <form onSubmit={(e) => void handleCheckPhone(e)} className="space-y-4">
+            ) : phoneStep === 'entry' ? (
+              <form onSubmit={(e) => void handlePhoneEntry(e)} className="space-y-4" autoComplete="on" method="post">
+                <PasswordManagerUsernameField username={phoneUsername} />
+                {salonName && (
+                  <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
+                    Signing in to <span className="font-medium text-foreground">{salonName}</span>
+                  </p>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="phone">WhatsApp business number</Label>
                   <div className="flex">
@@ -324,32 +333,17 @@ export function LoginForm() {
                     On first visit you&apos;ll create your password — no Meta account needed.
                   </p>
                 </div>
-                {error && (
-                  <p role="alert" className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
-                    {error}
-                  </p>
-                )}
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? 'Checking…' : 'Continue'}
-                </Button>
-              </form>
-            ) : phoneStep === 'login' ? (
-              <form onSubmit={(e) => void handlePhoneLogin(e)} className="space-y-4" autoComplete="on" method="post">
-                <PasswordManagerUsernameField username={phoneUsername} />
-                <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
-                  Signing in to <span className="font-medium text-foreground">{salonName}</span>
-                  {' · '}
-                  <span className="tabular-nums">{phoneE164()}</span>
-                </p>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
                   <PasswordInput
+                    key="phone-entry-password"
                     id="password"
                     name="password"
-                    required
                     autoComplete="current-password"
-                    autoFocus
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Required each time you sign in. Your browser can fill this if you saved it.
+                  </p>
                 </div>
                 {error && (
                   <p role="alert" className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">
@@ -358,9 +352,6 @@ export function LoginForm() {
                 )}
                 <Button type="submit" className="w-full" disabled={loading}>
                   {loading ? 'Signing in…' : 'Sign in'}
-                </Button>
-                <Button type="button" variant="ghost" className="w-full" onClick={backToPhoneEntry}>
-                  Use a different number
                 </Button>
               </form>
             ) : (

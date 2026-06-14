@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 
 type PasswordInputProps = Omit<React.ComponentProps<typeof Input>, 'type'>;
 
-export function PasswordInput({ className, ...props }: PasswordInputProps) {
+export function PasswordInput({ className, defaultValue = '', ...props }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -15,6 +15,7 @@ export function PasswordInput({ className, ...props }: PasswordInputProps) {
       <Input
         type={visible ? 'text' : 'password'}
         className={cn('pr-9', className)}
+        defaultValue={defaultValue}
         {...props}
       />
       <button
