@@ -493,21 +493,52 @@ async function reply(
 async function sendReceptionistGreeting(conv: Conversation & { customer: Customer; salon: Salon }) {
   const salon = conv.salon;
   const salonName = salon.tradingName?.trim() || salon.name;
-  const firstName = conv.customer.firstName?.trim();
+  const customer = conv.customer;
   const timeHour = DateTime.now().setZone(salon.timezone).hour;
   const timeGreeting =
     timeHour < 12 ? 'Good morning' : timeHour < 17 ? 'Good afternoon' : 'Good evening';
 
-  const personalised = firstName ? `, ${firstName}` : '';
+  // New customer — no profile yet. Show POPIA first before anything else.
+  if (isProfileIncomplete(customer)) {
+    await saveCtx(conv.id, {}, ConversationStep.BOOKING_POPIA_CONSENT);
+    syncConvContext(conv, {}, ConversationStep.BOOKING_POPIA_CONSENT);
+    await reply(
+      conv,
+      [
+        `${timeGreeting}! 👋 Welcome to *${salonName}* — we\'re happy to have you!`,
+        '',
+        'Before we get started, we just need a quick moment for a legal step. 👇',
+      ].join('\n'),
+    );
+    await reply(conv, buildBookingPopiaConsentMessage());
+    return;
+  }
+
+  // Returning customer — look up their last completed appointment for personalisation.
+  const firstName = customer.firstName?.trim() ?? 'there';
+  const lastAppt = await getTenantDb().appointment.findFirst({
+    where: {
+      customerId: customer.id,
+      salonId: salon.id,
+      status: { in: ['CONFIRMED', 'COMPLETED'] },
+      start: { lt: new Date() },
+    },
+    orderBy: { start: 'desc' },
+    include: { service: { select: { name: true } } },
+  });
+
+  const usualLine = lastAppt?.service?.name
+    ? `The usual *${sanitize(lastAppt.service.name)}*? Or something different today?`
+    : 'What can we do for you today?';
 
   await reply(
     conv,
     [
-      `${timeGreeting}${personalised}! 👋 Welcome to *${salonName}*.`,
+      `${timeGreeting}! Welcome back, *${firstName}* 😊`,
       '',
-      'How can I help you today? You can ask me anything — whether you\'d like to make a booking, check our prices, find out our hours, or anything else.',
+      `Great to see you again. ${usualLine}`,
       '',
-      '_Type *MENU* anytime to see all options._',
+      '_Just tell me what you need, or type *MENU* to see all options._',
     ].join('\n'),
   );
 }
