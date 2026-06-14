@@ -127,7 +127,9 @@ export type BotContext = Record<string, unknown> & {
   staffOrderIds?: string[];
   /** Hierarchical main-menu sub-section (my_appointments, services, …). */
   menuCategory?: MenuCategoryId | LegacyMenuCategoryId;
-  /** When set, PICK_SERVICE only shows these service ids (from Services submenu). */
+  /** Category ids shown during PICK_SERVICE_CATEGORY step. */
+  serviceCategoryOptions?: string[];
+  /** When set, PICK_SERVICE only shows these service ids (from Services submenu or chosen category). */
   serviceFilterIds?: string[];
   /** Hint for manage-booking submenu (view / reschedule / cancel). */
   manageBookingHint?: 'view' | 'reschedule' | 'cancel';
@@ -227,6 +229,7 @@ const WHATSAPP_BOOKING_STEPS: ConversationStep[] = [
   ConversationStep.COLLECT_DATE_OF_BIRTH,
   ConversationStep.BOOKING_POPIA_CONSENT,
   ConversationStep.PICK_BRANCH,
+  ConversationStep.PICK_SERVICE_CATEGORY,
   ConversationStep.PICK_SERVICE,
   ConversationStep.PICK_STAFF,
   ConversationStep.PICK_DATE,
@@ -239,12 +242,14 @@ async function loadActiveServicesForBooking(salonId: string) {
     return await getTenantDb().service.findMany({
       where: { salonId, active: true, deletedAt: null },
       orderBy: { sortOrder: 'asc' },
+      include: { category: { select: { id: true, name: true, sortOrder: true } } },
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
       return getTenantDb().service.findMany({
         where: { salonId, active: true },
         orderBy: { sortOrder: 'asc' },
+        include: { category: { select: { id: true, name: true, sortOrder: true } } },
       });
     }
     throw err;
@@ -1563,6 +1568,9 @@ async function routeConversation(
     case ConversationStep.BOOKING_POPIA_CONSENT:
       await handleBookingPopiaConsent(conv, t);
       break;
+    case ConversationStep.PICK_SERVICE_CATEGORY:
+      await handlePickServiceCategory(conv, t);
+      break;
     case ConversationStep.PICK_SERVICE:
       await handlePickService(conv, t);
       break;
@@ -1668,14 +1676,48 @@ async function startBookingFlow(
     await replyWithMenu(conv, msg);
     return;
   }
-  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
-  syncConvContext(conv, {}, ConversationStep.PICK_SERVICE);
+
   // Item 29: funnel entry tracking
   void getTenantDb().analyticsEvent.create({
     data: { salonId: salon.id, customerId: conv.customerId, type: 'funnel_pick_service' },
   }).catch(() => {});
-  await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+
+  // Group by category — if multiple categories exist, show category picker first.
+  const categories = new Map<string, { name: string; sortOrder: number; ids: string[] }>();
+  const uncategorised: typeof services = [];
+  for (const s of services) {
+    if (s.category) {
+      const entry = categories.get(s.category.id) ?? { name: s.category.name, sortOrder: s.category.sortOrder, ids: [] };
+      entry.ids.push(s.id);
+      categories.set(s.category.id, entry);
+    } else {
+      uncategorised.push(s);
+    }
+  }
+
+  const catList = [...categories.entries()]
+    .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+    .map(([id, cat]) => ({ id, ...cat }));
+
+  if (catList.length > 1) {
+    // Show categories — customer picks one, then sees services within it.
+    const lines = catList.map((c, i) => `${i + 1}. ${sanitize(c.name)}`);
+    if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
+    const catIds = catList.map((c) => c.id);
+    await saveCtx(conv.id, { serviceCategoryOptions: catIds }, ConversationStep.PICK_SERVICE_CATEGORY);
+    syncConvContext(conv, { serviceCategoryOptions: catIds }, ConversationStep.PICK_SERVICE_CATEGORY);
+    await reply(conv, ['What type of service are you looking for?', '', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    return;
+  }
+
+  // Single category or no categories — show flat list (keep it short with a note if long).
+  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, {}, ConversationStep.PICK_SERVICE);
+  const header = services.length > 8
+    ? `We have ${services.length} services — pick a number:`
+    : 'Pick a service:';
+  await reply(conv, [header, ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
 
 async function handleCollectFirstName(
@@ -2403,6 +2445,63 @@ function staffMenuLines(staffList: Staff[], preferredId: string | null): string[
     ),
     `${staffList.length + 1}. Any available`,
   ];
+}
+
+async function handlePickServiceCategory(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const c = ctx(conv);
+  const catIds = (c.serviceCategoryOptions ?? []) as string[];
+  const allServices = await loadActiveServicesForBooking(conv.salonId);
+
+  // Build same category list as shown to the customer.
+  const categories = new Map<string, { name: string; sortOrder: number; ids: string[] }>();
+  const uncategorised: typeof allServices = [];
+  for (const s of allServices) {
+    if (s.category && catIds.includes(s.category.id)) {
+      const entry = categories.get(s.category.id) ?? { name: s.category.name, sortOrder: s.category.sortOrder, ids: [] };
+      entry.ids.push(s.id);
+      categories.set(s.category.id, entry);
+    } else if (!s.category) {
+      uncategorised.push(s);
+    }
+  }
+  const catList = [...categories.entries()]
+    .sort((a, b) => a[1].sortOrder - b[1].sortOrder)
+    .map(([id, cat]) => ({ id, ...cat }));
+  const totalOptions = catList.length + (uncategorised.length > 0 ? 1 : 0);
+
+  const n = parseInt(text.trim(), 10);
+  if (!Number.isFinite(n) || n < 1 || n > totalOptions) {
+    const lines = catList.map((c, i) => `${i + 1}. ${sanitize(c.name)}`);
+    if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
+    await reply(conv, [`Please reply with a number (1–${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    return;
+  }
+
+  // Determine which services are in the chosen category.
+  let filterIds: string[];
+  let chosenName: string;
+  if (n <= catList.length) {
+    const chosen = catList[n - 1]!;
+    filterIds = chosen.ids;
+    chosenName = chosen.name;
+  } else {
+    filterIds = uncategorised.map((s) => s.id);
+    chosenName = 'Other services';
+  }
+
+  const filtered = allServices.filter((s) => filterIds.includes(s.id));
+  if (filtered.length === 0) {
+    await reply(conv, `No services found in that category. Reply BACK to choose again.`);
+    return;
+  }
+
+  const lines = filtered.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  await saveCtx(conv.id, { serviceFilterIds: filterIds }, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, { serviceFilterIds: filterIds }, ConversationStep.PICK_SERVICE);
+  await reply(conv, [`*${sanitize(chosenName)}*`, ...lines, '', 'Reply with a number to book, or BACK to change category.'].join('\n'));
 }
 
 async function handlePickService(
