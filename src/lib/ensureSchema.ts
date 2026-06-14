@@ -19,6 +19,16 @@ const SERVICE_COLUMN_GUARDS = [
   'ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3)',
 ] as const;
 
+const CUSTOMER_COLUMN_GUARDS = [
+  `DO $$ BEGIN
+    CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentStatus" "MarketingConsentStatus" NOT NULL DEFAULT 'PENDING'`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentAt" TIMESTAMP(3)`,
+  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsent" BOOLEAN NOT NULL DEFAULT false`,
+] as const;
+
 /** Idempotent ALTERs for columns that may be missing after a P3005 baseline. */
 const SCHEMA_COLUMN_GUARDS = [
   ...APPOINTMENT_COLUMN_GUARDS,
@@ -77,16 +87,6 @@ const CONSENT_RECORD_FKEY_GUARDS = [
       FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $$`,
-] as const;
-
-const CUSTOMER_COLUMN_GUARDS = [
-  `DO $$ BEGIN
-    CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END $$`,
-  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentStatus" "MarketingConsentStatus" NOT NULL DEFAULT 'PENDING'`,
-  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsentAt" TIMESTAMP(3)`,
-  `ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "marketingConsent" BOOLEAN NOT NULL DEFAULT false`,
 ] as const;
 
 const CUSTOMER_CAMPAIGN_INDEX_GUARDS = [
