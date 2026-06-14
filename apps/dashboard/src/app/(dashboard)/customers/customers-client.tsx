@@ -136,6 +136,7 @@ export function CustomersClient({ token }: Props) {
   const [search, setSearch] = useState('');
   const [consentFilter, setConsentFilter] = useState<ConsentFilter>('all');
   const [mergingId, setMergingId] = useState<string | null>(null);
+  const [mergeConfirm, setMergeConfirm] = useState<{ primaryId: string; dupId: string; primaryName: string; dupName: string; dupBookings: number } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -178,12 +179,19 @@ export function CustomersClient({ token }: Props) {
     searchRef.current = setTimeout(() => void load(value), 300);
   };
 
-  const handleMerge = async (primaryId: string, secondaryId: string) => {
-    setMergingId(secondaryId);
+  const confirmMerge = (primaryId: string, dupId: string, primaryName: string, dupName: string, dupBookings: number) => {
+    setMergeConfirm({ primaryId, dupId, primaryName, dupName, dupBookings });
+  };
+
+  const handleMerge = async () => {
+    if (!mergeConfirm) return;
+    const { primaryId, dupId } = mergeConfirm;
+    setMergeConfirm(null);
+    setMergingId(dupId);
     try {
       await apiFetch(`/customers/${primaryId}/merge`, {
         method: 'POST',
-        body: JSON.stringify({ secondaryId }),
+        body: JSON.stringify({ secondaryId: dupId }),
       }, token);
       showToast('Records merged successfully', 'success');
       await load(search);
@@ -393,7 +401,7 @@ export function CustomersClient({ token }: Props) {
                         size="sm"
                         variant="outline"
                         className="shrink-0 border-amber-400/50 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20 gap-1.5 text-xs h-7"
-                        onClick={() => void handleMerge(primary.id, dup.id)}
+                        onClick={() => confirmMerge(primary.id, dup.id, displayName(primary), displayName(dup), dup.bookingCount)}
                         disabled={isMerging}
                       >
                         {isMerging ? (
@@ -409,6 +417,45 @@ export function CustomersClient({ token }: Props) {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Merge confirmation dialog */}
+      {mergeConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-background rounded-2xl border shadow-2xl max-w-sm w-full p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 shrink-0">
+                <GitMerge className="size-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Merge records?</h3>
+                <p className="text-sm text-muted-foreground mt-1">This cannot be undone.</p>
+              </div>
+            </div>
+            <div className="rounded-xl border bg-muted/30 p-3 text-sm space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="size-4 text-green-500 shrink-0" />
+                <span className="font-medium">Keep: {mergeConfirm.primaryName}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <XCircle className="size-4 text-destructive shrink-0" />
+                <span className="text-muted-foreground">
+                  Remove: {mergeConfirm.dupName}
+                  {mergeConfirm.dupBookings > 0 && ` (${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} will transfer)`}
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => setMergeConfirm(null)}>
+                Cancel
+              </Button>
+              <Button className="flex-1 bg-amber-600 hover:bg-amber-700 text-white" onClick={() => void handleMerge()}>
+                <GitMerge className="size-4 mr-1.5" />
+                Merge
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -3399,6 +3399,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.delete('/waitlist/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const { id } = request.params as { id: string };
+      const db = getTenantDb();
+      const entry = await db.waitlistEntry.findFirst({ where: { id, salonId: user.salonId } });
+      if (!entry) return reply.status(404).send({ error: 'Not found' });
+      await db.waitlistEntry.delete({ where: { id } });
+      return { ok: true };
+    });
+  });
+
   // ─── Subscription & Billing ──────────────────────────────────────────
   app.get('/subscription/plans', async () => {
     return { plans: await getPlans() };

@@ -83,6 +83,7 @@ export function AppointmentsClient({
 }) {
   const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [removingWaitlistId, setRemovingWaitlistId] = useState<string | null>(null);
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkCompleting, setBulkCompleting] = useState(false);
   const [bulkToast, setBulkToast] = useState<string | null>(null);
@@ -99,6 +100,18 @@ export function AppointmentsClient({
   }, [token]);
 
   useEffect(() => { void loadWaitlist(); }, [loadWaitlist]);
+
+  async function handleRemoveWaitlist(id: string) {
+    setRemovingWaitlistId(id);
+    try {
+      await apiFetch(`/waitlist/${id}`, { method: 'DELETE' }, token);
+      setWaitlist((prev) => prev.filter((e) => e.id !== id));
+    } catch {
+      // silently ignore — entry will still show, user can retry
+    } finally {
+      setRemovingWaitlistId(null);
+    }
+  }
 
   const completableIds = upcoming
     .filter((a) => (a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID') && new Date(a.start) <= new Date())
@@ -290,24 +303,30 @@ export function AppointmentsClient({
             </p>
             <div className="space-y-2">
               {waitlist.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between p-3 rounded-lg border gap-3 text-sm">
-                  <div className="space-y-0.5 min-w-0">
+                <div key={entry.id} className="flex items-center gap-3 p-3 rounded-lg border text-sm">
+                  <div className="flex-1 space-y-0.5 min-w-0">
                     <p className="font-medium truncate">{entry.customerName}</p>
                     <p className="text-xs text-muted-foreground">
                       {entry.serviceName ?? 'Any service'}
                       {entry.staffName ? ` · ${entry.staffName}` : ''}
                     </p>
-                  </div>
-                  <div className="text-right shrink-0 space-y-0.5">
                     <p className="text-xs text-muted-foreground">
                       Since {new Date(entry.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                      {entry.expiresAt && ` · Expires ${new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}`}
                     </p>
-                    {entry.expiresAt && (
-                      <p className="text-[10px] text-muted-foreground">
-                        Expires {new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
-                      </p>
-                    )}
                   </div>
+                  <button
+                    onClick={() => void handleRemoveWaitlist(entry.id)}
+                    disabled={removingWaitlistId === entry.id}
+                    title="Remove from waitlist"
+                    className="h-8 w-8 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 shrink-0"
+                  >
+                    {removingWaitlistId === entry.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <X className="w-3.5 h-3.5" />
+                    )}
+                  </button>
                 </div>
               ))}
             </div>
