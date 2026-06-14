@@ -179,7 +179,7 @@ export function RosterClient({ token }: Props) {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Roster</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Roster</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Click any date to manage shifts and time off.
           </p>

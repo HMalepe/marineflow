@@ -504,7 +504,7 @@ export function ServicesClient({ token }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Services</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Services</h1>
           <p className="text-muted-foreground text-sm mt-1">
             Manage what customers can book via WhatsApp.
           </p>

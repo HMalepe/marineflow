@@ -112,7 +112,7 @@ async function AdminBillingPage({ token }: { token: string }) {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Billing &amp; Subscriptions</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Billing &amp; Subscriptions</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Platform-wide subscription and revenue overview.
         </p>
@@ -285,7 +285,7 @@ export default async function BillingPage({
 function BillingPageHeader() {
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight">Billing</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Billing</h1>
       <p className="text-muted-foreground text-sm mt-1">
         One simple plan — WhatsApp bookings, dashboard, and onboarding included.
       </p>

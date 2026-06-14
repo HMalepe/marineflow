@@ -167,7 +167,7 @@ export function AutomationsClient({ token }: Props) {
     <div className="space-y-8 max-w-4xl">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
             <Zap className="size-7 text-amber-500" />
             Power Features
           </h1>

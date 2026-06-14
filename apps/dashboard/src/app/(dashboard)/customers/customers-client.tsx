@@ -217,7 +217,7 @@ export function CustomersClient({ token }: Props) {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Customers</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {loading ? '—' : `${groups.length} customer${groups.length === 1 ? '' : 's'}`}
             {!loading && duplicateCount > 0 && (
