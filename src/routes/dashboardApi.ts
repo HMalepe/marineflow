@@ -3708,6 +3708,36 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  // Seed the 7 default barbershop categories if none exist yet for this salon.
+  app.post(
+    '/service-categories/seed-defaults',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.serviceCategory.count({ where: { salonId: user.salonId } });
+        if (existing > 0) return { seeded: false, message: 'Categories already exist' };
+
+        const defaults = [
+          { name: 'Fades & Cuts',  slug: 'fades-cuts',   sortOrder: 1 },
+          { name: 'Beard',          slug: 'beard',         sortOrder: 2 },
+          { name: 'Locs & Braids',  slug: 'locs-braids',  sortOrder: 3 },
+          { name: 'Kids & Teens',   slug: 'kids-teens',   sortOrder: 4 },
+          { name: 'Colour & Tint',  slug: 'colour-tint',  sortOrder: 5 },
+          { name: 'Add-Ons',        slug: 'add-ons',       sortOrder: 6 },
+          { name: 'Other',          slug: 'other',         sortOrder: 7 },
+        ];
+
+        const created = await Promise.all(
+          defaults.map((d) =>
+            db.serviceCategory.create({ data: { salonId: user.salonId, ...d } }),
+          ),
+        );
+        return { seeded: true, categories: created };
+      });
+    },
+  );
+
   app.post<{ Body: { name: string } }>(
     '/service-categories',
     { preHandler: requireRole('OWNER', 'MANAGER') },

@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
+import { ChevronDown, ChevronUp, ChevronRight, FolderOpen, Folder, Pencil, Plus } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,14 +18,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { DashboardToast } from '@/components/dashboard-toast';
 import { SaveFormFooter } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
@@ -55,6 +47,7 @@ interface ServiceForm {
   priceRands: string;
   durationMin: string;
   bufferMin: string;
+  categoryId: string;
 }
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -69,6 +62,7 @@ const emptyForm: ServiceForm = {
   priceRands: '',
   durationMin: '60',
   bufferMin: '0',
+  categoryId: '',
 };
 
 function formatPrice(cents: number): string {
@@ -89,6 +83,7 @@ function serviceToForm(s: Service): ServiceForm {
     priceRands: (s.priceCents / 100).toFixed(2),
     durationMin: String(s.durationMin),
     bufferMin: String(s.bufferMin),
+    categoryId: s.category?.id ?? '',
   };
 }
 
@@ -132,6 +127,10 @@ export function ServicesClient({ token }: Props) {
   const [catDeletingId, setCatDeletingId] = useState<string | null>(null);
   const [catEditId, setCatEditId] = useState<string | null>(null);
   const [catEditName, setCatEditName] = useState('');
+  const [showAddCatInput, setShowAddCatInput] = useState(false);
+
+  // Track which accordion groups are open (default: all open)
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -174,7 +173,7 @@ export function ServicesClient({ token }: Props) {
     void loadCategories();
   }, [loadServices, loadCategories]);
 
-  async function handleAddCategory(e: React.FormEvent) {
+  async function handleAddCategory(e: FormEvent) {
     e.preventDefault();
     const name = catInput.trim();
     if (!name) return;
@@ -182,6 +181,7 @@ export function ServicesClient({ token }: Props) {
     try {
       await apiFetch('/service-categories', { method: 'POST', body: JSON.stringify({ name }) }, token);
       setCatInput('');
+      setShowAddCatInput(false);
       void loadCategories();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Failed to add category', 'error');
@@ -219,7 +219,7 @@ export function ServicesClient({ token }: Props) {
 
   async function handleReorder(serviceId: string, direction: 'up' | 'down') {
     // Assign sequential sort orders first to eliminate gaps/ties, then swap
-    const sorted = [...services].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const sorted = [...services].sort((a: Service, b: Service) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
     const normalised = sorted.map((s, i) => ({ ...s, sortOrder: i * 10 }));
     const idx = normalised.findIndex((s) => s.id === serviceId);
     if (idx < 0) return;
@@ -235,8 +235,8 @@ export function ServicesClient({ token }: Props) {
         apiFetch(`/services/${a.id}/sort-order`, { method: 'PATCH', body: JSON.stringify({ sortOrder: aOrder }) }, token),
         apiFetch(`/services/${b.id}/sort-order`, { method: 'PATCH', body: JSON.stringify({ sortOrder: bOrder }) }, token),
       ]);
-      setServices((prev) =>
-        prev.map((s) => s.id === a.id ? { ...s, sortOrder: aOrder } : s.id === b.id ? { ...s, sortOrder: bOrder } : s),
+      setServices((prev: Service[]) =>
+        prev.map((s: Service) => s.id === a.id ? { ...s, sortOrder: aOrder } : s.id === b.id ? { ...s, sortOrder: bOrder } : s),
       );
     } catch {
       void loadServices(true); // re-sync on failure
@@ -245,7 +245,7 @@ export function ServicesClient({ token }: Props) {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return services.filter((s) => {
+    return services.filter((s: Service) => {
       if (statusFilter === 'active' && !s.active) return false;
       if (statusFilter === 'inactive' && s.active) return false;
       if (!q) return true;
@@ -256,16 +256,16 @@ export function ServicesClient({ token }: Props) {
     });
   }, [services, search, statusFilter]);
 
-  const activeCount = services.filter((s) => s.active).length;
+  const activeCount = services.filter((s: Service) => s.active).length;
   const inactiveCount = services.length - activeCount;
 
   const slotPreviewMin =
     (parseInt(form.durationMin, 10) || 0) + (parseInt(form.bufferMin, 10) || 0);
 
-  function openCreate() {
+  function openCreate(presetCategoryId = '') {
     clearSaveFeedback();
     setEditingId(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, categoryId: presetCategoryId });
     setTemplateStep(true);
     setTemplateSearch('');
     setTemplateBizType('');
@@ -293,17 +293,21 @@ export function ServicesClient({ token }: Props) {
   }
 
   function applyTemplate(t: ServiceTemplate) {
-    setForm({
+    const matchedCat = categories.find(
+      (c: ServiceCategory) => c.name.toLowerCase() === t.category.toLowerCase(),
+    );
+    setForm((f: ServiceForm) => ({
       name: t.name,
       description: t.description,
       priceRands: String(t.suggestedPriceRands),
       durationMin: String(t.suggestedDurationMin),
       bufferMin: '0',
-    });
+      categoryId: matchedCat ? matchedCat.id : f.categoryId,
+    }));
     setTemplateStep(false);
   }
 
-  async function handleSave(e: React.FormEvent, andClose = false) {
+  async function handleSave(e: FormEvent, andClose = false) {
     e.preventDefault();
     const submitter = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name');
     const shouldClose = andClose || submitter === 'addAndClose' || !!editingId;
@@ -333,12 +337,13 @@ export function ServicesClient({ token }: Props) {
     setSaving(true);
     try {
       const savedName = form.name.trim();
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: savedName,
         description: form.description.trim() || undefined,
         priceCents,
         durationMin,
         bufferMin,
+        categoryId: form.categoryId || null,
       };
 
       if (editingId) {
@@ -353,7 +358,7 @@ export function ServicesClient({ token }: Props) {
         }, token);
       }
 
-      void loadServices(true);
+      await loadServices(true);
 
       const successMessage = editingId ? SAVE_MESSAGES.changesSaved : `${savedName} added`;
 
@@ -362,7 +367,7 @@ export function ServicesClient({ token }: Props) {
         closeSheet();
       } else {
         reportSuccess(successMessage);
-        setForm(emptyForm);
+        setForm({ ...emptyForm, categoryId: form.categoryId });
         setTemplateStep(false);
       }
     } catch (e) {
@@ -372,12 +377,12 @@ export function ServicesClient({ token }: Props) {
     }
   }
 
-  async function toggleActive(service: Service, e: React.MouseEvent) {
+  async function toggleActive(service: Service, e: MouseEvent) {
     e.stopPropagation();
     const nextActive = !service.active;
     setTogglingId(service.id);
-    setServices((prev) =>
-      prev.map((s) => (s.id === service.id ? { ...s, active: nextActive } : s)),
+    setServices((prev: Service[]) =>
+      prev.map((s: Service) => (s.id === service.id ? { ...s, active: nextActive } : s)),
     );
     try {
       await apiFetch(`/services/${service.id}`, {
@@ -389,8 +394,8 @@ export function ServicesClient({ token }: Props) {
         'success',
       );
     } catch (err) {
-      setServices((prev) =>
-        prev.map((s) => (s.id === service.id ? { ...s, active: service.active } : s)),
+      setServices((prev: Service[]) =>
+        prev.map((s: Service) => (s.id === service.id ? { ...s, active: service.active } : s)),
       );
       showToast(err instanceof ApiError ? err.message : 'Update failed', 'error');
     } finally {
@@ -423,6 +428,59 @@ export function ServicesClient({ token }: Props) {
     }
   }
 
+  function toggleGroup(groupKey: string) {
+    setOpenGroups((prev: Set<string>) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+      } else {
+        next.add(groupKey);
+      }
+      return next;
+    });
+  }
+
+  function isGroupOpen(groupKey: string) {
+    // Open by default (not in the "closed" set)
+    return !openGroups.has(groupKey);
+  }
+
+  // Build grouped structure
+  const groupedServices = useMemo(() => {
+    const groups = new Map<string, { category: ServiceCategory | null; services: Service[] }>();
+
+    // Add named category groups in order
+    for (const cat of categories) {
+      groups.set(cat.id, { category: cat, services: [] });
+    }
+
+    // Distribute filtered services
+    for (const svc of filtered) {
+      const catId = svc.category?.id;
+      if (catId && groups.has(catId)) {
+        groups.get(catId)!.services.push(svc);
+      } else {
+        if (!groups.has('__other__')) {
+          groups.set('__other__', { category: null, services: [] });
+        }
+        groups.get('__other__')!.services.push(svc);
+      }
+    }
+
+    // Return as array, "Other" always last
+    const result: Array<{ key: string; category: ServiceCategory | null; services: Service[] }> = [];
+    for (const [key, value] of groups) {
+      if (key !== '__other__') {
+        result.push({ key, ...value });
+      }
+    }
+    const other = groups.get('__other__');
+    if (other) {
+      result.push({ key: '__other__', ...other });
+    }
+    return result;
+  }, [filtered, categories]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -436,7 +494,7 @@ export function ServicesClient({ token }: Props) {
           <Button variant="outline" size="sm" onClick={() => loadServices(true)} disabled={refreshing}>
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </Button>
-          <Button onClick={openCreate}>Add Service</Button>
+          <Button onClick={() => openCreate()}>Add Service</Button>
         </div>
       </div>
 
@@ -446,61 +504,7 @@ export function ServicesClient({ token }: Props) {
         <StatCard label="Inactive" value={inactiveCount} />
       </div>
 
-      {/* Service categories */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Service categories</CardTitle>
-          <p className="text-sm text-muted-foreground">Organise services into categories for cleaner menus.</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <form onSubmit={(e) => void handleAddCategory(e)} className="flex gap-2 max-w-sm">
-            <Input
-              placeholder="New category name…"
-              value={catInput}
-              onChange={(e) => setCatInput(e.target.value)}
-              maxLength={80}
-            />
-            <Button type="submit" size="sm" disabled={catSaving || !catInput.trim()}>Add</Button>
-          </form>
-          {categories.length === 0 && (
-            <p className="text-sm text-muted-foreground">No categories yet.</p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {categories.map((cat) => (
-              <div key={cat.id} className="flex items-center gap-1 rounded-full border bg-muted/40 pl-3 pr-1 py-1">
-                {catEditId === cat.id ? (
-                  <>
-                    <input
-                      autoFocus
-                      value={catEditName}
-                      onChange={(e) => setCatEditName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') void handleRenameCategory(cat.id); if (e.key === 'Escape') setCatEditId(null); }}
-                      className="text-xs bg-transparent border-b border-primary outline-none w-28"
-                      maxLength={80}
-                    />
-                    <button type="button" onClick={() => void handleRenameCategory(cat.id)} disabled={catSaving} className="text-xs text-primary hover:underline px-1">Save</button>
-                    <button type="button" onClick={() => setCatEditId(null)} className="text-xs text-muted-foreground hover:underline px-1">Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-xs font-medium">{cat.name}</span>
-                    <button type="button" onClick={() => { setCatEditId(cat.id); setCatEditName(cat.name); }} className="ml-1 text-muted-foreground hover:text-foreground text-xs px-1">✏</button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteCategory(cat.id)}
-                      disabled={catDeletingId === cat.id}
-                      className="text-muted-foreground hover:text-destructive text-xs px-1"
-                    >
-                      {catDeletingId === cat.id ? '…' : '×'}
-                    </button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
+      {/* Service catalog */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -521,146 +525,264 @@ export function ServicesClient({ token }: Props) {
           <Input
             placeholder="Search services…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e: { target: { value: string } }) => setSearch(e.target.value)}
             className="max-w-sm mt-2"
           />
         </CardHeader>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden lg:table-cell">Description</TableHead>
-                <TableHead className="hidden sm:table-cell">Price</TableHead>
-                <TableHead className="hidden sm:table-cell">Duration</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right w-[90px]"> </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-10">
-                    Loading services…
-                  </TableCell>
-                </TableRow>
+        <CardContent className="space-y-3 pb-4">
+          {loading && (
+            <p className="text-center text-muted-foreground py-10 text-sm">Loading services…</p>
+          )}
+          {!loading && filtered.length === 0 && (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground text-sm">
+                {search || statusFilter !== 'all'
+                  ? 'No services match your filters.'
+                  : 'No services yet.'}
+              </p>
+              {!search && statusFilter === 'all' && (
+                <Button size="sm" className="mt-3" onClick={() => openCreate()}>
+                  Add your first service
+                </Button>
               )}
-              {!loading && filtered.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10">
-                    <p className="text-muted-foreground text-sm">
-                      {search || statusFilter !== 'all'
-                        ? 'No services match your filters.'
-                        : 'No services yet.'}
-                    </p>
-                    {!search && statusFilter === 'all' && (
-                      <Button size="sm" className="mt-3" onClick={openCreate}>
-                        Add your first service
-                      </Button>
+            </div>
+          )}
+          {!loading && groupedServices.map((group: { key: string; category: ServiceCategory | null; services: Service[] }) => {
+            const groupKey = group.key;
+            const isOther = groupKey === '__other__';
+            const label = isOther ? 'Other' : (group.category?.name ?? 'Other');
+            const activeInGroup = group.services.filter((s: Service) => s.active).length;
+            const open = isGroupOpen(groupKey);
+
+            return (
+              <div key={groupKey} className="rounded-lg border border-border overflow-hidden">
+                {/* Group header */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 group/header">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(groupKey)}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                  >
+                    {open ? (
+                      <FolderOpen className="size-4 text-muted-foreground shrink-0" />
+                    ) : (
+                      <Folder className="size-4 text-muted-foreground shrink-0" />
                     )}
-                  </TableCell>
-                </TableRow>
-              )}
-              {filtered.map((service) => (
-                <TableRow
-                  key={service.id}
-                  className={cn(
-                    'cursor-pointer group',
-                    !service.active && 'opacity-60',
-                  )}
-                  onClick={() => openEdit(service)}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      openEdit(service);
-                    }
-                  }}
-                >
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{service.name}</span>
-                        {service.category && (
-                          <Badge variant="outline" className="text-[10px] font-normal">{service.category.name}</Badge>
-                        )}
-                        {!service.active && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            Hidden
-                          </Badge>
-                        )}
-                      </div>
-                      <span className="sm:hidden text-xs text-muted-foreground tabular-nums">
-                        {formatPrice(service.priceCents)} · {formatDuration(service)}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell max-w-[240px] truncate text-muted-foreground">
-                    {service.description || '—'}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell font-mono text-sm">{formatPrice(service.priceCents)}</TableCell>
-                  <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                    {formatDuration(service)}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={togglingId === service.id}
-                      onClick={(e) => toggleActive(service, e)}
+                    <span className="font-medium text-sm truncate">{label}</span>
+                    <span className="text-xs text-muted-foreground ml-1">
+                      {activeInGroup} active / {group.services.length} total
+                    </span>
+                    <ChevronRight
                       className={cn(
-                        service.active
-                          ? 'border-green-600/30 text-green-700 dark:text-green-400'
-                          : 'text-muted-foreground',
+                        'size-3.5 text-muted-foreground transition-transform ml-auto shrink-0',
+                        open && 'rotate-90',
                       )}
-                    >
-                      {togglingId === service.id
-                        ? '…'
-                        : service.active
-                          ? 'Active'
-                          : 'Inactive'}
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        title="Move up"
-                        onClick={(e) => { e.stopPropagation(); void handleReorder(service.id, 'up'); }}
-                        className="p-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                      >
-                        <ChevronUp className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Move down"
-                        onClick={(e) => { e.stopPropagation(); void handleReorder(service.id, 'down'); }}
-                        className="p-1 text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                      >
-                        <ChevronDown className="size-3.5" />
-                      </button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeSheet();
-                        setDeleteTarget(service);
-                      }}
-                    >
-                      Delete
-                    </Button>
+                    />
+                  </button>
+
+                  {/* Category actions (non-other groups) */}
+                  {!isOther && group.category && (
+                    <div className="flex items-center gap-1 opacity-0 group-hover/header:opacity-100 transition-opacity shrink-0">
+                      {catEditId === group.category.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            autoFocus
+                            value={catEditName}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCatEditName(e.target.value)}
+                            onKeyDown={(e: React.KeyboardEvent) => {
+                              if (e.key === 'Enter') void handleRenameCategory(group.category!.id);
+                              if (e.key === 'Escape') setCatEditId(null);
+                            }}
+                            className="text-xs bg-background border border-input rounded px-1.5 py-0.5 outline-none w-28 focus:border-ring"
+                            maxLength={80}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleRenameCategory(group.category!.id)}
+                            disabled={catSaving}
+                            className="text-xs text-primary hover:underline px-1"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCatEditId(null)}
+                            className="text-xs text-muted-foreground hover:underline px-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => { setCatEditId(group.category!.id); setCatEditName(group.category!.name); }}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+                            title="Rename category"
+                          >
+                            <Pencil className="size-3" />
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteCategory(group.category!.id)}
+                            disabled={catDeletingId === group.category.id}
+                            className="text-xs text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-muted transition-colors"
+                            title="Delete category"
+                          >
+                            {catDeletingId === group.category.id ? '…' : 'Delete'}
+                          </button>
+                        </>
+                      )}
                     </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                  )}
+
+                  {/* Add service to this group */}
+                  <button
+                    type="button"
+                    onClick={() => openCreate(isOther ? '' : (group.category?.id ?? ''))}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/header:opacity-100"
+                    title="Add service to this category"
+                  >
+                    <Plus className="size-3" />
+                    Add
+                  </button>
+                </div>
+
+                {/* Service rows */}
+                {open && (
+                  <div className="divide-y divide-border">
+                    {group.services.length === 0 && (
+                      <p className="text-xs text-muted-foreground px-4 py-3 italic">
+                        No services in this category.
+                      </p>
+                    )}
+                    {group.services
+                      .slice()
+                      .sort((a: Service, b: Service) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+                      .map((service: Service) => (
+                        <div
+                          key={service.id}
+                          className={cn(
+                            'flex items-center gap-3 px-3 py-2.5 group/row hover:bg-muted/30 transition-colors',
+                            !service.active && 'opacity-60',
+                          )}
+                        >
+                          {/* Reorder buttons */}
+                          <div className="flex flex-col gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
+                            <button
+                              type="button"
+                              title="Move up"
+                              onClick={() => void handleReorder(service.id, 'up')}
+                              className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <ChevronUp className="size-3" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Move down"
+                              onClick={() => void handleReorder(service.id, 'down')}
+                              className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <ChevronDown className="size-3" />
+                            </button>
+                          </div>
+
+                          {/* Name + badge */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-sm">{service.name}</span>
+                              {!service.active && (
+                                <Badge variant="secondary" className="text-[10px]">Hidden</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {formatDuration(service)}
+                            </p>
+                          </div>
+
+                          {/* Price */}
+                          <span className="text-sm font-mono text-muted-foreground shrink-0 hidden sm:block">
+                            {formatPrice(service.priceCents)}
+                          </span>
+
+                          {/* Active toggle */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={togglingId === service.id}
+                            onClick={(e: React.MouseEvent<HTMLButtonElement>) => toggleActive(service, e)}
+                            className={cn(
+                              'shrink-0 h-7 text-xs',
+                              service.active
+                                ? 'border-green-600/30 text-green-700 dark:text-green-400'
+                                : 'text-muted-foreground',
+                            )}
+                          >
+                            {togglingId === service.id
+                              ? '…'
+                              : service.active
+                                ? 'Active'
+                                : 'Inactive'}
+                          </Button>
+
+                          {/* Edit button */}
+                          <button
+                            type="button"
+                            onClick={() => openEdit(service)}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-1 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100"
+                            title="Edit service"
+                          >
+                            <Pencil className="size-3" />
+                            Edit
+                          </button>
+
+                          {/* Delete button */}
+                          <button
+                            type="button"
+                            onClick={() => { closeSheet(); setDeleteTarget(service); }}
+                            className="text-xs text-muted-foreground hover:text-destructive px-1.5 py-1 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100"
+                            title="Delete service"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add category button */}
+          <div className="pt-1">
+            {showAddCatInput ? (
+              <form onSubmit={(e: React.FormEvent<HTMLFormElement>) => void handleAddCategory(e)} className="flex gap-2 max-w-sm">
+                <Input
+                  autoFocus
+                  placeholder="New category name…"
+                  value={catInput}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCatInput(e.target.value)}
+                  maxLength={80}
+                />
+                <Button type="submit" size="sm" disabled={catSaving || !catInput.trim()}>Add</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => { setShowAddCatInput(false); setCatInput(''); }}>Cancel</Button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowAddCatInput(true)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Plus className="size-3.5" />
+                Add category
+              </button>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
+      <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet()}>
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
           {templateStep ? (
             <>
@@ -704,13 +826,13 @@ export function ServicesClient({ token }: Props) {
                   </button>
                 </div>
               )}
-              <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
+              <form onSubmit={(e: React.FormEvent<HTMLFormElement>) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Name *</Label>
                   <Input
                     id="name"
                     value={form.name}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. Haircut & Style"
                     autoFocus
                     required
@@ -721,11 +843,23 @@ export function ServicesClient({ token }: Props) {
                   <textarea
                     id="description"
                     value={form.description}
-                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, description: e.target.value }))}
                     placeholder="What the customer can expect"
                     rows={3}
                     className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="categoryId">Category</Label>
+                  <select
+                    id="categoryId"
+                    value={form.categoryId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, categoryId: e.target.value }))}
+                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                  >
+                    <option value="">— No category —</option>
+                    {categories.map((c: ServiceCategory) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -736,7 +870,7 @@ export function ServicesClient({ token }: Props) {
                       min="0"
                       step="0.01"
                       value={form.priceRands}
-                      onChange={(e) => setForm((f) => ({ ...f, priceRands: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, priceRands: e.target.value }))}
                       placeholder="250.00"
                       required
                     />
@@ -749,7 +883,7 @@ export function ServicesClient({ token }: Props) {
                       min="1"
                       step="5"
                       value={form.durationMin}
-                      onChange={(e) => setForm((f) => ({ ...f, durationMin: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, durationMin: e.target.value }))}
                       required
                     />
                   </div>
@@ -762,7 +896,7 @@ export function ServicesClient({ token }: Props) {
                     min="0"
                     step="5"
                     value={form.bufferMin}
-                    onChange={(e) => setForm((f) => ({ ...f, bufferMin: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, bufferMin: e.target.value }))}
                   />
                   {slotPreviewMin > 0 && (
                     <p className="text-xs text-muted-foreground">
@@ -808,7 +942,7 @@ export function ServicesClient({ token }: Props) {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={() => !deleting && setDeleteTarget(null)}
-          onKeyDown={(e) => e.key === 'Escape' && !deleting && setDeleteTarget(null)}
+          onKeyDown={(e: React.KeyboardEvent) => e.key === 'Escape' && !deleting && setDeleteTarget(null)}
           role="presentation"
         >
           <Card
@@ -816,8 +950,8 @@ export function ServicesClient({ token }: Props) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="delete-service-title"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
           >
             <CardContent className="p-6 space-y-4">
               <h2 id="delete-service-title" className="font-semibold">Remove service?</h2>
@@ -909,7 +1043,7 @@ function TemplatePicker({
       <Input
         placeholder="Search services… (fade, massage, pedicure…)"
         value={search}
-        onChange={(e) => onSearch(e.target.value)}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => onSearch(e.target.value)}
         autoFocus
       />
 
