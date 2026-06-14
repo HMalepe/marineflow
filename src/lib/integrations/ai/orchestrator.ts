@@ -24,6 +24,8 @@ export interface OrchestratorInput {
   services: Array<{ id: string; name: string; priceCents: number }>;
   staff: Array<{ id: string; name: string }>;
   faqSnippets: Array<{ question: string; answer: string }>;
+  /** True when the customer has at least one succeeded payment at this salon. */
+  hasPaymentHistory?: boolean;
 }
 
 export interface OrchestratorResult {
@@ -45,6 +47,7 @@ Rules:
 - Prefer intent "book" when they want an appointment; "faq" for questions; "loyalty" for rewards/stamps; "manage_booking" to change/cancel; "hours" for address/opening times; "human" only if they explicitly want a person; "menu" if they want options listed.
 - Keep reply under 320 characters, WhatsApp-friendly, no markdown.
 - Set negativeSentiment: true if the customer is angry, threatening, abusive, extremely frustrated, or in distress. Do NOT set it for mild frustration or impatience — only genuine negative emotion.
+- If hasPaymentHistory is false, do NOT mention "the usual", past visits, "what you usually get", "last time", or imply they are a returning customer — offer to show services or the menu instead.
 - Output ONLY valid JSON matching the schema.`;
 
 export async function orchestrateConversation(input: OrchestratorInput): Promise<OrchestratorResult | null> {
@@ -71,6 +74,7 @@ export async function orchestrateConversation(input: OrchestratorInput): Promise
     services: catalog || '(none configured)',
     staff: staffList || '(any available)',
     faqs: faqs || '(none)',
+    hasPaymentHistory: input.hasPaymentHistory ?? false,
     schema: {
       intent: 'book|faq|loyalty|manage_booking|hours|human|menu|spam|chat|unknown',
       reply: 'string — your WhatsApp reply',

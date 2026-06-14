@@ -617,6 +617,13 @@ function shouldPromptMarketingConsentBeforeMenu(
   return marketingConsentGatePending(conv.salon, conv.customer.marketingConsentStatus);
 }
 
+async function customerHasSucceededPayments(customerId: string, salonId: string): Promise<boolean> {
+  const count = await getTenantDb().payment.count({
+    where: { customerId, salonId, status: 'SUCCEEDED' },
+  });
+  return count > 0;
+}
+
 async function sendReceptionistGreeting(conv: Conversation & { customer: Customer; salon: Salon }) {
   const salon = conv.salon;
   const salonName = salon.tradingName?.trim() || salon.name;
@@ -637,22 +644,25 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
     return;
   }
 
-  // Returning customer — look up their last completed appointment for personalisation.
+  // Returning customer — personalise only after at least one successful payment.
   const firstName = customer.firstName?.trim() ?? 'there';
-  const lastAppt = await getTenantDb().appointment.findFirst({
-    where: {
-      customerId: customer.id,
-      salonId: salon.id,
-      status: { in: ['CONFIRMED', 'COMPLETED'] },
-      start: { lt: new Date() },
-    },
-    orderBy: { start: 'desc' },
-    include: { service: { select: { name: true } } },
-  });
-
-  const usualLine = lastAppt?.service?.name
-    ? `The usual *${sanitize(lastAppt.service.name)}*? Or something different today?`
-    : 'What can we do for you today?';
+  const hasPaymentHistory = await customerHasSucceededPayments(customer.id, salon.id);
+  let usualLine = 'What can we do for you today?';
+  if (hasPaymentHistory) {
+    const lastAppt = await getTenantDb().appointment.findFirst({
+      where: {
+        customerId: customer.id,
+        salonId: salon.id,
+        status: { in: ['CONFIRMED', 'CONFIRMED_PAID', 'COMPLETED'] },
+        start: { lt: new Date() },
+      },
+      orderBy: { start: 'desc' },
+      include: { service: { select: { name: true } } },
+    });
+    if (lastAppt?.service?.name) {
+      usualLine = `The usual *${sanitize(lastAppt.service.name)}*? Or something different today?`;
+    }
+  }
 
   await reply(
     conv,
@@ -2976,6 +2986,9 @@ async function getStaffListWithPreference(
   serviceId: string,
 ): Promise<{ staffList: Staff[]; preferredId: string | null }> {
   const staffList = await getStaffForService(conv.salonId, serviceId);
+  const hasPaymentHistory = await customerHasSucceededPayments(conv.customerId, conv.salonId);
+  if (!hasPaymentHistory) return { staffList, preferredId: null };
+
   // Re-read from DB — conv.customer may be stale within a long conversation.
   const fresh = await getTenantDb().customer.findUnique({
     where: { id: conv.customerId },

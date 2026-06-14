@@ -103,7 +103,7 @@ async function loadAssistContext(
   inboundText: string,
 ) {
   const db = getTenantDb();
-  const [services, staff, faqs, recentMessages] = await Promise.all([
+  const [services, staff, faqs, recentMessages, succeededPayments] = await Promise.all([
     db.service.findMany({
       where: { salonId: conv.salonId, active: true },
       orderBy: { sortOrder: 'asc' },
@@ -127,6 +127,9 @@ async function loadAssistContext(
       take: 8,
       select: { direction: true, body: true },
     }),
+    db.payment.count({
+      where: { salonId: conv.salonId, customerId: conv.customerId, status: 'SUCCEEDED' },
+    }),
   ]);
 
   return orchestrateConversation({
@@ -144,6 +147,7 @@ async function loadAssistContext(
     services,
     staff,
     faqSnippets: faqs,
+    hasPaymentHistory: succeededPayments > 0,
   });
 }
 
