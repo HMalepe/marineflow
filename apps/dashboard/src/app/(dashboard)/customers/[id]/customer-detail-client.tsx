@@ -343,6 +343,37 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               })}
             </span>
           </div>
+
+          {/* Quick actions */}
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+            <Link
+              href={`/appointments?customer=${customer.id}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium bg-card hover:bg-muted/60 transition-colors"
+            >
+              <Calendar className="size-3.5" />
+              View appointments
+            </Link>
+            {customer.waId && (
+              <Link
+                href={`/conversations?waId=${customer.waId}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium bg-card hover:bg-muted/60 transition-colors"
+              >
+                <MessageSquare className="size-3.5" />
+                Open conversation
+              </Link>
+            )}
+            {customer.waId && (
+              <a
+                href={`https://wa.me/${customer.waId.replace(/^\+/, '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[#25d366]/40 px-3 py-1.5 text-xs font-medium text-[#128c7e] dark:text-[#25d366] bg-[#25d366]/5 hover:bg-[#25d366]/10 transition-colors"
+              >
+                <Phone className="size-3.5" />
+                WhatsApp
+              </a>
+            )}
+          </div>
         </div>
       </div>
 

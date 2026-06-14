@@ -2832,9 +2832,17 @@ async function handlePickDate(
     if (suggestions.length === 0) {
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       const phone = conv.salon.phoneDisplay?.trim();
-      const msg = phone
-        ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
-        : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
+      const anyStaff = (c.anyStaff as boolean | undefined) ?? false;
+      const staffNote = anyStaff
+        ? `for *${sanitize(service.name)}*`
+        : `for *${sanitize(service.name)}* with *${sanitize(staff.name)}*`;
+      const msg = [
+        `😔 Unfortunately we have no open slots ${staffNote} in the next 2 weeks.`,
+        '',
+        phone
+          ? `📞 Please call us on *${phone}* and we'll find something that works for you.`
+          : `Please contact us directly and we'll arrange a time.`,
+      ].join('\n');
       await replyWithMenu(conv, msg);
       return;
     }
@@ -2857,7 +2865,10 @@ async function handlePickDate(
   }
 
   if (!localDateStr) {
-    await showDateList('Invalid input. Pick a number from the list or enter YYYY-MM-DD:');
+    const prefix = text.trim()
+      ? `I didn't recognise that date. Pick a number below or type a date in *YYYY-MM-DD* format:`
+      : `📅 When would you like to come in? Pick a date:`;
+    await showDateList(prefix);
     return;
   }
 

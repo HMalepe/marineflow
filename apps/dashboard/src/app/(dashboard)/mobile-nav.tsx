@@ -155,13 +155,13 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
               key={tab.href}
               href={tab.href}
               className={cn(
-                'flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
+                'relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
                 active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              <tab.icon className={cn('size-5', active && 'stroke-primary')} />
-              {tab.label}
-              {active && <span className="absolute bottom-0 h-0.5 w-8 bg-primary rounded-full" />}
+              <tab.icon className={cn('size-5 transition-transform', active && 'scale-110')} />
+              <span className={cn('transition-all', active && 'font-semibold')}>{tab.label}</span>
+              {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" />}
             </Link>
           );
         })}
@@ -181,24 +181,26 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh] overflow-y-auto pb-safe">
           <SheetHeader className="pb-2">
-            <SheetTitle className="text-base">Menu</SheetTitle>
+            <SheetTitle className="text-base">More</SheetTitle>
           </SheetHeader>
           <div className="grid grid-cols-2 gap-2 py-2">
             {!isAdmin && (
               <>
-                <MoreNavItem href="/tickets" label="Tickets" onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/faqs" label="Bot FAQs" onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/customers" label="Customers" onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/campaigns" label="Newsletter" onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/analytics" label="Analytics" onClick={() => setMoreOpen(false)} />
-                {isOwner && <MoreNavItem href="/settings" label="Settings" onClick={() => setMoreOpen(false)} icon={<SettingsIcon className="size-4" />} />}
-                {isOwner && <MoreNavItem href="/billing" label="Billing" onClick={() => setMoreOpen(false)} />}
+                <MoreNavItem href="/tickets" label="Tickets" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/faqs" label="Bot FAQs" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/customers" label="Customers" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/campaigns" label="Newsletter" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/analytics" label="Analytics" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/team-performance" label="Team Performance" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/automations" label="Power Features" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                {isOwner && <MoreNavItem href="/settings" label="Settings" pathname={pathname} onClick={() => setMoreOpen(false)} icon={<SettingsIcon className="size-4" />} />}
+                {isOwner && <MoreNavItem href="/billing" label="Billing" pathname={pathname} onClick={() => setMoreOpen(false)} />}
               </>
             )}
             {isAdmin && (
               <>
-                <MoreNavItem href="/admin" label="Admin" onClick={() => setMoreOpen(false)} />
-                <MoreNavItem href="/analytics" label="Analytics" onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/admin" label="Admin" pathname={pathname} onClick={() => setMoreOpen(false)} />
+                <MoreNavItem href="/analytics" label="Analytics" pathname={pathname} onClick={() => setMoreOpen(false)} />
               </>
             )}
           </div>
@@ -214,19 +216,27 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl }: NavProps)
 function MoreNavItem({
   href,
   label,
+  pathname,
   onClick,
   icon,
 }: {
   href: string;
   label: string;
+  pathname: string;
   onClick: () => void;
   icon?: React.ReactNode;
 }) {
+  const active = href === '/' ? pathname === '/' : pathname.startsWith(href);
   return (
     <Link
       href={href}
       onClick={onClick}
-      className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-muted/60 hover:bg-accent transition-colors text-sm font-medium"
+      className={cn(
+        'flex items-center gap-2.5 px-4 py-3 rounded-xl transition-colors text-sm font-medium',
+        active
+          ? 'bg-primary/10 text-primary border border-primary/20 font-semibold'
+          : 'bg-muted/60 hover:bg-accent text-foreground',
+      )}
     >
       {icon}
       {label}
