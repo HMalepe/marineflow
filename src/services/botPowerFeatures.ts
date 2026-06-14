@@ -1,5 +1,6 @@
 import type { Conversation, Customer, Salon } from '@prisma/client';
 import { DateTime } from 'luxon';
+import { isBackToMainMenuCommand } from '../lib/botNavigation.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import {
   buildExtraMenuLines,
@@ -171,7 +172,7 @@ export async function handleAddonPhase(
   if (!c.addonPhase) return false;
 
   const t = text.trim().toLowerCase();
-  if (t === 'back') {
+  if (t === 'back' || isBackToMainMenuCommand(text)) {
     await helpers.saveContext({ addonPhase: undefined, selectedServiceId: undefined });
     await helpers.reply('Cancelled add-ons. Reply 1 from the menu to start again.');
     return true;

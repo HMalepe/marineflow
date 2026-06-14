@@ -32,6 +32,7 @@ import {
 import { createDepositCheckoutSession } from './payments.js';
 import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
+import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import {
   buildMainMenuText,
@@ -1130,10 +1131,8 @@ async function processInboundWhatsApp(
   const lower = text.toLowerCase();
 
   // ── WhatsApp core flows (always win over dashboard marketing / follow-up settings) ──
-  if (lower === 'menu') {
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    await replyMenu(conv);
+  if (isBackToMainMenuCommand(text) && !WHATSAPP_BOOKING_STEPS.includes(conv.step)) {
+    await goBackToMainMenu(conv);
     return;
   }
 
@@ -1172,6 +1171,11 @@ async function processInboundWhatsApp(
   if (WHATSAPP_MENU_STEPS.includes(conv.step)) {
     try {
       conv = await reloadConversation(conv.id);
+
+      if (isBackToMainMenuCommand(text)) {
+        await goBackToMainMenu(conv);
+        return;
+      }
 
       if (shouldPromptMarketingConsentBeforeMenu(conv)) {
         await startMarketingConsentGate(conv);
@@ -1683,12 +1687,12 @@ const BOOKING_FLOW_STEPS = new Set<ConversationStep>([
 
 const SESSION_STALE_MS = 30 * 60 * 1000; // 30 minutes
 
-function isBackCommand(text: string): boolean {
-  return /^(back|undo)\b/i.test(text.trim());
-}
-
-function isMenuCommand(text: string): boolean {
-  return /^menu$/i.test(text.trim());
+async function goBackToMainMenu(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
+  syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+  await replyMenu(conv);
 }
 
 async function repromptPickBranch(conv: Conversation & { customer: Customer; salon: Salon }) {
@@ -2004,10 +2008,8 @@ async function routeConversation(
     return;
   }
 
-  if (isMenuCommand(t)) {
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    await replyMenu(conv);
+  if (isMainMenuCommand(t)) {
+    await goBackToMainMenu(conv);
     return;
   }
 
@@ -2870,6 +2872,11 @@ async function handleMenu(
     return;
   }
 
+  if (isBackToMainMenuCommand(trimmed)) {
+    await goBackToMainMenu(conv);
+    return;
+  }
+
   const rawCategory = ctx(conv).menuCategory;
   const activeCategory =
     rawCategory === 'appointments' ? 'appointments' : normalizeMenuCategoryId(rawCategory);
@@ -2931,7 +2938,7 @@ async function handleMenu(
     return;
   }
 
-  if (isConversationWakeMessage(trimmed) || upper === 'MENU' || upper === 'BACK') {
+  if (isConversationWakeMessage(trimmed)) {
     await replyMenu(conv);
     return;
   }
@@ -3015,6 +3022,11 @@ async function handlePickServiceCategory(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  if (isBackCommand(text)) {
+    await goBackOneStep(conv);
+    return;
+  }
+
   const c = ctx(conv);
   const catIds = (c.serviceCategoryOptions ?? []) as string[];
   const allServices = await loadActiveServicesForBooking(conv.salonId);
@@ -3463,10 +3475,8 @@ async function handleConfirm(
     await goBackOneStep(conv);
     return;
   }
-  if (isMenuCommand(trimmed)) {
-    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    await replyMenu(conv);
+  if (isMainMenuCommand(trimmed)) {
+    await goBackToMainMenu(conv);
     return;
   }
 
@@ -3809,8 +3819,7 @@ async function handleBookingRating(
 ) {
   const upper = text.trim().toUpperCase();
   if (upper === 'BACK' || upper === 'MENU' || upper === '0' || upper === 'SKIP') {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyMenu(conv);
+    await goBackToMainMenu(conv);
     return;
   }
   const rating = parseInt(text.trim(), 10);
@@ -3862,11 +3871,9 @@ async function handleManageBooking(
 ) {
   const c = ctx(conv);
   const ids = (c.manageList as string[] | undefined) ?? [];
-  const lower = text.toLowerCase().trim();
 
-  if (lower === 'back') {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyMenu(conv);
+  if (isBackToMainMenuCommand(text)) {
+    await goBackToMainMenu(conv);
     return;
   }
 
@@ -4061,6 +4068,11 @@ async function handleComplaint(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  if (isBackToMainMenuCommand(text)) {
+    await goBackToMainMenu(conv);
+    return;
+  }
+
   const ticket = await getTenantDb().ticket.create({
     data: {
       salonId: conv.salonId,
@@ -4088,8 +4100,9 @@ async function handleOtherQuery(
   const c = ctx(conv);
   const answered = c.otherQueryAnswered as boolean | undefined;
 
-  if (text.toUpperCase() === 'BACK' || text.toUpperCase() === 'MENU') {
-    await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
+  if (isBackToMainMenuCommand(text)) {
+    await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU, ctx(conv));
+    syncConvContext(conv, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
     await replyMenu(conv);
     return;
   }
@@ -4160,9 +4173,8 @@ async function handleHandoffRating(
   text: string,
 ) {
   const upper = text.trim().toUpperCase();
-  if (upper === 'BACK' || upper === 'MENU' || upper === '0') {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyMenu(conv);
+  if (isBackToMainMenuCommand(text) || upper === '0') {
+    await goBackToMainMenu(conv);
     return;
   }
   const rating = parseInt(text.trim(), 10);
@@ -4233,9 +4245,20 @@ async function handleRateExperience(
 ) {
   const c = ctx(conv);
   const subStep = (c.ratingSubStep ?? 'stars') as 'stars' | 'comment' | 'nps' | 'nps_reason';
+  const upper = text.trim().toUpperCase();
 
-  if (text.toUpperCase() === 'BACK' || text.toUpperCase() === 'SKIP') {
-    await saveCtx(conv.id, { ratingSubStep: undefined, ratingStars: undefined, ratingComment: undefined, ratingNps: undefined }, ConversationStep.MENU);
+  if (isBackToMainMenuCommand(text) || upper === 'SKIP') {
+    await saveCtx(
+      conv.id,
+      { ratingSubStep: undefined, ratingStars: undefined, ratingComment: undefined, ratingNps: undefined },
+      ConversationStep.MENU,
+      ctx(conv),
+    );
+    syncConvContext(
+      conv,
+      { ratingSubStep: undefined, ratingStars: undefined, ratingComment: undefined, ratingNps: undefined },
+      ConversationStep.MENU,
+    );
     await replyMenu(conv);
     return;
   }
@@ -4347,6 +4370,11 @@ async function handleFaq(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  if (isBackToMainMenuCommand(text)) {
+    await goBackToMainMenu(conv);
+    return;
+  }
+
   const n = parseInt(text, 10);
   const faqs = await getTenantDb().faqItem.findMany({
     where: { salonId: conv.salonId, status: 'APPROVED' },
@@ -4401,9 +4429,8 @@ async function handlePickBranch(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  if (text.toUpperCase() === 'BACK') {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyMenu(conv);
+  if (isBackToMainMenuCommand(text)) {
+    await goBackToMainMenu(conv);
     return;
   }
 
@@ -4445,7 +4472,7 @@ async function handleReschedule(
   const c = ctx(conv);
   const appointmentId = c.rescheduleAppointmentId as string | undefined;
 
-  if (text.toUpperCase() === 'CANCEL' || text.toUpperCase() === 'BACK') {
+  if (text.toUpperCase() === 'CANCEL' || isBackToMainMenuCommand(text)) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await replyMenu(conv);
     return;
@@ -4485,6 +4512,11 @@ async function handleCsat(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
+  if (isBackToMainMenuCommand(text)) {
+    await goBackToMainMenu(conv);
+    return;
+  }
+
   const rating = parseInt(text.trim(), 10);
 
   if (isNaN(rating) || rating < 1 || rating > 5) {
