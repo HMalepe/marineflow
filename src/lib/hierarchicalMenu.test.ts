@@ -61,6 +61,7 @@ describe('hierarchicalMenu', () => {
     expect(isMenuNavigationInput(undefined, '1')).toBe(true);
     expect(isMenuNavigationInput(undefined, '7')).toBe(true);
     expect(isMenuNavigationInput(undefined, 'hello')).toBe(false);
+    expect(isMenuNavigationInput(undefined, 'menu')).toBe(true);
     expect(isMenuNavigationInput('services', '1')).toBe(true);
     expect(isMenuNavigationInput('services', '6')).toBe(true);
     expect(isMenuNavigationInput('services', '7')).toBe(true);

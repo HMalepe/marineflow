@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { GripVertical, Lock, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import {
   BUILTIN_FLOW_DEFS,
+  LOCKED_FLOW_KEYS,
   buildFlowItems,
   newCustomFlowId,
   orderFromItems,
@@ -58,6 +59,7 @@ function SortableFlowCard({
   item,
   index,
   enabled,
+  locked,
   onToggle,
   onRemove,
   onUpdateCustom,
@@ -65,6 +67,7 @@ function SortableFlowCard({
   item: FlowItem;
   index: number;
   enabled: boolean;
+  locked?: boolean;
   onToggle: (checked: boolean) => void;
   onRemove?: () => void;
   onUpdateCustom?: (patch: Partial<Pick<CustomBotFlow, 'label' | 'prompt'>>) => void;
@@ -92,6 +95,7 @@ function SortableFlowCard({
         'rounded-xl border bg-card shadow-sm transition-shadow',
         isDragging && 'shadow-lg ring-2 ring-ring/30 z-10 opacity-95',
         !enabled && 'opacity-75',
+        locked && 'opacity-60 bg-muted/40',
         isCustom && 'border-dashed border-primary/30',
       )}
     >
@@ -111,15 +115,22 @@ function SortableFlowCard({
             <input
               type="checkbox"
               checked={enabled}
-              onChange={(e) => onToggle(e.target.checked)}
-              className="mt-1 size-4 rounded border-input accent-primary shrink-0"
-              aria-label={`Enable ${label}`}
+              onChange={(e) => !locked && onToggle(e.target.checked)}
+              disabled={locked}
+              className="mt-1 size-4 rounded border-input accent-primary shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={locked ? `${label} (temporarily disabled)` : `Enable ${label}`}
             />
             <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
                   Step {index + 1}
                 </span>
+                {locked && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                    <Lock className="size-3" />
+                    Temporarily off
+                  </span>
+                )}
                 {isCustom && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
                     <Sparkles className="size-3" />
@@ -336,6 +347,16 @@ export function ConversationFlowSection({ initialSettings, onSaved }: Props) {
         </p>
       </div>
 
+      {LOCKED_FLOW_KEYS.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800/40 dark:bg-yellow-900/20 dark:text-yellow-300">
+          <Lock className="mt-0.5 size-4 shrink-0" />
+          <p>
+            Some steps are <strong>temporarily disabled</strong> to keep the booking chatbot running
+            smoothly. They are greyed out below and cannot be toggled.
+          </p>
+        </div>
+      )}
+
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4 max-w-2xl">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
@@ -346,6 +367,7 @@ export function ConversationFlowSection({ initialSettings, onSaved }: Props) {
                   item={item}
                   index={index}
                   enabled={isEnabled(item)}
+                  locked={item.type === 'builtin' && (LOCKED_FLOW_KEYS as readonly string[]).includes(item.id)}
                   onToggle={(checked) => setEnabled(item, checked)}
                   onRemove={item.type === 'custom' ? () => removeCustomFlow(item.id) : undefined}
                   onUpdateCustom={

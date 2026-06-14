@@ -5,7 +5,7 @@ export const BUILTIN_FLOW_DEFS = [
     key: 'botAskMarketingConsent' as const,
     label: 'Ask for marketing consent (POPIA)',
     description:
-      'Prompts new customers to accept or decline marketing messages before entering the menu.',
+      'Temporarily disabled — the chatbot handles opt-in/opt-out automatically so booking is never interrupted.',
   },
   {
     key: 'botAllowStaffPick' as const,
@@ -40,6 +40,9 @@ export const BUILTIN_FLOW_DEFS = [
 ] as const;
 
 export type BuiltinFlowKey = (typeof BUILTIN_FLOW_DEFS)[number]['key'];
+
+/** Keys whose checkbox is locked/greyed out in the UI (feature temporarily disabled). */
+export const LOCKED_FLOW_KEYS: readonly BuiltinFlowKey[] = ['botAskMarketingConsent'] as const;
 
 export interface CustomBotFlow {
   id: string;

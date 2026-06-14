@@ -164,7 +164,6 @@ export async function synthesizeFaqAnswer(
 export async function tryAiAssist(
   conv: Conversation & { customer: Customer; salon: Salon },
   inboundText: string,
-  mainMenuText: string,
 ): Promise<AiAssistResult> {
   if (!isAnthropicConfigured()) return { handled: false };
 
@@ -197,7 +196,7 @@ export async function tryAiAssist(
       case 'menu':
         return {
           handled: true,
-          reply: `${ai.reply}\n\n${mainMenuText}`,
+          reply: `${ai.reply}\n\n_Type *MENU* to see all options._`,
           step: ConversationStep.MENU,
           contextPatch: { quickPickOptions: undefined, menuCategory: undefined },
         };
@@ -211,7 +210,7 @@ export async function tryAiAssist(
         ].filter(Boolean);
         return {
           handled: true,
-          reply: `${ai.reply}\n\n${lines.join('\n')}\n\n${mainMenuText}`,
+          reply: `${ai.reply}\n\n${lines.join('\n')}\n\n_Type *MENU* to see all options._`,
           step: ConversationStep.MENU,
           contextPatch: { menuCategory: undefined },
         };
@@ -245,7 +244,7 @@ export async function tryAiAssist(
         if (!serviceId) {
           return {
             handled: true,
-            reply: `${ai.reply}\n\n${mainMenuText}`,
+            reply: `${ai.reply}\n\n_Type *MENU* to see all options, or reply with what service you'd like._`,
             step: ConversationStep.MENU,
             contextPatch: { menuCategory: undefined },
           };
@@ -261,7 +260,7 @@ export async function tryAiAssist(
         if (quickPickOptions.length === 0) {
           return {
             handled: true,
-            reply: `${ai.reply}\n\nI couldn't find open slots right now — reply 1 on the menu to pick dates manually, or 0 to speak to our team.\n\n${mainMenuText}`,
+            reply: `${ai.reply}\n\nI couldn't find any open slots right now — type *MENU* and choose *Appointments › Book* to pick dates manually, or *Support › Speak To Reception* to chat with our team.`,
             step: ConversationStep.MENU,
             contextPatch: { menuCategory: undefined },
           };
@@ -293,7 +292,7 @@ export async function tryAiAssist(
       default:
         return {
           handled: true,
-          reply: `${ai.reply}\n\n${mainMenuText}`,
+          reply: `${ai.reply}\n\n_Type *MENU* anytime to see all options._`,
           step: ConversationStep.MENU,
           contextPatch: { menuCategory: undefined },
         };

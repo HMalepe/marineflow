@@ -64,6 +64,38 @@ try {
   }
 }
 
+// ── Column safety net ────────────────────────────────────────────────────────
+// If migrations were baselined (P3005 path) their SQL never ran.
+// Apply any missing columns now with IF NOT EXISTS — completely idempotent.
+try {
+  const { prisma: _prisma } = await import('./lib/prisma.js');
+  await _prisma.$executeRawUnsafe(`
+    ALTER TABLE "Customer"
+      ADD COLUMN IF NOT EXISTS "reviewCreditCents" INTEGER NOT NULL DEFAULT 0;
+  `);
+  await _prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "ReviewIncentiveClaim" (
+      "id" TEXT NOT NULL,
+      "salonId" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "appointmentId" TEXT,
+      "token" TEXT NOT NULL,
+      "rewardCents" INTEGER NOT NULL,
+      "claimedAt" TIMESTAMP(3),
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "ReviewIncentiveClaim_pkey" PRIMARY KEY ("id")
+    );
+  `);
+  await _prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ReviewIncentiveClaim_token_key" ON "ReviewIncentiveClaim"("token");`);
+  await _prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ReviewIncentiveClaim_salonId_idx" ON "ReviewIncentiveClaim"("salonId");`);
+  await _prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ReviewIncentiveClaim_customerId_idx" ON "ReviewIncentiveClaim"("customerId");`);
+  await _prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ReviewIncentiveClaim_appointmentId_idx" ON "ReviewIncentiveClaim"("appointmentId");`);
+  console.log('[STARTUP] Column safety net OK (reviewCreditCents + ReviewIncentiveClaim)');
+} catch (colErr) {
+  console.error('[STARTUP] Column safety net failed:', colErr);
+}
+
 try {
   console.log('[STARTUP] Syncing super admin password from env (if set)...');
   await syncSuperAdminPasswordFromEnv();

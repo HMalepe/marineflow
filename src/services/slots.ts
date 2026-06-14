@@ -134,13 +134,28 @@ export async function getStaffForService(
   serviceId: string,
   branchId?: string,
 ): Promise<Staff[]> {
-  return getTenantDb().staff.findMany({
+  // Try staff explicitly linked to this service first.
+  const linked = await getTenantDb().staff.findMany({
     where: {
       salonId,
       active: true,
       isBookable: true,
       deletedAt: null,
       services: { some: { serviceId } },
+      ...(branchId && { branchId }),
+    },
+    orderBy: { sortOrder: 'asc' },
+  });
+  if (linked.length > 0) return linked;
+
+  // Fallback: return all bookable staff when no explicit links are configured.
+  // This keeps booking working for salons that haven't set up service assignments yet.
+  return getTenantDb().staff.findMany({
+    where: {
+      salonId,
+      active: true,
+      isBookable: true,
+      deletedAt: null,
       ...(branchId && { branchId }),
     },
     orderBy: { sortOrder: 'asc' },
