@@ -198,14 +198,15 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
 async function AppointmentView({ token }: { token: string | null }) {
   let appointments: Appointment[] = [];
   let error: string | null = null;
+  let onboardingDone = true;
 
   try {
-    const data = await apiFetch<{ appointments: Appointment[] }>(
-      '/appointments/today',
-      {},
-      token,
-    );
-    appointments = data.appointments;
+    const [apptData, settingsData] = await Promise.all([
+      apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
+      apiFetch<{ salon: { onboardingCompletedAt: string | null; whatsappPhoneId: string | null } }>('/settings', {}, token),
+    ]);
+    appointments = apptData.appointments;
+    onboardingDone = !!(settingsData.salon.onboardingCompletedAt || settingsData.salon.whatsappPhoneId);
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load';
   }
@@ -216,6 +217,23 @@ async function AppointmentView({ token }: { token: string | null }) {
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-sm mt-1">Today&apos;s overview</p>
       </div>
+
+      {!onboardingDone && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="font-semibold text-sm">Finish setting up your account</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Connect WhatsApp, add services and staff to start taking bookings.
+            </p>
+          </div>
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+          >
+            Resume setup →
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard title="Today's Appointments" value={appointments.length} />

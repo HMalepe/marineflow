@@ -160,8 +160,11 @@ const PROFILE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ─── Debug mode ─────────────────────────────────────────────────────────────
 // Set BOT_DEBUG=true in Railway env vars to surface real errors in WhatsApp.
-// Remove / set to false before going live.
+// MUST be false in production — exposes stack traces to customers.
 const BOT_DEBUG = process.env.BOT_DEBUG === 'true';
+if (BOT_DEBUG) {
+  console.warn('[BOT] ⚠️  BOT_DEBUG=true — raw errors are being sent to customers via WhatsApp. Set BOT_DEBUG=false before going live.');
+}
 
 function debugMsg(label: string, err: unknown, extra?: Record<string, unknown>): string {
   const msg = err instanceof Error ? err.message : String(err);
@@ -603,14 +606,19 @@ function isWithinBusinessHours(salon: Salon, now = new Date()): boolean {
 }
 
 function afterHoursHumanReply(salon: Salon): string {
+  if (salon.afterHoursMessage?.trim()) return salon.afterHoursMessage.trim();
   const open = salon.openTime ?? '09:00';
   const close = salon.closeTime ?? '17:00';
-  return (
-    salon.afterHoursMessage?.trim() ||
-    `We're closed for live support right now (our hours are ${open}–${close}). ` +
-    `Someone from our team will contact you when we open. ` +
-    `You can still book appointments, check loyalty, and browse FAQs anytime.`
-  );
+  return [
+    `🌙 We're closed right now — our team is offline until we open at *${open}* tomorrow.`,
+    '',
+    `You can still:`,
+    `• Book an appointment (we'll confirm when we open)`,
+    `• Check your loyalty balance`,
+    `• Browse our FAQs`,
+    '',
+    `_Our hours are ${open} – ${close}. We'll reply to messages as soon as we open. 😊_`,
+  ].join('\n');
 }
 
 function isHumanHandoffRequest(text: string): boolean {
@@ -3228,9 +3236,16 @@ async function handleConfirm(
     conv,
     [
       bookingNotes ? `${bookingNotes}\n` : '',
-      `Booked! Reference: ${appointment.id.slice(0, 8)}`,
-      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-      DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc dd LLL yyyy HH:mm'),
+      `✅ *Booking confirmed!*`,
+      '',
+      `📋 *${sanitize(service.name)}*`,
+      `👤 with ${sanitize(staff.name)}`,
+      `📅 ${DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc, d MMMM yyyy')}`,
+      `🕐 ${DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('HH:mm')} – ${DateTime.fromJSDate(end).setZone(conv.salon.timezone).toFormat('HH:mm')}`,
+      '',
+      `🔖 Ref: *${appointment.id.slice(0, 8).toUpperCase()}*`,
+      '',
+      `_Reply *MENU* anytime to manage your bookings._`,
     ]
       .filter(Boolean)
       .join('\n'),

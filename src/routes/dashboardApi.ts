@@ -113,6 +113,8 @@ function serializeFaq(item: {
   status: FaqStatus;
   createdAt: Date;
   updatedAt: Date;
+  approvedAt?: Date | null;
+  approvedBy?: string | null;
 }) {
   return {
     id: item.id,
@@ -122,6 +124,8 @@ function serializeFaq(item: {
     status: faqToApiStatus(item.status),
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
+    approvedAt: item.approvedAt?.toISOString() ?? null,
+    approvedBy: item.approvedBy ?? null,
   };
 }
 
@@ -288,6 +292,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           slug: true,
           whatsappPhoneId: true,
           twilioWhatsAppFrom: true,
+          onboardingCompletedAt: true,
         },
       });
       const flow = parseBotFlowSettingsFromMetadata(salon.metadata);

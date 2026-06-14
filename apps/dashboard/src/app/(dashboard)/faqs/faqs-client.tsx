@@ -50,6 +50,8 @@ interface Faq {
   answer: string;
   sortOrder: number;
   status: FaqStatus;
+  approvedAt: string | null;
+  approvedBy: string | null;
 }
 
 interface FaqForm {
@@ -221,6 +223,12 @@ function SortableFaqCard({
             </div>
           </div>
           <p className="text-sm text-muted-foreground line-clamp-2">{truncate(faq.answer)}</p>
+          {faq.status === 'APPROVED' && faq.approvedAt && (
+            <p className="text-[11px] text-muted-foreground/60">
+              Approved {new Date(faq.approvedAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' })}
+              {faq.approvedBy ? ` · ${faq.approvedBy}` : ''}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onEdit(faq)}>
               Edit
