@@ -1,5 +1,14 @@
-import { ConversationStep } from '@prisma/client';
+import { ConversationStep, Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { logger } from '../lib/logger.js';
+
+function isMissingConsentRecordTable(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === 'P2021' &&
+    String(err.meta?.table ?? err.message).includes('ConsentRecord')
+  );
+}
 
 /** Normalise inbound text for exact POPIA keyword matching (trim, uppercase, Unicode NFKC). */
 export function normalizePopiaCommandText(text: string): string {
@@ -98,10 +107,7 @@ export async function exportCustomerData(customerId: string) {
         where: { customerId },
         orderBy: { createdAt: 'desc' },
       }),
-      db.consentRecord.findMany({
-        where: { customerId },
-        orderBy: { createdAt: 'desc' },
-      }),
+      safeConsentRecords(customerId),
       db.ticket.findMany({
         where: { customerId },
         include: { messages: true },
@@ -210,16 +216,12 @@ export async function eraseCustomerData(customerId: string) {
     data: { body: '[ERASED]' },
   });
 
-  // Record the erasure as a consent event
-  await db.consentRecord.create({
-    data: {
-      salonId: customer.salonId,
-      customerId,
-      type: 'erasure_completed',
-      granted: false,
-      revokedAt: new Date(),
-      source: 'manual',
-    },
+  await recordConsent({
+    salonId: customer.salonId,
+    customerId,
+    type: 'erasure_completed',
+    granted: false,
+    source: 'manual',
   });
 
   return { erased: true, customerId };
@@ -248,7 +250,12 @@ export async function deleteCustomerData(
     return { alreadyDeleted: true };
   }
 
-  await db.consentRecord.deleteMany({ where: { customerId, salonId } });
+  try {
+    await db.consentRecord.deleteMany({ where: { customerId, salonId } });
+  } catch (err) {
+    if (!isMissingConsentRecordTable(err)) throw err;
+    logger.warn({ customerId, salonId }, 'consent_record_delete_skipped_missing_table');
+  }
   await db.pushToken.deleteMany({ where: { customerId, salonId } });
 
   await db.customer.update({
@@ -311,8 +318,23 @@ export async function notifyPopiaRightsOnce(
   return true;
 }
 
+async function safeConsentRecords(customerId: string) {
+  const db = getTenantDb();
+  try {
+    return await db.consentRecord.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+  } catch (err) {
+    if (!isMissingConsentRecordTable(err)) throw err;
+    logger.warn({ customerId }, 'consent_record_read_skipped_missing_table');
+    return [];
+  }
+}
+
 /**
- * Record a consent event.
+ * Record a consent event (POPIA audit trail). Non-fatal if the table is missing —
+ * customer.marketingConsentStatus is the source of truth for campaigns.
  */
 export async function recordConsent(params: {
   salonId: string;
@@ -324,16 +346,25 @@ export async function recordConsent(params: {
 }) {
   const db = getTenantDb();
 
-  return db.consentRecord.create({
-    data: {
-      salonId: params.salonId,
-      customerId: params.customerId,
-      type: params.type,
-      granted: params.granted,
-      grantedAt: params.granted ? new Date() : null,
-      revokedAt: params.granted ? null : new Date(),
-      source: params.source ?? 'whatsapp',
-      ipAddress: params.ipAddress,
-    },
-  });
+  try {
+    return await db.consentRecord.create({
+      data: {
+        salonId: params.salonId,
+        customerId: params.customerId,
+        type: params.type,
+        granted: params.granted,
+        grantedAt: params.granted ? new Date() : null,
+        revokedAt: params.granted ? null : new Date(),
+        source: params.source ?? 'whatsapp',
+        ipAddress: params.ipAddress,
+      },
+    });
+  } catch (err) {
+    if (!isMissingConsentRecordTable(err)) throw err;
+    logger.warn(
+      { salonId: params.salonId, customerId: params.customerId, type: params.type },
+      'consent_record_write_skipped_missing_table',
+    );
+    return null;
+  }
 }

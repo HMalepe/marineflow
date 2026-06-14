@@ -12,6 +12,7 @@ import { validateCampaignMedia } from './campaigns.js';
 describe('parseMarketingConsentReply', () => {
   it('accepts explicit ACCEPT/DECLINE keywords', () => {
     expect(parseMarketingConsentReply('ACCEPT')).toBe('accept');
+    expect(parseMarketingConsentReply('Accept')).toBe('accept');
     expect(parseMarketingConsentReply('DECLINE')).toBe('decline');
     expect(parseMarketingConsentReply('stop')).toBe('decline');
   });

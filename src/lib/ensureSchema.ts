@@ -43,6 +43,48 @@ CREATE INDEX IF NOT EXISTS "ServiceAddon_salonId_idx" ON "ServiceAddon"("salonId
 CREATE INDEX IF NOT EXISTS "ServiceAddon_serviceId_idx" ON "ServiceAddon"("serviceId");
 `;
 
+const CONSENT_RECORD_TABLE_DDL = `
+CREATE TABLE IF NOT EXISTS "ConsentRecord" (
+    "id" TEXT NOT NULL,
+    "salonId" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "granted" BOOLEAN NOT NULL,
+    "grantedAt" TIMESTAMP(3),
+    "revokedAt" TIMESTAMP(3),
+    "source" TEXT NOT NULL DEFAULT 'whatsapp',
+    "ipAddress" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ConsentRecord_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "ConsentRecord_salonId_idx" ON "ConsentRecord"("salonId");
+CREATE INDEX IF NOT EXISTS "ConsentRecord_customerId_idx" ON "ConsentRecord"("customerId");
+CREATE INDEX IF NOT EXISTS "ConsentRecord_salonId_customerId_type_idx"
+  ON "ConsentRecord"("salonId", "customerId", "type");
+`;
+
+const CONSENT_RECORD_FKEY_GUARDS = [
+  `DO $$ BEGIN
+    ALTER TABLE "ConsentRecord"
+      ADD CONSTRAINT "ConsentRecord_salonId_fkey"
+      FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
+  `DO $$ BEGIN
+    ALTER TABLE "ConsentRecord"
+      ADD CONSTRAINT "ConsentRecord_customerId_fkey"
+      FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END $$`,
+] as const;
+
+const CUSTOMER_CAMPAIGN_INDEX_GUARDS = [
+  `CREATE INDEX IF NOT EXISTS "Customer_salonId_marketingConsentStatus_idx"
+    ON "Customer"("salonId", "marketingConsentStatus")`,
+  `CREATE INDEX IF NOT EXISTS "Customer_salonId_marketingConsentStatus_dateOfBirth_idx"
+    ON "Customer"("salonId", "marketingConsentStatus", "dateOfBirth")`,
+] as const;
+
 const SERVICE_ADDON_FKEY_GUARDS = [
   `DO $$ BEGIN
     ALTER TABLE "ServiceAddon"
@@ -83,6 +125,13 @@ export async function ensureSchemaColumns(): Promise<void> {
     }
     await client.$executeRawUnsafe(SERVICE_ADDON_TABLE_DDL);
     for (const sql of SERVICE_ADDON_FKEY_GUARDS) {
+      await client.$executeRawUnsafe(sql);
+    }
+    await client.$executeRawUnsafe(CONSENT_RECORD_TABLE_DDL);
+    for (const sql of CONSENT_RECORD_FKEY_GUARDS) {
+      await client.$executeRawUnsafe(sql);
+    }
+    for (const sql of CUSTOMER_CAMPAIGN_INDEX_GUARDS) {
       await client.$executeRawUnsafe(sql);
     }
   } finally {

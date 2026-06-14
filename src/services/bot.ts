@@ -1100,6 +1100,7 @@ async function processInboundWhatsApp(
   if (isConversationWakeMessage(text)) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
     syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
+    conv = await reloadConversation(conv.id);
     if (shouldPromptMarketingConsentBeforeMenu(conv)) {
       await startMarketingConsentGate(conv);
       return;
@@ -1564,12 +1565,13 @@ async function handleMarketingConsentFlow(
 
   if (isGlobalMarketingOptOut(text)) {
     if (status !== 'DECLINED') {
-      await applyMarketingConsentChoice({
+      const newStatus = await applyMarketingConsentChoice({
         customerId: conv.customerId,
         salonId: salon.id,
         choice: 'decline',
         source: 'whatsapp_stop',
       });
+      conv.customer.marketingConsentStatus = newStatus;
       void getTenantDb().analyticsEvent.create({
         data: {
           salonId: salon.id,
@@ -1585,12 +1587,13 @@ async function handleMarketingConsentFlow(
   }
 
   if (status === 'DECLINED' && isGlobalMarketingOptIn(text)) {
-    await applyMarketingConsentChoice({
+    const newStatus = await applyMarketingConsentChoice({
       customerId: conv.customerId,
       salonId: salon.id,
       choice: 'accept',
       source: 'whatsapp_opt_in',
     });
+    conv.customer.marketingConsentStatus = newStatus;
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyWithMenu(conv, buildConsentAcceptedMessage());
     return true;
@@ -1608,12 +1611,13 @@ async function handleMarketingConsentFlow(
 
   const choice = parseMarketingConsentReply(text);
   if (choice) {
-    await applyMarketingConsentChoice({
+    const newStatus = await applyMarketingConsentChoice({
       customerId: conv.customerId,
       salonId: salon.id,
       choice,
       source: 'whatsapp',
     });
+    conv.customer.marketingConsentStatus = newStatus;
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     const ack = choice === 'accept' ? buildConsentAcceptedMessage() : buildConsentDeclinedMessage();
     await replyWithMenu(conv, ack);

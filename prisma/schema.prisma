@@ -323,6 +323,8 @@ model Customer {
   @@index([salonId, email])
   @@index([preferredStaffId])
   @@index([salonId, lastInteractionAt])
+  @@index([salonId, marketingConsentStatus])
+  @@index([salonId, marketingConsentStatus, dateOfBirth])
 }
 
 model Conversation {
