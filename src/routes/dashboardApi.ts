@@ -473,6 +473,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             return { error: 'invalid_google_review_url', message: 'Google Review URL must start with https://' };
           }
         }
+        if (whatsappPhoneId !== undefined && whatsappPhoneId !== null) {
+          const trimmedPhoneId = whatsappPhoneId.trim();
+          if (trimmedPhoneId && !/^\d{10,20}$/.test(trimmedPhoneId)) {
+            reply.code(400);
+            return {
+              error: 'invalid_whatsapp_phone_id',
+              message: 'Phone Number ID must be digits only (10–20 characters, from Meta API Setup).',
+            };
+          }
+        }
 
         const followUpTouched =
           inactivityMessage1 !== undefined ||
@@ -665,6 +675,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             closingMessage: true,
             googleReviewUrl: true,
             metadata: true,
+            whatsappPhoneId: true,
           },
         });
 
