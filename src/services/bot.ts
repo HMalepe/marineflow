@@ -152,6 +152,23 @@ export type BotContext = Record<string, unknown> & {
 const PROFILE_NAME_REGEX = /^[a-zA-Z\s'-]{1,80}$/;
 const PROFILE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ─── Debug mode ─────────────────────────────────────────────────────────────
+// Set BOT_DEBUG=true in Railway env vars to surface real errors in WhatsApp.
+// Remove / set to false before going live.
+const BOT_DEBUG = process.env.BOT_DEBUG === 'true';
+
+function debugMsg(label: string, err: unknown, extra?: Record<string, unknown>): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const code =
+    err instanceof Prisma.PrismaClientKnownRequestError ? ` [Prisma ${err.code}]` : '';
+  const stack =
+    err instanceof Error && err.stack
+      ? '\n' + err.stack.split('\n').slice(1, 4).join('\n')
+      : '';
+  const extraStr = extra ? '\n' + JSON.stringify(extra, null, 2) : '';
+  return `🛠 *[BOT DEBUG — ${label}]*\n${msg}${code}${stack}${extraStr}`;
+}
+
 const PENDING_PROFILE_CLEAR: Pick<
   BotContext,
   | 'pendingFirstName'
@@ -722,7 +739,10 @@ export async function handleInboundWhatsApp(input: {
           accessibility: true,
         },
       });
-      if (salon) {
+      if (BOT_DEBUG) {
+        const dbgText = debugMsg('bot_transaction_failed', err, { errCode, tenantId: tenant.id });
+        await sendTenantWhatsApp(tenant.id, waId, dbgText);
+      } else if (salon) {
         await sendTenantWhatsApp(tenant.id, waId, buildMainMenuText(salon as Salon));
       }
     } catch (fallbackErr) {
@@ -926,7 +946,11 @@ async function processInboundWhatsApp(
       if (!hasPendingOutboundForConv(conv.id)) {
         await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU).catch(() => {});
         syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-        await reply(conv, 'Sorry — something went wrong with your booking. Starting fresh:');
+        if (BOT_DEBUG) {
+          await reply(conv, debugMsg('booking_flow_error', err, { step: conv.step, convId: conv.id }));
+        } else {
+          await reply(conv, 'Sorry — something went wrong with your booking. Starting fresh:');
+        }
         await replyMenu(conv);
       }
     }
@@ -961,10 +985,11 @@ async function processInboundWhatsApp(
     } catch (err) {
       logger.error({ err, convId: conv.id, step: conv.step }, 'menu_handler_error');
       if (!hasPendingOutboundForConv(conv.id)) {
-        await reply(
-          conv,
-          'Something went wrong. Reply *MENU* to see the menu and try again.',
-        );
+        if (BOT_DEBUG) {
+          await reply(conv, debugMsg('menu_handler_error', err, { step: conv.step, convId: conv.id }));
+        } else {
+          await reply(conv, 'Something went wrong. Reply *MENU* to see the menu and try again.');
+        }
       }
     }
     return;
@@ -1089,6 +1114,9 @@ async function processInboundWhatsApp(
         );
         await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
         syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+        if (BOT_DEBUG) {
+          await reply(conv, debugMsg('route_conversation_infra_error', err, { step: conv.step, convId: conv.id }));
+        }
         await replyMenu(conv);
         return;
       }
@@ -1096,18 +1124,24 @@ async function processInboundWhatsApp(
       const prevCount = (ctx(conv).errorCount as number | undefined) ?? 0;
       const errorCount = prevCount + 1;
 
+      if (BOT_DEBUG) {
+        await reply(conv, debugMsg('route_conversation_error', err, { step: conv.step, convId: conv.id, errorCount })).catch(() => {});
+      }
+
       if (errorCount >= 2) {
         // Escalate: move to HANDOFF, notify user, open a ticket, ping dashboard
         await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.HANDOFF).catch(
           () => {},
         );
 
-        await reply(
-          conv,
-          'Oops! We ran into an unexpected problem and couldn\'t complete your request. ' +
-          'A team member has been notified and will reach out to you shortly. ' +
-          'We apologise for the inconvenience.',
-        );
+        if (!BOT_DEBUG) {
+          await reply(
+            conv,
+            'Oops! We ran into an unexpected problem and couldn\'t complete your request. ' +
+            'A team member has been notified and will reach out to you shortly. ' +
+            'We apologise for the inconvenience.',
+          );
+        }
 
         // Open a support ticket so the dashboard shows it immediately
         await getTenantDb().ticket.create({
@@ -1145,11 +1179,16 @@ async function processInboundWhatsApp(
           () => {},
         );
         syncConvContext(conv, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU);
-        await reply(conv, "Sorry, something went wrong. Let's start fresh:");
+        if (!BOT_DEBUG) {
+          await reply(conv, "Sorry, something went wrong. Let's start fresh:");
+        }
         await replyMenu(conv);
       }
     } catch (innerErr) {
       logger.error({ innerErr }, 'error_recovery_failed');
+      if (BOT_DEBUG) {
+        await reply(conv, debugMsg('error_recovery_failed', innerErr, { convId: conv.id })).catch(() => {});
+      }
       await replyMenu(conv).catch(() => {});
     }
   }
@@ -1793,11 +1832,15 @@ async function menuActionStartBooking(
     if (!hasPendingOutboundForConv(conv.id)) {
       await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU).catch(() => {});
       syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-      const phone = conv.salon.phoneDisplay?.trim();
-      const msg = phone
-        ? `We couldn't start your booking just now. Please try again or call us on ${phone}.`
-        : "We couldn't start your booking just now. Please try again in a moment.";
-      await reply(conv, msg);
+      if (BOT_DEBUG) {
+        await reply(conv, debugMsg('menu_action_start_booking_failed', err, { convId: conv.id }));
+      } else {
+        const phone = conv.salon.phoneDisplay?.trim();
+        const msg = phone
+          ? `We couldn't start your booking just now. Please try again or call us on ${phone}.`
+          : "We couldn't start your booking just now. Please try again in a moment.";
+        await reply(conv, msg);
+      }
       await replyMenu(conv);
     }
   }
@@ -2261,10 +2304,11 @@ async function handleMenu(
     } catch (err) {
       logger.error({ err, convId: conv.id, selection }, 'main_menu_selection_failed');
       if (!hasPendingOutboundForConv(conv.id)) {
-        await reply(
-          conv,
-          'That option isn\'t available right now. Reply *MENU* to try again.',
-        );
+        if (BOT_DEBUG) {
+          await reply(conv, debugMsg('main_menu_selection_failed', err, { convId: conv.id, selection }));
+        } else {
+          await reply(conv, 'That option isn\'t available right now. Reply *MENU* to try again.');
+        }
       }
     }
     return;
