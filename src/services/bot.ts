@@ -30,7 +30,7 @@ import {
   redeemForNextBookingTx,
 } from './loyalty.js';
 import { createDepositCheckoutSession } from './payments.js';
-import { matchQuickPick, tryAiAssist, type QuickPickOption } from './botAssistant.js';
+import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
@@ -3018,6 +3018,45 @@ function buildServicePage(services: { id: string; name: string; priceCents: numb
   return [header, ...lines, ...footer].join('\n');
 }
 
+/** Leave slot/quick-pick flow and show the full service catalog. */
+async function beginAllServicesPicker(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  intro = 'Here are our services:',
+) {
+  const { services } = await resolveServicesForPicker(conv);
+  await saveCtx(
+    conv.id,
+    {
+      selectedServiceId: undefined,
+      selectedStaffId: undefined,
+      localDateStr: undefined,
+      slotStartIso: undefined,
+      quickPickOptions: undefined,
+      anyStaff: undefined,
+      staffOrderIds: undefined,
+      serviceFilterIds: undefined,
+      servicePage: 0,
+    },
+    ConversationStep.PICK_SERVICE,
+  );
+  syncConvContext(
+    conv,
+    {
+      selectedServiceId: undefined,
+      selectedStaffId: undefined,
+      localDateStr: undefined,
+      slotStartIso: undefined,
+      quickPickOptions: undefined,
+      anyStaff: undefined,
+      staffOrderIds: undefined,
+      serviceFilterIds: undefined,
+      servicePage: 0,
+    },
+    ConversationStep.PICK_SERVICE,
+  );
+  await reply(conv, `${intro}\n\n${buildServicePage(services, 0)}`);
+}
+
 async function handlePickServiceCategory(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3414,6 +3453,30 @@ async function handlePickSlot(
     return;
   }
 
+  if (isBrowseServicesRequest(text)) {
+    await beginAllServicesPicker(conv, 'Sure — here are all our cuts and services:');
+    return;
+  }
+
+  const aiResult = await tryAiAssist(conv, text);
+  if (aiResult.negativeSentiment) {
+    await escalateNegativeSentiment(conv, text);
+    return;
+  }
+  if (aiResult.handled && aiResult.reply) {
+    if (
+      isBrowseServicesRequest(text) ||
+      (aiResult.step === ConversationStep.MENU && /\b(service|cut|style|option)/i.test(text))
+    ) {
+      await beginAllServicesPicker(conv);
+      return;
+    }
+    await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
+    syncConvContext(conv, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
+    await reply(conv, aiResult.reply);
+    return;
+  }
+
   const serviceId = c.selectedServiceId as string | undefined;
   const staffId = c.selectedStaffId as string | undefined;
   const localDateStr = c.localDateStr as string | undefined;
@@ -3442,6 +3505,19 @@ async function handlePickSlot(
   const n = parseInt(text, 10);
   const maxVisible = visibleSlotCount(slots.length);
   if (!Number.isFinite(n) || n < 1 || n > maxVisible) {
+    const quickOptions = c.quickPickOptions as QuickPickOption[] | undefined;
+    if (quickOptions?.length) {
+      await reply(
+        conv,
+        [
+          "I didn't catch that. Reply with *A*, *B*, or *C* for one of these times:",
+          ...quickOptions.map((o) => o.label),
+          '',
+          'Or ask to *see all services*, or reply *BACK* for the main menu.',
+        ].join('\n'),
+      );
+      return;
+    }
     const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
     await reply(conv, [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
     return;

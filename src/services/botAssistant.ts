@@ -161,6 +161,17 @@ export async function synthesizeFaqAnswer(
   });
 }
 
+export function isBrowseServicesRequest(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  return (
+    (/\b(let me see|show me|see all|view all|list all|all the|browse)\b/.test(t) &&
+      /\b(cut|cuts|service|services|style|styles|option|options|menu)\b/.test(t)) ||
+    /\bwhat (cuts|services|options)\b/.test(t) ||
+    /\bother (cuts|services|options)\b/.test(t)
+  );
+}
+
 export async function tryAiAssist(
   conv: Conversation & { customer: Customer; salon: Salon },
   inboundText: string,
