@@ -173,6 +173,24 @@ export function ServicesClient({ token }: Props) {
     void loadCategories();
   }, [loadServices, loadCategories]);
 
+  // Warn before navigating away with unsaved form data
+  const formIsDirty = sheetOpen && (
+    form.name.trim() !== '' ||
+    form.description.trim() !== '' ||
+    form.priceRands !== '' ||
+    form.durationMin !== '60' ||
+    form.bufferMin !== '0'
+  );
+  useEffect(() => {
+    if (!formIsDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [formIsDirty]);
+
   async function handleAddCategory(e: FormEvent) {
     e.preventDefault();
     const name = catInput.trim();
@@ -281,7 +299,8 @@ export function ServicesClient({ token }: Props) {
     setSheetOpen(true);
   }
 
-  function closeSheet() {
+  function closeSheet(force = false) {
+    if (!force && formIsDirty && !window.confirm('You have unsaved changes. Close anyway?')) return;
     clearSaveFeedback();
     setSheetOpen(false);
     setEditingId(null);
@@ -782,7 +801,7 @@ export function ServicesClient({ token }: Props) {
         </CardContent>
       </Card>
 
-      <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet()}>
+      <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet(false)}>
         <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
           {templateStep ? (
             <>

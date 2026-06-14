@@ -214,8 +214,42 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
       ? `Continue to PayFast — ${formatZAR(selectedPlan.priceMonthly)}/mo`
       : `Continue to PayFast — ${formatZAR(selectedPlan.priceAnnual)}/yr`;
 
+  // Compute trial days remaining
+  const trialDaysLeft = (() => {
+    const trialEnd = subscription?.trialEndsAt ?? (subscription?.status === 'TRIALING' ? subscription?.currentPeriodEnd : null);
+    if (!trialEnd) return null;
+    const diff = new Date(trialEnd).getTime() - Date.now();
+    return diff > 0 ? Math.ceil(diff / 86_400_000) : 0;
+  })();
+  const isTrialing = subscription?.status === 'TRIALING' || (trialDaysLeft !== null && trialDaysLeft > 0);
+
   return (
     <div className="space-y-6">
+      {/* Trial countdown banner — shown prominently when in trial */}
+      {isTrialing && trialDaysLeft !== null && (
+        <div className={`rounded-2xl border px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between ${
+          trialDaysLeft <= 3
+            ? 'border-red-500/30 bg-red-500/10'
+            : trialDaysLeft <= 7
+            ? 'border-amber-500/30 bg-amber-500/10'
+            : 'border-primary/20 bg-primary/5'
+        }`}>
+          <div className="space-y-0.5">
+            <p className={`font-semibold text-sm ${trialDaysLeft <= 3 ? 'text-red-800 dark:text-red-200' : trialDaysLeft <= 7 ? 'text-amber-800 dark:text-amber-200' : ''}`}>
+              {trialDaysLeft === 0
+                ? '⚠️ Your trial ends today'
+                : trialDaysLeft === 1
+                ? '⚠️ Your trial ends tomorrow'
+                : `🕐 ${trialDaysLeft} days left on your trial`}
+            </p>
+            <p className="text-xs text-muted-foreground">Subscribe below to keep your bot live and all customer data intact.</p>
+          </div>
+          <Button size="sm" onClick={() => document.getElementById('subscribe-section')?.scrollIntoView({ behavior: 'smooth' })}>
+            Subscribe now
+          </Button>
+        </div>
+      )}
+
       {banner === 'success' && (
         <StatusBanner
           variant="success"
@@ -340,7 +374,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
       )}
 
       {canSubscribe && (
-        <div className="grid lg:grid-cols-5 gap-6 items-start">
+        <div id="subscribe-section" className="grid lg:grid-cols-5 gap-6 items-start">
           <div className="lg:col-span-3 space-y-4">
             <div className="inline-flex rounded-lg border bg-muted/50 p-1 w-full sm:w-auto">
               <button

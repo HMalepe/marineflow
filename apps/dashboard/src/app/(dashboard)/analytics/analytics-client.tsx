@@ -123,6 +123,22 @@ interface Props {
   token: string;
 }
 
+function currentMonthStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function offsetMonth(base: string, delta: number): string {
+  const [y, m] = base.split('-').map(Number) as [number, number];
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  return new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+}
+
 export function AnalyticsClient({ token }: Props) {
   const [data, setData]       = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -137,15 +153,18 @@ export function AnalyticsClient({ token }: Props) {
   const [noShowByService, setNoShowByService] = useState<NoShowRow[]>([]);
   const [funnel, setFunnel]     = useState<FunnelStep[]>([]);
   const [optOuts, setOptOuts]   = useState<OptOutData | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr());
+  const isCurrentMonth = selectedMonth === currentMonthStr();
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
+    const monthQ = `?month=${selectedMonth}`;
     try {
       const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData, campaignData] = await Promise.all([
-        apiFetch<AnalyticsData>('/analytics/overview', {}, token),
-        apiFetch<MonthlyReport>('/analytics/monthly-report', {}, token).catch(() => null),
+        apiFetch<AnalyticsData>(`/analytics/overview${monthQ}`, {}, token),
+        apiFetch<MonthlyReport>(`/analytics/monthly-report${monthQ}`, {}, token).catch(() => null),
         apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
         apiFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>('/analytics/no-show-patterns', {}, token).catch(() => null),
         apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
@@ -169,7 +188,7 @@ export function AnalyticsClient({ token }: Props) {
     }
   }, [token]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, selectedMonth]);
 
   const sendReportToWhatsApp = async () => {
     setSendingReport(true);
@@ -193,18 +212,41 @@ export function AnalyticsClient({ token }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Business performance at a glance.
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Analytics</h1>
+          <p className="text-muted-foreground text-sm mt-1">Business performance at a glance.</p>
         </div>
-        {!loading && (
-          <Button variant="outline" size="sm" onClick={load}>
-            Refresh
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Month navigator */}
+          <div className="flex items-center gap-1 rounded-xl border bg-card px-1 py-1 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setSelectedMonth(offsetMonth(selectedMonth, -1))}
+              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold"
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <span className="px-2 text-sm font-semibold tabular-nums min-w-[140px] text-center">
+              {formatMonthLabel(selectedMonth)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedMonth(offsetMonth(selectedMonth, 1))}
+              disabled={isCurrentMonth}
+              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+          {!loading && (
+            <Button variant="outline" size="sm" onClick={load}>
+              Refresh
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Loading skeleton */}
