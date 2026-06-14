@@ -1573,7 +1573,11 @@ async function startBookingFlow(
 
   const services = await loadActiveServicesForBooking(salon.id);
   if (services.length === 0) {
-    await replyWithMenu(conv, `No services configured yet. Please contact the salon.`);
+    const phone = salon.phoneDisplay?.trim();
+    const msg = phone
+      ? `We don't have any services set up for online booking yet.\n\nTo book, please call us on *${phone}* and we'll sort you out! 😊\n\nReply MENU to go back.`
+      : `We don't have any services set up for online booking just yet.\n\nPlease contact the salon directly to make a booking.\n\nReply MENU to go back.`;
+    await replyWithMenu(conv, msg);
     return;
   }
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
@@ -2384,7 +2388,11 @@ async function continueAfterServicePick(
   const { staffList: staff, preferredId } = await getStaffListWithPreference(conv, service.id);
   if (staff.length === 0) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    await replyWithMenu(conv, `No one is available for that service right now. Try another service or contact the salon.`);
+    const phone = conv.salon.phoneDisplay?.trim();
+    const noStaffMsg = phone
+      ? `Sorry, we don't have any staff available for *${sanitize(service.name)}* at the moment.\n\nPlease call us on *${phone}* to arrange a booking, or choose a different service.`
+      : `Sorry, we don't have any staff available for *${sanitize(service.name)}* at the moment. Please try another service or contact the salon directly.`;
+    await replyWithMenu(conv, noStaffMsg);
     return;
   }
   await saveCtx(
@@ -2416,7 +2424,11 @@ async function handlePickStaff(
   // Guard: staff may have been deactivated since service step
   if (staffList.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyWithMenu(conv, `Sorry, no staff are currently available for this service. Please try another.`);
+    const phone = conv.salon.phoneDisplay?.trim();
+    const msg = phone
+      ? `Sorry, it looks like the staff member for that service is no longer available.\n\nGive us a call on *${phone}* and we'll find you the next available slot!`
+      : `Sorry, it looks like the staff member for that service is no longer available. Please try another service.`;
+    await replyWithMenu(conv, msg);
     return;
   }
 
@@ -2473,7 +2485,11 @@ async function handlePickStaff(
   const dates = await suggestBookingDates(conv.salonId, 14);
   if (dates.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyWithMenu(conv, `No available dates found. Please contact us directly to book.`);
+    const phone = conv.salon.phoneDisplay?.trim();
+    const msg = phone
+      ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
+      : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
+    await replyWithMenu(conv, msg);
     return;
   }
 
@@ -2515,7 +2531,11 @@ async function handlePickDate(
   const showDateList = async (prefix: string) => {
     if (suggestions.length === 0) {
       await saveCtx(conv.id, {}, ConversationStep.MENU);
-      await replyWithMenu(conv, `No available dates found. Please contact us directly to book.`);
+      const phone = conv.salon.phoneDisplay?.trim();
+      const msg = phone
+        ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
+        : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
+      await replyWithMenu(conv, msg);
       return;
     }
     const dateLines = suggestions.slice(0, 10).map((d, i) => `${i + 1}. ${d}`);
@@ -2623,7 +2643,10 @@ async function handlePickSlot(
   });
   if (tooLong || slots.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
-    await reply(conv, 'No slots are available for this date. Please reply BACK to choose a different date.');
+    const reason = tooLong
+      ? `That service is too long to fit into any slot on this day. Try a different date, or reply BACK to choose another.`
+      : `No open slots on this day — it might be fully booked or our stylist isn't in. Reply BACK to pick a different date.`;
+    await reply(conv, reason);
     return;
   }
   const n = parseInt(text, 10);
@@ -3520,7 +3543,11 @@ async function handlePickBranch(
   // EC-05: guard against empty service list after branch selection
   if (services.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyWithMenu(conv, `No services configured yet. Please contact the salon.`);
+    const phone = conv.salon.phoneDisplay?.trim();
+    const msg = phone
+      ? `We don't have any services set up for online booking at this location yet.\n\nYou're welcome to call us on *${phone}* and we'll get you booked in! 😊`
+      : `We don't have any services set up for online booking at this location yet. Please contact the salon directly.`;
+    await replyWithMenu(conv, msg);
     return;
   }
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
