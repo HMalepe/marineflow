@@ -377,12 +377,15 @@ export function ServicesClient({ token }: Props) {
       (c: ServiceCategory) => c.name.toLowerCase() === t.category.toLowerCase(),
     );
     setForm((f: ServiceForm) => ({
+      ...f,
       name: t.name,
       description: t.description,
       priceRands: String(t.suggestedPriceRands),
       durationMin: String(t.suggestedDurationMin),
       bufferMin: '0',
       categoryId: matchedCat ? matchedCat.id : f.categoryId,
+      depositRands: '',
+      fullPay: false,
     }));
     setTemplateStep(false);
   }
