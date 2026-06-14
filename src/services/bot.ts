@@ -1553,11 +1553,36 @@ async function handleMarketingConsentFlow(
   return true;
 }
 
+const BOOKING_FLOW_STEPS = new Set([
+  ConversationStep.PICK_SERVICE,
+  ConversationStep.PICK_SERVICE_CATEGORY,
+  ConversationStep.PICK_STAFF,
+  ConversationStep.PICK_DATE,
+  ConversationStep.CONFIRM_BOOKING,
+  ConversationStep.MANAGE_BOOKING,
+  ConversationStep.CONFIRM_CANCEL,
+  ConversationStep.RESCHEDULE,
+]);
+
+const SESSION_STALE_MS = 30 * 60 * 1000; // 30 minutes
+
 async function routeConversation(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
   const t = text.trim();
+
+  // Stale session guard — if user was mid-booking 30+ minutes ago, reset to menu
+  if (
+    (BOOKING_FLOW_STEPS as Set<string>).has(conv.step) &&
+    conv.lastMessageAt &&
+    Date.now() - new Date(conv.lastMessageAt).getTime() > SESSION_STALE_MS
+  ) {
+    await saveCtx(conv.id, {}, ConversationStep.IDLE);
+    syncConvContext(conv, {}, ConversationStep.IDLE);
+    await replyWithMenu(conv, '👋 It\'s been a while — your previous session has ended. Here\'s the menu to start fresh:');
+    return;
+  }
 
   switch (conv.step) {
     case ConversationStep.GREETING:
