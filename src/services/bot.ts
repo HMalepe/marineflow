@@ -43,10 +43,8 @@ import {
   parseSubMenuChoice,
   parseFreeTextSupportIntent,
   salonDisplayName,
-  SERVICE_CATEGORY_ALIASES,
   type MenuCategoryId,
   type LegacyMenuCategoryId,
-  type ServiceCategoryKey,
 } from '../lib/hierarchicalMenu.js';
 import {
   afterServiceSelected,
@@ -89,6 +87,12 @@ import {
   BIRTHDAY_TREAT_TAG,
   isWithinBirthdayWindow,
 } from './outboundCampaigns.js';
+import {
+  buildServicesSubMenuText,
+  loadServiceSubMenuOptions,
+  loadServicesForSubMenuOption,
+  SERVICE_SUBMENU_PRICES,
+} from './serviceMenuCatalog.js';
 import { incrementCustomerBookingCount } from './noShowRisk.js';
 import {
   buildPopiaRightsHint,
@@ -2607,52 +2611,46 @@ async function menuActionShowLocation(
   await replyMenu(conv);
 }
 
-async function servicesForCategoryKey(salonId: string, key: ServiceCategoryKey) {
-  const aliases = SERVICE_CATEGORY_ALIASES[key];
-  const categories = await getTenantDb().serviceCategory.findMany({ where: { salonId } });
-  const matchedCatIds = categories
-    .filter((c) =>
-      aliases.some(
-        (a) => c.slug.toLowerCase().includes(a) || c.name.toLowerCase().includes(a),
-      ),
-    )
-    .map((c) => c.id);
-
-  return getTenantDb().service.findMany({
-    where: {
-      salonId,
-      active: true,
-      deletedAt: null,
-      OR: [
-        ...(matchedCatIds.length ? [{ categoryId: { in: matchedCatIds } }] : []),
-        ...aliases.map((a) => ({ name: { contains: a, mode: 'insensitive' as const } })),
-      ],
-    },
-    orderBy: { sortOrder: 'asc' },
-  });
+async function prepareServicesSubMenu(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<{ options: Awaited<ReturnType<typeof loadServiceSubMenuOptions>>; text: string }> {
+  const options = await loadServiceSubMenuOptions(conv.salonId);
+  const optionIds = options.map((o) => o.id);
+  await saveCtx(
+    conv.id,
+    { menuCategory: 'services', serviceCategoryOptions: optionIds },
+    ConversationStep.MENU,
+    ctx(conv),
+  );
+  syncConvContext(conv, { menuCategory: 'services', serviceCategoryOptions: optionIds }, ConversationStep.MENU);
+  return { options, text: buildServicesSubMenuText(options) };
 }
 
-async function menuActionShowServiceCategory(
+async function menuActionShowServicesForOption(
   conv: Conversation & { customer: Customer; salon: Salon },
-  key: ServiceCategoryKey,
+  optionId: string,
 ): Promise<void> {
-  const services = await servicesForCategoryKey(conv.salonId, key);
-  const label = key.charAt(0).toUpperCase() + key.slice(1);
+  if (optionId === SERVICE_SUBMENU_PRICES) {
+    await menuActionShowAllPrices(conv);
+    return;
+  }
+
+  const { label, services } = await loadServicesForSubMenuOption(conv.salonId, optionId);
   if (services.length === 0) {
     await reply(
       conv,
-      `No ${label.toLowerCase()} services listed yet.\n\nTry *Services › Prices* or *Appointments › Book*.\nReply BACK for menu.`,
+      `No ${label.toLowerCase()} services listed yet.\n\nTry *Services › Prices* or *Book an appointment*.\nReply BACK for menu.`,
     );
     return;
   }
 
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
   const filterPatch = { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined };
-  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE);
+  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE, ctx(conv));
   syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
   await reply(
     conv,
-    [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
+    [`*${sanitize(label)}*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
   );
 }
 
@@ -2765,13 +2763,15 @@ async function handleSubMenuChoice(
       if (choice === 2) return menuActionViewBookings(conv, 'reschedule');
       if (choice === 3) return menuActionViewBookings(conv, 'cancel');
       break;
-    case 'services':
-      if (choice === 1) return menuActionShowServiceCategory(conv, 'hair');
-      if (choice === 2) return menuActionShowServiceCategory(conv, 'nails');
-      if (choice === 3) return menuActionShowServiceCategory(conv, 'massage');
-      if (choice === 4) return menuActionShowServiceCategory(conv, 'beauty');
-      if (choice === 5) return menuActionShowAllPrices(conv);
+    case 'services': {
+      const options = await loadServiceSubMenuOptions(conv.salonId);
+      const idx = choice - 1;
+      if (idx >= 0 && idx < options.length) {
+        await menuActionShowServicesForOption(conv, options[idx]!.id);
+        return;
+      }
       break;
+    }
     case 'rewards':
       if (choice === 1) return menuActionLoyaltyBalance(conv, false);
       if (choice === 2) return menuActionLoyaltyBalance(conv, true);
@@ -2828,6 +2828,11 @@ async function handleMainMenuSelection(
       await replyWithMenu(conv, 'Rewards are not available at this salon right now.');
       return;
     }
+    if (selection.id === 'services') {
+      const { text } = await prepareServicesSubMenu(conv);
+      await reply(conv, text);
+      return;
+    }
     await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
     syncConvContext(conv, { menuCategory: selection.id }, ConversationStep.MENU);
     await reply(conv, buildSubMenuText(selection.id));
@@ -2870,7 +2875,13 @@ async function handleMenu(
     rawCategory === 'appointments' ? 'appointments' : normalizeMenuCategoryId(rawCategory);
   if (activeCategory) {
     const subChoice = parseSubMenuChoice(trimmed);
-    if (subChoice != null && isValidSubMenuChoice(activeCategory, subChoice)) {
+    if (activeCategory === 'services') {
+      const options = await loadServiceSubMenuOptions(conv.salonId);
+      if (subChoice != null && subChoice >= 1 && subChoice <= options.length) {
+        await menuActionShowServicesForOption(conv, options[subChoice - 1]!.id);
+        return;
+      }
+    } else if (subChoice != null && isValidSubMenuChoice(activeCategory, subChoice)) {
       await handleSubMenuChoice(conv, activeCategory, subChoice);
       return;
     }
@@ -2881,7 +2892,20 @@ async function handleMenu(
       await handleMainMenuSelection(conv, mainSelection);
       return;
     }
-    const count = getSubMenuItemCount(activeCategory);
+    const count =
+      activeCategory === 'services'
+        ? (await loadServiceSubMenuOptions(conv.salonId)).length
+        : getSubMenuItemCount(activeCategory);
+    if (activeCategory === 'services') {
+      const { text: freshServicesMenu } = await prepareServicesSubMenu(conv);
+      const freshCount = (ctx(conv).serviceCategoryOptions ?? []).length;
+      const hint =
+        subChoice != null
+          ? `That number isn't on this menu — pick 1–${freshCount} below, or reply BACK for the main menu.`
+          : `I didn't recognise that — pick 1–${freshCount} from the list below, or reply BACK for the main menu.`;
+      await reply(conv, [hint, '', freshServicesMenu].join('\n'));
+      return;
+    }
     const hint =
       subChoice != null
         ? `That number isn't on this menu — pick 1–${count} below, or reply BACK for the main menu.`

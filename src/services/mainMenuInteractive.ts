@@ -52,7 +52,7 @@ function mainMenuRowDescription(item: ReturnType<typeof getMainMenuItems>[number
     case 'my_appointments':
       return 'View, reschedule, cancel';
     case 'services':
-      return 'Hair, nails, massage, beauty, prices';
+      return 'Your salon categories and prices';
     case 'rewards':
       return 'Points, redeem, referrals';
     case 'promotions':

@@ -49,9 +49,8 @@ export function getMainMenuItems(salon: Pick<SalonMenuInput, 'botLoyaltyEnabled'
   return MAIN_MENU_ITEMS;
 }
 
-const SUB_MENUS: Record<MenuCategoryId, string[]> = {
+const SUB_MENUS: Record<Exclude<MenuCategoryId, 'services'>, string[]> = {
   my_appointments: ['View', 'Reschedule', 'Cancel'],
-  services: ['Hair', 'Nails', 'Massage', 'Beauty', 'Prices'],
   rewards: ['My Points', 'Redeem', 'Referrals'],
   promotions: ['Current Specials', 'Packages', 'Gift Vouchers'],
   about: ['Hours', 'Location', 'Contact', 'Team'],
@@ -97,7 +96,7 @@ export function buildMainMenuText(salon: SalonMenuInput): string {
 
 export function buildSubMenuText(categoryId: MenuCategoryId | LegacyMenuCategoryId): string {
   const normalized = normalizeMenuCategoryId(categoryId);
-  if (!normalized) return buildMainMenuText({ name: 'Salon' });
+  if (!normalized || normalized === 'services') return buildMainMenuText({ name: 'Salon' });
   const title = CATEGORY_LABELS[normalized];
   const items = SUB_MENUS[normalized];
   const lines = items.map((label, i) => `${i + 1} — ${label}`);
@@ -134,13 +133,17 @@ export function getSubMenuItemCount(
   category: MenuCategoryId | LegacyMenuCategoryId,
 ): number {
   if (category === 'appointments') return LEGACY_APPOINTMENTS_SUB_COUNT;
-  return SUB_MENUS[category]?.length ?? 0;
+  if (category === 'services') return 0;
+  const normalized = normalizeMenuCategoryId(category);
+  if (!normalized || normalized === 'services') return 0;
+  return SUB_MENUS[normalized]?.length ?? 0;
 }
 
 export function isValidSubMenuChoice(
   category: MenuCategoryId | LegacyMenuCategoryId,
   choice: number,
 ): boolean {
+  if (category === 'services') return false;
   return choice >= 1 && choice <= getSubMenuItemCount(category);
 }
 
@@ -171,6 +174,7 @@ export function isWhatsAppMenuInput(
 
   if (activeCategory) {
     const sub = parseSubMenuChoice(trimmed);
+    if (activeCategory === 'services') return false;
     if (sub != null && isValidSubMenuChoice(activeCategory, sub)) return true;
     return parseMainMenuSelection(trimmed, salon) !== null;
   }

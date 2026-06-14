@@ -75,8 +75,7 @@ describe('hierarchicalMenu', () => {
   });
 
   it('validates sub-menu choices per category', () => {
-    expect(isValidSubMenuChoice('services', 5)).toBe(true);
-    expect(isValidSubMenuChoice('services', 6)).toBe(false);
+    expect(isValidSubMenuChoice('services', 5)).toBe(false);
     expect(isValidSubMenuChoice('my_appointments', 3)).toBe(true);
     expect(isValidSubMenuChoice('my_appointments', 4)).toBe(false);
     expect(isValidSubMenuChoice('rewards', 3)).toBe(true);
@@ -88,10 +87,9 @@ describe('hierarchicalMenu', () => {
     expect(isMenuNavigationInput(undefined, '7')).toBe(true);
     expect(isMenuNavigationInput(undefined, 'hello')).toBe(false);
     expect(isMenuNavigationInput(undefined, 'menu')).toBe(true);
-    expect(isMenuNavigationInput('services', '1')).toBe(true);
-    expect(isMenuNavigationInput('services', '6')).toBe(true);
-    expect(isMenuNavigationInput('services', '7')).toBe(true);
-    expect(isMenuNavigationInput('services', '99')).toBe(false);
+    expect(isMenuNavigationInput('services', '1')).toBe(false);
+    expect(isMenuNavigationInput('services', '6')).toBe(false);
+    expect(isMenuNavigationInput('my_appointments', '1')).toBe(true);
     expect(isMenuNavigationInput('services', 'REFERRAL')).toBe(true);
   });
 
