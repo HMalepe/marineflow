@@ -287,7 +287,19 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
         </div>
 
         <div className="space-y-2 max-w-md">
-          <Label htmlFor="business-timezone">Timezone</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="business-timezone">Timezone</Label>
+            <button
+              type="button"
+              onClick={() => {
+                const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                if (detected) setForm((f) => ({ ...f, timezone: detected }));
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              Auto-detect from browser
+            </button>
+          </div>
           <select
             id="business-timezone"
             value={form.timezone}
@@ -303,6 +315,11 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
               </option>
             ))}
           </select>
+          {form.timezone && !TIMEZONE_OPTIONS.find((t) => t.value === form.timezone) && (
+            <p className="text-xs text-muted-foreground">
+              Using detected timezone: <span className="font-medium">{form.timezone}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
