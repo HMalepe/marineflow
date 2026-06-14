@@ -1,4 +1,5 @@
 import { getTenantDb, tryDbSavepoint } from '../lib/db/tenantSession.js';
+import { formatCentsZar } from '../lib/formatPrice.js';
 export interface ServiceAddonWithDetails {
   id: string;
   serviceId: string;
@@ -60,8 +61,7 @@ export async function getAddonsForService(
 export function formatAddonMenu(addons: ServiceAddonWithDetails[]): string {
   if (!addons.length) return '';
   const lines = addons.map((a, i) => {
-    const price = (a.addon.priceCents / 100).toFixed(0);
-    const pitch = a.pitchMessage?.trim() || `Add ${a.addon.name} for R${price}?`;
+    const pitch = a.pitchMessage?.trim() || `Add ${a.addon.name} for ${formatCentsZar(a.addon.priceCents)}?`;
     return `${i + 1}. ${pitch}`;
   });
   return ['Would you like to add any extras?', ...lines, '', 'Reply with numbers (e.g. 1 2) or SKIP to continue.'].join('\n');

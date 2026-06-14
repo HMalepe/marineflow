@@ -45,6 +45,8 @@ Rules:
 - Detect spam/phishing templates (e.g. "press X to return to menu", lottery wins, bank alerts) → intent "spam", reply briefly and offer the real menu.
 - If the customer expresses emotions or free-text needs (e.g. sad, anxious, wants a haircut but hates menus) → intent "book", pick the best matching serviceId from the catalog, reply with empathy first.
 - Prefer intent "book" when they want an appointment; "faq" for questions; "loyalty" for rewards/stamps; "manage_booking" to change/cancel; "hours" for address/opening times; "human" only if they explicitly want a person; "menu" if they want options listed.
+- The services list in the user payload is the ONLY source of truth for service names and prices. NEVER mention a service or price that is not in that list. NEVER invent price ranges.
+- In reply, do NOT include any R amounts or price ranges — exact catalog prices are shown separately by the booking system.
 - Keep reply under 320 characters, WhatsApp-friendly, no markdown.
 - Set negativeSentiment: true if the customer is angry, threatening, abusive, extremely frustrated, or in distress. Do NOT set it for mild frustration or impatience — only genuine negative emotion.
 - If hasPaymentHistory is false, do NOT mention "the usual", past visits, "what you usually get", "last time", or imply they are a returning customer — offer to show services or the menu instead.
@@ -52,7 +54,7 @@ Rules:
 
 export async function orchestrateConversation(input: OrchestratorInput): Promise<OrchestratorResult | null> {
   const catalog = input.services
-    .map((s) => `- id:${s.id} name:${s.name} price:R${(s.priceCents / 100).toFixed(0)}`)
+    .map((s) => `- id:${s.id} name:${s.name} price:${(s.priceCents / 100).toFixed(2)} ZAR`)
     .join('\n');
   const staffList = input.staff.map((s) => `- id:${s.id} name:${s.name}`).join('\n');
   const faqs = input.faqSnippets

@@ -2,7 +2,9 @@ import { ConversationStep, MessageDirection, type Conversation, type Customer, t
 import { DateTime } from 'luxon';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { isConversationWakeMessage } from '../lib/conversationWake.js';
+import { formatCentsZar } from '../lib/formatPrice.js';
 import { isAnthropicConfigured, orchestrateConversation, semanticSearch, claudeText } from '../lib/integrations/ai/index.js';
+import { loadSalonServiceCatalog, sanitizeAiBookReply } from './serviceCatalogDisplay.js';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
 import { logger } from '../lib/logger.js';
 
@@ -32,7 +34,7 @@ export interface AiAssistResult {
 }
 
 function fmtMoney(cents: number): string {
-  return `R${(cents / 100).toFixed(0)}`;
+  return formatCentsZar(cents);
 }
 
 function resolveServiceId(
@@ -104,11 +106,9 @@ async function loadAssistContext(
 ) {
   const db = getTenantDb();
   const [services, staff, faqs, recentMessages, succeededPayments] = await Promise.all([
-    db.service.findMany({
-      where: { salonId: conv.salonId, active: true },
-      orderBy: { sortOrder: 'asc' },
-      select: { id: true, name: true, priceCents: true },
-    }),
+    loadSalonServiceCatalog(conv.salonId).then((rows) =>
+      rows.map((s) => ({ id: s.id, name: s.name, priceCents: s.priceCents })),
+    ),
     db.staff.findMany({
       where: { salonId: conv.salonId, active: true, isBookable: true, deletedAt: null },
       orderBy: { sortOrder: 'asc' },
@@ -159,7 +159,7 @@ export async function synthesizeFaqAnswer(
   if (!isAnthropicConfigured()) return null;
 
   return claudeText({
-    system: `You answer FAQ questions for ${salon.name} on WhatsApp. Be warm, concise (max 350 chars), use only the provided context. If unsure, say you'll have the team follow up.`,
+    system: `You answer FAQ questions for ${salon.name} on WhatsApp. Be warm, concise (max 350 chars), use only the provided context. Never invent services or prices — only state prices that appear verbatim in the context. If unsure, say you'll have the team follow up.`,
     user: `Question: ${question}\n\nContext:\n${contextChunks.join('\n\n')}`,
     maxTokens: 400,
   });
@@ -201,10 +201,7 @@ export async function tryAiAssist(
       return { handled: false, negativeSentiment: true };
     }
 
-    const services = await getTenantDb().service.findMany({
-      where: { salonId: conv.salonId, active: true },
-      select: { id: true, name: true },
-    });
+    const services = await loadSalonServiceCatalog(conv.salonId);
 
     switch (ai.intent) {
       case 'spam':
@@ -282,10 +279,11 @@ export async function tryAiAssist(
         }
 
         const first = quickPickOptions[0]!;
+        const bookLead = sanitizeAiBookReply(ai.empathyNote?.trim() || ai.reply);
         return {
           handled: true,
           reply: [
-            ai.reply,
+            bookLead,
             '',
             'Here are times I can hold for you — reply with A, B, or C:',
             ...quickPickOptions.map((o) => o.label),

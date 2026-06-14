@@ -1,4 +1,6 @@
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { formatCentsZar } from '../lib/formatPrice.js';
+import { loadSalonServiceCatalog } from './serviceCatalogDisplay.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import { marketingConsentGatePending } from './marketingConsent.js';
 
@@ -49,16 +51,11 @@ export async function sendWelcomeJourneyIfNeeded(params: {
   ];
 
   if (automations.welcomeJourney.showPopularServices) {
-    const popular = await db.service.findMany({
-      where: { salonId: params.salonId, active: true, deletedAt: null },
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-      take: 4,
-      select: { name: true, priceCents: true },
-    });
+    const popular = await loadSalonServiceCatalog(params.salonId).then((rows) => rows.slice(0, 4));
     if (popular.length) {
       parts.push('', 'Popular services:');
       for (const s of popular) {
-        parts.push(`• ${s.name} — R${(s.priceCents / 100).toFixed(0)}`);
+        parts.push(`• ${s.name} — ${formatCentsZar(s.priceCents)}`);
       }
     }
   }

@@ -94,6 +94,11 @@ import {
   loadServicesForSubMenuOption,
   SERVICE_SUBMENU_PRICES,
 } from './serviceMenuCatalog.js';
+import {
+  buildCategorizedPriceLines,
+  loadSalonServiceCatalog,
+} from './serviceCatalogDisplay.js';
+import { formatCentsZar } from '../lib/formatPrice.js';
 import { incrementCustomerBookingCount } from './noShowRisk.js';
 import {
   buildPopiaRightsHint,
@@ -271,25 +276,20 @@ const WHATSAPP_BOOKING_STEPS: ConversationStep[] = [
 ];
 
 async function loadActiveServicesForBooking(salonId: string) {
-  const withDeletedFilter = await tryDbSavepoint(
-    'services_active_deleted',
-    () =>
-      getTenantDb().service.findMany({
-        where: { salonId, active: true, deletedAt: null },
-        orderBy: { sortOrder: 'asc' },
-        include: { category: { select: { id: true, name: true, sortOrder: true } } },
-      }),
+  const catalog = await tryDbSavepoint(
+    'services_catalog',
+    () => loadSalonServiceCatalog(salonId),
     null,
   );
-  if (withDeletedFilter) return withDeletedFilter;
+  if (catalog) return catalog;
 
   return tryDbSavepoint(
-    'services_active_fallback',
+    'services_catalog_fallback',
     () =>
       getTenantDb().service.findMany({
         where: { salonId, active: true },
         orderBy: { sortOrder: 'asc' },
-        include: { category: { select: { id: true, name: true, sortOrder: true } } },
+        include: { category: true },
       }),
     [],
   );
@@ -2669,15 +2669,12 @@ async function menuActionShowServicesForOption(
 async function menuActionShowAllPrices(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
-  const services = await getTenantDb().service.findMany({
-    where: { salonId: conv.salonId, active: true, deletedAt: null },
-    orderBy: { sortOrder: 'asc' },
-  });
+  const services = await loadSalonServiceCatalog(conv.salonId);
   if (services.length === 0) {
     await replyWithMenu(conv, 'No services listed yet.');
     return;
   }
-  const lines = services.map((s) => `• ${sanitize(s.name)} — ${fmtMoney(s.priceCents)}`);
+  const lines = buildCategorizedPriceLines(services, sanitize);
   await reply(
     conv,
     [`*Service prices*`, ...lines, '', 'Reply *Appointments › Book* from the main menu to schedule. Reply BACK.'].join('\n'),
@@ -4535,10 +4532,7 @@ async function handlePickBranch(
   const branchId = branchOptions[idx];
   await saveCtx(conv.id, { selectedBranchId: branchId }, ConversationStep.PICK_SERVICE);
 
-  const services = await getTenantDb().service.findMany({
-    where: { salonId: conv.salon.id, active: true, deletedAt: null },
-    orderBy: { sortOrder: 'asc' },
-  });
+  const services = await loadSalonServiceCatalog(conv.salon.id);
   // EC-05: guard against empty service list after branch selection
   if (services.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -4588,10 +4582,7 @@ async function handleReschedule(
   await reply(conv, "Got it! Your old booking is cancelled. Let's pick a new time.");
   await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
 
-  const services = await getTenantDb().service.findMany({
-    where: { salonId: conv.salon.id, active: true, deletedAt: null },
-    orderBy: { sortOrder: 'asc' },
-  });
+  const services = await loadSalonServiceCatalog(conv.salon.id);
   const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
   await reply(conv, ['Pick a service:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
@@ -4710,7 +4701,7 @@ async function handleReviewedKeyword(
 }
 
 function fmtMoney(cents: number): string {
-  return `R${(cents / 100).toFixed(2)}`;
+  return formatCentsZar(cents);
 }
 
 /** EC-13: Strip WhatsApp markdown chars from user-controlled strings to prevent formatting injection. */

@@ -1,5 +1,11 @@
 import { getCachedServices } from './cachedQueries.js';
 
+type CachedService = Awaited<ReturnType<typeof getCachedServices>>[number];
+
+function sortCatalogServices(services: CachedService[]): CachedService[] {
+  return [...services].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
 /** Sentinel ids stored in conversation context for the Services sub-menu. */
 export const SERVICE_SUBMENU_PRICES = '__prices__';
 export const SERVICE_SUBMENU_OTHER = '__other__';
@@ -8,8 +14,6 @@ export type ServiceSubMenuOption = {
   id: string;
   label: string;
 };
-
-type CachedService = Awaited<ReturnType<typeof getCachedServices>>[number];
 
 /** Build Services sub-menu options from the live dashboard catalog (cached, invalidated on writes). */
 export async function loadServiceSubMenuOptions(salonId: string): Promise<ServiceSubMenuOption[]> {
@@ -65,14 +69,14 @@ export async function loadServicesForSubMenuOption(
   const all = await getCachedServices(salonId);
 
   if (optionId === SERVICE_SUBMENU_PRICES) {
-    return { label: 'Service prices', services: all };
+    return { label: 'Service prices', services: sortCatalogServices(all) };
   }
 
   if (optionId === SERVICE_SUBMENU_OTHER) {
-    return { label: 'Other', services: all.filter((s) => !s.categoryId) };
+    return { label: 'Other', services: sortCatalogServices(all.filter((s) => !s.categoryId)) };
   }
 
-  const services = all.filter((s) => s.categoryId === optionId);
+  const services = sortCatalogServices(all.filter((s) => s.categoryId === optionId));
   const label = services[0]?.category?.name ?? 'Services';
   return { label, services };
 }

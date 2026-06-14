@@ -1,6 +1,7 @@
 import type { Conversation, Customer, Salon } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { isBackToMainMenuCommand } from '../lib/botNavigation.js';
+import { formatCentsZar } from '../lib/formatPrice.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import {
   buildExtraMenuLines,
@@ -228,7 +229,7 @@ export async function handleAddonPhase(
 
   if (selected.length) {
     await helpers.reply(
-      `Added: ${selected.map((a) => a.addon.name).join(', ')} (+R${(addonTotal / 100).toFixed(0)}). Continuing…`,
+      `Added: ${selected.map((a) => a.addon.name).join(', ')} (+${formatCentsZar(addonTotal)}). Continuing…`,
     );
   }
 
