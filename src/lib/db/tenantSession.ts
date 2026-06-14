@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../prisma.js';
+import { logger } from '../logger.js';
 
 export type PrismaTx = Prisma.TransactionClient;
 
@@ -9,6 +10,39 @@ const tenantStore = new AsyncLocalStorage<PrismaTx>();
 /** Prisma client for the active tenant transaction, or the global client (platform tables). */
 export function getTenantDb(): PrismaTx {
   return tenantStore.getStore() ?? (prisma as unknown as PrismaTx);
+}
+
+function savepointId(label: string): string {
+  const safe = label.replace(/\W/g, '_').slice(0, 24);
+  return `mfs_${safe}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Run optional DB work inside a SAVEPOINT so a failure (missing table/column)
+ * does not abort the outer bot transaction (PostgreSQL 25P02).
+ */
+export async function withDbSavepoint<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  const db = getTenantDb();
+  const sp = savepointId(label);
+  await db.$executeRawUnsafe(`SAVEPOINT "${sp}"`);
+  try {
+    const result = await fn();
+    await db.$executeRawUnsafe(`RELEASE SAVEPOINT "${sp}"`);
+    return result;
+  } catch (err) {
+    await db.$executeRawUnsafe(`ROLLBACK TO SAVEPOINT "${sp}"`);
+    throw err;
+  }
+}
+
+/** Like withDbSavepoint but returns fallback instead of throwing. */
+export async function tryDbSavepoint<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await withDbSavepoint(label, fn);
+  } catch (err) {
+    logger.warn({ err, label }, 'db_savepoint_failed');
+    return fallback;
+  }
 }
 
 /**

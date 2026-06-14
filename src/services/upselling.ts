@@ -1,7 +1,4 @@
-import { Prisma } from '@prisma/client';
-import { getTenantDb } from '../lib/db/tenantSession.js';
-import { logger } from '../lib/logger.js';
-
+import { getTenantDb, tryDbSavepoint } from '../lib/db/tenantSession.js';
 export interface ServiceAddonWithDetails {
   id: string;
   serviceId: string;
@@ -21,7 +18,7 @@ export async function getAddonsForService(
   salonId: string,
   serviceId: string,
 ): Promise<ServiceAddonWithDetails[]> {
-  try {
+  return tryDbSavepoint('service_addon_lookup', async () => {
     const db = getTenantDb();
     const rows = await db.serviceAddon.findMany({
       where: { salonId, serviceId, active: true },
@@ -57,13 +54,7 @@ export async function getAddonsForService(
           description: r.addonService.description,
         },
       }));
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
-      logger.warn({ salonId, serviceId }, 'service_addon_table_missing');
-      return [];
-    }
-    throw err;
-  }
+  }, []);
 }
 
 export function formatAddonMenu(addons: ServiceAddonWithDetails[]): string {

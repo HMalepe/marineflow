@@ -7,7 +7,7 @@ import {
   type Salon,
   type Staff,
 } from '@prisma/client';
-import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
+import { getTenantDb, tryDbSavepoint, withTenantContext } from '../lib/db/tenantSession.js';
 import { prisma } from '../lib/prisma.js';
 import {
   assertTenantActive,
@@ -266,22 +266,28 @@ const WHATSAPP_BOOKING_STEPS: ConversationStep[] = [
 ];
 
 async function loadActiveServicesForBooking(salonId: string) {
-  try {
-    return await getTenantDb().service.findMany({
-      where: { salonId, active: true, deletedAt: null },
-      orderBy: { sortOrder: 'asc' },
-      include: { category: { select: { id: true, name: true, sortOrder: true } } },
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021') {
-      return getTenantDb().service.findMany({
+  const withDeletedFilter = await tryDbSavepoint(
+    'services_active_deleted',
+    () =>
+      getTenantDb().service.findMany({
+        where: { salonId, active: true, deletedAt: null },
+        orderBy: { sortOrder: 'asc' },
+        include: { category: { select: { id: true, name: true, sortOrder: true } } },
+      }),
+    null,
+  );
+  if (withDeletedFilter) return withDeletedFilter;
+
+  return tryDbSavepoint(
+    'services_active_fallback',
+    () =>
+      getTenantDb().service.findMany({
         where: { salonId, active: true },
         orderBy: { sortOrder: 'asc' },
         include: { category: { select: { id: true, name: true, sortOrder: true } } },
-      });
-    }
-    throw err;
-  }
+      }),
+    [],
+  );
 }
 
 /** Live service list for picker — drops stale filter ids when dashboard catalog changed mid-flow. */
@@ -653,6 +659,27 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
       '_Just tell me what you need, or type *MENU* to see all options._',
     ].join('\n'),
   );
+}
+
+async function recoverBookingFlowToMenu(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  userMessage: string,
+): Promise<void> {
+  syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+  await tryDbSavepoint('booking_flow_recovery', async () => {
+    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU, ctx(conv));
+  }, undefined);
+  await reply(conv, userMessage);
+  const body = mainMenu(conv.salon);
+  let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
+  try {
+    interactive = salonUsesCloudInteractiveMenu(conv.salon.whatsappPhoneId)
+      ? buildMainMenuInteractive(conv.salon)
+      : undefined;
+  } catch (err) {
+    logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
+  }
+  await reply(conv, body, null, interactive ? { interactive } : undefined);
 }
 
 async function replyMenu(conv: Conversation & { customer: Customer; salon: Salon }) {
@@ -1124,14 +1151,10 @@ async function processInboundWhatsApp(
     } catch (err) {
       logger.error({ err, convId: conv.id, step: conv.step }, 'booking_flow_error');
       if (!hasPendingOutboundForConv(conv.id)) {
-        await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU).catch(() => {});
-        syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-        if (BOT_DEBUG) {
-          await reply(conv, debugMsg('booking_flow_error', err, { step: conv.step, convId: conv.id }));
-        } else {
-          await reply(conv, 'Sorry — something went wrong with your booking. Starting fresh:');
-        }
-        await replyMenu(conv);
+        const userMessage = BOT_DEBUG
+          ? debugMsg('booking_flow_error', err, { step: conv.step, convId: conv.id })
+          : 'Sorry — something went wrong with your booking. Starting fresh:';
+        await recoverBookingFlowToMenu(conv, userMessage);
       }
     }
     return;
