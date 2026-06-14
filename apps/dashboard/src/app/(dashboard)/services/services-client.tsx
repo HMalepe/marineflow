@@ -1005,7 +1005,7 @@ export function ServicesClient({ token }: Props) {
                   <div className="flex flex-row justify-end gap-2 flex-wrap">
                   {editingId ? (
                     <>
-                      <Button type="button" variant="outline" onClick={closeSheet} disabled={saving}>
+                      <Button type="button" variant="outline" onClick={() => closeSheet()} disabled={saving}>
                         Cancel
                       </Button>
                       <Button type="submit" disabled={saving}>
@@ -1014,7 +1014,7 @@ export function ServicesClient({ token }: Props) {
                     </>
                   ) : (
                     <>
-                      <Button type="button" variant="ghost" size="sm" onClick={closeSheet} disabled={saving}>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => closeSheet()} disabled={saving}>
                         Done
                       </Button>
                       <Button type="submit" name="addAndClose" variant="outline" size="sm" disabled={saving}>
