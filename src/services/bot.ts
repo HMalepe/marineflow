@@ -221,7 +221,7 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
-  return !customer.firstName || !customer.email || !customer.dateOfBirth;
+  return !customer.firstName || !customer.dateOfBirth;
 }
 
 const WHATSAPP_MENU_STEPS: ConversationStep[] = [
@@ -1796,11 +1796,28 @@ async function handleCollectEmail(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ): Promise<void> {
+  const upper = text.trim().toUpperCase();
+
+  if (upper === 'SKIP') {
+    await saveCtx(conv.id, { pendingEmail: undefined }, ConversationStep.COLLECT_DATE_OF_BIRTH);
+    await reply(
+      conv,
+      [
+        'No problem! Last question — what is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
+        '',
+        '_We use your DOB for age-based pricing and birthday rewards. 🎂_',
+        '',
+        'Reply *SKIP* to skip · *BACK* for menu.',
+      ].join('\n'),
+    );
+    return;
+  }
+
   const email = text.trim().toLowerCase();
   if (!PROFILE_EMAIL_REGEX.test(email)) {
     await reply(
       conv,
-      'Please enter a valid email address (e.g. name@example.com). Reply BACK for menu.',
+      'Please enter a valid email address (e.g. name@example.com).\n\nReply *SKIP* to skip this step · *BACK* for menu.',
     );
     return;
   }
@@ -1813,7 +1830,7 @@ async function handleCollectEmail(
       '',
       '_We ask for your DOB for two reasons: some services have different pricing for children vs adults, and we\'d love to send you a little birthday treat! 🎂_',
       '',
-      'Reply BACK for menu.',
+      'Reply *SKIP* to skip · *BACK* for menu.',
     ].join('\n'),
   );
 }
@@ -1822,11 +1839,34 @@ async function handleCollectDateOfBirth(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ): Promise<void> {
+  const upper = text.trim().toUpperCase();
+
+  // Allow skipping DOB
+  if (upper === 'SKIP') {
+    const pending = ctx(conv);
+    const firstName = pending.pendingFirstName as string | undefined;
+    const email = pending.pendingEmail as string | undefined;
+    if (!firstName) {
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+      await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
+      return;
+    }
+    const db = getTenantDb();
+    await db.customer.update({
+      where: { id: conv.customerId },
+      data: { firstName, ...(email ? { email } : {}), displayName: firstName },
+    });
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
+    const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
+    await startBookingFlow({ ...conv, customer: updatedCustomer });
+    return;
+  }
+
   const dob = parseDOB(text);
   if (!dob) {
     await reply(
       conv,
-      'Please enter your date of birth in DD/MM/YYYY format (e.g. 15/06/1990). Reply BACK for menu.',
+      'Please enter your date of birth in DD/MM/YYYY format (e.g. 15/06/1990).\n\nReply *SKIP* to skip · *BACK* for menu.',
     );
     return;
   }
@@ -1843,7 +1883,7 @@ async function handleCollectDateOfBirth(
   const firstName = pending.pendingFirstName as string | undefined;
   const email = pending.pendingEmail as string | undefined;
 
-  if (!firstName || !email) {
+  if (!firstName) {
     // Context lost mid-flow — restart from POPIA.
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
     await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
@@ -1855,7 +1895,7 @@ async function handleCollectDateOfBirth(
     where: { id: conv.customerId },
     data: {
       firstName,
-      email,
+      ...(email ? { email } : {}),
       dateOfBirth: new Date(dobStr),
       displayName: firstName,
     },
