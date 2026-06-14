@@ -1,4 +1,4 @@
-import {
+﻿import {
   ConversationStep,
   MessageDirection,
   Prisma,
@@ -111,11 +111,11 @@ export type BotContext = Record<string, unknown> & {
   anyStaff?: boolean;
   manageList?: string[];
   managingAppointmentId?: string;
-  /** Consecutive unhandled-error count — triggers staff escalation at 2 */
+  /** Consecutive unhandled-error count ΓÇö triggers staff escalation at 2 */
   errorCount?: number;
   /** True when a human agent explicitly took over via the dashboard (keeps bot silent). */
   handoffByStaff?: boolean;
-  /** Set when the bot auto-escalated due to negative sentiment — prevents re-escalation loop until staff resolves. */
+  /** Set when the bot auto-escalated due to negative sentiment ΓÇö prevents re-escalation loop until staff resolves. */
   negativeSentimentEscalated?: boolean;
   /** AI-suggested quick book slots (A/B/C). */
   quickPickOptions?: QuickPickOption[];
@@ -126,7 +126,7 @@ export type BotContext = Record<string, unknown> & {
    * preferred stylist) changes between menu render and reply.
    */
   staffOrderIds?: string[];
-  /** Hierarchical main-menu sub-section (my_appointments, services, …). */
+  /** Hierarchical main-menu sub-section (my_appointments, services, ΓÇª). */
   menuCategory?: MenuCategoryId | LegacyMenuCategoryId;
   /** Category ids shown during PICK_SERVICE_CATEGORY step. */
   serviceCategoryOptions?: string[];
@@ -148,21 +148,14 @@ export type BotContext = Record<string, unknown> & {
   pendingFirstName?: string;
   pendingLastName?: string;
   pendingEmail?: string;
-  /** ISO date string YYYY-MM-DD — stored as string to survive JSON round-trip safely. */
+  /** ISO date string YYYY-MM-DD ΓÇö stored as string to survive JSON round-trip safely. */
   pendingDateOfBirth?: string;
-  /** After profile + POPIA gates, resume the booking path the customer chose (Book vs Services). */
-  bookingResume?: BookingResume;
 };
-
-/** Where to continue after booking profile + POPIA gates complete. */
-export type BookingResume =
-  | { kind: 'default' }
-  | { kind: 'service_filter'; serviceFilterIds: string[]; headerLabel?: string };
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z\s'-]{1,80}$/;
 const PROFILE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// ─── Debug mode ─────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Debug mode ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 // Set BOT_DEBUG=true in Railway env vars to surface real errors in WhatsApp.
 // Remove / set to false before going live.
 const BOT_DEBUG = process.env.BOT_DEBUG === 'true';
@@ -176,7 +169,7 @@ function debugMsg(label: string, err: unknown, extra?: Record<string, unknown>):
       ? '\n' + err.stack.split('\n').slice(1, 4).join('\n')
       : '';
   const extraStr = extra ? '\n' + JSON.stringify(extra, null, 2) : '';
-  return `🛠 *[BOT DEBUG — ${label}]*\n${msg}${code}${stack}${extraStr}`;
+  return `≡ƒ¢á *[BOT DEBUG ΓÇö ${label}]*\n${msg}${code}${stack}${extraStr}`;
 }
 
 const PENDING_PROFILE_CLEAR: Pick<
@@ -304,13 +297,13 @@ function buildBookingPopiaConsentMessage(): string {
     'Before we continue, we need your consent under *POPIA* (Protection of Personal Information Act).',
     '',
     '*Why we collect this:*',
-    '• Process your appointment booking',
-    '• Send booking confirmations and reminders',
-    '• Age-appropriate service and pricing',
+    'ΓÇó Process your appointment booking',
+    'ΓÇó Send booking confirmations and reminders',
+    'ΓÇó Age-appropriate service and pricing',
     '',
     '*Your rights:*',
-    '• Request access to your personal data at any time',
-    '• Ask us to delete your data — reply *DELETE* anytime',
+    'ΓÇó Request access to your personal data at any time',
+    'ΓÇó Ask us to delete your data ΓÇö reply *DELETE* anytime',
     '',
     'Consent is *required* to complete a booking via WhatsApp.',
     '',
@@ -511,23 +504,23 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
   const timeGreeting =
     timeHour < 12 ? 'Good morning' : timeHour < 17 ? 'Good afternoon' : 'Good evening';
 
-  // New customer — no profile yet. Show POPIA first before anything else.
+  // New customer ΓÇö no profile yet. Show POPIA first before anything else.
   if (isProfileIncomplete(customer)) {
     await saveCtx(conv.id, {}, ConversationStep.BOOKING_POPIA_CONSENT);
     syncConvContext(conv, {}, ConversationStep.BOOKING_POPIA_CONSENT);
     await reply(
       conv,
       [
-        `${timeGreeting}! 👋 Welcome to *${salonName}* — we\'re happy to have you!`,
+        `${timeGreeting}! ≡ƒæï Welcome to *${salonName}* ΓÇö we\'re happy to have you!`,
         '',
-        'Before we get started, we just need a quick moment for a legal step. 👇',
+        'Before we get started, we just need a quick moment for a legal step. ≡ƒæç',
       ].join('\n'),
     );
     await reply(conv, buildBookingPopiaConsentMessage());
     return;
   }
 
-  // Returning customer — look up their last completed appointment for personalisation.
+  // Returning customer ΓÇö look up their last completed appointment for personalisation.
   const firstName = customer.firstName?.trim() ?? 'there';
   const lastAppt = await getTenantDb().appointment.findFirst({
     where: {
@@ -547,7 +540,7 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
   await reply(
     conv,
     [
-      `${timeGreeting}! Welcome back, *${firstName}* 😊`,
+      `${timeGreeting}! Welcome back, *${firstName}* ≡ƒÿè`,
       '',
       `Great to see you again. ${usualLine}`,
       '',
@@ -611,7 +604,7 @@ function afterHoursHumanReply(salon: Salon): string {
   const close = salon.closeTime ?? '17:00';
   return (
     salon.afterHoursMessage?.trim() ||
-    `We're closed for live support right now (our hours are ${open}–${close}). ` +
+    `We're closed for live support right now (our hours are ${open}ΓÇô${close}). ` +
     `Someone from our team will contact you when we open. ` +
     `You can still book appointments, check loyalty, and browse FAQs anytime.`
   );
@@ -739,7 +732,7 @@ export async function handleInboundWhatsApp(input: {
   }
 
   if (!(await rateLimitOrReject(waId))) {
-    await sendTenantWhatsApp(tenant.id, waId, 'Too many messages — please wait a minute and try again.');
+    await sendTenantWhatsApp(tenant.id, waId, 'Too many messages ΓÇö please wait a minute and try again.');
     return;
   }
 
@@ -753,7 +746,7 @@ export async function handleInboundWhatsApp(input: {
     try {
       acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
     } catch {
-      // Redis unavailable — skip deduplication, process anyway
+      // Redis unavailable ΓÇö skip deduplication, process anyway
       acquired = 'OK';
     }
     lockAcquired = acquired === 'OK';
@@ -784,7 +777,7 @@ export async function handleInboundWhatsApp(input: {
   } catch (err) {
     const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
     logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
-    // Last resort — send an error notice so users know something went wrong (not a silent menu)
+    // Last resort ΓÇö send an error notice so users know something went wrong (not a silent menu)
     try {
       const salon = await prisma.salon.findUnique({
         where: { id: tenant.id },
@@ -903,7 +896,7 @@ async function processInboundWhatsApp(
     },
   }).catch((err) => logger.warn({ err }, 'analytics_event_create_failed'));
 
-  // Notify the dashboard SSE stream — fire-and-forget, must not block the transaction
+  // Notify the dashboard SSE stream ΓÇö fire-and-forget, must not block the transaction
   emitMessageReceived(salon.id, customer.id, text).catch((err) =>
     logger.warn({ err }, 'sse_emit_failed'),
   );
@@ -932,7 +925,7 @@ async function processInboundWhatsApp(
         salonId: salon.id,
         customerId: customer.id,
         status: 'OPEN',
-        subject: 'Bot paused — customer needs human reply',
+        subject: 'Bot paused ΓÇö customer needs human reply',
         messages: {
           create: {
             direction: MessageDirection.INBOUND,
@@ -950,13 +943,13 @@ async function processInboundWhatsApp(
     return;
   }
 
-  // POPIA erasure / access — must run before marketing consent gate (legal priority)
+  // POPIA erasure / access ΓÇö must run before marketing consent gate (legal priority)
   if (isPopiaDeleteCommand(text)) {
     if (isDeletedCustomer(customer)) {
       await reply(
         conv,
         'Your personal data has already been removed from our records. ' +
-          'Reply 1 anytime to book again — we\'ll start fresh.',
+          'Reply 1 anytime to book again ΓÇö we\'ll start fresh.',
       );
       await saveCtx(conv.id, {}, ConversationStep.GREETING);
       return;
@@ -988,7 +981,7 @@ async function processInboundWhatsApp(
 
   const lower = text.toLowerCase();
 
-  // ── WhatsApp core flows (always win over dashboard marketing / follow-up settings) ──
+  // ΓöÇΓöÇ WhatsApp core flows (always win over dashboard marketing / follow-up settings) ΓöÇΓöÇ
   if (lower === 'undo' || lower === 'back' || lower === 'menu') {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
@@ -1014,7 +1007,7 @@ async function processInboundWhatsApp(
         if (BOT_DEBUG) {
           await reply(conv, debugMsg('booking_flow_error', err, { step: conv.step, convId: conv.id }));
         } else {
-          await reply(conv, 'Sorry — something went wrong with your booking. Starting fresh:');
+          await reply(conv, 'Sorry ΓÇö something went wrong with your booking. Starting fresh:');
         }
         await replyMenu(conv);
       }
@@ -1067,7 +1060,7 @@ async function processInboundWhatsApp(
     return;
   }
 
-  // Dashboard marketing consent — never blocks menu numbers or booking navigation
+  // Dashboard marketing consent ΓÇö never blocks menu numbers or booking navigation
   const consentHandled = await handleMarketingConsentFlow(conv, text);
   if (consentHandled) return;
 
@@ -1079,7 +1072,7 @@ async function processInboundWhatsApp(
   });
   if (waitlistHandled) return;
 
-  // Birthday-campaign treat claim — the outbound message says "reply BIRTHDAY"
+  // Birthday-campaign treat claim ΓÇö the outbound message says "reply BIRTHDAY"
   if (lower === 'birthday') {
     await handleBirthdayKeyword(conv);
     return;
@@ -1094,7 +1087,7 @@ async function processInboundWhatsApp(
 
   if (isHumanHandoffRequest(text)) {
     if (!isWithinBusinessHours(salon)) {
-      // After hours — don't escalate yet; offer AI help first
+      // After hours ΓÇö don't escalate yet; offer AI help first
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       await reply(
         conv,
@@ -1104,7 +1097,7 @@ async function processInboundWhatsApp(
       return;
     }
 
-    // Within hours — open a ticket and hand off
+    // Within hours ΓÇö open a ticket and hand off
     await getTenantDb().ticket.create({
       data: {
         salonId: salon.id,
@@ -1120,7 +1113,7 @@ async function processInboundWhatsApp(
       },
     });
 
-    // Notify owner — best-effort, never blocks handoff
+    // Notify owner ΓÇö best-effort, never blocks handoff
     void (async () => {
       try {
         const ownerUser = await getTenantDb().staffUser.findFirst({
@@ -1134,7 +1127,7 @@ async function processInboundWhatsApp(
           await sendWithFallback({
             salonId: salon.id,
             to: ownerPhone,
-            body: `🙋 ${sanitize(customerName)} is asking to speak to a person. Check the dashboard to respond.`,
+            body: `≡ƒÖï ${sanitize(customerName)} is asking to speak to a person. Check the dashboard to respond.`,
           });
         }
       } catch {
@@ -1144,7 +1137,7 @@ async function processInboundWhatsApp(
 
     await reply(
       conv,
-      'Thanks — a team member will read this chat and respond as soon as possible.',
+      'Thanks ΓÇö a team member will read this chat and respond as soon as possible.',
     );
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.IDLE);
     return;
@@ -1153,7 +1146,7 @@ async function processInboundWhatsApp(
   const aiSteps: ConversationStep[] = [ConversationStep.FAQ];
   if (aiSteps.includes(conv.step)) {
     const aiResult = await tryAiAssist(conv, text);
-    // §4.4/§5 — check negative sentiment FIRST; cannot be bypassed by handled flag
+    // ┬º4.4/┬º5 ΓÇö check negative sentiment FIRST; cannot be bypassed by handled flag
     if (aiResult.negativeSentiment) {
       await escalateNegativeSentiment(conv, text);
       return;
@@ -1167,14 +1160,14 @@ async function processInboundWhatsApp(
 
   try {
     await routeConversation(conv, text);
-    // Reset error counter after any successful routing (best-effort — must not throw)
+    // Reset error counter after any successful routing (best-effort ΓÇö must not throw)
     if ((ctx(conv).errorCount ?? 0) > 0) {
       await saveCtx(conv.id, { errorCount: undefined }).catch(() => {});
     }
   } catch (err) {
     logger.error({ err, convId: conv.id, step: conv.step }, 'route_conversation_error');
     try {
-      // P2021 = table doesn't exist yet (migration pending) — infrastructure error,
+      // P2021 = table doesn't exist yet (migration pending) ΓÇö infrastructure error,
       // not a logic error. Reset quietly to MENU so the bot keeps working.
       const isInfraError =
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -1221,7 +1214,7 @@ async function processInboundWhatsApp(
             salonId: conv.salonId,
             customerId: conv.customerId,
             status: 'OPEN',
-            subject: 'Bot escalation — requires immediate attention',
+            subject: 'Bot escalation ΓÇö requires immediate attention',
             messages: {
               create: {
                 direction: MessageDirection.INBOUND,
@@ -1246,7 +1239,7 @@ async function processInboundWhatsApp(
           'bot_escalated_to_staff',
         );
       } else {
-        // First failure — inform user and show menu
+        // First failure ΓÇö inform user and show menu
         await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU).catch(
           () => {},
         );
@@ -1267,7 +1260,7 @@ async function processInboundWhatsApp(
 }
 
 /**
- * §4.4 / §5 — Auto-escalate when the AI orchestrator detects genuine negative sentiment
+ * ┬º4.4 / ┬º5 ΓÇö Auto-escalate when the AI orchestrator detects genuine negative sentiment
  * (anger, threats, abuse, extreme frustration, or distress).
  * Opens a ticket, sends an empathetic holding message, and pings the dashboard.
  * Called before the normal aiResult.handled check so it cannot be bypassed.
@@ -1288,7 +1281,7 @@ async function escalateNegativeSentiment(
       salonId: conv.salonId,
       customerId: conv.customerId,
       status: 'OPEN',
-      subject: 'Negative sentiment detected — customer may need urgent help',
+      subject: 'Negative sentiment detected ΓÇö customer may need urgent help',
       messages: {
         create: {
           direction: MessageDirection.INBOUND,
@@ -1323,7 +1316,7 @@ async function escalateNegativeSentiment(
       "I've flagged this for one of our team members who will reach out to you shortly. " +
       "We want to make this right."
     : "I can hear that you're frustrated, and I'm sorry for any inconvenience. " +
-      "I've flagged this for our team — we're currently outside business hours but someone will follow up with you as soon as we open. " +
+      "I've flagged this for our team ΓÇö we're currently outside business hours but someone will follow up with you as soon as we open. " +
       "We want to make this right.";
 
   await reply(conv, holdingMessage);
@@ -1334,13 +1327,13 @@ async function escalateNegativeSentiment(
   }).catch((err: unknown) => logger.warn({ err }, 'emit_escalation_failed'));
 }
 
-const BIRTHDAY_TREAT_TICKET_SUBJECT = 'Birthday treat — apply 50% off';
+const BIRTHDAY_TREAT_TICKET_SUBJECT = 'Birthday treat ΓÇö apply 50% off';
 const DAY_MS = 86_400_000;
 
 /**
  * The birthday campaign promises "reply BIRTHDAY for a special treat" (50% off
  * a service). Guarded by:
- *   1. DOB on file + within ±7 days of birthday (salon timezone)
+ *   1. DOB on file + within ┬▒7 days of birthday (salon timezone)
  *   2. A birthday_sent outbound message in the last 14 days (proves we invited them)
  * Staff apply the discount manually via the ticket this opens.
  */
@@ -1360,7 +1353,7 @@ async function handleBirthdayKeyword(
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await replyWithMenu(
       conv,
-      `We'd love to celebrate with you, but the birthday treat is only available around your birthday. 😊`,
+      `We'd love to celebrate with you, but the birthday treat is only available around your birthday. ≡ƒÿè`,
     );
     return;
   }
@@ -1437,7 +1430,7 @@ async function handleBirthdayKeyword(
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await replyWithMenu(
     conv,
-    `🎂 Wonderful! Your birthday treat is locked in — 50% off a service of your choice. Our team will apply it when you visit.\n\nReply 1 to book now!`,
+    `≡ƒÄé Wonderful! Your birthday treat is locked in ΓÇö 50% off a service of your choice. Our team will apply it when you visit.\n\nReply 1 to book now!`,
   );
 }
 
@@ -1448,7 +1441,7 @@ async function handleMarketingConsentFlow(
   const salon = conv.salon;
   const status = conv.customer.marketingConsentStatus;
 
-  // Marketing consent gate is disabled — chatbot booking flow takes priority.
+  // Marketing consent gate is disabled ΓÇö chatbot booking flow takes priority.
   // Only process explicit STOP/START opt-out and opt-in commands.
   const consentGateEnabled = false;
 
@@ -1637,18 +1630,18 @@ async function routeConversation(
     case ConversationStep.HANDOFF:
     case ConversationStep.CLOSED:
       if (ctx(conv).handoffByStaff) {
-        // A human agent explicitly claimed this conversation — stay silent.
+        // A human agent explicitly claimed this conversation ΓÇö stay silent.
         // Message is already recorded; dashboard SSE has already been emitted.
         logger.info({ convId: conv.id, step: conv.step }, 'bot_silent_handoff');
         return;
       }
       if (ctx(conv).negativeSentimentEscalated) {
-        // Negative-sentiment escalation is pending staff pick-up — stay silent so
+        // Negative-sentiment escalation is pending staff pick-up ΓÇö stay silent so
         // we do not auto-recover to MENU and trigger a duplicate escalation loop.
         logger.info({ convId: conv.id }, 'bot_silent_sentiment_handoff');
         return;
       }
-      // Bot-error HANDOFF with no staff claim — auto-recover so the customer
+      // Bot-error HANDOFF with no staff claim ΓÇö auto-recover so the customer
       // isn't stuck indefinitely.
       logger.info({ convId: conv.id }, 'bot_auto_recover_handoff');
       await saveCtx(conv.id, { errorCount: undefined }, ConversationStep.MENU);
@@ -1686,7 +1679,7 @@ async function startBookingFlow(
   if (services.length === 0) {
     const phone = salon.phoneDisplay?.trim();
     const msg = phone
-      ? `We don't have any services set up for online booking yet.\n\nTo book, please call us on *${phone}* and we'll sort you out! 😊\n\nReply MENU to go back.`
+      ? `We don't have any services set up for online booking yet.\n\nTo book, please call us on *${phone}* and we'll sort you out! ≡ƒÿè\n\nReply MENU to go back.`
       : `We don't have any services set up for online booking just yet.\n\nPlease contact the salon directly to make a booking.\n\nReply MENU to go back.`;
     await replyWithMenu(conv, msg);
     return;
@@ -1697,7 +1690,7 @@ async function startBookingFlow(
     data: { salonId: salon.id, customerId: conv.customerId, type: 'funnel_pick_service' },
   }).catch(() => {});
 
-  // Group by category — if multiple categories exist, show category picker first.
+  // Group by category ΓÇö if multiple categories exist, show category picker first.
   const categories = new Map<string, { name: string; sortOrder: number; ids: string[] }>();
   const uncategorised: typeof services = [];
   for (const s of services) {
@@ -1715,7 +1708,7 @@ async function startBookingFlow(
     .map(([id, cat]) => ({ id, ...cat }));
 
   if (catList.length > 1) {
-    // Show categories — customer picks one, then sees services within it.
+    // Show categories ΓÇö customer picks one, then sees services within it.
     const lines = catList.map((c, i) => `${i + 1}. ${sanitize(c.name)}`);
     if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
     const catIds = catList.map((c) => c.id);
@@ -1725,12 +1718,12 @@ async function startBookingFlow(
     return;
   }
 
-  // Single category or no categories — show flat list (keep it short with a note if long).
+  // Single category or no categories ΓÇö show flat list (keep it short with a note if long).
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
   await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
   syncConvContext(conv, {}, ConversationStep.PICK_SERVICE);
   const header = services.length > 8
-    ? `We have ${services.length} services — pick a number:`
+    ? `We have ${services.length} services ΓÇö pick a number:`
     : 'Pick a service:';
   await reply(conv, [header, ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
@@ -1752,10 +1745,10 @@ async function handleCollectFirstName(
   await reply(
     conv,
     [
-      `Nice to meet you, *${name}*! 😊`,
+      `Nice to meet you, *${name}*! ≡ƒÿè`,
       '',
       'What is your *email address*?',
-      '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
+      '_We\'ll send your booking confirmation and appointment reminders here ΓÇö no spam, ever._',
       '',
       'Reply BACK for menu.',
     ].join('\n'),
@@ -1779,9 +1772,9 @@ async function handleCollectEmail(
   await reply(
     conv,
     [
-      'Got it! Last question — what is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
+      'Got it! Last question ΓÇö what is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
       '',
-      '_We ask for your DOB for two reasons: some services have different pricing for children vs adults, and we\'d love to send you a little birthday treat! 🎂_',
+      '_We ask for your DOB for two reasons: some services have different pricing for children vs adults, and we\'d love to send you a little birthday treat! ≡ƒÄé_',
       '',
       'Reply BACK for menu.',
     ].join('\n'),
@@ -1808,15 +1801,15 @@ async function handleCollectDateOfBirth(
 
   const dobStr = `${dob.getFullYear()}-${String(dob.getMonth() + 1).padStart(2, '0')}-${String(dob.getDate()).padStart(2, '0')}`;
 
-  // POPIA consent was already granted before name collection — commit profile now.
+  // POPIA consent was already granted before name collection ΓÇö commit profile now.
   const pending = ctx(conv);
   const firstName = pending.pendingFirstName as string | undefined;
   const email = pending.pendingEmail as string | undefined;
 
   if (!firstName || !email) {
-    // Context lost mid-flow — restart from POPIA.
+    // Context lost mid-flow ΓÇö restart from POPIA.
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-    await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
+    await reply(conv, ['Something went wrong ΓÇö let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
     return;
   }
 
@@ -1833,77 +1826,7 @@ async function handleCollectDateOfBirth(
 
   await saveCtx(conv.id, PENDING_PROFILE_CLEAR);
   const updatedCustomer = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
-  await resumeBookingAfterGates({ ...conv, customer: updatedCustomer });
-}
-
-async function showFilteredServicePicker(
-  conv: Conversation & { customer: Customer; salon: Salon },
-  serviceFilterIds: string[],
-  headerLabel?: string,
-): Promise<void> {
-  const services = await getTenantDb().service.findMany({
-    where: {
-      salonId: conv.salonId,
-      active: true,
-      deletedAt: null,
-      id: { in: serviceFilterIds },
-    },
-    orderBy: { sortOrder: 'asc' },
-  });
-  if (services.length === 0) {
-    await replyWithMenu(conv, 'Those services are no longer available. Please choose again from the menu.');
-    return;
-  }
-
-  const label = headerLabel ?? 'Services';
-  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  const filterPatch = {
-    serviceFilterIds: services.map((s) => s.id),
-    menuCategory: undefined,
-  };
-  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE);
-  syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
-  await reply(
-    conv,
-    [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
-  );
-}
-
-async function resumeBookingAfterGates(
-  conv: Conversation & { customer: Customer; salon: Salon },
-): Promise<void> {
-  const resume = ctx(conv).bookingResume as BookingResume | undefined;
-  await saveCtx(conv.id, { bookingResume: undefined });
-  syncConvContext(conv, { bookingResume: undefined });
-
-  if (resume?.kind === 'service_filter' && resume.serviceFilterIds.length > 0) {
-    await showFilteredServicePicker(conv, resume.serviceFilterIds, resume.headerLabel);
-    return;
-  }
-
-  await startBookingFlow(conv);
-}
-
-/** All booking entry paths (Book, Services, etc.) must go through here for POPIA + profile parity. */
-async function ensureBookingProfileAndPopiaThen(
-  conv: Conversation & { customer: Customer; salon: Salon },
-  resume: BookingResume,
-): Promise<void> {
-  await saveCtx(conv.id, { ...BOOKING_CTX_CLEAR, bookingResume: resume }, ConversationStep.MENU);
-  syncConvContext(conv, { ...BOOKING_CTX_CLEAR, bookingResume: resume }, ConversationStep.MENU);
-
-  const customer = await getTenantDb().customer.findUniqueOrThrow({
-    where: { id: conv.customerId },
-  });
-
-  if (isProfileIncomplete(customer)) {
-    await saveCtx(conv.id, { bookingResume: resume }, ConversationStep.BOOKING_POPIA_CONSENT);
-    syncConvContext(conv, { bookingResume: resume }, ConversationStep.BOOKING_POPIA_CONSENT);
-    await reply(conv, buildBookingPopiaConsentMessage());
-    return;
-  }
-
-  await resumeBookingAfterGates({ ...conv, customer });
+  await startBookingFlow({ ...conv, customer: updatedCustomer });
 }
 
 async function handleBookingPopiaConsent(
@@ -1937,15 +1860,15 @@ async function handleBookingPopiaConsent(
     const phoneHint = salon.phoneDisplay
       ? ` You can also phone us on ${salon.phoneDisplay} to book.`
       : ' Please contact the salon by phone to book.';
-    await saveCtx(conv.id, { ...PENDING_PROFILE_CLEAR, bookingResume: undefined }, ConversationStep.MENU);
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
     await replyWithMenu(
       conv,
-      `Understood — we won't store your details without consent.${phoneHint}`,
+      `Understood ΓÇö we won't store your details without consent.${phoneHint}`,
     );
     return;
   }
 
-  // POPIA accepted — now collect profile details before booking.
+  // POPIA accepted ΓÇö now collect profile details before booking.
   await db.auditLog.create({
     data: {
       salonId: salon.id,
@@ -1963,7 +1886,7 @@ async function handleBookingPopiaConsent(
       'Thank you! Let\'s get your details set up.',
       '',
       'What is your *first name*?',
-      '(Letters only — reply BACK for menu.)',
+      '(Letters only ΓÇö reply BACK for menu.)',
     ].join('\n'),
   );
 }
@@ -1972,7 +1895,21 @@ async function menuActionStartBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
   try {
-    await ensureBookingProfileAndPopiaThen(conv, { kind: 'default' });
+    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+    syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
+
+    const customer = await getTenantDb().customer.findUniqueOrThrow({
+      where: { id: conv.customerId },
+    });
+
+    if (isProfileIncomplete(customer)) {
+      await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+      syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
+      await reply(conv, buildBookingPopiaConsentMessage());
+      return;
+    }
+
+    await startBookingFlow({ ...conv, customer });
   } catch (err) {
     logger.error({ err, convId: conv.id }, 'menu_action_start_booking_failed');
     if (!hasPendingOutboundForConv(conv.id)) {
@@ -2027,9 +1964,9 @@ async function menuActionViewBookings(
     `${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`;
 
   const lines: string[] = [];
-  if (hint === 'reschedule') lines.push('📅 *Reschedule an appointment*');
-  else if (hint === 'cancel') lines.push('📅 *Cancel an appointment*');
-  else lines.push('📅 *Your appointments*');
+  if (hint === 'reschedule') lines.push('≡ƒôà *Reschedule an appointment*');
+  else if (hint === 'cancel') lines.push('≡ƒôà *Cancel an appointment*');
+  else lines.push('≡ƒôà *Your appointments*');
 
   if (upcoming.length > 0) {
     lines.push('', '*Upcoming:*');
@@ -2090,16 +2027,16 @@ async function menuActionLoyaltyBalance(
   const progressBar = buildStampBar(stamps % stampsPerReward || (redeemable ? stampsPerReward : 0), stampsPerReward);
 
   const lines = [
-    `⭐ *Your rewards* — ${salonDisplayName(salon)}`,
+    `Γ¡É *Your rewards* ΓÇö ${salonDisplayName(salon)}`,
     '',
     `Points: ${stamps} stamp${stamps === 1 ? '' : 's'}`,
     progressBar,
     redeemable
-      ? `\n🎊 You've earned a reward! Reply REDEEM on your next booking to use it.`
+      ? `\n≡ƒÄè You've earned a reward! Reply REDEEM on your next booking to use it.`
       : `${remaining} more visit${remaining === 1 ? '' : 's'} until your next reward!`,
     '',
     emphasizeRedeem && redeemable
-      ? 'Reply 1 under *Appointments › Book* to redeem on your next visit.'
+      ? 'Reply 1 under *Appointments ΓÇ║ Book* to redeem on your next visit.'
       : '',
     'Reply BACK for menu.',
   ].filter(Boolean);
@@ -2124,7 +2061,7 @@ async function menuActionShowFaqs(
   const lines = faqs.map((f, i) => `${i + 1}. ${f.question}`);
   await reply(
     conv,
-    ['FAQs — reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n'),
+    ['FAQs ΓÇö reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n'),
   );
 }
 
@@ -2133,7 +2070,7 @@ async function menuActionShowContact(
 ): Promise<void> {
   const salon = conv.salon;
   const parts = [
-    `📞 *Contact ${salonDisplayName(salon)}*`,
+    `≡ƒô₧ *Contact ${salonDisplayName(salon)}*`,
     salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : null,
     (salon as unknown as { contactEmail?: string }).contactEmail
       ? `Email: ${(salon as unknown as { contactEmail?: string }).contactEmail}`
@@ -2153,7 +2090,7 @@ async function menuActionShowHours(
   const isOpen = isWithinBusinessHours(salon);
   await reply(
     conv,
-    `🕐 *Business hours*\n\nMon–Sat: ${open} – ${close}\n\nWe are currently ${isOpen ? '✅ open' : '🔴 closed'}.`,
+    `≡ƒòÉ *Business hours*\n\nMonΓÇôSat: ${open} ΓÇô ${close}\n\nWe are currently ${isOpen ? 'Γ£à open' : '≡ƒö┤ closed'}.`,
   );
   await replyMenu(conv);
 }
@@ -2165,17 +2102,17 @@ async function menuActionShowLocation(
   const address = salon.addressLine ?? 'Address not on file.';
   const mapsUrl = (salon as unknown as { mapsUrl?: string }).mapsUrl;
   const lines = [
-    `📍 *Find us*`,
+    `≡ƒôì *Find us*`,
     address,
     salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : null,
-    salon.accessibility ? `♿ ${salon.accessibility}` : null,
+    salon.accessibility ? `ΓÖ┐ ${salon.accessibility}` : null,
   ].filter(Boolean);
 
   if (mapsUrl) {
-    lines.push('', `📌 Open in maps:\n${mapsUrl}`);
+    lines.push('', `≡ƒôî Open in maps:\n${mapsUrl}`);
   } else {
     const query = encodeURIComponent(`${salonDisplayName(salon)} ${address}`);
-    lines.push('', `📌 Google Maps: https://maps.google.com/?q=${query}`);
+    lines.push('', `≡ƒôî Google Maps: https://maps.google.com/?q=${query}`);
   }
 
   await reply(conv, lines.join('\n'));
@@ -2216,16 +2153,19 @@ async function menuActionShowServiceCategory(
   if (services.length === 0) {
     await reply(
       conv,
-      `No ${label.toLowerCase()} services listed yet.\n\nTry *Services › Prices* or *Appointments › Book*.\nReply BACK for menu.`,
+      `No ${label.toLowerCase()} services listed yet.\n\nTry *Services ΓÇ║ Prices* or *Appointments ΓÇ║ Book*.\nReply BACK for menu.`,
     );
     return;
   }
 
-  await ensureBookingProfileAndPopiaThen(conv, {
-    kind: 'service_filter',
-    serviceFilterIds: services.map((s) => s.id),
-    headerLabel: label,
-  });
+  const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
+  const filterPatch = { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined };
+  await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
+  await reply(
+    conv,
+    [`*${label} services*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
+  );
 }
 
 async function menuActionShowAllPrices(
@@ -2239,10 +2179,10 @@ async function menuActionShowAllPrices(
     await replyWithMenu(conv, 'No services listed yet.');
     return;
   }
-  const lines = services.map((s) => `• ${sanitize(s.name)} — ${fmtMoney(s.priceCents)}`);
+  const lines = services.map((s) => `ΓÇó ${sanitize(s.name)} ΓÇö ${fmtMoney(s.priceCents)}`);
   await reply(
     conv,
-    [`*Service prices*`, ...lines, '', 'Reply *Appointments › Book* from the main menu to schedule. Reply BACK.'].join('\n'),
+    [`*Service prices*`, ...lines, '', 'Reply *Appointments ΓÇ║ Book* from the main menu to schedule. Reply BACK.'].join('\n'),
   );
 }
 
@@ -2255,8 +2195,8 @@ async function menuActionShowSpecials(
       : {};
   const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
   const body = special
-    ? `🌟 *Current specials*\n\n${special}\n\nReply BACK for menu.`
-    : `No specials posted right now — check back soon!\n\nReply BACK for menu.`;
+    ? `≡ƒîƒ *Current specials*\n\n${special}\n\nReply BACK for menu.`
+    : `No specials posted right now ΓÇö check back soon!\n\nReply BACK for menu.`;
   await reply(conv, body);
 }
 
@@ -2274,7 +2214,7 @@ async function menuActionShowTeam(
     return;
   }
   const lines = team.map((s, i) => {
-    const spec = s.specialties.length ? ` — ${s.specialties.slice(0, 2).join(', ')}` : '';
+    const spec = s.specialties.length ? ` ΓÇö ${s.specialties.slice(0, 2).join(', ')}` : '';
     return `${i + 1}. ${sanitize(s.name)}${spec}`;
   });
   await reply(conv, [`*Our team*`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
@@ -2312,7 +2252,7 @@ async function menuActionLeaveReview(
   );
   await reply(
     conv,
-    '⭐ *Leave a review*\n\nHow would you rate your last visit?\nReply with a number:\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent',
+    'Γ¡É *Leave a review*\n\nHow would you rate your last visit?\nReply with a number:\n1 Γ¡É ΓÇö Poor\n2 Γ¡ÉΓ¡É ΓÇö Below average\n3 Γ¡ÉΓ¡ÉΓ¡É ΓÇö Average\n4 Γ¡ÉΓ¡ÉΓ¡ÉΓ¡É ΓÇö Good\n5 Γ¡ÉΓ¡ÉΓ¡ÉΓ¡ÉΓ¡É ΓÇö Excellent',
   );
 }
 
@@ -2360,7 +2300,7 @@ async function handleSubMenuChoice(
       if (choice === 3) {
         await reply(
           conv,
-          `🎁 *Gift vouchers*\n\nContact ${salonDisplayName(conv.salon)} to purchase or redeem a gift voucher.${
+          `≡ƒÄü *Gift vouchers*\n\nContact ${salonDisplayName(conv.salon)} to purchase or redeem a gift voucher.${
             conv.salon.phoneDisplay ? `\nPhone: ${conv.salon.phoneDisplay}` : ''
           }\n\nReply BACK for menu.`,
         );
@@ -2378,12 +2318,12 @@ async function handleSubMenuChoice(
       if (choice === 2) return menuActionLeaveReview(conv);
       if (choice === 3) {
         await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.COMPLAINT);
-        await reply(conv, 'Please describe the issue — our team will follow up shortly.');
+        await reply(conv, 'Please describe the issue ΓÇö our team will follow up shortly.');
         return;
       }
       if (choice === 4) {
         await saveCtx(conv.id, { otherQueryAnswered: false, ...PENDING_PROFILE_CLEAR }, ConversationStep.OTHER_QUERY);
-        await reply(conv, 'You\'re through to reception — how can we help you today?');
+        await reply(conv, 'You\'re through to reception ΓÇö how can we help you today?');
         return;
       }
       break;
@@ -2489,18 +2429,18 @@ async function handleMenu(
   await reply(
     conv,
     [
-      'I\'m not sure I caught that — I\'m best at helping with bookings, prices, and salon info. 😊',
+      'I\'m not sure I caught that ΓÇö I\'m best at helping with bookings, prices, and salon info. ≡ƒÿè',
       '',
       'Type *MENU* to see everything I can help with, or just ask me something like:',
-      '• "I want to book a haircut"',
-      '• "What are your prices?"',
-      '• "What time do you open?"',
+      'ΓÇó "I want to book a haircut"',
+      'ΓÇó "What are your prices?"',
+      'ΓÇó "What time do you open?"',
     ].join('\n'),
   );
 }
 
 /**
- * §6.1 — Preferred staff memory.
+ * ┬º6.1 ΓÇö Preferred staff memory.
  * Returns the bookable staff for a service with the customer's preferred stylist
  * (the one they last explicitly booked) moved to index 0, deduped.
  * `preferredId` is non-null only when that stylist is still in the list
@@ -2513,7 +2453,7 @@ async function getStaffListWithPreference(
   serviceId: string,
 ): Promise<{ staffList: Staff[]; preferredId: string | null }> {
   const staffList = await getStaffForService(conv.salonId, serviceId);
-  // Re-read from DB — conv.customer may be stale within a long conversation.
+  // Re-read from DB ΓÇö conv.customer may be stale within a long conversation.
   const fresh = await getTenantDb().customer.findUnique({
     where: { id: conv.customerId },
     select: { preferredStaffId: true },
@@ -2522,7 +2462,7 @@ async function getStaffListWithPreference(
   if (!preferredId) return { staffList, preferredId: null };
 
   const idx = staffList.findIndex((s) => s.id === preferredId);
-  if (idx < 0) return { staffList, preferredId: null }; // no longer offered — plain list
+  if (idx < 0) return { staffList, preferredId: null }; // no longer offered ΓÇö plain list
   if (idx === 0) return { staffList, preferredId };
   return {
     staffList: [staffList[idx]!, ...staffList.slice(0, idx), ...staffList.slice(idx + 1)],
@@ -2568,7 +2508,7 @@ async function handlePickServiceCategory(
   if (!Number.isFinite(n) || n < 1 || n > totalOptions) {
     const lines = catList.map((c, i) => `${i + 1}. ${sanitize(c.name)}`);
     if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
-    await reply(conv, [`Please reply with a number (1–${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    await reply(conv, [`Please reply with a number (1ΓÇô${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
     return;
   }
 
@@ -2600,23 +2540,6 @@ async function handlePickService(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  const customer = await getTenantDb().customer.findUniqueOrThrow({
-    where: { id: conv.customerId },
-  });
-  if (isProfileIncomplete(customer)) {
-    const filterIds = ctx(conv).serviceFilterIds;
-    await ensureBookingProfileAndPopiaThen(
-      conv,
-      Array.isArray(filterIds) && filterIds.length
-        ? {
-            kind: 'service_filter',
-            serviceFilterIds: filterIds as string[],
-          }
-        : { kind: 'default' },
-    );
-    return;
-  }
-
   const c = ctx(conv);
   if (c.addonPhase) {
     const handled = await handleAddonPhase(conv, text, {
@@ -2642,7 +2565,7 @@ async function handlePickService(
   });
   if (!Number.isFinite(n) || n < 1 || n > services.length) {
     const svcLines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-    await reply(conv, [`Invalid choice. Pick a number (1–${services.length}):`, ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
+    await reply(conv, [`Invalid choice. Pick a number (1ΓÇô${services.length}):`, ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
     return;
   }
   const service = services[n - 1]!;
@@ -2710,7 +2633,7 @@ async function handlePickStaff(
     return;
   }
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
-  // §6.1 — same preferred-first ordering as the menu the customer was shown,
+  // ┬º6.1 ΓÇö same preferred-first ordering as the menu the customer was shown,
   // so the number they reply with maps to the stylist they saw at that position.
   const { staffList, preferredId } = await getStaffListWithPreference(conv, service.id);
   // Guard: staff may have been deactivated since service step
@@ -2741,7 +2664,7 @@ async function handlePickStaff(
   const n = parseInt(text, 10);
   const anyIdx = renderedIds.length + 1;
   if (!Number.isFinite(n) || n < 1 || n > anyIdx) {
-    await rerenderMenu(`Invalid choice. Pick a number (1–${staffList.length + 1}):`);
+    await rerenderMenu(`Invalid choice. Pick a number (1ΓÇô${staffList.length + 1}):`);
     return;
   }
 
@@ -2750,7 +2673,7 @@ async function handlePickStaff(
   if (!isAny) {
     const chosen = staffList.find((s) => s.id === renderedIds[n - 1]);
     if (!chosen) {
-      // That stylist became unavailable between menu render and reply —
+      // That stylist became unavailable between menu render and reply ΓÇö
       // never silently book whoever shifted into their slot number.
       await rerenderMenu('Sorry, that stylist just became unavailable. Here are the current options:');
       return;
@@ -2779,7 +2702,7 @@ async function handlePickStaff(
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     const phone = conv.salon.phoneDisplay?.trim();
     const msg = phone
-      ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
+      ? `We don't have any open slots in the next 2 weeks. ≡ƒÿö\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
       : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
     await replyWithMenu(conv, msg);
     return;
@@ -2825,7 +2748,7 @@ async function handlePickDate(
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       const phone = conv.salon.phoneDisplay?.trim();
       const msg = phone
-        ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
+        ? `We don't have any open slots in the next 2 weeks. ≡ƒÿö\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
         : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
       await replyWithMenu(conv, msg);
       return;
@@ -2896,7 +2819,7 @@ async function handlePickSlot(
         localDateStr: quickPick.localDateStr,
         slotStartIso: quickPick.slotStartIso,
         quickPickOptions: undefined,
-        // §6.1 — quick-pick staff is auto-assigned unless the customer named
+        // ┬º6.1 ΓÇö quick-pick staff is auto-assigned unless the customer named
         // them; anyStaff=true suppresses the preference write in handleConfirm.
         anyStaff: !quickPick.explicitStaff,
       },
@@ -2906,7 +2829,7 @@ async function handlePickSlot(
     await reply(
       conv,
       [
-        `Perfect — let's lock this in:`,
+        `Perfect ΓÇö let's lock this in:`,
         `${sanitize(service.name)} with ${sanitize(staff.name)}`,
         dt.toFormat('cccc, dd LLL yyyy HH:mm'),
         '',
@@ -2937,7 +2860,7 @@ async function handlePickSlot(
     await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
     const reason = tooLong
       ? `That service is too long to fit into any slot on this day. Try a different date, or reply BACK to choose another.`
-      : `No open slots on this day — it might be fully booked or our stylist isn't in. Reply BACK to pick a different date.`;
+      : `No open slots on this day ΓÇö it might be fully booked or our stylist isn't in. Reply BACK to pick a different date.`;
     await reply(conv, reason);
     return;
   }
@@ -2947,7 +2870,7 @@ async function handlePickSlot(
       const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
       return `${i + 1}. ${dt.toFormat('ccc HH:mm')}`;
     });
-    await reply(conv, [`Invalid choice. Pick a slot number (1–${Math.min(slots.length, 8)}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
+    await reply(conv, [`Invalid choice. Pick a slot number (1ΓÇô${Math.min(slots.length, 8)}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
     return;
   }
   const slot = slots[n - 1]!;
@@ -2978,7 +2901,7 @@ async function handleConfirm(
   if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(text.trim())) {
     await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU);
     syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
-    await reply(conv, 'Booking not confirmed — no worries!');
+    await reply(conv, 'Booking not confirmed ΓÇö no worries!');
     await replyMenu(conv);
     return;
   }
@@ -3061,7 +2984,7 @@ async function handleConfirm(
       const dt = DateTime.fromJSDate(new Date(customerOverlap.start)).setZone(conv.salon.timezone);
       await reply(
         conv,
-        `You already have a booking at that time — ${sanitize(customerOverlap.service.name)} at ${dt.toFormat('HH:mm')}. Reply BACK to choose a different slot, or MANAGE to view your bookings.`,
+        `You already have a booking at that time ΓÇö ${sanitize(customerOverlap.service.name)} at ${dt.toFormat('HH:mm')}. Reply BACK to choose a different slot, or MANAGE to view your bookings.`,
       );
       return;
     }
@@ -3158,7 +3081,7 @@ async function handleConfirm(
     });
   }
 
-  // Track booking count for no-show risk scoring (best-effort — must not fail booking)
+  // Track booking count for no-show risk scoring (best-effort ΓÇö must not fail booking)
   const isFirstBooking = conv.customer.bookingCount === 0;
   try {
     await incrementCustomerBookingCount(conv.customerId, tx);
@@ -3166,7 +3089,7 @@ async function handleConfirm(
     logger.warn({ err, customerId: conv.customerId }, 'booking_count_increment_failed');
   }
 
-  // Item 16: Notify owner on new booking — best-effort, never blocks booking
+  // Item 16: Notify owner on new booking ΓÇö best-effort, never blocks booking
   void (async () => {
     try {
       const ownerUser = await getTenantDb().staffUser.findFirst({
@@ -3182,7 +3105,7 @@ async function handleConfirm(
           salonId: conv.salonId,
           to: ownerPhone,
           body: [
-            `📅 New booking (${appointment.id.slice(0, 8)})`,
+            `≡ƒôà New booking (${appointment.id.slice(0, 8)})`,
             `Customer: ${sanitize(customerName)}`,
             `Service: ${sanitize(service.name)} with ${sanitize(staff.name)}`,
             dt.toFormat('cccc, dd LLL yyyy HH:mm'),
@@ -3194,10 +3117,10 @@ async function handleConfirm(
     }
   })();
 
-  // §6.1 — remember the stylist for next booking, but only when the customer
+  // ┬º6.1 ΓÇö remember the stylist for next booking, but only when the customer
   // explicitly chose them this booking. Skipped for:
   //  - "Any available" / auto-assigned staff (anyStaff)
-  //  - reschedules, which silently reuse the original appointment's staff —
+  //  - reschedules, which silently reuse the original appointment's staff ΓÇö
   //    if that staff was explicitly chosen the preference is already stored.
   // Awaited with try/catch rather than fire-and-forget: getTenantDb() is a
   // transaction client, so a dangling promise could outlive the transaction.
@@ -3247,7 +3170,7 @@ async function handleConfirm(
     }
     await replyWithMenu(
       conv,
-      `Booking created — payment link unavailable. Staff will confirm manually.`,
+      `Booking created ΓÇö payment link unavailable. Staff will confirm manually.`,
     );
     if (isFirstBooking) {
       await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
@@ -3277,7 +3200,7 @@ async function handleConfirm(
     await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
   }
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
-  await reply(conv, 'How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)');
+  await reply(conv, 'How was the booking process? Rate us 1ΓÇô5 Γ¡É\n(1 = frustrating, 5 = super easy)');
 }
 
 async function handleBookingRating(
@@ -3307,13 +3230,13 @@ async function handleBookingRating(
   });
   let thankYou: string;
   if (rating === 5) {
-    thankYou = 'Amazing! 🌟 So glad it was easy. See you soon!';
+    thankYou = 'Amazing! ≡ƒîƒ So glad it was easy. See you soon!';
   } else if (rating === 4) {
-    thankYou = 'Thanks! 😊 Glad that was smooth.';
+    thankYou = 'Thanks! ≡ƒÿè Glad that was smooth.';
   } else if (rating === 3) {
-    thankYou = 'Thanks for the feedback — we\'ll keep improving.';
+    thankYou = 'Thanks for the feedback ΓÇö we\'ll keep improving.';
   } else {
-    thankYou = 'Sorry it wasn\'t easier — we\'ll work on that.';
+    thankYou = 'Sorry it wasn\'t easier ΓÇö we\'ll work on that.';
     await getTenantDb().ticket.create({
       data: {
         salonId: conv.salonId,
@@ -3372,7 +3295,7 @@ async function handleManageBooking(
       appointment: appt,
     });
     if (!cancelCheck.ok) {
-      // Record penalty attempted so the dashboard can surface it — tenant context is live here
+      // Record penalty attempted so the dashboard can surface it ΓÇö tenant context is live here
       if (cancelCheck.penaltyApplies) {
         void getTenantDb().appointment.update({
           where: { id: appt.id },
@@ -3484,12 +3407,12 @@ async function handleComplaint(
     },
   });
   await saveCtx(conv.id, {}, ConversationStep.MENU);
-  await replyWithMenu(conv, `Thanks — we logged your complaint and will respond shortly.`);
+  await replyWithMenu(conv, `Thanks ΓÇö we logged your complaint and will respond shortly.`);
 }
 
-// ─── Other / Something Else ────────────────────────────────────────────
-// Flow: customer asks anything → AI answers → "Did that help? YES / NO"
-//   YES → menu  |  NO → open ticket + IDLE (human picks up)
+// ΓöÇΓöÇΓöÇ Other / Something Else ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// Flow: customer asks anything ΓåÆ AI answers ΓåÆ "Did that help? YES / NO"
+//   YES ΓåÆ menu  |  NO ΓåÆ open ticket + IDLE (human picks up)
 async function handleOtherQuery(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3508,7 +3431,7 @@ async function handleOtherQuery(
     const upper = text.toUpperCase();
     if (upper === 'YES' || upper === 'Y') {
       await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
-      await replyWithMenu(conv, `Great! 😊 Anything else I can help with?`);
+      await replyWithMenu(conv, `Great! ≡ƒÿè Anything else I can help with?`);
       return;
     }
     if (upper === 'NO' || upper === 'N') {
@@ -3530,19 +3453,19 @@ async function handleOtherQuery(
       });
       await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.IDLE);
       if (isOpen) {
-        await reply(conv, "No problem — I've flagged this for a team member who will be with you shortly. 🙏");
+        await reply(conv, "No problem ΓÇö I've flagged this for a team member who will be with you shortly. ≡ƒÖÅ");
       } else {
         await reply(conv, `${afterHoursHumanReply(conv.salon)}\n\nI've noted your question and a team member will follow up when we open.`);
       }
       return;
     }
-    // They sent something new — treat it as a follow-up question
+    // They sent something new ΓÇö treat it as a follow-up question
   }
 
   // Try AI assist
   try {
     const aiResult = await tryAiAssist(conv, text);
-    // §4.4/§5 — negative sentiment detected: escalate immediately, skip FAQ loop
+    // ┬º4.4/┬º5 ΓÇö negative sentiment detected: escalate immediately, skip FAQ loop
     if (aiResult.negativeSentiment) {
       await escalateNegativeSentiment(conv, text);
       return;
@@ -3554,16 +3477,16 @@ async function handleOtherQuery(
       return;
     }
   } catch {
-    // AI unavailable — fall through to escalation prompt
+    // AI unavailable ΓÇö fall through to escalation prompt
   }
 
-  // AI couldn't answer — offer human
+  // AI couldn't answer ΓÇö offer human
   await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
   await reply(conv, "I'm not sure I have the answer to that one. Would you like me to pass this on to a team member? Reply YES or NO.");
 }
 
-// ─── Post-Handoff Satisfaction Rating ──────────────────────────────────
-// Triggered when staff clicks "Query Completed". Bot asked customer to rate 1–10.
+// ΓöÇΓöÇΓöÇ Post-Handoff Satisfaction Rating ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// Triggered when staff clicks "Query Completed". Bot asked customer to rate 1ΓÇô10.
 async function handleHandoffRating(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3614,18 +3537,18 @@ async function handleHandoffRating(
 
   let closing: string;
   if (rating >= 9) {
-    closing = `${rating}/10 — that's amazing, thank you! 🌟 We're so glad we could help. See you next time at ${salonName}!`;
+    closing = `${rating}/10 ΓÇö that's amazing, thank you! ≡ƒîƒ We're so glad we could help. See you next time at ${salonName}!`;
   } else if (rating >= 7) {
-    closing = `${rating}/10 — thanks for the feedback! We'll keep working to make every experience great. 😊`;
+    closing = `${rating}/10 ΓÇö thanks for the feedback! We'll keep working to make every experience great. ≡ƒÿè`;
   } else if (rating >= 5) {
-    closing = `${rating}/10 — thank you for being honest. We'll use this to improve. If there's anything specific we can do better, feel free to let us know.`;
+    closing = `${rating}/10 ΓÇö thank you for being honest. We'll use this to improve. If there's anything specific we can do better, feel free to let us know.`;
   } else {
-    closing = `${rating}/10 — we're really sorry we didn't meet your expectations. Our team will review this and follow up with you. Thank you for letting us know. 🙏`;
+    closing = `${rating}/10 ΓÇö we're really sorry we didn't meet your expectations. Our team will review this and follow up with you. Thank you for letting us know. ≡ƒÖÅ`;
   }
 
   await reply(conv, closing);
 
-  // Move to IDLE — bot stays quiet until customer sends something, then menu restarts
+  // Move to IDLE ΓÇö bot stays quiet until customer sends something, then menu restarts
   await saveCtx(conv.id, {
     handoffByStaff: undefined,
     errorCount: undefined,
@@ -3634,8 +3557,8 @@ async function handleHandoffRating(
   }, ConversationStep.IDLE);
 }
 
-// ─── Rate My Experience ─────────────────────────────────────────────────
-// Multi-step: stars → comment → NPS (1–10) → NPS reason → done
+// ΓöÇΓöÇΓöÇ Rate My Experience ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// Multi-step: stars ΓåÆ comment ΓåÆ NPS (1ΓÇô10) ΓåÆ NPS reason ΓåÆ done
 async function handleRateExperience(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3657,8 +3580,8 @@ async function handleRateExperience(
     }
     await saveCtx(conv.id, { ratingStars: stars, ratingSubStep: 'comment' });
     const prompt = stars <= 2
-      ? `We're sorry to hear that! 😔 What went wrong? Please leave a comment so we can improve:`
-      : `Thanks! 😊 Would you like to leave a comment about your experience? (Or reply SKIP to continue)`;
+      ? `We're sorry to hear that! ≡ƒÿö What went wrong? Please leave a comment so we can improve:`
+      : `Thanks! ≡ƒÿè Would you like to leave a comment about your experience? (Or reply SKIP to continue)`;
     await reply(conv, prompt);
     return;
   }
@@ -3666,7 +3589,7 @@ async function handleRateExperience(
   if (subStep === 'comment') {
     const comment = text.toUpperCase() === 'SKIP' ? '' : text.trim();
     await saveCtx(conv.id, { ratingComment: comment, ratingSubStep: 'nps' });
-    await reply(conv, 'On a scale of 1–10, how likely are you to recommend us to a friend?\n(1 = Not at all, 10 = Definitely!)');
+    await reply(conv, 'On a scale of 1ΓÇô10, how likely are you to recommend us to a friend?\n(1 = Not at all, 10 = Definitely!)');
     return;
   }
 
@@ -3679,12 +3602,12 @@ async function handleRateExperience(
     await saveCtx(conv.id, { ratingNps: nps, ratingSubStep: 'nps_reason' });
     const prompt = nps <= 6
       ? `What's the main reason for your score? We really want to improve:`
-      : `That means a lot! 🙏 What's the main reason for your high score? (Or reply SKIP)`;
+      : `That means a lot! ≡ƒÖÅ What's the main reason for your high score? (Or reply SKIP)`;
     await reply(conv, prompt);
     return;
   }
 
-  // nps_reason — final step, save everything
+  // nps_reason ΓÇö final step, save everything
   if (subStep === 'nps_reason') {
     const reason = text.toUpperCase() === 'SKIP' ? '' : text.trim();
     const stars = (c.ratingStars ?? 0) as number;
@@ -3702,11 +3625,11 @@ async function handleRateExperience(
       },
     });
 
-    // Open a ticket for bad ratings (stars ≤ 2 or NPS ≤ 6) so owner is notified
+    // Open a ticket for bad ratings (stars Γëñ 2 or NPS Γëñ 6) so owner is notified
     const isBadRating = stars <= 2 || nps <= 6;
     if (isBadRating) {
       const subject = stars <= 2
-        ? `Low rating (${stars}★) from customer`
+        ? `Low rating (${stars}Γÿà) from customer`
         : `Low NPS (${nps}/10) from customer`;
       const body = [
         `Stars: ${stars}/5`,
@@ -3729,11 +3652,11 @@ async function handleRateExperience(
     // Friendly closing message
     let closing: string;
     if (stars === 5 && nps >= 9) {
-      closing = `Thank you so much! 🌟 Your kind words mean the world to us. See you next time!`;
+      closing = `Thank you so much! ≡ƒîƒ Your kind words mean the world to us. See you next time!`;
     } else if (isBadRating) {
-      closing = `Thank you for your honest feedback — it helps us get better. Our team will be in touch shortly to make it right. 🙏`;
+      closing = `Thank you for your honest feedback ΓÇö it helps us get better. Our team will be in touch shortly to make it right. ≡ƒÖÅ`;
     } else {
-      closing = `Thank you for the feedback! We're always working to improve and hope to see you again soon. 😊`;
+      closing = `Thank you for the feedback! We're always working to improve and hope to see you again soon. ≡ƒÿè`;
     }
 
     await saveCtx(conv.id, {
@@ -3747,9 +3670,9 @@ async function handleRateExperience(
     return;
   }
 
-  // Fallback — reset
+  // Fallback ΓÇö reset
   await saveCtx(conv.id, { ratingSubStep: 'stars' }, ConversationStep.RATE_EXPERIENCE);
-  await reply(conv, '⭐ How would you rate your last visit? (1–5)');
+  await reply(conv, 'Γ¡É How would you rate your last visit? (1ΓÇô5)');
 }
 
 async function handleFaq(
@@ -3766,7 +3689,7 @@ async function handleFaq(
   if (Number.isFinite(n) && n >= 1 && n <= faqs.length) {
     const f = faqs[n - 1]!;
     // EC-14: WhatsApp messages cap at ~4096 chars; truncate long answers
-    const answer = f.answer.length > 3900 ? f.answer.slice(0, 3900) + '…' : f.answer;
+    const answer = f.answer.length > 3900 ? f.answer.slice(0, 3900) + 'ΓÇª' : f.answer;
     await reply(conv, `${f.question}\n\n${answer}\n\nReply with another number, ask a question, or BACK.`);
     return;
   }
@@ -3780,12 +3703,12 @@ async function handleFaq(
       const chunks = results.map((r) => r.content);
       const synthesized = await synthesizeFaqAnswer(conv.salon, text, chunks);
       const answer = synthesized ?? results[0]!.content;
-      const truncated = answer.length > 3900 ? answer.slice(0, 3900) + '…' : answer;
+      const truncated = answer.length > 3900 ? answer.slice(0, 3900) + 'ΓÇª' : answer;
       await reply(conv, `${truncated}\n\nReply with a FAQ number, ask another question, or BACK.`);
       return;
     }
   } catch {
-    // AI unavailable — fall through to default message
+    // AI unavailable ΓÇö fall through to default message
   }
 
   await reply(conv, "I couldn't find an answer. Pick a FAQ number, ask differently, or reply BACK.");
@@ -3796,16 +3719,16 @@ async function handleLoyalty(
   text: string,
 ) {
   if (text.toUpperCase() === 'REDEEM') {
-    // Redemption requires a booking context — direct customer to book instead
+    // Redemption requires a booking context ΓÇö direct customer to book instead
     await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyWithMenu(conv, `🎊 To use your free cut, simply book your next appointment (option 1) and it will be applied automatically!`);
+    await replyWithMenu(conv, `≡ƒÄè To use your free cut, simply book your next appointment (option 1) and it will be applied automatically!`);
     return;
   }
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await replyMenu(conv);
 }
 
-// ─── Branch Selection ──────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Branch Selection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function handlePickBranch(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3837,7 +3760,7 @@ async function handlePickBranch(
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     const phone = conv.salon.phoneDisplay?.trim();
     const msg = phone
-      ? `We don't have any services set up for online booking at this location yet.\n\nYou're welcome to call us on *${phone}* and we'll get you booked in! 😊`
+      ? `We don't have any services set up for online booking at this location yet.\n\nYou're welcome to call us on *${phone}* and we'll get you booked in! ≡ƒÿè`
       : `We don't have any services set up for online booking at this location yet. Please contact the salon directly.`;
     await replyWithMenu(conv, msg);
     return;
@@ -3846,7 +3769,7 @@ async function handlePickBranch(
   await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
 
-// ─── Reschedule ────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Reschedule ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function handleReschedule(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3884,7 +3807,7 @@ async function handleReschedule(
   await reply(conv, ['Pick a service:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
 }
 
-// ─── CSAT Survey ───────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ CSAT Survey ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 async function handleCsat(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3935,7 +3858,7 @@ async function handleCsat(
     2: "Thank you for letting us know. We'll do better next time.",
     3: 'Thanks for the feedback! We appreciate it.',
     4: 'Great to hear! Thank you for your feedback.',
-    5: 'Wonderful! So glad you had a great experience! 🌟',
+    5: 'Wonderful! So glad you had a great experience! ≡ƒîƒ',
   };
 
   await reply(conv, messages[rating] ?? 'Thank you!');
@@ -3980,7 +3903,7 @@ async function handleReviewedKeyword(
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await replyWithMenu(
       conv,
-      `You've already claimed your ${reward} review reward — it's waiting on your next booking! 💈`,
+      `You've already claimed your ${reward} review reward ΓÇö it's waiting on your next booking! ≡ƒÆê`,
     );
     return;
   }
@@ -3988,7 +3911,7 @@ async function handleReviewedKeyword(
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await replyWithMenu(
     conv,
-    `Thanks for leaving a review! 🎉\n\nYour ${reward} reward is saved and will come off your next booking automatically.\n\nReply 1 anytime to book.`,
+    `Thanks for leaving a review! ≡ƒÄë\n\nYour ${reward} reward is saved and will come off your next booking automatically.\n\nReply 1 anytime to book.`,
   );
 }
 
@@ -4008,5 +3931,5 @@ function fmtDt(d: Date, zone: string): string {
 function buildStampBar(earned: number, total: number): string {
   const filled = Math.min(earned, total);
   const empty = total - filled;
-  return `[${'★'.repeat(filled)}${'☆'.repeat(empty)}] ${filled}/${total}`;
+  return `[${'Γÿà'.repeat(filled)}${'Γÿå'.repeat(empty)}] ${filled}/${total}`;
 }
