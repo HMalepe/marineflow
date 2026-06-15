@@ -34,6 +34,12 @@ const envSchema = z.object({
   META_ACCESS_TOKEN: z.string().optional(),
   META_PHONE_NUMBER_ID: z.string().optional(),
   META_API_VERSION: z.string().default('v21.0'),
+  /** WhatsApp Flow ID for the native booking experience. Set after first deploy of ensureBookingFlow(). */
+  WHATSAPP_FLOW_ID: z.string().optional(),
+  /** RSA private key (PEM) for decrypting WhatsApp Flows data exchange requests. */
+  FLOW_PRIVATE_KEY: z.string().optional(),
+  /** WhatsApp Business Account ID (WABA ID) — used to create/manage Flows via Graph API. */
+  META_WABA_ID: z.string().optional(),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
   /** Set to 1 for local Inngest dev server; auto-enabled in development when no signing key. */

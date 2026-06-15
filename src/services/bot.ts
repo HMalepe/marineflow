@@ -57,6 +57,8 @@ import {
   computeAppointmentEnd,
 } from './botPowerFeatures.js';
 import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
+import { buildFlowTriggerMessage } from '../lib/whatsappFlows/bookingFlowJson.js';
+import type { BookingFlowPayload } from '../lib/whatsappFlows/types.js';
 import {
   claimReviewIncentive,
   applyReviewCreditTx,
@@ -1145,6 +1147,13 @@ async function processInboundWhatsApp(
     return;
   }
 
+  // WhatsApp Flow completion — nfm_reply arrives as __FLOW__:<json>
+  if (text.startsWith('__FLOW__:')) {
+    const rawJson = text.slice('__FLOW__:'.length);
+    await handleFlowCompletion(conv, rawJson);
+    return;
+  }
+
   // POPIA erasure / access — must run before marketing consent gate (legal priority)
   if (isPopiaDeleteCommand(text)) {
     if (isDeletedCustomer(customer)) {
@@ -2197,6 +2206,113 @@ async function routeConversation(
   }
 }
 
+/** Send the WhatsApp Flows booking UI — replaces the text-based multi-step picker. */
+async function sendBookingFlow(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  flowId: string,
+): Promise<void> {
+  const flowToken = `${conv.salonId}:${conv.id}`;
+  const salonName = conv.salon.tradingName?.trim() || conv.salon.name;
+  const welcomeBody = `Hi ${conv.customer.firstName ?? 'there'} 👋\nLet's book your appointment at *${salonName}* — tap the button below.`;
+
+  const payload = buildFlowTriggerMessage({ salonName, flowId, flowToken, welcomeBody });
+
+  await reply(conv, welcomeBody, null, { interactive: payload as import('../lib/integrations/messaging/types.js').InteractiveMessage });
+  await saveCtx(conv.id, { awaitingFlowCompletion: true }, ConversationStep.PICK_SERVICE);
+  syncConvContext(conv, { awaitingFlowCompletion: true }, ConversationStep.PICK_SERVICE);
+}
+
+/**
+ * Handle WhatsApp Flow completion (nfm_reply routed as __FLOW__:<json>).
+ * Extracts the booking payload and creates the appointment.
+ */
+async function handleFlowCompletion(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  rawJson: string,
+): Promise<boolean> {
+  let payload: BookingFlowPayload;
+  try {
+    payload = JSON.parse(rawJson) as BookingFlowPayload;
+  } catch {
+    logger.warn({ convId: conv.id }, 'flow_completion_invalid_json');
+    return false;
+  }
+
+  if (!payload.serviceId || !payload.slotStart) return false;
+
+  try {
+    const db = getTenantDb();
+    const service = await db.service.findFirst({
+      where: { id: payload.serviceId, salonId: conv.salonId, active: true },
+    });
+    if (!service) {
+      await reply(conv, 'Sorry, that service is no longer available. Please try booking again.');
+      await replyMenu(conv);
+      return true;
+    }
+
+    // Resolve staff — "any" means first available
+    let staffId = payload.staffId;
+    if (!staffId || staffId === 'any') {
+      const staff = await db.staff.findFirst({ where: { salonId: conv.salonId, active: true } });
+      staffId = staff?.id ?? '';
+    }
+    if (!staffId) {
+      await reply(conv, 'No staff available right now. Please try again soon.');
+      await replyMenu(conv);
+      return true;
+    }
+
+    const slotStart = new Date(payload.slotStart);
+
+    // Store in context and move to CONFIRM_BOOKING (re-use existing confirmation logic)
+    await saveCtx(
+      conv.id,
+      {
+        selectedServiceId: service.id,
+        selectedStaffId: staffId,
+        slotStartIso: slotStart.toISOString(),
+        localDateStr: payload.date,
+        awaitingFlowCompletion: undefined,
+      },
+      ConversationStep.CONFIRM_BOOKING,
+    );
+    syncConvContext(
+      conv,
+      {
+        selectedServiceId: service.id,
+        selectedStaffId: staffId,
+        slotStartIso: slotStart.toISOString(),
+        localDateStr: payload.date,
+        awaitingFlowCompletion: undefined,
+      },
+      ConversationStep.CONFIRM_BOOKING,
+    );
+
+    // Patch the in-memory conv context so handleConfirm reads the right values
+    const updatedConv = {
+      ...conv,
+      step: ConversationStep.CONFIRM_BOOKING,
+      context: {
+        ...(typeof conv.context === 'object' && conv.context ? conv.context : {}),
+        selectedServiceId: service.id,
+        selectedStaffId: staffId,
+        slotStartIso: slotStart.toISOString(),
+        localDateStr: payload.date,
+        awaitingFlowCompletion: undefined,
+      } as object,
+    };
+    // User already tapped "Confirm Booking" in the flow — pass "YES" to the confirm handler
+    await handleConfirm(updatedConv, 'yes');
+    return true;
+  } catch (err) {
+    logger.error({ err, convId: conv.id }, 'flow_completion_booking_failed');
+    await reply(conv, 'Something went wrong creating your booking. Please try again.');
+    await replyMenu(conv);
+    return true;
+  }
+}
+
 async function startBookingFlow(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
@@ -2501,6 +2617,13 @@ async function menuActionStartBooking(
         buildBookingPopiaConsentMessage(),
         buildBookingPopiaInteractive(conv.salon),
       );
+      return;
+    }
+
+    // Use WhatsApp Flows if a flow ID is configured for this salon
+    const flowId = process.env.WHATSAPP_FLOW_ID?.trim() || null;
+    if (flowId && conv.salon.whatsappPhoneId) {
+      await sendBookingFlow(conv, flowId);
       return;
     }
 

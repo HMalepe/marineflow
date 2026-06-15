@@ -21,6 +21,8 @@ import { resolveTenantForInbound } from './lib/tenant.js';
 import { handlePayfastAppointmentWebhook } from './services/payments.js';
 import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
 import { payfastAdapter } from './lib/integrations/payments/payfast.js';
+import { handleFlowDataExchange } from './lib/whatsappFlows/dataExchange.js';
+import { decryptFlowRequest, encryptFlowResponse } from './lib/whatsappFlows/crypto.js';
 import { serve } from 'inngest/fastify';
 import { inngest, inngestIsDev, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity, winbackCampaign, birthdayCampaign, appointmentRating, googleReviewRequest, reactivationCampaign } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
@@ -288,6 +290,72 @@ export async function buildApp() {
       logger.error({ err, reference: body.m_payment_id }, 'payfast_subscription_itn_error');
     }
     return reply.send('OK');
+  });
+
+  // ── WhatsApp Flows data exchange endpoint ────────────────────────────────
+  // Meta POSTs encrypted payloads here during flow screen transitions.
+  // Requires FLOW_PRIVATE_KEY env var (RSA PEM) to decrypt.
+  await app.register(async function flowEndpoint(f) {
+    f.addContentTypeParser(
+      'application/json',
+      { parseAs: 'buffer', bodyLimit: 512 * 1024 },
+      (_req, body, done) => { done(null, body); },
+    );
+
+    f.post('/webhooks/whatsapp-flow', async (request, reply) => {
+      const privateKey = process.env.FLOW_PRIVATE_KEY?.replace(/\\n/g, '\n');
+      if (!privateKey) {
+        logger.warn('flow_endpoint_no_private_key');
+        return reply.code(421).send({ error: 'Flow endpoint not configured' });
+      }
+
+      const buf = request.body as Buffer;
+      let body: ReturnType<typeof JSON.parse>;
+      try {
+        body = JSON.parse(buf.toString('utf8'));
+      } catch {
+        return reply.code(400).send({ error: 'invalid_json' });
+      }
+
+      // Health-check from Meta (no encryption)
+      if (body && typeof body === 'object' && 'action' in body && body.action === 'ping') {
+        return reply.send({ data: { status: 'active' } });
+      }
+
+      let aesKey: Buffer;
+      let iv: Buffer;
+      let decrypted: unknown;
+      try {
+        ({ aesKey, iv, decrypted } = decryptFlowRequest(body, privateKey));
+      } catch (err) {
+        logger.warn({ err }, 'flow_decrypt_failed');
+        return reply.code(400).send({ error: 'decryption_failed' });
+      }
+
+      // Resolve salonId from the flow token (format: "<salonId>:<conversationId>")
+      const flowReq = decrypted as { action: string; screen: string; data: Record<string, unknown>; flow_token: string };
+      const [salonId] = (flowReq.flow_token ?? '').split(':');
+      if (!salonId) {
+        return reply.code(400).send({ error: 'invalid_flow_token' });
+      }
+
+      let responseBody: unknown;
+      try {
+        responseBody = await handleFlowDataExchange(salonId, {
+          version: '3.0',
+          action: flowReq.action as 'INIT' | 'data_exchange' | 'BACK',
+          screen: flowReq.screen,
+          data: flowReq.data ?? {},
+          flow_token: flowReq.flow_token,
+        });
+      } catch (err) {
+        logger.error({ err, salonId, screen: flowReq.screen }, 'flow_data_exchange_error');
+        return reply.code(500).send({ error: 'data_exchange_failed' });
+      }
+
+      const encrypted = encryptFlowResponse(responseBody, aesKey, iv);
+      return reply.send(encrypted);
+    });
   });
 
   await app.register(payCheckoutRoutes);

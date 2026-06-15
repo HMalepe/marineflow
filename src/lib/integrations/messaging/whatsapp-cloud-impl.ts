@@ -49,11 +49,16 @@ function extractInboundBody(msg: {
     type?: string;
     list_reply?: { id: string; title?: string };
     button_reply?: { id: string; title?: string };
+    nfm_reply?: { response_json: string; name: string; body: string };
   };
 }): string {
   if (msg.text?.body) return msg.text.body.trim();
   if (msg.interactive?.list_reply?.id) return msg.interactive.list_reply.id.trim();
   if (msg.interactive?.button_reply?.id) return msg.interactive.button_reply.id.trim();
+  // WhatsApp Flow completion — encode as __FLOW__:<json> for bot routing
+  if (msg.interactive?.nfm_reply?.response_json) {
+    return `__FLOW__:${msg.interactive.nfm_reply.response_json}`;
+  }
   return '';
 }
 
@@ -170,6 +175,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
                 type?: string;
                 list_reply?: { id: string };
                 button_reply?: { id: string };
+                nfm_reply?: { response_json: string; name: string; body: string };
               };
             }[];
           };
