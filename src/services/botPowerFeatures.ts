@@ -126,8 +126,8 @@ export async function tryHandleWaitlistReply(
 }
 
 export async function afterServiceSelected(
-  conv: Conversation & { customer: Customer; salon: Salon },
-  serviceId: string,
+  _conv: Conversation & { customer: Customer; salon: Salon },
+  _serviceId: string,
   helpers: {
     reply: (body: string) => Promise<void>;
     saveContext: (patch: Record<string, unknown>) => Promise<void>;
