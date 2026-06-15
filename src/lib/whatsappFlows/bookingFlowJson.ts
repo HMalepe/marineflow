@@ -12,9 +12,9 @@ export function buildBookingFlowJson(_salonName: string): object {
     data_api_version: '3.0',
     routing_model: {
       SERVICE_SCREEN: ['STAFF_SCREEN'],
-      STAFF_SCREEN: ['DATE_SCREEN', 'SERVICE_SCREEN'],
-      DATE_SCREEN: ['TIME_SCREEN', 'STAFF_SCREEN'],
-      TIME_SCREEN: ['CONFIRM_SCREEN', 'DATE_SCREEN'],
+      STAFF_SCREEN: ['DATE_SCREEN'],
+      DATE_SCREEN: ['TIME_SCREEN'],
+      TIME_SCREEN: ['CONFIRM_SCREEN'],
       CONFIRM_SCREEN: [],
     },
     screens: [
@@ -123,6 +123,7 @@ export function buildBookingFlowJson(_salonName: string): object {
           serviceName: { type: 'string', __example__: 'Haircut' },
           staffId: { type: 'string', __example__: 'staff1' },
           staffName: { type: 'string', __example__: 'Alice' },
+          subtitle: { type: 'string', __example__: 'Haircut with Alice' },
           minDate: { type: 'string', __example__: '2026-06-16' },
           maxDate: { type: 'string', __example__: '2026-08-15' },
         },
@@ -131,7 +132,7 @@ export function buildBookingFlowJson(_salonName: string): object {
           children: [
             {
               type: 'TextHeading',
-              text: '${data.serviceName} with ${data.staffName}',
+              text: '${data.subtitle}',
             },
             {
               type: 'DatePicker',
@@ -181,6 +182,7 @@ export function buildBookingFlowJson(_salonName: string): object {
           staffName: { type: 'string', __example__: 'Alice' },
           date: { type: 'string', __example__: '2026-06-16' },
           dateLabel: { type: 'string', __example__: 'Monday, 16 Jun 2026' },
+          subtitle: { type: 'string', __example__: 'Haircut with Alice' },
           noSlots: { type: 'boolean', __example__: false },
         },
         layout: {
@@ -192,7 +194,7 @@ export function buildBookingFlowJson(_salonName: string): object {
             },
             {
               type: 'TextSubheading',
-              text: '${data.serviceName} with ${data.staffName}',
+              text: '${data.subtitle}',
             },
             {
               type: 'RadioButtonsGroup',
