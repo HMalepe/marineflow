@@ -21,9 +21,9 @@ export const BUILTIN_FLOW_DEFS = [
   },
   {
     key: 'botRequireDepositStep' as const,
-    label: 'Require deposit / payment before confirming',
+    label: 'Send PayFast payment link after booking',
     description:
-      'When a service has a deposit or full-pay requirement, the bot sends a payment link before confirming. Disable to confirm immediately and collect payment in-person.',
+      'After the customer confirms, the bot sends a PayFast link for the deposit or full service price. Disable to skip online payment and collect in-store.',
   },
   {
     key: 'botWinbackEnabled' as const,

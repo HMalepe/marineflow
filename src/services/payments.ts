@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
 import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
+import { isPayfastConfigured } from '../lib/integrations/payments/index.js';
 import { sendWithFallback } from './channelRouter.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { notifyAppointmentChangedLater } from './rosterSync.js';
@@ -15,19 +16,46 @@ function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
 }
 
+/** PayFast checkout after booking confirmation — full price unless service specifies deposit/full-pay. */
+export function resolvePostConfirmPayment(input: {
+  bookingTotalCents: number;
+  service: Pick<Service, 'fullPay' | 'depositCents'>;
+  loyaltyRedeemed: boolean;
+  requirePaymentStep: boolean;
+}): { amountCents: number; mode: 'deposit' | 'full' } | null {
+  if (
+    !input.requirePaymentStep ||
+    input.loyaltyRedeemed ||
+    !isPayfastConfigured() ||
+    input.bookingTotalCents <= 0
+  ) {
+    return null;
+  }
+  if (input.service.fullPay) {
+    return { amountCents: input.bookingTotalCents, mode: 'full' };
+  }
+  const deposit = input.service.depositCents ?? 0;
+  if (deposit > 0) {
+    return { amountCents: deposit, mode: 'deposit' };
+  }
+  return { amountCents: input.bookingTotalCents, mode: 'full' };
+}
+
 export async function createDepositCheckoutSession(input: {
   salonId: string;
   customerId: string;
   appointmentId: string;
   service: Service;
   mode: 'deposit' | 'full';
+  amountCents?: number;
 }): Promise<string | null> {
   if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY) return null;
 
   const amountCents =
-    input.mode === 'full'
+    input.amountCents ??
+    (input.mode === 'full'
       ? input.service.priceCents
-      : (input.service.depositCents ?? input.service.priceCents);
+      : (input.service.depositCents ?? input.service.priceCents));
   if (amountCents <= 0) return null;
 
   const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';

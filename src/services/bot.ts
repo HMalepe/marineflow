@@ -29,7 +29,7 @@ import {
   getStampBalance,
   redeemForNextBookingTx,
 } from './loyalty.js';
-import { createDepositCheckoutSession } from './payments.js';
+import { createDepositCheckoutSession, resolvePostConfirmPayment } from './payments.js';
 import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
@@ -3859,15 +3859,16 @@ async function handleConfirm(
     bookingTotalCents += addonServices.reduce((sum, a) => sum + a.priceCents, 0);
   }
 
-  const needPay =
-    conv.salon.botRequireDepositStep &&
-    !redeem.redeemed &&
-    ((service.depositCents ?? 0) > 0 || service.fullPay);
-
+  const paymentPlan = resolvePostConfirmPayment({
+    bookingTotalCents,
+    service,
+    loyaltyRedeemed: redeem.redeemed,
+    requirePaymentStep: conv.salon.botRequireDepositStep,
+  });
   const reviewCredit = await applyReviewCreditTx(tx, {
     customerId: conv.customerId,
     servicePriceCents: bookingTotalCents,
-    atVisitOnly: needPay,
+    atVisitOnly: Boolean(paymentPlan),
   });
   const reschedulingId = c.managingAppointmentId as string | undefined;
 
@@ -3880,14 +3881,10 @@ async function handleConfirm(
       start,
       end,
       addonServiceIds: (c.selectedAddonIds as string[] | undefined) ?? [],
-      status: redeem.redeemed
-        ? 'CONFIRMED'
-        : (conv.salon.botRequireDepositStep && (service.depositCents || service.fullPay))
-          ? 'HELD'
-          : 'CONFIRMED',
+      status: redeem.redeemed ? 'CONFIRMED' : paymentPlan ? 'PENDING_PAYMENT' : 'CONFIRMED',
       loyaltyRedeemed: redeem.redeemed,
       rescheduledFromId: reschedulingId ?? undefined,
-      confirmedAt: (!conv.salon.botRequireDepositStep || (!service.depositCents && !service.fullPay)) ? new Date() : undefined,
+      confirmedAt: new Date(),
     },
   });
 
@@ -4014,42 +4011,6 @@ async function handleConfirm(
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
 
   const bookingNotes = [redeem.note, reviewCredit.note].filter(Boolean).join('\n');
-  if (needPay) {
-    const sessionUrl = await createDepositCheckoutSession({
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      appointmentId: appointment.id,
-      service,
-      mode: service.fullPay ? 'full' : 'deposit',
-    });
-    if (sessionUrl) {
-      await reply(
-        conv,
-        [
-          bookingNotes ? `${bookingNotes}\n` : '',
-          `Booking held (${appointment.id.slice(0, 8)}).`,
-          `Please complete payment: ${sessionUrl}`,
-          'We will confirm once payment succeeds.',
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      );
-      if (isFirstBooking) {
-        await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-      }
-      await replyMenu(conv);
-      return;
-    }
-    await replyWithMenu(
-      conv,
-      `Booking created — payment link unavailable. Staff will confirm manually.`,
-    );
-    if (isFirstBooking) {
-      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-    }
-    return;
-  }
-
   await reply(
     conv,
     [
@@ -4068,13 +4029,49 @@ async function handleConfirm(
       .filter(Boolean)
       .join('\n'),
   );
-  void onBookingConfirmed({
-    id: appointment.id,
-    salonId: conv.salonId,
-    start,
-    status: appointment.status,
-    salon: conv.salon,
-  }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+
+  if (paymentPlan) {
+    const sessionUrl = await createDepositCheckoutSession({
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: appointment.id,
+      service,
+      mode: paymentPlan.mode,
+      amountCents: paymentPlan.amountCents,
+    });
+    if (sessionUrl) {
+      const payLabel =
+        paymentPlan.mode === 'deposit'
+          ? `Deposit due: *${formatCentsZar(paymentPlan.amountCents)}*`
+          : `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`;
+      await reply(
+        conv,
+        [
+          `💳 *Complete payment*`,
+          '',
+          payLabel,
+          '',
+          `Pay securely via PayFast:`,
+          sessionUrl,
+          '',
+          `_We'll mark your booking as paid once payment goes through._`,
+        ].join('\n'),
+      );
+    } else {
+      await reply(
+        conv,
+        'We could not generate a payment link right now — you can pay in-store or contact us to pay over the phone.',
+      );
+    }
+  } else {
+    void onBookingConfirmed({
+      id: appointment.id,
+      salonId: conv.salonId,
+      start,
+      status: appointment.status,
+      salon: conv.salon,
+    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+  }
 
   if (isFirstBooking) {
     await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
