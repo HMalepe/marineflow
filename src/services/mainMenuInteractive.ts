@@ -26,8 +26,10 @@ export {
  * Row ids "1"–"7" match text-menu routing in handleMenu().
  */
 export function buildMainMenuInteractive(salon: SalonMenuInput): InteractiveList {
-  const welcome =
-    menuWelcomeLine(salon).replace('Reply with a number:', 'Tap below to get started.');
+  const welcome = menuWelcomeLine(salon).replace(
+    'Reply with a number:',
+    'Tap an option below to get started 👇',
+  );
 
   const rows: InteractiveList['sections'][0]['rows'] = getMainMenuItems(salon).map((item, index) => ({
     id: String(index + 1),
@@ -38,29 +40,29 @@ export function buildMainMenuInteractive(salon: SalonMenuInput): InteractiveList
   return normalizeInteractiveList({
     type: 'list',
     body: welcome,
-    footer: truncateListField(`Powered by ${salonDisplayName(salon)}`, 60),
-    button: 'Main menu',
-    sections: [{ title: 'Choose section', rows }],
+    footer: truncateListField(salonDisplayName(salon), 60),
+    button: 'View options',
+    sections: [{ title: 'How can we help you?', rows }],
   });
 }
 
 function mainMenuRowDescription(item: ReturnType<typeof getMainMenuItems>[number]): string {
   if (item.kind === 'direct') {
-    return item.action === 'book' ? 'Schedule a new visit' : '';
+    return item.action === 'book' ? 'Pick a service, date & time' : '';
   }
   switch (item.id) {
     case 'my_appointments':
-      return 'View, reschedule, cancel';
+      return 'View, reschedule or cancel';
     case 'services':
-      return 'Your salon categories and prices';
+      return 'Browse treatments & pricing';
     case 'rewards':
-      return 'Points, redeem, referrals';
+      return 'Your stamps, rewards & referrals';
     case 'promotions':
-      return 'Specials, packages, gift vouchers';
+      return 'Specials, packages & gift vouchers';
     case 'about':
-      return 'Hours, location, contact, team';
+      return 'Hours, location & contact';
     case 'support':
-      return 'FAQ, review, report issue, reception';
+      return 'FAQ, reviews & speak to reception';
     default:
       return '';
   }

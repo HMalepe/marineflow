@@ -14,7 +14,6 @@ import {
   resolveTenantForInbound,
   type ResolvedTenant,
 } from '../lib/tenant.js';
-import { salonUsesCloudInteractiveMenu } from '../lib/integrations/messaging/interactiveList.js';
 import { sendWithFallback } from './channelRouter.js';
 import { buildMainMenuInteractive } from './mainMenuInteractive.js';
 import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
@@ -509,10 +508,10 @@ type PendingOutbound = {
 };
 
 function salonInteractive(
-  salon: Salon,
+  _salon: Salon,
   interactive: InteractiveMessage | null | undefined,
 ): InteractiveMessage | undefined {
-  if (!interactive || !salonUsesCloudInteractiveMenu(salon.whatsappPhoneId)) return undefined;
+  if (!interactive) return undefined;
   return interactive;
 }
 
@@ -736,9 +735,7 @@ async function recoverBookingFlowToMenu(
   const body = mainMenu(conv.salon);
   let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
   try {
-    interactive = salonUsesCloudInteractiveMenu(conv.salon.whatsappPhoneId)
-      ? buildMainMenuInteractive(conv.salon)
-      : undefined;
+    interactive = buildMainMenuInteractive(conv.salon);
   } catch (err) {
     logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
   }
@@ -751,9 +748,7 @@ async function replyMenu(conv: Conversation & { customer: Customer; salon: Salon
   const body = mainMenu(conv.salon);
   let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
   try {
-    interactive = salonUsesCloudInteractiveMenu(conv.salon.whatsappPhoneId)
-      ? buildMainMenuInteractive(conv.salon)
-      : undefined;
+    interactive = buildMainMenuInteractive(conv.salon);
   } catch (err) {
     logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
   }
