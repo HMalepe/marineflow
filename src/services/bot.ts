@@ -120,6 +120,7 @@ import type { InteractiveMessage } from '../lib/integrations/messaging/types.js'
 import {
   buildCategorizedPriceLines,
   loadSalonServiceCatalog,
+  filterBookableCatalogServices,
 } from './serviceCatalogDisplay.js';
 import { formatCentsZar } from '../lib/formatPrice.js';
 import { incrementCustomerBookingCount } from './noShowRisk.js';
@@ -304,7 +305,7 @@ const WHATSAPP_BOOKING_STEPS: ConversationStep[] = [
 async function loadActiveServicesForBooking(salonId: string) {
   const catalog = await tryDbSavepoint(
     'services_catalog',
-    () => loadSalonServiceCatalog(salonId),
+    () => loadSalonServiceCatalog(salonId).then(filterBookableCatalogServices),
     null,
   );
   if (catalog) return catalog;
@@ -316,7 +317,7 @@ async function loadActiveServicesForBooking(salonId: string) {
         where: { salonId, active: true },
         orderBy: { sortOrder: 'asc' },
         include: { category: true },
-      }),
+      }).then(filterBookableCatalogServices),
     [],
   );
 }
@@ -3630,34 +3631,63 @@ async function handlePickSlot(
     return;
   }
 
-  const aiResult = await tryAiAssist(conv, text);
-  if (aiResult.negativeSentiment) {
-    await escalateNegativeSentiment(conv, text);
-    return;
-  }
-  if (aiResult.handled && aiResult.reply) {
-    if (
-      isBrowseServicesRequest(text) ||
-      (aiResult.step === ConversationStep.MENU && /\b(service|cut|style|option)/i.test(text))
-    ) {
-      await beginAllServicesPicker(conv);
+  const serviceId = c.selectedServiceId as string | undefined;
+  const staffId = c.selectedStaffId as string | undefined;
+  const localDateStr = c.localDateStr as string | undefined;
+  const looksLikeSlotNumber = /^\d+$/.test(text.trim());
+
+  if (looksLikeSlotNumber && serviceId && staffId && localDateStr) {
+    const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+    const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+    const { slots, tooLong } = await getAvailableSlots({
+      salonId: conv.salonId,
+      service,
+      staff,
+      localDateStr,
+    });
+    if (tooLong || slots.length === 0) {
+      await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
+      const reason = tooLong
+        ? `That service is too long to fit into any slot on this day. Try a different date, or reply BACK to choose another.`
+        : `No open slots on this day — it might be fully booked or our stylist isn't in. Reply BACK to pick a different date.`;
+      await reply(conv, reason);
       return;
     }
-    await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
-    syncConvContext(conv, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
-    const quickOpts = (aiResult.contextPatch?.quickPickOptions ??
-      ctx(conv).quickPickOptions) as QuickPickOption[] | undefined;
+    const n = parseInt(text, 10);
+    const maxVisible = visibleSlotCount(slots.length);
+    if (Number.isFinite(n) && n >= 1 && n <= maxVisible) {
+      const slot = slots[n - 1]!;
+      await saveCtx(
+        conv.id,
+        { slotStartIso: slot.start.toISOString(), quickPickOptions: undefined },
+        ConversationStep.CONFIRM_BOOKING,
+      );
+      syncConvContext(
+        conv,
+        { slotStartIso: slot.start.toISOString(), quickPickOptions: undefined },
+        ConversationStep.CONFIRM_BOOKING,
+      );
+      const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
+      const confirmBody = [
+        `Confirm booking?`,
+        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+        '',
+        `Reply YES to confirm, or BACK to choose another time.`,
+      ].join('\n');
+      await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+      return;
+    }
+    const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
+    const invalidBody = [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
     await replyMaybeInteractive(
       conv,
-      aiResult.reply,
-      quickOpts?.length ? buildQuickPickInteractive(quickOpts, conv.salon) : null,
+      invalidBody,
+      buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
     );
     return;
   }
 
-  const serviceId = c.selectedServiceId as string | undefined;
-  const staffId = c.selectedStaffId as string | undefined;
-  const localDateStr = c.localDateStr as string | undefined;
   if (!serviceId || !staffId || !localDateStr) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await replyMenu(conv);
@@ -3665,7 +3695,6 @@ async function handlePickSlot(
   }
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
-  // EC-11: getAvailableSlots now returns { slots, tooLong }
   const { slots, tooLong } = await getAvailableSlots({
     salonId: conv.salonId,
     service,
@@ -3680,48 +3709,28 @@ async function handlePickSlot(
     await reply(conv, reason);
     return;
   }
-  const n = parseInt(text, 10);
-  const maxVisible = visibleSlotCount(slots.length);
-  if (!Number.isFinite(n) || n < 1 || n > maxVisible) {
-    const quickOptions = c.quickPickOptions as QuickPickOption[] | undefined;
-    if (quickOptions?.length) {
-      await replyMaybeInteractive(
-        conv,
-        [
-          "I didn't catch that. Reply with *A*, *B*, or *C* for one of these times:",
-          ...quickOptions.map((o) => o.label),
-          '',
-          'Or ask to *see all services*, or reply *BACK* for the main menu.',
-        ].join('\n'),
-        buildQuickPickInteractive(quickOptions, conv.salon),
-      );
-      return;
-    }
-    const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
-    const invalidBody = [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+  const quickOptions = c.quickPickOptions as QuickPickOption[] | undefined;
+  if (quickOptions?.length) {
     await replyMaybeInteractive(
       conv,
-      invalidBody,
-      buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
+      [
+        "I didn't catch that. Reply with *A*, *B*, or *C* for one of these times:",
+        ...quickOptions.map((o) => o.label),
+        '',
+        'Or ask to *see all services*, or reply *BACK* for the main menu.',
+      ].join('\n'),
+      buildQuickPickInteractive(quickOptions, conv.salon),
     );
     return;
   }
-  const slot = slots[n - 1]!;
-  await saveCtx(
-    conv.id,
-    { slotStartIso: slot.start.toISOString() },
-    ConversationStep.CONFIRM_BOOKING,
+  const maxVisible = visibleSlotCount(slots.length);
+  const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
+  const invalidBody = [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+  await replyMaybeInteractive(
+    conv,
+    invalidBody,
+    buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
   );
-  syncConvContext(conv, { slotStartIso: slot.start.toISOString() }, ConversationStep.CONFIRM_BOOKING);
-  const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
-  const confirmBody = [
-    `Confirm booking?`,
-    `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-    dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-    '',
-    `Reply YES to confirm, or BACK to choose another time.`,
-  ].join('\n');
-  await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
 }
 
 async function handleConfirm(

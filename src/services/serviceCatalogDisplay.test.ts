@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCategorizedPriceLines, sanitizeAiBookReply } from './serviceCatalogDisplay.js';
+import { buildCategorizedPriceLines, sanitizeAiBookReply, isAddonCatalogService, filterBookableCatalogServices } from './serviceCatalogDisplay.js';
 
 describe('serviceCatalogDisplay', () => {
   it('buildCategorizedPriceLines uses exact dashboard prices by category', () => {
@@ -33,5 +33,14 @@ describe('serviceCatalogDisplay', () => {
     );
     expect(cleaned).not.toMatch(/R\s?\d/i);
     expect(cleaned.length).toBeGreaterThan(0);
+  });
+
+  it('isAddonCatalogService detects add-on category and names', () => {
+    const addon = {
+      name: 'Hot Towel Treatment (Add-On)',
+      category: { slug: 'add-ons', name: 'Add-Ons' },
+    } as never;
+    expect(isAddonCatalogService(addon)).toBe(true);
+    expect(filterBookableCatalogServices([addon])).toHaveLength(0);
   });
 });

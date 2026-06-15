@@ -4,7 +4,7 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { isConversationWakeMessage } from '../lib/conversationWake.js';
 import { formatCentsZar } from '../lib/formatPrice.js';
 import { isAnthropicConfigured, orchestrateConversation, semanticSearch, claudeText } from '../lib/integrations/ai/index.js';
-import { loadSalonServiceCatalog, sanitizeAiBookReply } from './serviceCatalogDisplay.js';
+import { loadSalonServiceCatalog, sanitizeAiBookReply, filterBookableCatalogServices, isAddonCatalogService } from './serviceCatalogDisplay.js';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
 import { logger } from '../lib/logger.js';
 
@@ -57,7 +57,13 @@ export async function buildQuickPickOptions(input: {
   maxOptions?: number;
 }): Promise<QuickPickOption[]> {
   const max = input.maxOptions ?? 3;
-  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: input.serviceId } });
+  const service = await getTenantDb().service.findUniqueOrThrow({
+    where: { id: input.serviceId },
+    include: { category: true },
+  });
+  if (isAddonCatalogService(service)) {
+    return [];
+  }
   const staffList = await getStaffForService(input.salonId, input.serviceId);
   if (staffList.length === 0) return [];
 
@@ -107,7 +113,11 @@ async function loadAssistContext(
   const db = getTenantDb();
   const [services, staff, faqs, recentMessages, succeededPayments] = await Promise.all([
     loadSalonServiceCatalog(conv.salonId).then((rows) =>
-      rows.map((s) => ({ id: s.id, name: s.name, priceCents: s.priceCents })),
+      filterBookableCatalogServices(rows).map((s) => ({
+        id: s.id,
+        name: s.name,
+        priceCents: s.priceCents,
+      })),
     ),
     db.staff.findMany({
       where: { salonId: conv.salonId, active: true, isBookable: true, deletedAt: null },
@@ -176,11 +186,26 @@ export function isBrowseServicesRequest(text: string): boolean {
   );
 }
 
+const STRUCTURED_BOOKING_STEPS: ConversationStep[] = [
+  ConversationStep.PICK_BRANCH,
+  ConversationStep.PICK_SERVICE_CATEGORY,
+  ConversationStep.PICK_SERVICE,
+  ConversationStep.PICK_STAFF,
+  ConversationStep.PICK_DATE,
+  ConversationStep.PICK_SLOT,
+  ConversationStep.CONFIRM_BOOKING,
+];
+
 export async function tryAiAssist(
   conv: Conversation & { customer: Customer; salon: Salon },
   inboundText: string,
 ): Promise<AiAssistResult> {
   if (!isAnthropicConfigured()) return { handled: false };
+
+  // Never hijack structured booking — slot/service/date picks must stay deterministic.
+  if (STRUCTURED_BOOKING_STEPS.includes(conv.step)) {
+    return { handled: false };
+  }
 
   const trimmed = inboundText.trim();
   if (
@@ -201,7 +226,7 @@ export async function tryAiAssist(
       return { handled: false, negativeSentiment: true };
     }
 
-    const services = await loadSalonServiceCatalog(conv.salonId);
+    const services = filterBookableCatalogServices(await loadSalonServiceCatalog(conv.salonId));
 
     switch (ai.intent) {
       case 'spam':

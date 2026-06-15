@@ -8,6 +8,22 @@ export async function loadSalonServiceCatalog(salonId: string): Promise<SalonCat
   return getCachedServices(salonId);
 }
 
+/** Services in Add-Ons category or marked as add-ons — not bookable as a primary appointment via WhatsApp. */
+export function isAddonCatalogService(
+  service: Pick<SalonCatalogService, 'name' | 'category'>,
+): boolean {
+  const slug = service.category?.slug?.toLowerCase() ?? '';
+  const catName = service.category?.name?.toLowerCase() ?? '';
+  if (slug === 'add-ons' || slug === 'addons') return true;
+  if (catName.includes('add-on') || catName.includes('addon')) return true;
+  if (/\(add-?on\)/i.test(service.name)) return true;
+  return false;
+}
+
+export function filterBookableCatalogServices(services: SalonCatalogService[]): SalonCatalogService[] {
+  return services.filter((s) => !isAddonCatalogService(s));
+}
+
 function sortServices(services: SalonCatalogService[]): SalonCatalogService[] {
   return [...services].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
 }

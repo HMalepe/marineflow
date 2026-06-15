@@ -1,21 +1,17 @@
 import type { Conversation, Customer, Salon } from '@prisma/client';
 import { DateTime } from 'luxon';
-import { isBackToMainMenuCommand } from '../lib/botNavigation.js';
-import { formatCentsZar } from '../lib/formatPrice.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import {
   buildExtraMenuLines,
   parseWaitlistClaim,
   resolveExtendedMenuActions,
 } from '../lib/powerFeaturesMenu.js';
-import { getAddonsForService, formatAddonMenu, parseAddonSelection } from './upselling.js';
 import { getActiveMembershipPlans, formatMembershipPlansMenu, getCustomerActiveMembership } from './membership.js';
 import { getOrCreateReferralCode, buildReferralShareMessage } from './referralProgram.js';
 import { checkCancellationAllowed } from './cancellationRules.js';
 import { notifyWaitlistOnCancel } from './waitlist.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { validateSlotAvailable } from './slots.js';
-import { logger } from '../lib/logger.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 
 export function getSalonAutomations(salon: Pick<Salon, 'metadata'>) {
@@ -138,9 +134,10 @@ export async function afterServiceSelected(
   await helpers.continueToStaff();
 }
 
+/** Clears legacy add-on upsell state from in-flight conversations. */
 export async function handleAddonPhase(
   conv: Conversation & { customer: Customer; salon: Salon },
-  text: string,
+  _text: string,
   helpers: {
     reply: (body: string) => Promise<void>;
     saveContext: (patch: Record<string, unknown>) => Promise<void>;
@@ -151,67 +148,12 @@ export async function handleAddonPhase(
     typeof conv.context === 'object' && conv.context ? (conv.context as Record<string, unknown>) : {};
   if (!c.addonPhase) return false;
 
-  const t = text.trim().toLowerCase();
-  if (t === 'back' || isBackToMainMenuCommand(text)) {
-    await helpers.saveContext({ addonPhase: undefined, selectedServiceId: undefined });
-    await helpers.reply('Cancelled add-ons. Reply 1 from the menu to start again.');
-    return true;
-  }
-
-  const serviceId = c.selectedServiceId as string | undefined;
-  if (!serviceId) {
-    await helpers.saveContext({ addonPhase: undefined });
-    return false;
-  }
-
-  let addons: Awaited<ReturnType<typeof getAddonsForService>>;
-  try {
-    addons = await getAddonsForService(conv.salonId, serviceId);
-  } catch (err) {
-    logger.warn({ err, salonId: conv.salonId, serviceId }, 'addon_phase_lookup_failed');
-    await helpers.saveContext({ addonPhase: undefined });
-    await helpers.continueToStaff();
-    return true;
-  }
-  const selected = parseAddonSelection(text, addons);
-
-  const hasNumbers = /\d/.test(text);
-  if (hasNumbers && selected.length === 0 && t !== 'skip' && t !== 'no' && t !== '0') {
-    await helpers.reply(
-      [`Please pick 1–${addons.length}, SKIP to continue without extras, or BACK.`, formatAddonMenu(addons)].join(
-        '\n\n',
-      ),
-    );
-    return true;
-  }
-
-  const addonIds = selected.map((a) => a.addonServiceId);
-  const addonTotal = selected.reduce((s, a) => s + a.addon.priceCents, 0);
-
   await helpers.saveContext({
     addonPhase: undefined,
-    selectedAddonIds: addonIds,
-    addonExtraCents: addonTotal,
+    addonOptions: undefined,
+    selectedAddonIds: undefined,
+    addonExtraCents: undefined,
   });
-
-  // Item 24: track when customer skips add-ons (best-effort analytics)
-  if (selected.length === 0 && addons.length > 0) {
-    void getTenantDb().analyticsEvent.create({
-      data: {
-        salonId: conv.salonId,
-        customerId: conv.customerId,
-        type: 'addon_skipped',
-        payload: { serviceId, addonCount: addons.length },
-      },
-    }).catch((err) => logger.warn({ err }, 'addon_skip_analytics_failed'));
-  }
-
-  if (selected.length) {
-    await helpers.reply(
-      `Added: ${selected.map((a) => a.addon.name).join(', ')} (+${formatCentsZar(addonTotal)}). Continuing…`,
-    );
-  }
-
   await helpers.continueToStaff();
   return true;
 }

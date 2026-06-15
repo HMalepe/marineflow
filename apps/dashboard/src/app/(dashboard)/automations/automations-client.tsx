@@ -591,23 +591,6 @@ export function AutomationsClient({ token }: Props) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
-            <TrendingUp className="size-4" /> Smart upselling
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Toggle
-            icon={TrendingUp}
-            checked={draft.upselling.enabled}
-            onChange={(v) => patch('upselling', { enabled: v })}
-            label="Recommend add-ons at booking"
-            description="Configure add-ons under Services — deep conditioning, hot towel, waxing, retail, etc."
-          />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
             <Star className="size-4 text-amber-500" /> Stylist performance
           </CardTitle>
         </CardHeader>
