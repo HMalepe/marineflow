@@ -49,7 +49,6 @@ import {
 } from '../lib/hierarchicalMenu.js';
 import {
   afterServiceSelected,
-  handleAddonPhase,
   handleReferralMenuItem,
   handleMembershipMenuItem,
   tryCancelWithRules,
@@ -3287,13 +3286,10 @@ async function handlePickService(
   text: string,
 ) {
   const c = ctx(conv);
+
+  // Clear any stale addonPhase from old conversation contexts
   if (c.addonPhase) {
-    const handled = await handleAddonPhase(conv, text, {
-      reply: (body) => reply(conv, body),
-      saveContext: (patch) => saveCtx(conv.id, patch),
-      continueToStaff: () => continueAfterServicePick(conv, (ctx(conv).selectedServiceId as string) ?? ''),
-    });
-    if (handled) return;
+    await saveCtx(conv.id, { addonPhase: undefined });
   }
 
   const { services, clearedStaleFilter } = await resolveServicesForPicker(conv);
