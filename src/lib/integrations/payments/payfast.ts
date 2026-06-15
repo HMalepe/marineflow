@@ -1,31 +1,104 @@
 import crypto from 'node:crypto';
 import { env } from '../../../config.js';
+import { logger } from '../../logger.js';
 import type { PaymentProviderAdapter, CreateCheckoutInput, CheckoutResult, WebhookVerifyResult } from './types.js';
+import {
+  PAYFAST_PROCESS_URL_LIVE,
+  PAYFAST_PROCESS_URL_SANDBOX,
+  buildPayfastRedirectUrl,
+  buildPayfastSignature,
+  payfastUrlEncode,
+  resolvePayfastIsSandbox,
+  trimPayfastCredential,
+} from './payfastSignature.js';
 
-const PAYFAST_BASE_TEST = 'https://sandbox.payfast.co.za/eng/process';
-const PAYFAST_BASE_LIVE = 'https://www.payfast.co.za/eng/process';
+export function payfastProcessUrl(): string {
+  const sandbox = resolvePayfastIsSandbox(env.PAYFAST_IS_TEST, env.NODE_ENV);
+  return sandbox ? PAYFAST_PROCESS_URL_SANDBOX : PAYFAST_PROCESS_URL_LIVE;
+}
 
-function generateSignature(data: Record<string, string>, passphrase?: string): string {
-  const params = Object.entries(data)
-    .filter(([, v]) => v !== '')
-    .map(([k, v]) => `${k}=${encodeURIComponent(v).replace(/%20/g, '+')}`)
-    .join('&');
-  const withPassphrase = passphrase ? `${params}&passphrase=${encodeURIComponent(passphrase)}` : params;
-  return crypto.createHash('md5').update(withPassphrase).digest('hex');
+export function payfastCredentials(): { merchantId: string; merchantKey: string; passphrase: string } {
+  return {
+    merchantId: trimPayfastCredential(env.PAYFAST_MERCHANT_ID),
+    merchantKey: trimPayfastCredential(env.PAYFAST_MERCHANT_KEY),
+    passphrase: trimPayfastCredential(env.PAYFAST_PASSPHRASE),
+  };
+}
+
+function checkoutFieldOrder(data: Record<string, string>): Array<[string, string]> {
+  const order = [
+    'merchant_id',
+    'merchant_key',
+    'return_url',
+    'cancel_url',
+    'notify_url',
+    'name_first',
+    'name_last',
+    'email_address',
+    'cell_number',
+    'm_payment_id',
+    'amount',
+    'item_name',
+    'item_description',
+    'custom_int1',
+    'custom_int2',
+    'custom_int3',
+    'custom_int4',
+    'custom_int5',
+    'custom_str1',
+    'custom_str2',
+    'custom_str3',
+    'custom_str4',
+    'custom_str5',
+    'email_confirmation',
+    'payment_method',
+  ] as const;
+
+  return order
+    .filter((key) => data[key] !== undefined && data[key] !== '')
+    .map((key) => [key, data[key]!]);
+}
+
+function verifySignatureFromBody(body: Record<string, string>, passphrase: string): boolean {
+  const pairs: string[] = [];
+  for (const [key, value] of Object.entries(body)) {
+    if (key === 'signature' || value === '') continue;
+    pairs.push(`${key}=${payfastUrlEncode(value)}`);
+  }
+
+  let paramString = pairs.join('&');
+  if (passphrase) {
+    paramString += `&passphrase=${payfastUrlEncode(passphrase)}`;
+  }
+
+  const expected = crypto.createHash('md5').update(paramString).digest('hex');
+  const received = body.signature ?? '';
+  if (!received || expected.length !== received.length) return false;
+
+  const expectedBuf = Buffer.from(expected);
+  const receivedBuf = Buffer.from(received);
+  return crypto.timingSafeEqual(expectedBuf, receivedBuf);
 }
 
 export const payfastAdapter: PaymentProviderAdapter = {
   name: 'payfast',
 
   async createCheckout(input: CreateCheckoutInput): Promise<CheckoutResult> {
-    if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY) {
+    const { merchantId, merchantKey, passphrase } = payfastCredentials();
+    if (!merchantId || !merchantKey) {
       throw new Error('PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY required');
     }
 
+    const sandbox = resolvePayfastIsSandbox(env.PAYFAST_IS_TEST, env.NODE_ENV);
+    logger.info(
+      { sandbox, merchantIdPrefix: merchantId.slice(0, 4) },
+      'payfast_checkout_create',
+    );
+
     const amountStr = (input.amountCents / 100).toFixed(2);
     const data: Record<string, string> = {
-      merchant_id: env.PAYFAST_MERCHANT_ID,
-      merchant_key: env.PAYFAST_MERCHANT_KEY,
+      merchant_id: merchantId,
+      merchant_key: merchantKey,
       return_url: input.returnUrl,
       cancel_url: input.cancelUrl,
       notify_url: input.notifyUrl,
@@ -36,11 +109,9 @@ export const payfastAdapter: PaymentProviderAdapter = {
       custom_str2: input.customerId,
     };
 
-    data.signature = generateSignature(data, env.PAYFAST_PASSPHRASE);
-
-    const base = env.PAYFAST_IS_TEST ? PAYFAST_BASE_TEST : PAYFAST_BASE_LIVE;
-    const params = new URLSearchParams(data);
-    const redirectUrl = `${base}?${params.toString()}`;
+    const orderedFields = checkoutFieldOrder(data);
+    const signature = buildPayfastSignature(orderedFields, passphrase || undefined);
+    const redirectUrl = buildPayfastRedirectUrl(payfastProcessUrl(), orderedFields, signature);
 
     return { redirectUrl, externalReference: input.reference };
   },
@@ -52,18 +123,8 @@ export const payfastAdapter: PaymentProviderAdapter = {
     const statusRaw = body['payment_status'] ?? '';
     const amountStr = body['amount_gross'] ?? '0';
 
-    const signatureReceived = body['signature'];
-    if (!signatureReceived) {
-      return { valid: false };
-    }
-
-    const dataForSig = { ...body };
-    delete dataForSig['signature'];
-    const expected = generateSignature(dataForSig, env.PAYFAST_PASSPHRASE);
-    const expectedBuf = Buffer.from(expected);
-    const receivedBuf = Buffer.from(signatureReceived);
-    const valid = expectedBuf.length === receivedBuf.length &&
-      crypto.timingSafeEqual(expectedBuf, receivedBuf);
+    const { passphrase } = payfastCredentials();
+    const valid = verifySignatureFromBody(body, passphrase);
 
     const statusMap: Record<string, 'success' | 'failed' | 'pending' | 'cancelled'> = {
       COMPLETE: 'success',

@@ -2,10 +2,8 @@ import crypto from 'node:crypto';
 import { prisma } from '../lib/prisma.js';
 import { env } from '../config.js';
 import { isPayfastConfigured } from '../lib/billingUrls.js';
-
-const PAYFAST_URL = env.PAYFAST_IS_TEST
-  ? 'https://sandbox.payfast.co.za/eng/process'
-  : 'https://www.payfast.co.za/eng/process';
+import { payfastCredentials, payfastProcessUrl } from '../lib/integrations/payments/payfast.js';
+import { buildPayfastSignature } from '../lib/integrations/payments/payfastSignature.js';
 
 interface CreateSubscriptionInput {
   salonId: string;
@@ -74,9 +72,11 @@ export async function createPayfastSubscription(input: CreateSubscriptionInput) 
 
   const cycleLabel = input.billingCycle === 'annual' ? 'Annual' : 'Monthly';
 
+  const { merchantId, merchantKey } = payfastCredentials();
+
   const data: Record<string, string> = {
-    merchant_id: env.PAYFAST_MERCHANT_ID ?? '',
-    merchant_key: env.PAYFAST_MERCHANT_KEY ?? '',
+    merchant_id: merchantId,
+    merchant_key: merchantKey,
     return_url: input.returnUrl,
     cancel_url: input.cancelUrl,
     notify_url: input.notifyUrl,
@@ -108,7 +108,7 @@ export async function createPayfastSubscription(input: CreateSubscriptionInput) 
 
   return {
     ok: true as const,
-    url: PAYFAST_URL,
+    url: payfastProcessUrl(),
     formData: data,
     summary,
   };
@@ -180,7 +180,7 @@ export async function cancelSubscription(salonId: string) {
   if (sub.status !== 'ACTIVE') return { ok: false, error: 'not_active' as const };
   if (sub.cancelAtPeriodEnd) return { ok: true as const, alreadyScheduled: true as const };
 
-  if (sub.payfastSubscriptionId && env.PAYFAST_MERCHANT_ID) {
+  if (sub.payfastSubscriptionId && payfastCredentials().merchantId) {
     const cancelUrl = env.PAYFAST_IS_TEST
       ? `https://sandbox.payfast.co.za/subscriptions/${sub.payfastSubscriptionId}/cancel`
       : `https://api.payfast.co.za/subscriptions/${sub.payfastSubscriptionId}/cancel`;
@@ -226,19 +226,33 @@ export function checkQuota(
 }
 
 function generatePayfastSignature(data: Record<string, string>): string {
-  const passphrase = env.PAYFAST_PASSPHRASE ?? '';
-  const params = Object.entries(data)
-    .filter(([_, v]) => v !== '')
-    .map(([k, v]) => `${k}=${encodeURIComponent(v.trim()).replace(/%20/g, '+')}`)
-    .join('&');
-
-  const withPassphrase = passphrase ? `${params}&passphrase=${encodeURIComponent(passphrase)}` : params;
-  return crypto.createHash('md5').update(withPassphrase).digest('hex');
+  const { passphrase } = payfastCredentials();
+  const order = [
+    'merchant_id',
+    'merchant_key',
+    'return_url',
+    'cancel_url',
+    'notify_url',
+    'name_first',
+    'email_address',
+    'm_payment_id',
+    'amount',
+    'item_name',
+    'subscription_type',
+    'frequency',
+    'cycles',
+    'custom_str1',
+    'custom_str2',
+    'custom_str3',
+  ] as const;
+  const fields = order
+    .filter((key) => data[key] !== undefined && data[key] !== '')
+    .map((key) => [key, data[key]!] as [string, string]);
+  return buildPayfastSignature(fields, passphrase || undefined);
 }
 
 function generateApiSignature(timestamp: string): string {
-  const passphrase = env.PAYFAST_PASSPHRASE ?? '';
-  const merchantId = env.PAYFAST_MERCHANT_ID ?? '';
+  const { passphrase, merchantId } = payfastCredentials();
   const str = `merchant-id=${merchantId}&passphrase=${passphrase}&timestamp=${timestamp}&version=v1`;
   return crypto.createHash('md5').update(str).digest('hex');
 }

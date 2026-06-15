@@ -58,10 +58,10 @@
 | `REDIS_URL` | Redis connection string |
 | `SESSION_SECRET` | 32+ char random string |
 | `INTERNAL_API_KEY` | 16+ char random string |
-| `PAYFAST_MERCHANT_ID` | PayFast merchant ID |
-| `PAYFAST_MERCHANT_KEY` | PayFast merchant key |
-| `PAYFAST_PASSPHRASE` | PayFast passphrase |
-| `PAYFAST_IS_TEST` | `false` for production |
+| `PAYFAST_MERCHANT_ID` | PayFast merchant ID (live from payfast.co.za, or sandbox from sandbox.payfast.co.za) |
+| `PAYFAST_MERCHANT_KEY` | PayFast merchant key (must match the same environment as merchant ID) |
+| `PAYFAST_PASSPHRASE` | PayFast security passphrase (Settings → Integration; no leading/trailing spaces) |
+| `PAYFAST_IS_TEST` | `true` = **sandbox** (`sandbox.payfast.co.za`) with **sandbox credentials only**. `false` = **live** (`www.payfast.co.za`) with your production merchant ID/key. Live and sandbox IDs are **not interchangeable**. |
 | `META_APP_SECRET` | WhatsApp Cloud API app secret |
 | `META_ACCESS_TOKEN` | WhatsApp Cloud API token |
 | `META_WEBHOOK_VERIFY_TOKEN` | Your chosen verify token |
