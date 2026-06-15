@@ -35,6 +35,7 @@ import { plannedRoutes } from './routes/planned.js';
 import { initSentry, captureException } from './lib/sentry.js';
 import { registerRequestId } from './lib/requestId.js';
 import { generateBookingTwiml } from './lib/integrations/messaging/voice.js';
+import { payCheckoutRoutes } from './routes/payCheckout.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -288,6 +289,8 @@ export async function buildApp() {
     }
     return reply.send('OK');
   });
+
+  await app.register(payCheckoutRoutes);
 
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(clientAuthRoutes, { prefix: '/api/client/auth' });

@@ -17,6 +17,8 @@ export function billingReturnUrl(origin: string, outcome: 'success' | 'cancelled
   return `${origin}/billing?checkout=${outcome}`;
 }
 
+import { isPayfastConfigured as payfastConfigured } from './integrations/payments/payfast.js';
+
 export function isPayfastConfigured(): boolean {
-  return Boolean(env.PAYFAST_MERCHANT_ID && env.PAYFAST_MERCHANT_KEY);
+  return payfastConfigured();
 }

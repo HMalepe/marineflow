@@ -1,8 +1,7 @@
-import { env } from '../../../config.js';
 import type { PaymentProviderAdapter } from './types.js';
 import { ozowAdapter } from './ozow.js';
-import { payfastAdapter } from './payfast.js';
-
+import { payfastAdapter, isPayfastConfigured as payfastConfigured } from './payfast.js';
+import { env } from '../../../config.js';
 export type { PaymentProviderAdapter, CreateCheckoutInput, CheckoutResult, WebhookVerifyResult } from './types.js';
 export { ozowAdapter } from './ozow.js';
 export { payfastAdapter } from './payfast.js';
@@ -29,5 +28,5 @@ export function isOzowConfigured(): boolean {
 }
 
 export function isPayfastConfigured(): boolean {
-  return Boolean(env.PAYFAST_MERCHANT_ID && env.PAYFAST_MERCHANT_KEY);
+  return payfastConfigured();
 }

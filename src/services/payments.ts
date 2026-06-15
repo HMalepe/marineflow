@@ -71,7 +71,12 @@ export async function createPaymentCheckoutSession(input: {
       notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
     });
 
-    await getTenantDb().payment.create({
+    if (!result.form) {
+      logger.error({ appointmentId: input.appointmentId }, 'payfast_checkout_form_missing');
+      return null;
+    }
+
+    const payment = await getTenantDb().payment.create({
       data: {
         salonId: input.salonId,
         appointmentId: input.appointmentId,
@@ -82,11 +87,15 @@ export async function createPaymentCheckoutSession(input: {
         currency: 'ZAR',
         externalReference: reference,
         payfastMerchantRef: reference,
-        metadata: { reference, provider: 'payfast' },
+        metadata: {
+          reference,
+          provider: 'payfast',
+          payfastForm: result.form,
+        },
       },
     });
 
-    return result.redirectUrl;
+    return `${baseUrl}/pay/checkout/${payment.id}`;
   } catch (err) {
     logger.error(
       { err, salonId: input.salonId, appointmentId: input.appointmentId },

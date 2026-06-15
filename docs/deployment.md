@@ -61,7 +61,10 @@
 | `PAYFAST_MERCHANT_ID` | PayFast merchant ID (live from payfast.co.za, or sandbox from sandbox.payfast.co.za) |
 | `PAYFAST_MERCHANT_KEY` | PayFast merchant key (must match the same environment as merchant ID) |
 | `PAYFAST_PASSPHRASE` | PayFast security passphrase (Settings → Integration; no leading/trailing spaces) |
-| `PAYFAST_IS_TEST` | `true` = **sandbox** (`sandbox.payfast.co.za`) with **sandbox credentials only**. `false` = **live** (`www.payfast.co.za`) with your production merchant ID/key. Live and sandbox IDs are **not interchangeable**. |
+| `PAYFAST_IS_TEST` | `true` = sandbox (`sandbox.payfast.co.za`). `false` = live (`www.payfast.co.za`). **Never mix live merchant ID with sandbox URL.** |
+| `PAYFAST_SANDBOX_MERCHANT_ID` | Optional. Sandbox merchant ID when `PAYFAST_IS_TEST=true` (from [sandbox.payfast.co.za](https://sandbox.payfast.co.za) → Settings → Integration). PayFast demo: `10000100` / `46f0cd694581a` / passphrase `jt7NOE43FZPn` |
+| `PAYFAST_SANDBOX_MERCHANT_KEY` | Sandbox merchant key (paired with sandbox merchant ID) |
+| `PAYFAST_SANDBOX_PASSPHRASE` | Sandbox security passphrase (Settings → Integration on **sandbox** dashboard) |
 | `META_APP_SECRET` | WhatsApp Cloud API app secret |
 | `META_ACCESS_TOKEN` | WhatsApp Cloud API token |
 | `META_WEBHOOK_VERIFY_TOKEN` | Your chosen verify token |

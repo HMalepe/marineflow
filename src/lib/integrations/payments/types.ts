@@ -14,6 +14,8 @@ export interface CreateCheckoutInput {
 export interface CheckoutResult {
   redirectUrl: string;
   externalReference: string;
+  /** POST form fields for hosted checkout page (preferred over GET redirectUrl). */
+  form?: { action: string; fields: Record<string, string> };
 }
 
 export interface WebhookVerifyResult {

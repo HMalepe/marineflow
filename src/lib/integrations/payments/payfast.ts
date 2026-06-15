@@ -17,12 +17,69 @@ export function payfastProcessUrl(): string {
   return sandbox ? PAYFAST_PROCESS_URL_SANDBOX : PAYFAST_PROCESS_URL_LIVE;
 }
 
-export function payfastCredentials(): { merchantId: string; merchantKey: string; passphrase: string } {
+export function payfastCredentials(): {
+  merchantId: string;
+  merchantKey: string;
+  passphrase: string;
+  sandbox: boolean;
+} {
+  const sandbox = resolvePayfastIsSandbox(env.PAYFAST_IS_TEST, env.NODE_ENV);
+  if (sandbox) {
+    const merchantId =
+      trimPayfastCredential(env.PAYFAST_SANDBOX_MERCHANT_ID) ||
+      trimPayfastCredential(env.PAYFAST_MERCHANT_ID);
+    const merchantKey =
+      trimPayfastCredential(env.PAYFAST_SANDBOX_MERCHANT_KEY) ||
+      trimPayfastCredential(env.PAYFAST_MERCHANT_KEY);
+    const passphrase =
+      trimPayfastCredential(env.PAYFAST_SANDBOX_PASSPHRASE) ||
+      trimPayfastCredential(env.PAYFAST_PASSPHRASE);
+    return { merchantId, merchantKey, passphrase, sandbox: true };
+  }
   return {
     merchantId: trimPayfastCredential(env.PAYFAST_MERCHANT_ID),
     merchantKey: trimPayfastCredential(env.PAYFAST_MERCHANT_KEY),
     passphrase: trimPayfastCredential(env.PAYFAST_PASSPHRASE),
+    sandbox: false,
   };
+}
+
+export function isPayfastConfigured(): boolean {
+  const { merchantId, merchantKey } = payfastCredentials();
+  return Boolean(merchantId && merchantKey);
+}
+
+export interface PayfastCheckoutForm {
+  action: string;
+  fields: Record<string, string>;
+}
+
+export function buildPayfastCheckoutForm(input: CreateCheckoutInput): PayfastCheckoutForm {
+  const { merchantId, merchantKey, passphrase } = payfastCredentials();
+  if (!merchantId || !merchantKey) {
+    throw new Error('PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY required');
+  }
+
+  const amountStr = (input.amountCents / 100).toFixed(2);
+  const data: Record<string, string> = {
+    merchant_id: merchantId,
+    merchant_key: merchantKey,
+    return_url: input.returnUrl,
+    cancel_url: input.cancelUrl,
+    notify_url: input.notifyUrl,
+    m_payment_id: input.reference,
+    amount: amountStr,
+    item_name: input.description ?? `Payment ${input.reference}`,
+    custom_str1: input.salonId,
+    custom_str2: input.customerId,
+  };
+
+  const orderedFields = checkoutFieldOrder(data);
+  const signature = buildPayfastSignature(orderedFields, passphrase || undefined);
+  const fields: Record<string, string> = Object.fromEntries(orderedFields);
+  fields.signature = signature;
+
+  return { action: payfastProcessUrl(), fields };
 }
 
 function checkoutFieldOrder(data: Record<string, string>): Array<[string, string]> {
@@ -84,36 +141,24 @@ export const payfastAdapter: PaymentProviderAdapter = {
   name: 'payfast',
 
   async createCheckout(input: CreateCheckoutInput): Promise<CheckoutResult> {
-    const { merchantId, merchantKey, passphrase } = payfastCredentials();
-    if (!merchantId || !merchantKey) {
+    const { merchantId, sandbox } = payfastCredentials();
+    if (!merchantId) {
       throw new Error('PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY required');
     }
 
-    const sandbox = resolvePayfastIsSandbox(env.PAYFAST_IS_TEST, env.NODE_ENV);
     logger.info(
       { sandbox, merchantIdPrefix: merchantId.slice(0, 4) },
       'payfast_checkout_create',
     );
 
-    const amountStr = (input.amountCents / 100).toFixed(2);
-    const data: Record<string, string> = {
-      merchant_id: merchantId,
-      merchant_key: merchantKey,
-      return_url: input.returnUrl,
-      cancel_url: input.cancelUrl,
-      notify_url: input.notifyUrl,
-      m_payment_id: input.reference,
-      amount: amountStr,
-      item_name: input.description ?? `Payment ${input.reference}`,
-      custom_str1: input.salonId,
-      custom_str2: input.customerId,
-    };
+    const form = buildPayfastCheckoutForm(input);
+    const redirectUrl = buildPayfastRedirectUrl(
+      form.action,
+      Object.entries(form.fields).filter(([k]) => k !== 'signature') as Array<[string, string]>,
+      form.fields.signature!,
+    );
 
-    const orderedFields = checkoutFieldOrder(data);
-    const signature = buildPayfastSignature(orderedFields, passphrase || undefined);
-    const redirectUrl = buildPayfastRedirectUrl(payfastProcessUrl(), orderedFields, signature);
-
-    return { redirectUrl, externalReference: input.reference };
+    return { redirectUrl, externalReference: input.reference, form };
   },
 
   verifyWebhook(payload: unknown, _headers: Record<string, string | undefined>): WebhookVerifyResult {
