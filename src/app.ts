@@ -334,6 +334,13 @@ export async function buildApp() {
 
       // Resolve salonId from the flow token (format: "<salonId>:<conversationId>")
       const flowReq = decrypted as { action: string; screen: string; data: Record<string, unknown>; flow_token: string };
+
+      // Health-check ping arrives encrypted — respond with encrypted active status
+      if (flowReq.action === 'ping') {
+        const pingResp = encryptFlowResponse({ data: { status: 'active' } }, aesKey, iv);
+        return reply.send(pingResp);
+      }
+
       const [salonId] = (flowReq.flow_token ?? '').split(':');
       if (!salonId) {
         return reply.code(400).send({ error: 'invalid_flow_token' });
