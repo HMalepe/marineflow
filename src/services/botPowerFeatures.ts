@@ -134,29 +134,8 @@ export async function afterServiceSelected(
     continueToStaff: () => Promise<void>;
   },
 ): Promise<void> {
-  const auto = getSalonAutomations(conv.salon);
-  if (!auto.upselling.enabled) {
-    await helpers.continueToStaff();
-    return;
-  }
-
-  try {
-    const addons = await getAddonsForService(conv.salonId, serviceId);
-    if (!addons.length) {
-      await helpers.continueToStaff();
-      return;
-    }
-
-    await helpers.saveContext({
-      selectedServiceId: serviceId,
-      addonPhase: true,
-      addonOptions: addons.map((a) => a.addonServiceId),
-    });
-    await helpers.reply(formatAddonMenu(addons));
-  } catch (err) {
-    logger.warn({ err, salonId: conv.salonId, serviceId }, 'addon_upsell_skipped');
-    await helpers.continueToStaff();
-  }
+  // Add-on upsell removed — go straight to staff/slot selection after service pick.
+  await helpers.continueToStaff();
 }
 
 export async function handleAddonPhase(
