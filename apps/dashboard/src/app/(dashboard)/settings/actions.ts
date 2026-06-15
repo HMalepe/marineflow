@@ -20,7 +20,7 @@ export interface SalonSettings {
   botAskMarketingConsent: boolean;
   botAllowStaffPick: boolean;
   botLoyaltyEnabled: boolean;
-  botRequireDepositStep: boolean;
+  botRequirePaymentStep: boolean;
   botWinbackEnabled: boolean;
   botBirthdayEnabled: boolean;
   botFlowOrder?: string[];
@@ -265,7 +265,7 @@ export async function saveBotFlowSettings(flags: {
   botAskMarketingConsent?: boolean;
   botAllowStaffPick?: boolean;
   botLoyaltyEnabled?: boolean;
-  botRequireDepositStep?: boolean;
+  botRequirePaymentStep?: boolean;
   botWinbackEnabled?: boolean;
   botBirthdayEnabled?: boolean;
   botFlowOrder?: string[];
@@ -289,7 +289,7 @@ export async function saveBotBehaviour(flags: {
   botAskMarketingConsent?: boolean;
   botAllowStaffPick?: boolean;
   botLoyaltyEnabled?: boolean;
-  botRequireDepositStep?: boolean;
+  botRequirePaymentStep?: boolean;
   botWinbackEnabled?: boolean;
   botBirthdayEnabled?: boolean;
 }): Promise<{ salon?: SalonSettings; error?: string }> {

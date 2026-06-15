@@ -10,7 +10,7 @@ export interface SalonAutomations {
     allowSelfServiceReschedule: boolean;
     rescheduleHoursBefore: number;
     cancelHoursBefore: number;
-    forfeitDepositOnLateCancel: boolean;
+    forfeitPaymentOnLateCancel: boolean;
   };
   waitlist: {
     enabled: boolean;
@@ -59,7 +59,7 @@ export interface SalonAutomations {
   booking: {
     /** Slot interval in minutes — controls how granular the time picker is */
     slotIntervalMin: number;
-    /** Minutes before a HELD appointment is auto-released if payment not received. 0 = no auto-release. */
+    /** Minutes before an unpaid appointment is auto-released. 0 = no auto-release. */
     holdTimeoutMin: number;
   };
   messaging: {
@@ -78,7 +78,7 @@ export const DEFAULT_AUTOMATIONS: SalonAutomations = {
     allowSelfServiceReschedule: true,
     rescheduleHoursBefore: 12,
     cancelHoursBefore: 24,
-    forfeitDepositOnLateCancel: true,
+    forfeitPaymentOnLateCancel: true,
   },
   waitlist: {
     enabled: true,
@@ -242,9 +242,9 @@ export function parseAutomationsFromMetadata(metadata: unknown): SalonAutomation
         168,
         DEFAULT_AUTOMATIONS.cancellation.cancelHoursBefore,
       ),
-      forfeitDepositOnLateCancel: parseBool(
-        cancellationRaw.forfeitDepositOnLateCancel,
-        DEFAULT_AUTOMATIONS.cancellation.forfeitDepositOnLateCancel,
+      forfeitPaymentOnLateCancel: parseBool(
+        cancellationRaw.forfeitPaymentOnLateCancel ?? cancellationRaw.forfeitDepositOnLateCancel,
+        DEFAULT_AUTOMATIONS.cancellation.forfeitPaymentOnLateCancel,
       ),
     },
     waitlist: parseSection(waitlistRaw, DEFAULT_AUTOMATIONS.waitlist),

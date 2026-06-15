@@ -176,7 +176,7 @@ model Salon {
   botAskMarketingConsent Boolean @default(true)
   botAllowStaffPick      Boolean @default(true)
   botLoyaltyEnabled      Boolean @default(true)
-  botRequireDepositStep  Boolean @default(true)
+  botRequirePaymentStep  Boolean @default(true) @map("botRequireDepositStep")
   /// Automated outbound campaigns (Inngest daily crons)
   botWinbackEnabled      Boolean @default(true)
   botBirthdayEnabled     Boolean @default(true)
@@ -395,9 +395,9 @@ model Service {
   priceCents      Int
   categoryId      String?
   category        ServiceCategory? @relation(fields: [categoryId], references: [id])
-  depositCents    Int?
-  depositPercent  Int?
-  fullPay         Boolean          @default(false)
+  depositCents    Int?             @ignore
+  depositPercent  Int?             @ignore
+  fullPay         Boolean          @default(false) @ignore
   qualifiesLoyalty Boolean         @default(true)
   active          Boolean          @default(true)
   sortOrder       Int              @default(0)
@@ -545,7 +545,7 @@ model Appointment {
   end                 DateTime
   status              AppointmentStatus  @default(HELD)
   notes               String?
-  depositInvoiceId    String?
+  paymentInvoiceId    String?            @map("depositInvoiceId")
   loyaltyRedeemed     Boolean            @default(false)
   cancellationReason  CancellationReason?
   cancelledAt         DateTime?
@@ -564,7 +564,7 @@ model Appointment {
   penaltyWaivedAt     DateTime?
   penaltyWaivedBy     String?            /// StaffUser id
   cancellationPenaltyApplied Boolean     @default(false)
-  depositForfeited    Boolean            @default(false)
+  paymentForfeited    Boolean            @default(false) @map("depositForfeited")
   addonServiceIds     String[]           @default([])
   csatSentAt          DateTime?
   csatScore           Int?               /// 1–5, null until customer replies

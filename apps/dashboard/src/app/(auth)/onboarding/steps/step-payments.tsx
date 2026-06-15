@@ -27,7 +27,7 @@ export function StepPayments({ data, updateData, onNext, onBack }: Props) {
       <div>
         <h2 className="text-lg font-semibold">Payment Provider</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Accept deposits for bookings. You can configure multiple providers later.
+          Accept full online payment for bookings. You can configure providers later.
         </p>
       </div>
 

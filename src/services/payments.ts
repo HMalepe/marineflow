@@ -16,13 +16,12 @@ function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
 }
 
-/** PayFast checkout after booking confirmation — full price unless service specifies deposit/full-pay. */
+/** Full PayFast checkout after booking confirmation — full price or nothing. */
 export function resolvePostConfirmPayment(input: {
   bookingTotalCents: number;
-  service: Pick<Service, 'fullPay' | 'depositCents'>;
   loyaltyRedeemed: boolean;
   requirePaymentStep: boolean;
-}): { amountCents: number; mode: 'deposit' | 'full' } | null {
+}): { amountCents: number } | null {
   if (
     !input.requirePaymentStep ||
     input.loyaltyRedeemed ||
@@ -31,32 +30,18 @@ export function resolvePostConfirmPayment(input: {
   ) {
     return null;
   }
-  if (input.service.fullPay) {
-    return { amountCents: input.bookingTotalCents, mode: 'full' };
-  }
-  const deposit = input.service.depositCents ?? 0;
-  if (deposit > 0) {
-    return { amountCents: deposit, mode: 'deposit' };
-  }
-  return { amountCents: input.bookingTotalCents, mode: 'full' };
+  return { amountCents: input.bookingTotalCents };
 }
 
-export async function createDepositCheckoutSession(input: {
+export async function createPaymentCheckoutSession(input: {
   salonId: string;
   customerId: string;
   appointmentId: string;
   service: Service;
-  mode: 'deposit' | 'full';
-  amountCents?: number;
+  amountCents: number;
 }): Promise<string | null> {
   if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY) return null;
-
-  const amountCents =
-    input.amountCents ??
-    (input.mode === 'full'
-      ? input.service.priceCents
-      : (input.service.depositCents ?? input.service.priceCents));
-  if (amountCents <= 0) return null;
+  if (input.amountCents <= 0) return null;
 
   const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const reference = appointmentPaymentReference(input.appointmentId);
@@ -64,10 +49,10 @@ export async function createDepositCheckoutSession(input: {
   const result = await payfastAdapter.createCheckout({
     salonId: input.salonId,
     customerId: input.customerId,
-    amountCents,
+    amountCents: input.amountCents,
     currency: 'ZAR',
     reference,
-    description: `${input.service.name} (${input.mode})`,
+    description: input.service.name,
     returnUrl: `${baseUrl}/pay/success?ref=${reference}`,
     cancelUrl: `${baseUrl}/pay/cancel?ref=${reference}`,
     notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
@@ -79,15 +64,14 @@ export async function createDepositCheckoutSession(input: {
       appointmentId: input.appointmentId,
       customerId: input.customerId,
       status: 'PENDING',
-      amountCents,
+      amountCents: input.amountCents,
       currency: 'ZAR',
-      metadata: { mode: input.mode, reference, provider: 'payfast' },
+      metadata: { reference, provider: 'payfast' },
     },
   });
 
   return result.redirectUrl;
 }
-
 export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
   const verified = payfastAdapter.verifyWebhook(body, {});
   if (!verified.valid || verified.status !== 'success') return;
@@ -150,7 +134,6 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
 
     const ratingMsg = `How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)`;
 
-    // Send confirmation message
     let confirmSid: string | null = null;
     try {
       const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: confirmMsg });
@@ -162,7 +145,6 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
         data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
       });
 
-      // Send rating prompt and move to BOOKING_RATING
       let ratingSid: string | null = null;
       try {
         const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: ratingMsg });
@@ -233,5 +215,4 @@ export async function refundPayfastPayment(input: {
   ]);
 }
 
-// Alias — keeps dashboardApi import working
 export const refundPaymentStaff = refundPayfastPayment;

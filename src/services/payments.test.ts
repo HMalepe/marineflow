@@ -12,32 +12,29 @@ describe('resolvePostConfirmPayment', () => {
     expect(
       resolvePostConfirmPayment({
         bookingTotalCents: 5000,
-        service: { fullPay: false, depositCents: null },
         loyaltyRedeemed: false,
         requirePaymentStep: false,
       }),
     ).toBeNull();
   });
 
-  it('returns full amount when no deposit configured', () => {
+  it('returns full booking amount when payment enabled', () => {
     expect(
       resolvePostConfirmPayment({
         bookingTotalCents: 17000,
-        service: { fullPay: false, depositCents: null },
         loyaltyRedeemed: false,
         requirePaymentStep: true,
       }),
-    ).toEqual({ amountCents: 17000, mode: 'full' });
+    ).toEqual({ amountCents: 17000 });
   });
 
-  it('returns deposit amount when service has deposit', () => {
+  it('returns null when loyalty covers the booking', () => {
     expect(
       resolvePostConfirmPayment({
         bookingTotalCents: 17000,
-        service: { fullPay: false, depositCents: 5000 },
-        loyaltyRedeemed: false,
+        loyaltyRedeemed: true,
         requirePaymentStep: true,
       }),
-    ).toEqual({ amountCents: 5000, mode: 'deposit' });
+    ).toBeNull();
   });
 });

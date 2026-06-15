@@ -34,7 +34,7 @@ export interface SalonAutomations {
     allowSelfServiceReschedule: boolean;
     rescheduleHoursBefore: number;
     cancelHoursBefore: number;
-    forfeitDepositOnLateCancel: boolean;
+    forfeitPaymentOnLateCancel: boolean;
   };
   waitlist: { enabled: boolean; autoFillOnCancel: boolean };
   googleReview: { enabled: boolean; hoursAfterVisit: number; incentiveEnabled: boolean; incentiveCents: number };
@@ -55,7 +55,7 @@ const DEFAULTS: SalonAutomations = {
     allowSelfServiceReschedule: true,
     rescheduleHoursBefore: 12,
     cancelHoursBefore: 24,
-    forfeitDepositOnLateCancel: true,
+    forfeitPaymentOnLateCancel: true,
   },
   waitlist: { enabled: true, autoFillOnCancel: true },
   googleReview: { enabled: true, hoursAfterVisit: 24, incentiveEnabled: true, incentiveCents: 5000 },
@@ -353,10 +353,10 @@ export function AutomationsClient({ token }: Props) {
           </div>
           <Toggle
             icon={CalendarX}
-            checked={draft.cancellation.forfeitDepositOnLateCancel}
-            onChange={(v) => patch('cancellation', { forfeitDepositOnLateCancel: v })}
-            label={`Forfeit deposit on late cancellation (< ${draft.cancellation.cancelHoursBefore}h notice)`}
-            description="If a customer cancels after the deadline above, their deposit is kept. Use the 'Waive penalty' button on the appointment if you want to make an exception."
+            checked={draft.cancellation.forfeitPaymentOnLateCancel}
+            onChange={(v) => patch('cancellation', { forfeitPaymentOnLateCancel: v })}
+            label={`No refund on late cancellation (< ${draft.cancellation.cancelHoursBefore}h notice)`}
+            description="If a customer cancels after the deadline above, their online payment is not refunded. Use the 'Waive penalty' button on the appointment if you want to make an exception."
           />
         </CardContent>
       </Card>

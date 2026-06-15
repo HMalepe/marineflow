@@ -60,19 +60,19 @@ const UNIVERSAL: FaqTemplate[] = [
     category: 'General',
     businessTypes: ['All'],
     question: 'What is your cancellation policy?',
-    answer: `We ask for at least 24 hours notice for cancellations.\n\n🔴 Late cancellations (less than 24 hours): [deposit is non-refundable / a [R AMOUNT] cancellation fee applies]\n🔴 No-shows: [deposit is forfeited / full service fee may be charged for future bookings]\n\nWe understand emergencies happen — please let us know as soon as possible.`,
+    answer: `We ask for at least 24 hours notice for cancellations.\n\n🔴 Late cancellations (less than 24 hours): [online payment is non-refundable / a [R AMOUNT] cancellation fee applies]\n🔴 No-shows: [payment is forfeited / full service fee may be charged for future bookings]\n\nWe understand emergencies happen — please let us know as soon as possible.`,
   },
   {
     category: 'General',
     businessTypes: ['All'],
     question: 'Can I reschedule my appointment?',
-    answer: `Yes — life happens! Please give us at least 24 hours notice so we can offer the slot to someone else.\n\n📲 To reschedule: reply to this chat or call [PHONE NUMBER]\n\nDeposits are transferable to a rescheduled appointment when sufficient notice is given.`,
+    answer: `Yes — life happens! Please give us at least 24 hours notice so we can offer the slot to someone else.\n\n📲 To reschedule: reply to this chat or call [PHONE NUMBER]\n\nOnline payments can be transferred to a rescheduled appointment when sufficient notice is given.`,
   },
   {
     category: 'General',
     businessTypes: ['All'],
-    question: 'Do you require a deposit to book?',
-    answer: `Yes, we require a booking deposit for most services to secure your appointment.\n\n💳 Deposit amount: R[AMOUNT] / [X]% of the service cost\n\nThe deposit goes toward your total bill on the day. It is [refundable with 24 hours notice / non-refundable for late cancellations or no-shows].\n\nPayment details will be sent with your booking confirmation.`,
+    question: 'Do you require payment to book?',
+    answer: `Yes — we require full payment via PayFast to secure your appointment.\n\n💳 You pay the full service price when you confirm your booking on WhatsApp.\n\nPayment is [refundable with 24 hours notice / non-refundable for late cancellations or no-shows].\n\nA PayFast link is sent right after you confirm your booking.`,
   },
   {
     category: 'General',
@@ -84,7 +84,7 @@ const UNIVERSAL: FaqTemplate[] = [
     category: 'General',
     businessTypes: ['All'],
     question: 'What should I bring to my appointment?',
-    answer: `For your appointment, please bring:\n\n✅ A valid ID or proof of booking\n✅ Proof of deposit payment (if applicable)\n✅ Any relevant documents or referrals\n✅ Comfortable clothing suitable for your service\n\nWe'll take care of the rest!`,
+    answer: `For your appointment, please bring:\n\n✅ A valid ID or proof of booking\n✅ Proof of payment (if applicable)\n✅ Any relevant documents or referrals\n✅ Comfortable clothing suitable for your service\n\nWe'll take care of the rest!`,
   },
   {
     category: 'General',
@@ -150,7 +150,7 @@ const UNIVERSAL: FaqTemplate[] = [
     category: 'General',
     businessTypes: ['All'],
     question: "I'm a first-time customer — what should I know?",
-    answer: `Welcome! Here's everything you need to know:\n\n✅ Book your appointment [online / via WhatsApp / by calling [PHONE NUMBER]]\n✅ Arrive [X minutes] early so we can get started on time\n✅ Bring [any relevant documents / proof of booking / ID]\n✅ A deposit of R[AMOUNT] is required to secure your booking\n\nWe're excited to have you — don't hesitate to ask us anything!`,
+    answer: `Welcome! Here's everything you need to know:\n\n✅ Book your appointment [online / via WhatsApp / by calling [PHONE NUMBER]]\n✅ Arrive [X minutes] early so we can get started on time\n✅ Bring [any relevant documents / proof of booking / ID]\n✅ Full payment via PayFast is required to secure your booking\n\nWe're excited to have you — don't hesitate to ask us anything!`,
   },
   {
     category: 'General',
@@ -256,8 +256,8 @@ const CATERING: FaqTemplate[] = [
   {
     category: 'Bookings',
     businessTypes: ['Catering Company'],
-    question: 'Do you require a deposit for catering bookings?',
-    answer: `Yes. We require a [X]% deposit to confirm your catering booking, with the balance due [X days before / on the day of the event].\n\nThe deposit is non-refundable if cancelled within [X days] of the event.`,
+    question: 'Do you require full payment for catering bookings?',
+    answer: `Yes. We require full payment via PayFast to confirm your catering booking.\n\nPayment is non-refundable if cancelled within [X days] of the event.`,
   },
   {
     category: 'Menu',
@@ -984,7 +984,7 @@ const SOLAR: FaqTemplate[] = [
     category: 'Pricing',
     businessTypes: ['Solar Installation'],
     question: 'Do you offer finance options for solar?',
-    answer: `Yes! We work with [FINANCE PARTNER] to offer:\n\n💳 [X]% deposit + monthly instalments\n🏦 Solar-specific home loans\n📊 Rent-to-own options\n\nIn many cases, monthly savings on your electricity bill can offset your repayment. Contact us for a personalised financial analysis.`,
+    answer: `Yes! We work with [FINANCE PARTNER] to offer:\n\n💳 Upfront payment + monthly instalments\n🏦 Solar-specific home loans\n📊 Rent-to-own options\n\nIn many cases, monthly savings on your electricity bill can offset your repayment. Contact us for a personalised financial analysis.`,
   },
   {
     category: 'Warranty',
@@ -1152,7 +1152,7 @@ const WEDDING_PHOTOGRAPHER: FaqTemplate[] = [
     category: 'Bookings',
     businessTypes: ['Wedding Photographer', 'Photographer'],
     question: 'How far in advance should I book a wedding photographer?',
-    answer: `We recommend booking [9–18 months] in advance for wedding photography, especially for peak season (September–April) and popular dates.\n\nA [X]% deposit secures your date. Dates are only confirmed once the deposit is received.`,
+    answer: `We recommend booking [9–18 months] in advance for wedding photography, especially for peak season (September–April) and popular dates.\n\nFull payment secures your date. Dates are only confirmed once payment is received.`,
   },
   {
     category: 'Services',
@@ -1191,13 +1191,13 @@ const DJ: FaqTemplate[] = [
     category: 'Bookings',
     businessTypes: ['DJ Service'],
     question: 'How far in advance should I book a DJ?',
-    answer: `We recommend booking:\n\n👰 Weddings: [6–12 months] in advance\n🎉 Corporate events: [1–3 months] in advance\n🥳 Private parties: [2–4 weeks] in advance\n\nA [X]% deposit confirms your booking. Peak season (December, Valentine's, year-end) books up very quickly.`,
+    answer: `We recommend booking:\n\n👰 Weddings: [6–12 months] in advance\n🎉 Corporate events: [1–3 months] in advance\n🥳 Private parties: [2–4 weeks] in advance\n\nFull payment confirms your booking. Peak season (December, Valentine's, year-end) books up very quickly.`,
   },
   {
     category: 'Bookings',
     businessTypes: ['DJ Service'],
-    question: 'Is a deposit required and what are your payment terms?',
-    answer: `Yes:\n\n💳 Booking deposit: [X]% due at booking to confirm your date\n💳 Balance due: [X days before / on the day of] the event\n\nDeposit is non-refundable if cancelled within [X days] of the event. We accept EFT, card, and SnapScan.`,
+    question: 'Is full payment required and what are your payment terms?',
+    answer: `Yes:\n\n💳 Full payment is due at booking to confirm your date\n\nPayment is non-refundable if cancelled within [X days] of the event. We accept PayFast, EFT, card, and SnapScan.`,
   },
   {
     category: 'Logistics',

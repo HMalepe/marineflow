@@ -21,7 +21,7 @@ interface WaitlistEntry {
 }
 
 type NoShowRisk = 'LOW' | 'MEDIUM' | 'HIGH';
-type DepositFilter = 'all' | 'pending' | 'paid';
+type PaymentFilter = 'all' | 'pending' | 'paid';
 
 export interface AppointmentData {
   id: string;
@@ -29,13 +29,13 @@ export interface AppointmentData {
   end: string;
   status: string;
   cancellationPenaltyApplied: boolean;
-  depositForfeited: boolean;
+  paymentForfeited: boolean;
   penaltyWaivedAt: string | null;
   reminder24hSentAt: string | null;
   reminder2hSentAt: string | null;
   reminder24hFailed: boolean;
   reminder2hFailed: boolean;
-  service: { name: string; depositCents: number | null; fullPay: boolean };
+  service: { name: string };
   staff: { name: string; displayName: string | null; deletedAt: string | null };
   customer: {
     displayName: string | null;
@@ -69,10 +69,14 @@ function riskSummary(noShowCount: number, bookingCount: number): string {
   return `Based on ${noShowCount} no-show${noShowCount === 1 ? '' : 's'} from ${bookingCount} booking${bookingCount === 1 ? '' : 's'}`;
 }
 
-function getDepositStatus(appt: AppointmentData): 'none' | 'paid' | 'unpaid' {
-  const requiresDeposit = (appt.service.depositCents ?? 0) > 0 || appt.service.fullPay;
-  if (!requiresDeposit) return 'none';
-  return appt.status === 'CONFIRMED_PAID' || appt.payments.length > 0 ? 'paid' : 'unpaid';
+function getPaymentStatus(appt: AppointmentData): 'none' | 'paid' | 'unpaid' {
+  if (appt.status === 'CONFIRMED_PAID' || appt.payments.some((p) => p.status === 'SUCCEEDED')) {
+    return 'paid';
+  }
+  if (appt.status === 'PENDING_PAYMENT' || appt.status === 'HELD') {
+    return 'unpaid';
+  }
+  return 'none';
 }
 
 export function AppointmentsClient({
@@ -86,7 +90,7 @@ export function AppointmentsClient({
 }) {
   const [upcoming, setUpcoming] = useState(initialUpcoming);
   const [past, setPast] = useState(initialPast);
-  const [depositFilter, setDepositFilter] = useState<DepositFilter>('all');
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [search, setSearch] = useState('');
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
   const [removingWaitlistId, setRemovingWaitlistId] = useState<string | null>(null);
@@ -179,10 +183,10 @@ export function AppointmentsClient({
 
   function applyFilter(list: AppointmentData[]): AppointmentData[] {
     return list.filter((a) => {
-      if (depositFilter !== 'all') {
-        const ds = getDepositStatus(a);
-        if (depositFilter === 'paid' && ds !== 'paid') return false;
-        if (depositFilter === 'pending' && ds !== 'unpaid') return false;
+      if (paymentFilter !== 'all') {
+        const ps = getPaymentStatus(a);
+        if (paymentFilter === 'paid' && ps !== 'paid') return false;
+        if (paymentFilter === 'pending' && ps !== 'unpaid') return false;
       }
       if (search.trim()) {
         const q = search.trim().toLowerCase();
@@ -289,19 +293,19 @@ export function AppointmentsClient({
               )}
             </div>
           )}
-          {/* Deposit filter */}
+          {/* Payment filter */}
           <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
-          {(['all', 'pending', 'paid'] as DepositFilter[]).map((f) => (
+          {(['all', 'pending', 'paid'] as PaymentFilter[]).map((f) => (
             <button
               key={f}
-              onClick={() => setDepositFilter(f)}
+              onClick={() => setPaymentFilter(f)}
               className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                depositFilter === f
+                paymentFilter === f
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'pending' ? 'Deposit pending' : 'Deposit paid'}
+              {f === 'all' ? 'All' : f === 'pending' ? 'Payment pending' : 'Paid'}
             </button>
           ))}
           </div>
@@ -321,10 +325,10 @@ export function AppointmentsClient({
                 <Calendar className="size-6 text-muted-foreground/50" />
               </div>
               <p className="text-sm font-medium text-foreground">
-                {depositFilter !== 'all' ? 'No appointments match this filter' : 'No upcoming appointments'}
+                {paymentFilter !== 'all' ? 'No appointments match this filter' : 'No upcoming appointments'}
               </p>
               <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                {depositFilter !== 'all'
+                {paymentFilter !== 'all'
                   ? 'Try switching the filter above to see all bookings.'
                   : 'New bookings from WhatsApp will appear here automatically.'}
               </p>
@@ -495,12 +499,7 @@ function AppointmentRow({
   const isFormerStaff = !!appt.staff.deletedAt;
   const staffLabel = appt.staff.displayName ?? appt.staff.name;
 
-  const requiresDeposit = (appt.service.depositCents ?? 0) > 0 || appt.service.fullPay;
-  const depositStatus = !requiresDeposit
-    ? 'none'
-    : appt.status === 'CONFIRMED_PAID' || appt.payments.length > 0
-      ? 'paid'
-      : 'unpaid';
+  const paymentStatus = getPaymentStatus(appt);
 
   return (
     <div className="flex items-start justify-between p-3 rounded-lg border gap-3">
@@ -534,9 +533,8 @@ function AppointmentRow({
         {appt.penaltyWaivedAt && (
           <span className="text-[10px] text-green-700 dark:text-green-400 font-medium">✓ Penalty waived</span>
         )}
-        {/* Deposit forfeited */}
-        {appt.depositForfeited && (
-          <span className="text-[10px] text-destructive font-medium">⚠ Deposit forfeited (no-show)</span>
+        {appt.paymentForfeited && (
+          <span className="text-[10px] text-destructive font-medium">⚠ Payment forfeited (no-show)</span>
         )}
         {/* Cancellation reason */}
         {appt.cancellationReason && (
@@ -567,14 +565,13 @@ function AppointmentRow({
           {showBadge && (
             <NoShowRiskBadge risk={risk} noShowCount={noShowCount} bookingCount={bookingCount} />
           )}
-          {/* Deposit badge */}
-          {requiresDeposit && ACTIONABLE_STATUSES.has(appt.status) && (
+          {paymentStatus !== 'none' && ACTIONABLE_STATUSES.has(appt.status) && (
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-              depositStatus === 'paid'
+              paymentStatus === 'paid'
                 ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
                 : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
             }`}>
-              {depositStatus === 'paid' ? 'Deposit paid' : 'Deposit pending'}
+              {paymentStatus === 'paid' ? 'Paid' : 'Payment pending'}
             </span>
           )}
           <Badge variant={statusColors[appt.status] ?? 'secondary'}>

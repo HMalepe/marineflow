@@ -59,7 +59,7 @@ export function checkCancellationAllowed(params: {
     }
 
     const penaltyApplies =
-      rules.forfeitDepositOnLateCancel &&
+      rules.forfeitPaymentOnLateCancel &&
       !params.appointment.penaltyWaivedAt &&
       params.action === 'cancel';
 
@@ -69,7 +69,7 @@ export function checkCancellationAllowed(params: {
       hoursUntil,
       penaltyApplies,
       message: penaltyApplies
-        ? `Cancellations within ${threshold} hours of your appointment forfeit any deposit paid. Contact us if you need help.`
+        ? `Cancellations within ${threshold} hours of your appointment forfeit any payment already made. Contact us if you need help.`
         : `${params.action === 'cancel' ? 'Cancellation' : 'Reschedule'} must be at least ${threshold} hours before your appointment. Please contact us directly.`,
     };
   }

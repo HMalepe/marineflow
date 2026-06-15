@@ -20,10 +20,10 @@ export const BUILTIN_FLOW_DEFS = [
       'Shows "My rewards / loyalty" as a menu option so customers can check their stamp balance.',
   },
   {
-    key: 'botRequireDepositStep' as const,
+    key: 'botRequirePaymentStep' as const,
     label: 'Send PayFast payment link after booking',
     description:
-      'After the customer confirms, the bot sends a PayFast link for the deposit or full service price. Disable to skip online payment and collect in-store.',
+      'After the customer confirms, the bot sends a PayFast link for the full service price. Disable to skip online payment and collect in-store.',
   },
   {
     key: 'botWinbackEnabled' as const,

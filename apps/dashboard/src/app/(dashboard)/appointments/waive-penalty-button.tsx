@@ -46,7 +46,7 @@ export function WaivePenaltyButton({ appointmentId, token }: Props) {
         className="h-7 text-xs border-amber-500/40 text-amber-800 dark:text-amber-200"
         disabled={loading}
         onClick={() => void waive()}
-        title="Waive late-cancellation deposit penalty (car broke down, child sick, etc.)"
+        title="Waive late-cancellation payment penalty (car broke down, child sick, etc.)"
       >
         <ShieldCheck className="size-3.5 mr-1" />
         {loading ? '…' : 'Emergency waive'}

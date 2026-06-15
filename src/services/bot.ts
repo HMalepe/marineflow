@@ -29,7 +29,7 @@ import {
   getStampBalance,
   redeemForNextBookingTx,
 } from './loyalty.js';
-import { createDepositCheckoutSession, resolvePostConfirmPayment } from './payments.js';
+import { createPaymentCheckoutSession, resolvePostConfirmPayment } from './payments.js';
 import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
@@ -3861,9 +3861,8 @@ async function handleConfirm(
 
   const paymentPlan = resolvePostConfirmPayment({
     bookingTotalCents,
-    service,
     loyaltyRedeemed: redeem.redeemed,
-    requirePaymentStep: conv.salon.botRequireDepositStep,
+    requirePaymentStep: conv.salon.botRequirePaymentStep,
   });
   const reviewCredit = await applyReviewCreditTx(tx, {
     customerId: conv.customerId,
@@ -3939,7 +3938,7 @@ async function handleConfirm(
     logger.warn({ err, customerId: conv.customerId }, 'booking_count_increment_failed');
   }
 
-  // Notify dashboard + invalidate slot cache immediately — including HELD/deposit bookings.
+  // Notify dashboard + invalidate slot cache immediately — including unpaid bookings.
   notifyAppointmentBookedLater(conv.salonId, appointment.id, {
     staffId: staff.id,
     serviceId: service.id,
@@ -4031,25 +4030,20 @@ async function handleConfirm(
   );
 
   if (paymentPlan) {
-    const sessionUrl = await createDepositCheckoutSession({
+    const sessionUrl = await createPaymentCheckoutSession({
       salonId: conv.salonId,
       customerId: conv.customerId,
       appointmentId: appointment.id,
       service,
-      mode: paymentPlan.mode,
       amountCents: paymentPlan.amountCents,
     });
     if (sessionUrl) {
-      const payLabel =
-        paymentPlan.mode === 'deposit'
-          ? `Deposit due: *${formatCentsZar(paymentPlan.amountCents)}*`
-          : `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`;
       await reply(
         conv,
         [
           `💳 *Complete payment*`,
           '',
-          payLabel,
+          `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`,
           '',
           `Pay securely via PayFast:`,
           sessionUrl,

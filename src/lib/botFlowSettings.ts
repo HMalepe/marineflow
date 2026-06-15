@@ -4,7 +4,7 @@ export const BUILTIN_FLOW_KEYS = [
   'botAskMarketingConsent',
   'botAllowStaffPick',
   'botLoyaltyEnabled',
-  'botRequireDepositStep',
+  'botRequirePaymentStep',
   'botWinbackEnabled',
   'botBirthdayEnabled',
 ] as const;
@@ -53,6 +53,10 @@ export function parseCustomBotFlows(raw: unknown): CustomBotFlow[] {
   return out.slice(0, MAX_CUSTOM_FLOWS);
 }
 
+const LEGACY_FLOW_KEY_ALIASES: Record<string, BuiltinFlowKey> = {
+  botRequireDepositStep: 'botRequirePaymentStep',
+};
+
 export function parseBotFlowOrder(raw: unknown, customFlows: CustomBotFlow[]): string[] {
   const customIds = new Set(customFlows.map((f) => f.id));
   const seen = new Set<string>();
@@ -61,10 +65,11 @@ export function parseBotFlowOrder(raw: unknown, customFlows: CustomBotFlow[]): s
   if (Array.isArray(raw)) {
     for (const id of raw) {
       if (typeof id !== 'string') continue;
-      if (!isBuiltinFlowKey(id) && !customIds.has(id)) continue;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      order.push(id);
+      const normalized = LEGACY_FLOW_KEY_ALIASES[id] ?? id;
+      if (!isBuiltinFlowKey(normalized) && !customIds.has(normalized)) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      order.push(normalized);
     }
   }
 

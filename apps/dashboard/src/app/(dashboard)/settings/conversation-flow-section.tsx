@@ -49,7 +49,7 @@ function flagsFromSettings(s: SalonSettings): FlagState {
     botAskMarketingConsent: s.botAskMarketingConsent ?? true,
     botAllowStaffPick: s.botAllowStaffPick ?? true,
     botLoyaltyEnabled: s.botLoyaltyEnabled ?? true,
-    botRequireDepositStep: s.botRequireDepositStep ?? true,
+    botRequirePaymentStep: s.botRequirePaymentStep ?? true,
     botWinbackEnabled: s.botWinbackEnabled ?? true,
     botBirthdayEnabled: s.botBirthdayEnabled ?? true,
   };

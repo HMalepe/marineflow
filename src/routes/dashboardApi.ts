@@ -281,7 +281,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botAskMarketingConsent: true,
           botAllowStaffPick: true,
           botLoyaltyEnabled: true,
-          botRequireDepositStep: true,
+          botRequirePaymentStep: true,
           botWinbackEnabled: true,
           botBirthdayEnabled: true,
           inactivityMessage1: true,
@@ -376,7 +376,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       botAskMarketingConsent?: boolean;
       botAllowStaffPick?: boolean;
       botLoyaltyEnabled?: boolean;
-      botRequireDepositStep?: boolean;
+      botRequirePaymentStep?: boolean;
       botWinbackEnabled?: boolean;
       botBirthdayEnabled?: boolean;
       botFlowOrder?: string[];
@@ -416,7 +416,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           botAskMarketingConsent,
           botAllowStaffPick,
           botLoyaltyEnabled,
-          botRequireDepositStep,
+          botRequirePaymentStep,
           botWinbackEnabled,
           botBirthdayEnabled,
           botFlowOrder,
@@ -619,7 +619,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(botAskMarketingConsent !== undefined && { botAskMarketingConsent }),
             ...(botAllowStaffPick !== undefined && { botAllowStaffPick }),
             ...(botLoyaltyEnabled !== undefined && { botLoyaltyEnabled }),
-            ...(botRequireDepositStep !== undefined && { botRequireDepositStep }),
+            ...(botRequirePaymentStep !== undefined && { botRequirePaymentStep }),
             ...(botWinbackEnabled !== undefined && { botWinbackEnabled }),
             ...(botBirthdayEnabled !== undefined && { botBirthdayEnabled }),
             ...(inactivityMessage1 !== undefined && {
@@ -677,7 +677,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             botAskMarketingConsent: true,
             botAllowStaffPick: true,
             botLoyaltyEnabled: true,
-            botRequireDepositStep: true,
+            botRequirePaymentStep: true,
             botWinbackEnabled: true,
             botBirthdayEnabled: true,
             inactivityMessage1: true,
@@ -748,7 +748,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           status: { not: 'CANCELLED' },
         },
         include: {
-          service: { select: { name: true, depositCents: true, fullPay: true } },
+          service: { select: { name: true } },
           staff: { select: { id: true, name: true, displayName: true, avatarUrl: true, deletedAt: true } },
           customer: {
             select: {
@@ -922,14 +922,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'customer_unavailable', message: 'Customer record is not available.' };
         }
 
-        // Forfeit deposit if one was paid
-        const depositWasPaid = appt.status === 'CONFIRMED_PAID' || appt.payments.length > 0;
+        const paymentWasMade = appt.status === 'CONFIRMED_PAID' || appt.payments.length > 0;
         await db.appointment.update({
           where: { id: appt.id },
           data: {
             status: 'NO_SHOW',
             noShowMarkedAt: new Date(),
-            ...(depositWasPaid ? { depositForfeited: true } : {}),
+            ...(paymentWasMade ? { paymentForfeited: true } : {}),
           },
         });
 
@@ -942,7 +941,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             appointmentId: appt.id,
             staffId: appt.staffId,
             type: 'no_show',
-            payload: { source: 'dashboard', noShowRisk, depositForfeited: depositWasPaid },
+            payload: { source: 'dashboard', noShowRisk, paymentForfeited: paymentWasMade },
           },
         });
 
@@ -975,7 +974,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           staffId: appt.staffId,
           source: 'dashboard',
         });
-        return { ok: true, noShowRisk, depositForfeited: depositWasPaid };
+        return { ok: true, noShowRisk, paymentForfeited: paymentWasMade };
       });
     },
   );
@@ -2458,8 +2457,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       durationMin: number;
       bufferMin?: number;
       active?: boolean;
-      depositCents?: number | null;
-      fullPay?: boolean;
     };
   }>(
     '/services',
@@ -2467,7 +2464,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const { name, description, priceCents, durationMin, bufferMin, active, depositCents, fullPay } = request.body;
+        const { name, description, priceCents, durationMin, bufferMin, active } = request.body;
         if (!name?.trim()) {
           reply.code(400);
           return { error: 'name_required' };
@@ -2481,11 +2478,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'invalid_duration' };
         }
 
-        if (depositCents !== undefined && depositCents !== null && (!Number.isFinite(depositCents) || depositCents < 0)) {
-          reply.code(400);
-          return { error: 'invalid_deposit' };
-        }
-
         const service = await db.service.create({
           data: {
             salonId: user.salonId,
@@ -2495,8 +2487,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             durationMin: Math.round(durationMin),
             bufferMin: Math.round(bufferMin ?? 0),
             active: active ?? true,
-            ...(depositCents !== undefined && { depositCents: depositCents === null ? null : Math.round(depositCents) }),
-            ...(fullPay !== undefined && { fullPay }),
           },
         });
 
@@ -2526,8 +2516,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       bufferMin?: number;
       active?: boolean;
       removeFromCatalog?: boolean;
-      depositCents?: number | null;
-      fullPay?: boolean;
     };
   }>(
     '/services/:id',
@@ -2543,7 +2531,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, depositCents, fullPay } =
+        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog } =
           request.body;
 
         if (removeFromCatalog) {
@@ -2576,10 +2564,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_duration' };
         }
-        if (depositCents !== undefined && depositCents !== null && (!Number.isFinite(depositCents) || depositCents < 0)) {
-          reply.code(400);
-          return { error: 'invalid_deposit' };
-        }
 
         const updated = await db.service.update({
           where: { id: existing.id },
@@ -2590,8 +2574,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(durationMin !== undefined && { durationMin: Math.round(durationMin) }),
             ...(bufferMin !== undefined && { bufferMin: Math.round(bufferMin) }),
             ...(active !== undefined && { active }),
-            ...(depositCents !== undefined && { depositCents: depositCents === null ? null : Math.round(depositCents) }),
-            ...(fullPay !== undefined && { fullPay }),
           },
         });
 

@@ -39,7 +39,7 @@ describe('cancellationRules', () => {
     expect(result.reason).toBe('penalty_applies');
   });
 
-  it('blocks late cancel with penalty message when deposit forfeit applies', () => {
+  it('blocks late cancel with penalty message when payment forfeit applies', () => {
     const result = checkCancellationAllowed({
       salon: { metadata: emptyMeta, timezone: TZ },
       appointment: apptInHours(6),
