@@ -367,6 +367,58 @@ export function buildFaqListInteractive(
   );
 }
 
+const STAR_LABELS = ['Poor', 'Below average', 'Average', 'Good', 'Excellent'] as const;
+
+export function buildStarRatingInteractive(salon: SalonMenuInput): InteractiveMessage {
+  return numberedList(
+    '⭐ How would you rate your last visit?',
+    'Pick rating',
+    'Rating',
+    STAR_LABELS.map((label, i) => ({
+      id: String(i + 1),
+      title: `${i + 1} star${i === 0 ? '' : 's'}`,
+      description: label,
+    })),
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildNpsRatingInteractive(salon: SalonMenuInput): InteractiveMessage {
+  return numberedList(
+    'How likely are you to recommend us? (1 = not at all, 10 = definitely)',
+    'Pick score',
+    'NPS',
+    Array.from({ length: 10 }, (_, i) => ({
+      id: String(i + 1),
+      title: String(i + 1),
+      description: i + 1 <= 6 ? 'Unlikely' : i + 1 <= 8 ? 'Neutral' : 'Likely',
+    })),
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildSkipOnlyInteractive(body: string, salon: SalonMenuInput): InteractiveButtons {
+  return quickButtons(body, [{ id: 'skip', title: 'Skip' }], footerForSalon(salon))!;
+}
+
+export function buildTeamListInteractive(
+  team: Array<{ name: string; specialties?: string[] }>,
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  if (team.length === 0) return null;
+  return numberedList(
+    '*Our team*',
+    'View team',
+    'Team',
+    team.slice(0, MAX_LIST_ROWS).map((s, i) => ({
+      id: String(i + 1),
+      title: s.name,
+      description: s.specialties?.length ? truncateListField(s.specialties.slice(0, 2).join(', '), 72) : undefined,
+    })),
+    footerForSalon(salon),
+  );
+}
+
 export function buildCategoryServiceListInteractive(
   label: string,
   services: Array<{ name: string; priceCents: number }>,

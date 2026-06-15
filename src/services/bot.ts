@@ -103,6 +103,10 @@ import {
   buildDatePickerInteractive,
   buildBookingPopiaInteractive,
   buildFaqListInteractive,
+  buildNpsRatingInteractive,
+  buildSkipOnlyInteractive,
+  buildStarRatingInteractive,
+  buildTeamListInteractive,
   buildManageBookingActionsInteractive,
   buildManageBookingListInteractive,
   buildMarketingConsentInteractive,
@@ -2818,7 +2822,15 @@ async function menuActionShowTeam(
     const spec = s.specialties.length ? ` — ${s.specialties.slice(0, 2).join(', ')}` : '';
     return `${i + 1}. ${sanitize(s.name)}${spec}`;
   });
-  await reply(conv, [`*Our team*`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
+  const body = [`*Our team*`, ...lines, '', 'Reply BACK for menu.'].join('\n');
+  await replyMaybeInteractive(
+    conv,
+    body,
+    buildTeamListInteractive(
+      team.map((s) => ({ name: sanitize(s.name), specialties: s.specialties })),
+      conv.salon,
+    ),
+  );
 }
 
 async function menuActionLeaveReview(
@@ -2851,10 +2863,9 @@ async function menuActionLeaveReview(
     },
     ConversationStep.RATE_EXPERIENCE,
   );
-  await reply(
-    conv,
-    '⭐ *Leave a review*\n\nHow would you rate your last visit?\nReply with a number:\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent',
-  );
+  const ratingBody =
+    '⭐ *Leave a review*\n\nHow would you rate your last visit?\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent';
+  await replyMaybeInteractive(conv, ratingBody, buildStarRatingInteractive(conv.salon));
 }
 
 async function handleSubMenuChoice(
@@ -4579,35 +4590,52 @@ async function handleRateExperience(
   if (subStep === 'stars') {
     const stars = parseInt(text.trim(), 10);
     if (isNaN(stars) || stars < 1 || stars > 5) {
-      await reply(conv, 'Please reply with a number from 1 to 5 (1 = Poor, 5 = Excellent), or BACK to cancel.');
+      await replyMaybeInteractive(
+        conv,
+        'Please reply with a number from 1 to 5 (1 = Poor, 5 = Excellent), or BACK to cancel.',
+        buildStarRatingInteractive(conv.salon),
+      );
       return;
     }
     await saveCtx(conv.id, { ratingStars: stars, ratingSubStep: 'comment' });
     const prompt = stars <= 2
       ? `We're sorry to hear that! 😔 What went wrong? Please leave a comment so we can improve:`
       : `Thanks! 😊 Would you like to leave a comment about your experience? (Or reply SKIP to continue)`;
-    await reply(conv, prompt);
+    await replyMaybeInteractive(
+      conv,
+      prompt,
+      stars > 2 ? buildSkipOnlyInteractive(prompt, conv.salon) : null,
+    );
     return;
   }
 
   if (subStep === 'comment') {
     const comment = text.toUpperCase() === 'SKIP' ? '' : text.trim();
     await saveCtx(conv.id, { ratingComment: comment, ratingSubStep: 'nps' });
-    await reply(conv, 'On a scale of 1–10, how likely are you to recommend us to a friend?\n(1 = Not at all, 10 = Definitely!)');
+    const npsBody = 'On a scale of 1–10, how likely are you to recommend us to a friend?\n(1 = Not at all, 10 = Definitely!)';
+    await replyMaybeInteractive(conv, npsBody, buildNpsRatingInteractive(conv.salon));
     return;
   }
 
   if (subStep === 'nps') {
     const nps = parseInt(text.trim(), 10);
     if (isNaN(nps) || nps < 1 || nps > 10) {
-      await reply(conv, 'Please reply with a number from 1 to 10.');
+      await replyMaybeInteractive(
+        conv,
+        'Please reply with a number from 1 to 10.',
+        buildNpsRatingInteractive(conv.salon),
+      );
       return;
     }
     await saveCtx(conv.id, { ratingNps: nps, ratingSubStep: 'nps_reason' });
     const prompt = nps <= 6
       ? `What's the main reason for your score? We really want to improve:`
       : `That means a lot! 🙏 What's the main reason for your high score? (Or reply SKIP)`;
-    await reply(conv, prompt);
+    await replyMaybeInteractive(
+      conv,
+      prompt,
+      nps > 6 ? buildSkipOnlyInteractive(prompt, conv.salon) : null,
+    );
     return;
   }
 
@@ -4676,7 +4704,11 @@ async function handleRateExperience(
 
   // Fallback — reset
   await saveCtx(conv.id, { ratingSubStep: 'stars' }, ConversationStep.RATE_EXPERIENCE);
-  await reply(conv, '⭐ How would you rate your last visit? (1–5)');
+  await replyMaybeInteractive(
+    conv,
+    '⭐ How would you rate your last visit? (1–5)',
+    buildStarRatingInteractive(conv.salon),
+  );
 }
 
 async function handleFaq(
