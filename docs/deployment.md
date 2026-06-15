@@ -93,10 +93,21 @@
 
 ## 7. PayFast
 
-1. Register at [payfast.co.za](https://payfast.co.za)
-2. Set ITN (Instant Transaction Notification) URL:
-   `https://your-api.railway.app/webhooks/payfast/subscription`
-3. Copy Merchant ID, Merchant Key, and Passphrase
+1. Register at [payfast.co.za](https://payfast.co.za) (or use sandbox for testing)
+2. Set these Railway env vars (you already have merchant ID/key/passphrase):
+   - `PUBLIC_BASE_URL` = `https://marineflow.co.za` (must match your live API domain)
+   - `PAYFAST_IS_TEST` = `true` for sandbox, `false` for live payments
+3. **ITN (Instant Transaction Notification) URLs** — MarineFlow registers these automatically on each checkout via `notify_url`. You do **not** need a separate env var. PayFast will POST to:
+   - **Appointment payments (WhatsApp bookings):**  
+     `https://marineflow.co.za/webhooks/payfast/appointment`
+   - **Salon subscription billing (dashboard):**  
+     `https://marineflow.co.za/webhooks/payfast/subscription`
+4. In PayFast merchant settings (optional but recommended):
+   - **Security passphrase** must match `PAYFAST_PASSPHRASE` exactly
+   - **Return URL:** `https://marineflow.co.za/pay/success`
+   - **Cancel URL:** `https://marineflow.co.za/pay/cancel`
+5. In MarineFlow dashboard → **Settings → Conversation flow**, enable **“Send PayFast payment link after booking”**
+6. Redeploy Railway after env changes so payment links use the correct domain
 
 ## 8. DNS & SSL
 
