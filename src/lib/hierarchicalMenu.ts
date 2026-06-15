@@ -57,7 +57,7 @@ const SUB_MENUS: Record<Exclude<MenuCategoryId, 'services'>, string[]> = {
   support: ['FAQ', 'Leave Review', 'Report Issue', 'Speak To Reception'],
 };
 
-const CATEGORY_LABELS: Record<MenuCategoryId, string> = {
+export const CATEGORY_LABELS: Record<MenuCategoryId, string> = {
   my_appointments: 'My Bookings',
   services: 'Services',
   rewards: 'Rewards',
@@ -137,6 +137,16 @@ export function getSubMenuItemCount(
   const normalized = normalizeMenuCategoryId(category);
   if (!normalized || normalized === 'services') return 0;
   return SUB_MENUS[normalized]?.length ?? 0;
+}
+
+/** Labels for a main-menu category submenu (excludes dynamic Services catalog). */
+export function getSubMenuLabels(
+  category: Exclude<MenuCategoryId, 'services'> | LegacyMenuCategoryId,
+): readonly string[] {
+  if (category === 'appointments') {
+    return ['Book', ...SUB_MENUS.my_appointments];
+  }
+  return SUB_MENUS[category];
 }
 
 export function isValidSubMenuChoice(

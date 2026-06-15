@@ -35,8 +35,24 @@ export interface SendOptions {
   templateLang?: string;
   templateParams?: TemplateParam[];
   /** Meta Cloud API interactive list — body is used as plain-text fallback */
-  interactive?: InteractiveList;
+  interactive?: InteractiveMessage;
 }
+
+/** WhatsApp reply buttons (Meta Cloud API) — max 3 buttons per message. */
+export interface InteractiveButtons {
+  type: 'button';
+  header?: string;
+  body: string;
+  footer?: string;
+  buttons: Array<{
+    /** Value returned when tapped (e.g. "yes", "1") */
+    id: string;
+    /** Button label — max 20 characters */
+    title: string;
+  }>;
+}
+
+export type InteractiveMessage = InteractiveList | InteractiveButtons;
 
 export interface TemplateParam {
   name: string;

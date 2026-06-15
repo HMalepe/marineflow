@@ -95,6 +95,26 @@ import {
   SERVICE_SUBMENU_PRICES,
 } from './serviceMenuCatalog.js';
 import {
+  buildBranchPickerInteractive,
+  buildCategoryServiceListInteractive,
+  buildCategorySubMenuInteractive,
+  buildConfirmBookingInteractive,
+  buildConfirmCancelInteractive,
+  buildDatePickerInteractive,
+  buildBookingPopiaInteractive,
+  buildFaqListInteractive,
+  buildManageBookingActionsInteractive,
+  buildManageBookingListInteractive,
+  buildMarketingConsentInteractive,
+  buildQuickPickInteractive,
+  buildServiceCategoryPickerInteractive,
+  buildServicePickerInteractive,
+  buildServicesSubMenuInteractive,
+  buildSlotPickerInteractive,
+  buildStaffPickerInteractive,
+} from './botInteractiveMenus.js';
+import type { InteractiveMessage } from '../lib/integrations/messaging/types.js';
+import {
   buildCategorizedPriceLines,
   loadSalonServiceCatalog,
 } from './serviceCatalogDisplay.js';
@@ -149,6 +169,7 @@ export type BotContext = Record<string, unknown> & {
   servicePage?: number;
   /** Hint for manage-booking submenu (view / reschedule / cancel). */
   manageBookingHint?: 'view' | 'reschedule' | 'cancel';
+  pendingManageIdx?: number;
   /** True once the AI has given its first answer in the OTHER_QUERY flow */
   otherQueryAnswered?: boolean;
   /** Original question text saved for the ticket if customer says NO */
@@ -480,8 +501,25 @@ type PendingOutbound = {
   customerId: string;
   waId: string;
   body: string;
-  interactive?: ReturnType<typeof buildMainMenuInteractive>;
+  interactive?: InteractiveMessage;
 };
+
+function salonInteractive(
+  salon: Salon,
+  interactive: InteractiveMessage | null | undefined,
+): InteractiveMessage | undefined {
+  if (!interactive || !salonUsesCloudInteractiveMenu(salon.whatsappPhoneId)) return undefined;
+  return interactive;
+}
+
+async function replyMaybeInteractive(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  body: string,
+  interactive?: InteractiveMessage | null,
+): Promise<void> {
+  const msg = salonInteractive(conv.salon, interactive);
+  await reply(conv, body, null, msg ? { interactive: msg } : undefined);
+}
 
 /** When set, reply() queues WhatsApp sends until after the DB transaction commits. */
 let pendingOutbound: PendingOutbound[] | null = null;
@@ -558,8 +596,8 @@ async function reply(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
   outboundSid?: string | null,
-  sendOptions?: { interactive?: ReturnType<typeof buildMainMenuInteractive> },
-) {
+  sendOptions?: { interactive?: InteractiveMessage },
+): Promise<void> {
   if (!outboundSid && pendingOutbound) {
     pendingOutbound.push({
       salonId: conv.salonId,
@@ -610,7 +648,11 @@ async function startMarketingConsentGate(
   await saveCtx(conv.id, {}, ConversationStep.MARKETING_CONSENT);
   syncConvContext(conv, {}, ConversationStep.MARKETING_CONSENT);
   pendingWelcomeJourney = null;
-  await reply(conv, buildPopiaConsentMessage(salonDisplayName(conv.salon)));
+  await replyMaybeInteractive(
+    conv,
+    buildPopiaConsentMessage(salonDisplayName(conv.salon)),
+    buildMarketingConsentInteractive(conv.salon),
+  );
 }
 
 function shouldPromptMarketingConsentBeforeMenu(
@@ -1210,7 +1252,13 @@ async function processInboundWhatsApp(
       if (aiResult.handled && aiResult.reply) {
         await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
         syncConvContext(conv, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
-        await reply(conv, aiResult.reply);
+        const quickOpts = (aiResult.contextPatch?.quickPickOptions ??
+          ctx(conv).quickPickOptions) as QuickPickOption[] | undefined;
+        const interactive =
+          quickOpts?.length
+            ? buildQuickPickInteractive(quickOpts, conv.salon)
+            : null;
+        await replyMaybeInteractive(conv, aiResult.reply, interactive);
         return;
       }
       await handleMenu(conv, text);
@@ -1676,7 +1724,11 @@ async function handleMarketingConsentFlow(
     return true;
   }
 
-  await reply(conv, 'Please reply *ACCEPT* or *DECLINE* for marketing messages (POPIA).');
+  await replyMaybeInteractive(
+    conv,
+    'Please reply *ACCEPT* or *DECLINE* for marketing messages (POPIA).',
+    buildMarketingConsentInteractive(conv.salon),
+  );
   return true;
 }
 
@@ -1720,7 +1772,11 @@ async function repromptPickBranch(conv: Conversation & { customer: Customer; sal
   const lines = branches.map((b, i) => `${i + 1}. ${b.name}${b.city ? ` (${b.city})` : ''}`);
   await saveCtx(conv.id, { branchOptions: branches.map((b) => b.id) }, ConversationStep.PICK_BRANCH);
   syncConvContext(conv, { branchOptions: branches.map((b) => b.id) }, ConversationStep.PICK_BRANCH);
-  await reply(conv, ['Which location?', ...lines, '', 'Reply BACK for main menu.'].join('\n'));
+  await replyMaybeInteractive(
+    conv,
+    ['Which location?', ...lines, '', 'Reply BACK for main menu.'].join('\n'),
+    buildBranchPickerInteractive(branches, conv.salon),
+  );
 }
 
 async function repromptPickServiceCategory(conv: Conversation & { customer: Customer; salon: Salon }) {
@@ -1741,9 +1797,10 @@ async function repromptPickServiceCategory(conv: Conversation & { customer: Cust
     .map(([id, cat]) => ({ id, ...cat }));
   const lines = catList.map((cat, i) => `${i + 1}. ${sanitize(cat.name)}`);
   if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
-  await reply(
+  await replyMaybeInteractive(
     conv,
     ['What type of service are you looking for?', '', ...lines, '', 'Reply BACK to go back.'].join('\n'),
+    buildServiceCategoryPickerInteractive(catList, uncategorised.length > 0, conv.salon),
   );
 }
 
@@ -1760,7 +1817,12 @@ async function repromptPickService(conv: Conversation & { customer: Customer; sa
     : services.length > 8
       ? `We have ${services.length} services — pick a number:`
       : 'Pick a service:';
-  await reply(conv, [header, ...lines, '', 'Reply BACK to go back.'].join('\n'));
+  const page = (ctx(conv).servicePage as number | undefined) ?? 0;
+  await replyMaybeInteractive(
+    conv,
+    [header, ...lines, '', 'Reply BACK to go back.'].join('\n'),
+    buildServicePickerInteractive(services, page, SVC_PAGE_SIZE, conv.salon, header),
+  );
 }
 
 async function repromptPickStaff(conv: Conversation & { customer: Customer; salon: Salon }) {
@@ -1782,7 +1844,11 @@ async function repromptPickStaff(conv: Conversation & { customer: Customer; salo
   const header = preferredId
     ? `Last time you booked with ${sanitize(staffList[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
     : 'Choose stylist:';
-  await reply(conv, [header, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK to go back.'].join('\n'));
+  await replyMaybeInteractive(
+    conv,
+    [header, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK to go back.'].join('\n'),
+    buildStaffPickerInteractive(staffList, preferredId, conv.salon, header),
+  );
 }
 
 async function repromptPickDate(conv: Conversation & { customer: Customer; salon: Salon }) {
@@ -1797,15 +1863,11 @@ async function repromptPickDate(conv: Conversation & { customer: Customer; salon
     return;
   }
   const lines = formatDateMenuLines(dates.slice(0, 10));
-  await reply(
+  const prefix = 'Pick a date (next available days):';
+  await replyMaybeInteractive(
     conv,
-    [
-      'Pick a date (next available days):',
-      ...lines,
-      '',
-      APPOINTMENT_DATE_HINT,
-      'Reply BACK to go back.',
-    ].join('\n'),
+    [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
+    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
   );
 }
 
@@ -1838,7 +1900,12 @@ async function repromptPickSlot(conv: Conversation & { customer: Customer; salon
     slots.length > MAX_SLOT_OPTIONS
       ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
       : '';
-  await reply(conv, ['Pick a time slot:', ...lines, extra, '', 'Reply BACK to choose a different date.'].join('\n'));
+  const header = 'Pick a time slot:';
+  await replyMaybeInteractive(
+    conv,
+    [header, ...lines, extra, '', 'Reply BACK to choose a different date.'].join('\n'),
+    buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon, header),
+  );
 }
 
 /** Step back one level in the booking funnel and re-show the previous prompt. */
@@ -2144,7 +2211,11 @@ async function startBookingFlow(
   if (branches.length > 1) {
     const lines = branches.map((b, i) => `${i + 1}. ${b.name}${b.city ? ` (${b.city})` : ''}`);
     await saveCtx(conv.id, { branchOptions: branches.map((b) => b.id) }, ConversationStep.PICK_BRANCH);
-    await reply(conv, ['Which location?', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    await replyMaybeInteractive(
+      conv,
+      ['Which location?', ...lines, '', 'Reply BACK for menu.'].join('\n'),
+      buildBranchPickerInteractive(branches, conv.salon),
+    );
     return;
   }
 
@@ -2192,7 +2263,12 @@ async function startBookingFlow(
     const catIds = catList.map((c) => c.id);
     await saveCtx(conv.id, { serviceCategoryOptions: catIds }, ConversationStep.PICK_SERVICE_CATEGORY);
     syncConvContext(conv, { serviceCategoryOptions: catIds }, ConversationStep.PICK_SERVICE_CATEGORY);
-    await reply(conv, ['What type of service are you looking for?', '', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    const catNames = catList.map((c) => ({ name: c.name }));
+    await replyMaybeInteractive(
+      conv,
+      ['What type of service are you looking for?', '', ...lines, '', 'Reply BACK for menu.'].join('\n'),
+      buildServiceCategoryPickerInteractive(catNames, uncategorised.length > 0, conv.salon),
+    );
     return;
   }
 
@@ -2200,7 +2276,12 @@ async function startBookingFlow(
   const page = 0;
   await saveCtx(conv.id, { servicePage: page }, ConversationStep.PICK_SERVICE);
   syncConvContext(conv, { servicePage: page }, ConversationStep.PICK_SERVICE);
-  await reply(conv, buildServicePage(services, page));
+  const pageText = buildServicePage(services, page);
+  await replyMaybeInteractive(
+    conv,
+    pageText,
+    buildServicePickerInteractive(services, page, SVC_PAGE_SIZE, conv.salon),
+  );
 }
 
 async function handleCollectFirstName(
@@ -2303,7 +2384,11 @@ async function handleCollectDateOfBirth(
 
   if (!firstName || !email) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-    await reply(conv, ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'));
+    await replyMaybeInteractive(
+      conv,
+      ['Something went wrong — let\'s start over.', '', buildBookingPopiaConsentMessage()].join('\n'),
+      buildBookingPopiaInteractive(conv.salon),
+    );
     return;
   }
 
@@ -2343,9 +2428,10 @@ async function handleBookingPopiaConsent(
   const answer = text.trim().toUpperCase();
 
   if (answer !== 'YES' && answer !== 'NO') {
-    await reply(
+    await replyMaybeInteractive(
       conv,
       'Please reply *YES* to accept or *NO* to decline.\n\n' + buildBookingPopiaConsentMessage(),
+      buildBookingPopiaInteractive(conv.salon),
     );
     return;
   }
@@ -2411,7 +2497,11 @@ async function menuActionStartBooking(
     if (isProfileIncomplete(customer)) {
       await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
       syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
-      await reply(conv, buildBookingPopiaConsentMessage());
+      await replyMaybeInteractive(
+        conv,
+        buildBookingPopiaConsentMessage(),
+        buildBookingPopiaInteractive(conv.salon),
+      );
       return;
     }
 
@@ -2496,16 +2586,30 @@ async function menuActionViewBookings(
   if (upcoming.length > 0) {
     const actionHint =
       hint === 'cancel'
-        ? 'Reply CANCEL 1 (use the upcoming number) to cancel, or BACK.'
+        ? 'Tap a booking to cancel, or reply CANCEL 1 (use the upcoming number), or BACK.'
         : hint === 'reschedule'
-          ? 'Reply RESCHEDULE 1 (use the upcoming number) to reschedule, or BACK.'
-          : 'Reply CANCEL 1 or RESCHEDULE 1 to manage (use the upcoming number), or BACK.';
+          ? 'Tap a booking to reschedule, or reply RESCHEDULE 1 (use the upcoming number), or BACK.'
+          : 'Tap a booking to manage, or reply CANCEL 1 / RESCHEDULE 1, or BACK.';
     lines.push('', actionHint);
     await saveCtx(
       conv.id,
-      { manageList: upcoming.map((a) => a.id), manageBookingHint: hint, menuCategory: undefined },
+      { manageList: upcoming.map((a) => a.id), manageBookingHint: hint, menuCategory: undefined, pendingManageIdx: undefined },
       ConversationStep.MANAGE_BOOKING,
     );
+    const header = lines.join('\n');
+    await replyMaybeInteractive(
+      conv,
+      header,
+      buildManageBookingListInteractive(
+        upcoming.map((a) => ({
+          serviceName: sanitize(a.service.name),
+          whenLabel: fmtDt(a.start, salon.timezone),
+        })),
+        salon,
+        header,
+      ),
+    );
+    return;
   } else {
     lines.push('', 'Reply BACK for menu.');
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
@@ -2565,10 +2669,8 @@ async function menuActionShowFaqs(
   }
   await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.FAQ);
   const lines = faqs.map((f, i) => `${i + 1}. ${f.question}`);
-  await reply(
-    conv,
-    ['FAQs — reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n'),
-  );
+  const body = ['FAQs — reply with a number, or ask a question:', ...lines, '', 'Reply BACK for menu.'].join('\n');
+  await replyMaybeInteractive(conv, body, buildFaqListInteractive(faqs, conv.salon));
 }
 
 async function menuActionShowContact(
@@ -2662,9 +2764,11 @@ async function menuActionShowServicesForOption(
   const filterPatch = { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined };
   await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE, ctx(conv));
   syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
-  await reply(
+  const body = [`*${sanitize(label)}*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n');
+  await replyMaybeInteractive(
     conv,
-    [`*${sanitize(label)}*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n'),
+    body,
+    buildCategoryServiceListInteractive(label, services, conv.salon),
   );
 }
 
@@ -2764,7 +2868,11 @@ async function handleSubMenuChoice(
     if (choice === 2) return menuActionViewBookings(conv, 'view');
     if (choice === 3) return menuActionViewBookings(conv, 'reschedule');
     if (choice === 4) return menuActionViewBookings(conv, 'cancel');
-    await reply(conv, 'Invalid choice. Reply BACK for main menu.');
+    await replyMaybeInteractive(
+      conv,
+      'Invalid choice. Pick an option below, or reply BACK for main menu.\n\n' + buildSubMenuText('appointments'),
+      buildCategorySubMenuInteractive('appointments', conv.salon),
+    );
     return;
   }
 
@@ -2823,7 +2931,11 @@ async function handleSubMenuChoice(
       break;
   }
 
-  await reply(conv, 'Invalid choice. Reply BACK for main menu.');
+  await replyMaybeInteractive(
+    conv,
+    'Invalid choice. Pick an option below, or reply BACK for main menu.\n\n' + buildSubMenuText(category),
+    buildCategorySubMenuInteractive(category, conv.salon),
+  );
 }
 
 async function handleMainMenuSelection(
@@ -2840,13 +2952,18 @@ async function handleMainMenuSelection(
       return;
     }
     if (selection.id === 'services') {
-      const { text } = await prepareServicesSubMenu(conv);
-      await reply(conv, text);
+      const { text, options } = await prepareServicesSubMenu(conv);
+      await replyMaybeInteractive(conv, text, buildServicesSubMenuInteractive(options, conv.salon));
       return;
     }
     await saveCtx(conv.id, { menuCategory: selection.id }, ConversationStep.MENU);
     syncConvContext(conv, { menuCategory: selection.id }, ConversationStep.MENU);
-    await reply(conv, buildSubMenuText(selection.id));
+    const subText = buildSubMenuText(selection.id);
+    await replyMaybeInteractive(
+      conv,
+      subText,
+      buildCategorySubMenuInteractive(selection.id, conv.salon),
+    );
     return;
   }
 }
@@ -2866,7 +2983,8 @@ async function handleFreeTextSupportIntent(
   }
   await saveCtx(conv.id, { menuCategory: 'support', ...PENDING_PROFILE_CLEAR }, ConversationStep.MENU);
   syncConvContext(conv, { menuCategory: 'support' }, ConversationStep.MENU);
-  await reply(conv, buildSubMenuText('support'));
+  const subText = buildSubMenuText('support');
+  await replyMaybeInteractive(conv, subText, buildCategorySubMenuInteractive('support', conv.salon));
 }
 
 async function handleMenu(
@@ -2913,20 +3031,29 @@ async function handleMenu(
         ? (await loadServiceSubMenuOptions(conv.salonId)).length
         : getSubMenuItemCount(activeCategory);
     if (activeCategory === 'services') {
-      const { text: freshServicesMenu } = await prepareServicesSubMenu(conv);
+      const { text: freshServicesMenu, options } = await prepareServicesSubMenu(conv);
       const freshCount = (ctx(conv).serviceCategoryOptions ?? []).length;
       const hint =
         subChoice != null
           ? `That number isn't on this menu — pick 1–${freshCount} below, or reply BACK for the main menu.`
           : `I didn't recognise that — pick 1–${freshCount} from the list below, or reply BACK for the main menu.`;
-      await reply(conv, [hint, '', freshServicesMenu].join('\n'));
+      await replyMaybeInteractive(
+        conv,
+        [hint, '', freshServicesMenu].join('\n'),
+        buildServicesSubMenuInteractive(options, conv.salon),
+      );
       return;
     }
     const hint =
       subChoice != null
         ? `That number isn't on this menu — pick 1–${count} below, or reply BACK for the main menu.`
         : `I didn't recognise that — pick 1–${count} from the list below, or reply BACK for the main menu.`;
-    await reply(conv, [hint, '', buildSubMenuText(activeCategory)].join('\n'));
+    const subText = buildSubMenuText(activeCategory);
+    await replyMaybeInteractive(
+      conv,
+      [hint, '', subText].join('\n'),
+      buildCategorySubMenuInteractive(activeCategory, conv.salon),
+    );
     return;
   }
 
@@ -3066,7 +3193,11 @@ async function beginAllServicesPicker(
     },
     ConversationStep.PICK_SERVICE,
   );
-  await reply(conv, `${intro}\n\n${buildServicePage(services, 0)}`);
+  await replyMaybeInteractive(
+    conv,
+    `${intro}\n\n${buildServicePage(services, 0)}`,
+    buildServicePickerInteractive(services, 0, SVC_PAGE_SIZE, conv.salon),
+  );
 }
 
 async function handlePickServiceCategory(
@@ -3103,7 +3234,15 @@ async function handlePickServiceCategory(
   if (!Number.isFinite(n) || n < 1 || n > totalOptions) {
     const lines = catList.map((c, i) => `${i + 1}. ${sanitize(c.name)}`);
     if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
-    await reply(conv, [`Please reply with a number (1–${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'));
+    await replyMaybeInteractive(
+      conv,
+      [`Please reply with a number (1–${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'),
+      buildServiceCategoryPickerInteractive(
+        catList.map((c) => ({ name: c.name })),
+        uncategorised.length > 0,
+        conv.salon,
+      ),
+    );
     return;
   }
 
@@ -3128,7 +3267,8 @@ async function handlePickServiceCategory(
   const lines = filtered.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
   await saveCtx(conv.id, { serviceFilterIds: filterIds }, ConversationStep.PICK_SERVICE);
   syncConvContext(conv, { serviceFilterIds: filterIds }, ConversationStep.PICK_SERVICE);
-  await reply(conv, [`*${sanitize(chosenName)}*`, ...lines, '', 'Reply with a number to book, or BACK to change category.'].join('\n'));
+  const body = [`*${sanitize(chosenName)}*`, ...lines, '', 'Reply with a number to book, or BACK to change category.'].join('\n');
+  await replyMaybeInteractive(conv, body, buildCategoryServiceListInteractive(chosenName, filtered, conv.salon));
 }
 
 async function handlePickService(
@@ -3158,7 +3298,12 @@ async function handlePickService(
     }
     await saveCtx(conv.id, { servicePage: nextPage }, ConversationStep.PICK_SERVICE);
     syncConvContext(conv, { servicePage: nextPage }, ConversationStep.PICK_SERVICE);
-    await reply(conv, buildServicePage(services, nextPage));
+    const pageText = buildServicePage(services, nextPage);
+    await replyMaybeInteractive(
+      conv,
+      pageText,
+      buildServicePickerInteractive(services, nextPage, SVC_PAGE_SIZE, conv.salon),
+    );
     return;
   }
 
@@ -3168,10 +3313,19 @@ async function handlePickService(
       await saveCtx(conv.id, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
       syncConvContext(conv, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
       const svcLines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-      await reply(conv, ['That service list changed — here is what is available now:', ...svcLines, '', 'Reply BACK for menu.'].join('\n'));
+      await replyMaybeInteractive(
+        conv,
+        ['That service list changed — here is what is available now:', ...svcLines, '', 'Reply BACK for menu.'].join('\n'),
+        buildServicePickerInteractive(services, 0, SVC_PAGE_SIZE, conv.salon),
+      );
     } else {
       const page = (ctx(conv).servicePage as number | undefined) ?? 0;
-      await reply(conv, `Please reply with a number (1–${services.length}).\n\n${buildServicePage(services, page)}`);
+      const pageText = `Please reply with a number (1–${services.length}).\n\n${buildServicePage(services, page)}`;
+      await replyMaybeInteractive(
+        conv,
+        pageText,
+        buildServicePickerInteractive(services, page, SVC_PAGE_SIZE, conv.salon),
+      );
     }
     return;
   }
@@ -3225,7 +3379,11 @@ async function continueAfterServicePick(
   const header = preferredId
     ? `Last time you booked with ${sanitize(staff[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
     : 'Choose stylist:';
-  await reply(conv, [header, ...staffMenuLines(staff, preferredId), '', 'BACK'].join('\n'));
+  await replyMaybeInteractive(
+    conv,
+    [header, ...staffMenuLines(staff, preferredId), '', 'BACK'].join('\n'),
+    buildStaffPickerInteractive(staff, preferredId, conv.salon, header),
+  );
 }
 
 async function handlePickStaff(
@@ -3262,9 +3420,11 @@ async function handlePickStaff(
 
   const rerenderMenu = async (prefix: string) => {
     await saveCtx(conv.id, { staffOrderIds: staffList.map((s) => s.id) });
-    await reply(
+    const body = [prefix, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK for menu.'].join('\n');
+    await replyMaybeInteractive(
       conv,
-      [prefix, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK for menu.'].join('\n'),
+      body,
+      buildStaffPickerInteractive(staffList, preferredId, conv.salon, prefix),
     );
   };
 
@@ -3321,15 +3481,11 @@ async function handlePickStaff(
     ConversationStep.PICK_DATE,
   );
   const lines = formatDateMenuLines(dates.slice(0, 10));
-  await reply(
+  const prefix = 'Pick a date (next available days):';
+  await replyMaybeInteractive(
     conv,
-    [
-      'Pick a date (next available days):',
-      ...lines,
-      '',
-      APPOINTMENT_DATE_HINT,
-      'Reply BACK to go back.',
-    ].join('\n'),
+    [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
+    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
   );
 }
 
@@ -3369,9 +3525,10 @@ async function handlePickDate(
       return;
     }
     const dateLines = formatDateMenuLines(suggestions.slice(0, 10));
-    await reply(
+    await replyMaybeInteractive(
       conv,
       [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
+      buildDatePickerInteractive(suggestions.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
     );
   };
 
@@ -3418,14 +3575,12 @@ async function handlePickDate(
     slots.length > MAX_SLOT_OPTIONS
       ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
       : '';
-  await reply(conv, [
-    `🗓 *${localDt.toFormat('cccc, d MMMM')}*`,
-    'Pick a time:',
-    ...lines,
-    extra,
-    '',
-    'Reply *BACK* to choose a different date.',
-  ].join('\n'));
+  const header = `🗓 *${localDt.toFormat('cccc, d MMMM')}*\nPick a time:`;
+  await replyMaybeInteractive(
+    conv,
+    [header, ...lines, extra, '', 'Reply *BACK* to choose a different date.'].join('\n'),
+    buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon, header),
+  );
 }
 
 async function handlePickSlot(
@@ -3452,16 +3607,14 @@ async function handlePickSlot(
       ConversationStep.CONFIRM_BOOKING,
     );
     const dt = DateTime.fromISO(quickPick.slotStartIso).setZone(conv.salon.timezone);
-    await reply(
-      conv,
-      [
-        `Perfect — let's lock this in:`,
-        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-        '',
-        `Reply YES to confirm and continue to payment, or BACK to choose another time.`,
-      ].join('\n'),
-    );
+    const confirmBody = [
+      `Perfect — let's lock this in:`,
+      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+      '',
+      `Reply YES to confirm and continue to payment, or BACK to choose another time.`,
+    ].join('\n');
+    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
     return;
   }
 
@@ -3485,7 +3638,13 @@ async function handlePickSlot(
     }
     await saveCtx(conv.id, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
     syncConvContext(conv, aiResult.contextPatch ?? {}, aiResult.step ?? ConversationStep.MENU);
-    await reply(conv, aiResult.reply);
+    const quickOpts = (aiResult.contextPatch?.quickPickOptions ??
+      ctx(conv).quickPickOptions) as QuickPickOption[] | undefined;
+    await replyMaybeInteractive(
+      conv,
+      aiResult.reply,
+      quickOpts?.length ? buildQuickPickInteractive(quickOpts, conv.salon) : null,
+    );
     return;
   }
 
@@ -3519,7 +3678,7 @@ async function handlePickSlot(
   if (!Number.isFinite(n) || n < 1 || n > maxVisible) {
     const quickOptions = c.quickPickOptions as QuickPickOption[] | undefined;
     if (quickOptions?.length) {
-      await reply(
+      await replyMaybeInteractive(
         conv,
         [
           "I didn't catch that. Reply with *A*, *B*, or *C* for one of these times:",
@@ -3527,11 +3686,17 @@ async function handlePickSlot(
           '',
           'Or ask to *see all services*, or reply *BACK* for the main menu.',
         ].join('\n'),
+        buildQuickPickInteractive(quickOptions, conv.salon),
       );
       return;
     }
     const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
-    await reply(conv, [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
+    const invalidBody = [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+    await replyMaybeInteractive(
+      conv,
+      invalidBody,
+      buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
+    );
     return;
   }
   const slot = slots[n - 1]!;
@@ -3542,16 +3707,14 @@ async function handlePickSlot(
   );
   syncConvContext(conv, { slotStartIso: slot.start.toISOString() }, ConversationStep.CONFIRM_BOOKING);
   const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
-  await reply(
-    conv,
-    [
-      `Confirm booking?`,
-      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-      '',
-      `Reply YES to confirm, or BACK to choose another time.`,
-    ].join('\n'),
-  );
+  const confirmBody = [
+    `Confirm booking?`,
+    `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+    dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+    '',
+    `Reply YES to confirm, or BACK to choose another time.`,
+  ].join('\n');
+  await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
 }
 
 async function handleConfirm(
@@ -3570,9 +3733,10 @@ async function handleConfirm(
 
   // EC-03: accept natural affirmations, not just exact "yes"/"y"
   if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(trimmed)) {
-    await reply(
+    await replyMaybeInteractive(
       conv,
       'No problem — reply *YES* to confirm this booking, or *BACK* to pick a different time.',
+      buildConfirmBookingInteractive(conv.salon),
     );
     return;
   }
@@ -3626,7 +3790,12 @@ async function handleConfirm(
       if (freshSlots.length > 0) {
         await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
         const slotLines = formatSlotMenuLines(freshSlots, conv.salon.timezone);
-        await reply(conv, ['Sorry, that slot was just taken. Please pick another time:', ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n'));
+        const slotBody = ['Sorry, that slot was just taken. Please pick another time:', ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+        await replyMaybeInteractive(
+          conv,
+          slotBody,
+          buildSlotPickerInteractive(freshSlots, conv.salon.timezone, conv.salon),
+        );
         return;
       }
     }
@@ -3965,6 +4134,66 @@ async function handleManageBooking(
     return;
   }
 
+  const pendingIdx = c.pendingManageIdx as number | undefined;
+  if (pendingIdx != null) {
+    const action = text.trim().toLowerCase();
+    if (action === 'back' || isBackCommand(text)) {
+      await saveCtx(conv.id, { pendingManageIdx: undefined }, ConversationStep.MANAGE_BOOKING);
+      await menuActionViewBookings(conv, (c.manageBookingHint as 'view' | 'reschedule' | 'cancel' | undefined) ?? 'view');
+      return;
+    }
+    if (action === 'cancel') {
+      await saveCtx(conv.id, { pendingManageIdx: undefined });
+      await handleManageBooking(conv, `cancel ${pendingIdx}`);
+      return;
+    }
+    if (action === 'reschedule') {
+      await saveCtx(conv.id, { pendingManageIdx: undefined });
+      await handleManageBooking(conv, `reschedule ${pendingIdx}`);
+      return;
+    }
+  }
+
+  const bareNum = /^(\d+)$/.exec(text.trim());
+  if (bareNum) {
+    const idx = parseInt(bareNum[1]!, 10);
+    const hint = (c.manageBookingHint as 'view' | 'reschedule' | 'cancel' | undefined) ?? 'view';
+    if (hint === 'cancel') {
+      await handleManageBooking(conv, `cancel ${idx}`);
+      return;
+    }
+    if (hint === 'reschedule') {
+      await handleManageBooking(conv, `reschedule ${idx}`);
+      return;
+    }
+    if (idx >= 1 && idx <= ids.length) {
+      const id = ids[idx - 1]!;
+      const appt = await getTenantDb().appointment.findFirst({
+        where: { id, customerId: conv.customerId },
+        include: { service: true, staff: true },
+      });
+      if (!appt) {
+        await reply(conv, 'Booking not found.');
+        return;
+      }
+      await saveCtx(conv.id, { pendingManageIdx: idx }, ConversationStep.MANAGE_BOOKING);
+      const dt = DateTime.fromJSDate(appt.start).setZone(conv.salon.timezone);
+      const friendlyDate = dt.toFormat('cccc, d MMMM') + ' at ' + dt.toFormat('HH:mm');
+      await replyMaybeInteractive(
+        conv,
+        [
+          `*${sanitize(appt.service.name)}*`,
+          `with ${sanitize(appt.staff.name)}`,
+          friendlyDate,
+          '',
+          'Cancel or reschedule this booking?',
+        ].join('\n'),
+        buildManageBookingActionsInteractive(conv.salon),
+      );
+      return;
+    }
+  }
+
   // EC-04: removed $ anchor so trailing whitespace/punctuation doesn't break match
   const cancelMatch = /^cancel\s*(\d+)/i.exec(text.trim());
   const rescheduleMatch = /^reschedule\s*(\d+)/i.exec(text.trim());
@@ -4004,19 +4233,17 @@ async function handleManageBooking(
     const dt = DateTime.fromJSDate(appt.start).setZone(conv.salon.timezone);
     const friendlyDate = dt.toFormat('cccc, d MMMM') + ' at ' + dt.toFormat('HH:mm');
     await saveCtx(conv.id, { pendingCancelApptId: appt.id }, ConversationStep.CONFIRM_CANCEL);
-    await reply(
-      conv,
-      [
-        `⚠️ *Are you sure you want to cancel?*`,
-        '',
-        `📋 *${sanitize(appt.service.name)}*`,
-        `👤 with ${sanitize(appt.staff.name)}`,
-        `📅 ${friendlyDate}`,
-        '',
-        'Reply *YES* to confirm cancellation',
-        'Reply *NO* to keep your booking',
-      ].join('\n'),
-    );
+    const cancelBody = [
+      `⚠️ *Are you sure you want to cancel?*`,
+      '',
+      `📋 *${sanitize(appt.service.name)}*`,
+      `👤 with ${sanitize(appt.staff.name)}`,
+      `📅 ${friendlyDate}`,
+      '',
+      'Reply *YES* to confirm cancellation',
+      'Reply *NO* to keep your booking',
+    ].join('\n');
+    await replyMaybeInteractive(conv, cancelBody, buildConfirmCancelInteractive(conv.salon));
     return;
   }
 
@@ -4059,17 +4286,11 @@ async function handleManageBooking(
 
     const dates = await suggestBookingDates(conv.salonId);
     const dateLines = formatDateMenuLines(dates.slice(0, 10));
-    await reply(
+    const prefix = `🔄 Rescheduling *${sanitize(appt.service.name)}* with ${sanitize(appt.staff.name)}.\n\nPick a new date:`;
+    await replyMaybeInteractive(
       conv,
-      [
-        `🔄 Rescheduling *${sanitize(appt.service.name)}* with ${sanitize(appt.staff.name)}.`,
-        '',
-        'Pick a new date:',
-        ...dateLines,
-        '',
-        APPOINTMENT_DATE_HINT,
-        'Reply *BACK* to return to menu.',
-      ].join('\n'),
+      [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
+      buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
     );
     return;
   }
@@ -4097,7 +4318,11 @@ async function handleConfirmCancel(
   }
 
   if (lower !== 'yes' && lower !== 'y') {
-    await reply(conv, 'Reply *YES* to confirm cancellation, or *NO* to keep your booking.');
+    await replyMaybeInteractive(
+      conv,
+      'Reply *YES* to confirm cancellation, or *NO* to keep your booking.',
+      buildConfirmCancelInteractive(conv.salon),
+    );
     return;
   }
 
@@ -4474,7 +4699,8 @@ async function handleFaq(
     const f = faqs[n - 1]!;
     // EC-14: WhatsApp messages cap at ~4096 chars; truncate long answers
     const answer = f.answer.length > 3900 ? f.answer.slice(0, 3900) + '…' : f.answer;
-    await reply(conv, `${f.question}\n\n${answer}\n\nReply with another number, ask a question, or BACK.`);
+    const faqBody = `${f.question}\n\n${answer}\n\nReply with another number, ask a question, or BACK.`;
+    await replyMaybeInteractive(conv, faqBody, buildFaqListInteractive(faqs, conv.salon));
     return;
   }
 
@@ -4495,7 +4721,8 @@ async function handleFaq(
     // AI unavailable — fall through to default message
   }
 
-  await reply(conv, "I couldn't find an answer. Pick a FAQ number, ask differently, or reply BACK.");
+  const faqRepromptBody = "I couldn't find an answer. Pick a FAQ number, ask differently, or reply BACK.";
+  await replyMaybeInteractive(conv, faqRepromptBody, buildFaqListInteractive(faqs, conv.salon));
 }
 
 async function handleLoyalty(
@@ -4527,7 +4754,15 @@ async function handlePickBranch(
   const idx = parseInt(text, 10) - 1;
 
   if (isNaN(idx) || idx < 0 || idx >= branchOptions.length) {
-    await reply(conv, `Please reply with a number (1-${branchOptions.length}) or BACK.`);
+    const branches = await getTenantDb().branch.findMany({
+      where: { salonId: conv.salonId, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+    await replyMaybeInteractive(
+      conv,
+      `Please reply with a number (1-${branchOptions.length}) or BACK.`,
+      buildBranchPickerInteractive(branches, conv.salon),
+    );
     return;
   }
 
@@ -4546,7 +4781,12 @@ async function handlePickBranch(
     return;
   }
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  await reply(conv, ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+  const body = ['Pick a service number:', ...lines, '', 'Reply BACK for menu.'].join('\n');
+  await replyMaybeInteractive(
+    conv,
+    body,
+    buildServicePickerInteractive(services, 0, SVC_PAGE_SIZE, conv.salon),
+  );
 }
 
 // ─── Reschedule ────────────────────────────────────────────────────────

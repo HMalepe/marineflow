@@ -1,0 +1,386 @@
+import { DateTime } from 'luxon';
+import { formatCentsZar } from '../lib/formatPrice.js';
+import {
+  CATEGORY_LABELS,
+  getSubMenuLabels,
+  salonDisplayName,
+  type MenuCategoryId,
+  type SalonMenuInput,
+} from '../lib/hierarchicalMenu.js';
+import { truncateListField } from '../lib/integrations/messaging/interactiveList.js';
+import type { InteractiveButtons, InteractiveList, InteractiveMessage } from '../lib/integrations/messaging/types.js';
+import type { QuickPickOption } from './botAssistant.js';
+import type { ServiceSubMenuOption } from './serviceMenuCatalog.js';
+
+const MAX_LIST_ROWS = 10;
+
+function footerForSalon(salon: SalonMenuInput): string | undefined {
+  const f = truncateListField(`Powered by ${salonDisplayName(salon)}`, 60);
+  return f || undefined;
+}
+
+function numberedList(
+  body: string,
+  buttonLabel: string,
+  sectionTitle: string,
+  items: Array<{ id: string; title: string; description?: string }>,
+  footer?: string,
+): InteractiveList | null {
+  if (items.length === 0) return null;
+  const rows = items.slice(0, MAX_LIST_ROWS).map((item) => ({
+    id: item.id,
+    title: truncateListField(item.title, 24),
+    description: item.description ? truncateListField(item.description, 72) : undefined,
+  }));
+  return {
+    type: 'list',
+    body: truncateListField(body, 1024),
+    footer,
+    button: truncateListField(buttonLabel, 20),
+    sections: [{ title: truncateListField(sectionTitle, 24), rows }],
+  };
+}
+
+function quickButtons(
+  body: string,
+  buttons: Array<{ id: string; title: string }>,
+  footer?: string,
+): InteractiveButtons | null {
+  if (buttons.length === 0) return null;
+  return {
+    type: 'button',
+    body: truncateListField(body, 1024),
+    footer,
+    buttons: buttons.slice(0, 3).map((b) => ({
+      id: b.id,
+      title: truncateListField(b.title, 20),
+    })),
+  };
+}
+
+/** Main-menu category submenu (My Bookings, Rewards, etc.). */
+export function buildCategorySubMenuInteractive(
+  categoryId: MenuCategoryId | 'appointments',
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  if (categoryId === 'services') return null;
+  const title =
+    categoryId === 'appointments' ? CATEGORY_LABELS.my_appointments : CATEGORY_LABELS[categoryId];
+  const labels = [...getSubMenuLabels(categoryId)];
+  const footer = footerForSalon(salon);
+  const body = `*${title}*\nTap below to choose.`;
+
+  if (labels.length <= 3) {
+    return quickButtons(
+      body,
+      labels.map((label, i) => ({ id: String(i + 1), title: label })),
+      footer,
+    );
+  }
+
+  return numberedList(
+    body,
+    'Choose option',
+    title,
+    labels.map((label, i) => ({ id: String(i + 1), title: label })),
+    footer,
+  );
+}
+
+/** Services submenu from live dashboard categories. */
+export function buildServicesSubMenuInteractive(
+  options: ServiceSubMenuOption[],
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  if (options.length === 0) return null;
+  const footer = footerForSalon(salon);
+  const body = '*Services*\nTap below to browse.';
+
+  if (options.length <= 3) {
+    return quickButtons(
+      body,
+      options.map((o, i) => ({ id: String(i + 1), title: o.label })),
+      footer,
+    );
+  }
+
+  return numberedList(
+    body,
+    'Services',
+    'Services',
+    options.map((o, i) => ({ id: String(i + 1), title: o.label })),
+    footer,
+  );
+}
+
+export function buildServicePickerInteractive(
+  services: Array<{ name: string; priceCents: number }>,
+  page: number,
+  pageSize: number,
+  salon: SalonMenuInput,
+  header?: string,
+): InteractiveMessage | null {
+  const start = page * pageSize;
+  const slice = services.slice(start, start + pageSize);
+  const listSlice = slice.slice(0, MAX_LIST_ROWS);
+  if (listSlice.length === 0) return null;
+
+  const body =
+    header ??
+    (services.length > pageSize
+      ? `Pick a service (${start + 1}–${start + listSlice.length} of ${services.length}):`
+      : 'Pick a service:');
+
+  return numberedList(
+    truncateListField(body, 1024),
+    'Pick service',
+    'Services',
+    listSlice.map((s, i) => ({
+      id: String(start + i + 1),
+      title: s.name,
+      description: formatCentsZar(s.priceCents),
+    })),
+    footerForSalon(salon),
+  );
+}
+
+export function buildStaffPickerInteractive(
+  staffList: Array<{ id: string; name: string }>,
+  preferredId: string | null,
+  salon: SalonMenuInput,
+  header?: string,
+): InteractiveMessage | null {
+  const items = [
+    ...staffList.map((s, i) => ({
+      id: String(i + 1),
+      title: s.name,
+      description: s.id === preferredId ? 'Your last stylist' : undefined,
+    })),
+    { id: String(staffList.length + 1), title: 'Any available', description: undefined },
+  ];
+
+  return numberedList(
+    truncateListField(header ?? 'Choose stylist:', 1024),
+    'Choose stylist',
+    'Stylists',
+    items.slice(0, MAX_LIST_ROWS),
+    footerForSalon(salon),
+  );
+}
+
+export function buildDatePickerInteractive(
+  isoDates: string[],
+  timezone: string,
+  salon: SalonMenuInput,
+  prefix?: string,
+): InteractiveMessage | null {
+  const slice = isoDates.slice(0, MAX_LIST_ROWS);
+  if (slice.length === 0) return null;
+
+  const body = prefix ?? '📅 When would you like to come in?';
+  return numberedList(
+    truncateListField(body, 1024),
+    'Pick date',
+    'Dates',
+    slice.map((iso, i) => {
+      const dt = DateTime.fromISO(iso).setZone(timezone);
+      return { id: String(i + 1), title: dt.toFormat('ccc dd LLL'), description: dt.toFormat('yyyy') };
+    }),
+    footerForSalon(salon),
+  );
+}
+
+export function buildSlotPickerInteractive(
+  slots: Array<{ start: Date }>,
+  timezone: string,
+  salon: SalonMenuInput,
+  header?: string,
+): InteractiveMessage | null {
+  const slice = slots.slice(0, MAX_LIST_ROWS);
+  if (slice.length === 0) return null;
+
+  return numberedList(
+    truncateListField(header ?? 'Pick a time:', 1024),
+    'Pick time',
+    'Times',
+    slice.map((s, i) => {
+      const dt = DateTime.fromJSDate(s.start).setZone(timezone);
+      return { id: String(i + 1), title: dt.toFormat('HH:mm'), description: dt.toFormat('ccc') };
+    }),
+    footerForSalon(salon),
+  );
+}
+
+export function buildBranchPickerInteractive(
+  branches: Array<{ name: string; city?: string | null }>,
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  return numberedList(
+    'Which location?',
+    'Locations',
+    'Locations',
+    branches.slice(0, MAX_LIST_ROWS).map((b, i) => ({
+      id: String(i + 1),
+      title: b.name,
+      description: b.city ? truncateListField(b.city, 72) : undefined,
+    })),
+    footerForSalon(salon),
+  );
+}
+
+export function buildServiceCategoryPickerInteractive(
+  categories: Array<{ name: string }>,
+  hasUncategorised: boolean,
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  const items = categories.map((c, i) => ({ id: String(i + 1), title: c.name }));
+  if (hasUncategorised) {
+    items.push({ id: String(items.length + 1), title: 'Other / Uncategorised' });
+  }
+  return numberedList(
+    'What type of service are you looking for?',
+    'Categories',
+    'Categories',
+    items.slice(0, MAX_LIST_ROWS),
+    footerForSalon(salon),
+  );
+}
+
+export function buildConfirmBookingInteractive(salon: SalonMenuInput): InteractiveButtons {
+  return quickButtons(
+    'Reply YES to confirm this booking, or tap below.',
+    [
+      { id: 'yes', title: 'Yes, confirm' },
+      { id: 'back', title: 'Back' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildBookingPopiaInteractive(salon: SalonMenuInput): InteractiveButtons {
+  return quickButtons(
+    'To continue booking we need your consent to store your details (POPIA).',
+    [
+      { id: 'yes', title: 'Yes, accept' },
+      { id: 'no', title: 'No, decline' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildMarketingConsentInteractive(salon: SalonMenuInput): InteractiveButtons {
+  return quickButtons(
+    'Can we send you occasional promos and offers? (Booking updates are always sent.)',
+    [
+      { id: 'accept', title: 'Accept' },
+      { id: 'decline', title: 'Decline' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildQuickPickInteractive(
+  options: QuickPickOption[],
+  salon: SalonMenuInput,
+  leadText?: string,
+): InteractiveMessage | null {
+  const slice = options.slice(0, 3);
+  if (slice.length === 0) return null;
+
+  const body = leadText ?? 'Here are times I can hold for you:';
+  if (slice.length <= 3) {
+    return quickButtons(
+      body,
+      slice.map((o) => ({ id: o.key, title: o.key })),
+      footerForSalon(salon),
+    );
+  }
+
+  return numberedList(
+    body,
+    'Pick time',
+    'Times',
+    slice.map((o) => ({
+      id: o.key,
+      title: truncateListField(o.label, 24),
+    })),
+    footerForSalon(salon),
+  );
+}
+
+export function buildConfirmCancelInteractive(salon: SalonMenuInput): InteractiveButtons {
+  return quickButtons(
+    'Reply YES to confirm cancellation, or tap below.',
+    [
+      { id: 'yes', title: 'Yes, cancel' },
+      { id: 'no', title: 'Keep booking' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildManageBookingActionsInteractive(salon: SalonMenuInput): InteractiveButtons {
+  return quickButtons(
+    'What would you like to do with this booking?',
+    [
+      { id: 'cancel', title: 'Cancel' },
+      { id: 'reschedule', title: 'Reschedule' },
+      { id: 'back', title: 'Back' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildManageBookingListInteractive(
+  appointments: Array<{ serviceName: string; whenLabel: string }>,
+  salon: SalonMenuInput,
+  header: string,
+): InteractiveMessage | null {
+  if (appointments.length === 0) return null;
+  return numberedList(
+    truncateListField(header, 1024),
+    'Pick booking',
+    'Upcoming',
+    appointments.slice(0, MAX_LIST_ROWS).map((a, i) => ({
+      id: String(i + 1),
+      title: truncateListField(a.serviceName, 24),
+      description: truncateListField(a.whenLabel, 72),
+    })),
+    footerForSalon(salon),
+  );
+}
+
+export function buildFaqListInteractive(
+  faqs: Array<{ question: string }>,
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  if (faqs.length === 0) return null;
+  return numberedList(
+    'FAQs — tap a question or type your own:',
+    'Pick FAQ',
+    'FAQs',
+    faqs.slice(0, MAX_LIST_ROWS).map((f, i) => ({
+      id: String(i + 1),
+      title: truncateListField(f.question, 24),
+    })),
+    footerForSalon(salon),
+  );
+}
+
+export function buildCategoryServiceListInteractive(
+  label: string,
+  services: Array<{ name: string; priceCents: number }>,
+  salon: SalonMenuInput,
+): InteractiveMessage | null {
+  return numberedList(
+    `*${truncateListField(label, 40)}*\nTap a service to book.`,
+    'Pick service',
+    truncateListField(label, 24),
+    services.slice(0, MAX_LIST_ROWS).map((s, i) => ({
+      id: String(i + 1),
+      title: s.name,
+      description: formatCentsZar(s.priceCents),
+    })),
+    footerForSalon(salon),
+  );
+}

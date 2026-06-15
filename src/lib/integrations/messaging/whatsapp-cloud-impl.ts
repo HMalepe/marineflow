@@ -1,13 +1,12 @@
 import crypto from 'node:crypto';
 import { env } from '../../../config.js';
 import type {
-  InteractiveList,
   MessagingProvider,
   NormalisedInboundMessage,
   SendOptions,
   SentMessage,
 } from './types.js';
-import { assertValidInteractiveList } from './interactiveList.js';
+import { buildCloudInteractivePayload } from './interactivePayload.js';
 
 /** Verify Meta webhook signature against the raw request body Buffer. */
 export function verifyWebhookRawBuffer(buf: Buffer, signature: string | undefined): boolean {
@@ -42,30 +41,7 @@ function buildMediaPayload(options: SendOptions): Record<string, unknown> | null
   };
 }
 
-/** Build Meta Graph API interactive list payload (exported for tests). */
-export function buildCloudInteractivePayload(interactive: InteractiveList): Record<string, unknown> {
-  assertValidInteractiveList(interactive);
-  return {
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      ...(interactive.header ? { header: { type: 'text', text: interactive.header } } : {}),
-      body: { text: interactive.body },
-      ...(interactive.footer ? { footer: { text: interactive.footer } } : {}),
-      action: {
-        button: interactive.button,
-        sections: interactive.sections.map((section) => ({
-          ...(section.title ? { title: section.title } : {}),
-          rows: section.rows.map((row) => ({
-            id: row.id,
-            title: row.title,
-            ...(row.description ? { description: row.description } : {}),
-          })),
-        })),
-      },
-    },
-  };
-}
+export { buildCloudInteractivePayload } from './interactivePayload.js';
 
 function extractInboundBody(msg: {
   text?: { body: string };

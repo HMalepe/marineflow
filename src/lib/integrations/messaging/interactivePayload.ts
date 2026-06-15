@@ -1,0 +1,105 @@
+import type { InteractiveButtons, InteractiveMessage } from './types.js';
+import {
+  assertValidInteractiveList,
+  normalizeInteractiveList,
+  truncateListField,
+  validateInteractiveListPayload,
+} from './interactiveList.js';
+
+export function normalizeInteractiveButtons(interactive: InteractiveButtons): InteractiveButtons {
+  return {
+    type: 'button',
+    header: interactive.header ? truncateListField(interactive.header.trim(), 60) : undefined,
+    body: truncateListField(interactive.body.trim(), 1024),
+    footer: interactive.footer ? truncateListField(interactive.footer.trim(), 60) : undefined,
+    buttons: interactive.buttons.slice(0, 3).map((b) => ({
+      id: truncateListField(b.id.trim(), 256),
+      title: truncateListField(b.title.trim(), 20),
+    })),
+  };
+}
+
+export function validateInteractiveButtonsPayload(interactive: InteractiveButtons): string[] {
+  const errors: string[] = [];
+  if (interactive.type !== 'button') errors.push('interactive.type must be "button"');
+  if (!interactive.body?.trim()) errors.push('interactive.body is required');
+  if (!interactive.buttons?.length) errors.push('at least one button is required');
+  if (interactive.buttons.length > 3) errors.push('interactive buttons support max 3 buttons');
+  const seen = new Set<string>();
+  for (const btn of interactive.buttons) {
+    if (!btn.id?.trim()) errors.push('button.id is required');
+    if (!btn.title?.trim()) errors.push('button.title is required');
+    if (btn.title.length > 20) errors.push(`button title exceeds 20 chars: ${btn.title}`);
+    if (btn.id && seen.has(btn.id)) errors.push(`duplicate button.id: ${btn.id}`);
+    if (btn.id) seen.add(btn.id);
+  }
+  return errors;
+}
+
+export function assertValidInteractiveButtons(interactive: InteractiveButtons): void {
+  const errors = validateInteractiveButtonsPayload(interactive);
+  if (errors.length > 0) {
+    throw new Error(`Invalid interactive buttons: ${errors.join('; ')}`);
+  }
+}
+
+export function normalizeInteractiveMessage(interactive: InteractiveMessage): InteractiveMessage {
+  return interactive.type === 'list'
+    ? normalizeInteractiveList(interactive)
+    : normalizeInteractiveButtons(interactive);
+}
+
+export function validateInteractiveMessage(interactive: InteractiveMessage): string[] {
+  return interactive.type === 'list'
+    ? validateInteractiveListPayload(interactive)
+    : validateInteractiveButtonsPayload(interactive);
+}
+
+export function assertValidInteractiveMessage(interactive: InteractiveMessage): void {
+  if (interactive.type === 'list') assertValidInteractiveList(interactive);
+  else assertValidInteractiveButtons(interactive);
+}
+
+export function buildCloudInteractivePayload(interactive: InteractiveMessage): Record<string, unknown> {
+  const normalized = normalizeInteractiveMessage(interactive);
+  assertValidInteractiveMessage(normalized);
+
+  if (normalized.type === 'button') {
+    return {
+      type: 'interactive',
+      interactive: {
+        type: 'button',
+        ...(normalized.header ? { header: { type: 'text', text: normalized.header } } : {}),
+        body: { text: normalized.body },
+        ...(normalized.footer ? { footer: { text: normalized.footer } } : {}),
+        action: {
+          buttons: normalized.buttons.map((b) => ({
+            type: 'reply',
+            reply: { id: b.id, title: b.title },
+          })),
+        },
+      },
+    };
+  }
+
+  return {
+    type: 'interactive',
+    interactive: {
+      type: 'list',
+      ...(normalized.header ? { header: { type: 'text', text: normalized.header } } : {}),
+      body: { text: normalized.body },
+      ...(normalized.footer ? { footer: { text: normalized.footer } } : {}),
+      action: {
+        button: normalized.button,
+        sections: normalized.sections.map((section) => ({
+          ...(section.title ? { title: section.title } : {}),
+          rows: section.rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            ...(row.description ? { description: row.description } : {}),
+          })),
+        })),
+      },
+    },
+  };
+}

@@ -5,7 +5,7 @@ import { smsMessaging } from '../lib/integrations/messaging/sms-impl.js';
 import { callBookingConfirmation } from '../lib/integrations/messaging/voice.js';
 import { logger } from '../lib/logger.js';
 import { isTwilioConfigured } from '../config.js';
-import type { InteractiveList, SentMessage } from '../lib/integrations/messaging/types.js';
+import type { InteractiveMessage, SentMessage } from '../lib/integrations/messaging/types.js';
 
 export type Channel = 'whatsapp' | 'sms' | 'voice';
 
@@ -21,7 +21,7 @@ export async function sendWithFallback(params: {
   phoneNumberId?: string;
   mediaUrl?: string;
   mediaType?: 'image' | 'video' | 'document' | 'audio';
-  interactive?: InteractiveList;
+  interactive?: InteractiveMessage;
 }): Promise<{ channel: Channel; result: SentMessage }> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: params.salonId },
