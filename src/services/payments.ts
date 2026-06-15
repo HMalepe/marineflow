@@ -10,9 +10,11 @@ import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
-import { DateTime } from 'luxon';
 
 const PAYFAST_NOTIFY_PATH = '/webhooks/payfast/appointment';
+
+const BOOKING_RATING_PROMPT =
+  'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.';
 
 function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
@@ -129,8 +131,6 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     if (!waId) return;
 
     const salonName = appt.salon.tradingName?.trim() || appt.salon.name;
-    const tz = appt.salon.timezone;
-    const dateStr = DateTime.fromJSDate(appt.start).setZone(tz).toFormat('cccc dd LLL yyyy HH:mm');
 
     const conv = await tx.conversation.findFirst({
       where: { salonId: appt.salonId, customerId: appt.customerId },
@@ -143,17 +143,10 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       popiaRightsNotified: Boolean(convCtx.popiaRightsNotified),
     });
 
-    let confirmMsg =
-      `✅ Payment received! Your booking is confirmed.\n\n` +
-      `${appt.service.name} with ${appt.staff.name}\n` +
-      `${dateStr}\n\n` +
-      `Reference: ${appointmentId.slice(0, 8)}\n\n` +
-      `See you at ${salonName}! 💈`;
+    let confirmMsg = `✅ *Payment received!*\n\nYour booking is paid and confirmed. See you at ${salonName}! 💈`;
     if (includePopiaHint) {
       confirmMsg += `\n\n${buildPopiaRightsHint()}`;
     }
-
-    const ratingMsg = `How was the booking process? Rate us 1–5 ⭐\n(1 = frustrating, 5 = super easy)`;
 
     let confirmSid: string | null = null;
     try {
@@ -168,12 +161,12 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
 
       let ratingSid: string | null = null;
       try {
-        const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: ratingMsg });
+        const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: BOOKING_RATING_PROMPT });
         ratingSid = result.providerMessageId ?? null;
       } catch { /* best-effort */ }
 
       await tx.message.create({
-        data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: ratingMsg, providerSid: ratingSid },
+        data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: BOOKING_RATING_PROMPT, providerSid: ratingSid },
       });
 
       const currentCtx = (conv.context ?? {}) as Record<string, unknown>;

@@ -4033,6 +4033,7 @@ async function handleConfirm(
   );
 
   if (paymentPlan) {
+    let awaitingOnlinePayment = false;
     try {
       const sessionUrl = await createPaymentCheckoutSession({
         salonId: conv.salonId,
@@ -4042,6 +4043,7 @@ async function handleConfirm(
         amountCents: paymentPlan.amountCents,
       });
       if (sessionUrl) {
+        awaitingOnlinePayment = true;
         await reply(
           conv,
           [
@@ -4068,6 +4070,23 @@ async function handleConfirm(
         'We could not generate a payment link right now — you can pay in-store or contact us to pay over the phone.',
       );
     }
+
+    if (isFirstBooking) {
+      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+    }
+
+    if (awaitingOnlinePayment) {
+      await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
+      return;
+    }
+
+    void onBookingConfirmed({
+      id: appointment.id,
+      salonId: conv.salonId,
+      start,
+      status: appointment.status,
+      salon: conv.salon,
+    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
   } else {
     void onBookingConfirmed({
       id: appointment.id,
@@ -4076,11 +4095,12 @@ async function handleConfirm(
       status: appointment.status,
       salon: conv.salon,
     }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+
+    if (isFirstBooking) {
+      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+    }
   }
 
-  if (isFirstBooking) {
-    await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-  }
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
   await reply(
     conv,
