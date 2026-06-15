@@ -29,7 +29,7 @@ import {
   getStampBalance,
   redeemForNextBookingTx,
 } from './loyalty.js';
-import { createPaymentCheckoutSession, resolvePostConfirmPayment } from './payments.js';
+import { createPaymentCheckoutSession, resolvePostConfirmPayment, salonRequiresPostConfirmPayment } from './payments.js';
 import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
@@ -3668,12 +3668,15 @@ async function handlePickSlot(
         ConversationStep.CONFIRM_BOOKING,
       );
       const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
+      const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
+        ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
+        : 'Reply YES to confirm, or BACK to choose another time.';
       const confirmBody = [
         `Confirm booking?`,
         `${sanitize(service.name)} with ${sanitize(staff.name)}`,
         dt.toFormat('cccc, dd LLL yyyy HH:mm'),
         '',
-        `Reply YES to confirm, or BACK to choose another time.`,
+        confirmFooter,
       ].join('\n');
       await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
       return;
@@ -3862,7 +3865,7 @@ async function handleConfirm(
   const paymentPlan = resolvePostConfirmPayment({
     bookingTotalCents,
     loyaltyRedeemed: redeem.redeemed,
-    requirePaymentStep: conv.salon.botRequirePaymentStep,
+    requirePaymentStep: salonRequiresPostConfirmPayment(freshSalon),
   });
   const reviewCredit = await applyReviewCreditTx(tx, {
     customerId: conv.customerId,
@@ -4030,28 +4033,36 @@ async function handleConfirm(
   );
 
   if (paymentPlan) {
-    const sessionUrl = await createPaymentCheckoutSession({
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      appointmentId: appointment.id,
-      service,
-      amountCents: paymentPlan.amountCents,
-    });
-    if (sessionUrl) {
-      await reply(
-        conv,
-        [
-          `💳 *Complete payment*`,
-          '',
-          `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`,
-          '',
-          `Pay securely via PayFast:`,
-          sessionUrl,
-          '',
-          `_We'll mark your booking as paid once payment goes through._`,
-        ].join('\n'),
-      );
-    } else {
+    try {
+      const sessionUrl = await createPaymentCheckoutSession({
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: appointment.id,
+        service,
+        amountCents: paymentPlan.amountCents,
+      });
+      if (sessionUrl) {
+        await reply(
+          conv,
+          [
+            `💳 *Complete payment*`,
+            '',
+            `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`,
+            '',
+            `Pay securely via PayFast:`,
+            sessionUrl,
+            '',
+            `_We'll mark your booking as paid once payment goes through._`,
+          ].join('\n'),
+        );
+      } else {
+        await reply(
+          conv,
+          'We could not generate a payment link right now — you can pay in-store or contact us to pay over the phone.',
+        );
+      }
+    } catch (err) {
+      logger.error({ err, appointmentId: appointment.id }, 'post_confirm_payment_failed');
       await reply(
         conv,
         'We could not generate a payment link right now — you can pay in-store or contact us to pay over the phone.',

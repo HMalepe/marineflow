@@ -1,4 +1,6 @@
 import { prisma } from '../lib/prisma.js';
+import { getTenantDb } from '../lib/db/tenantSession.js';
+import { logger } from '../lib/logger.js';
 import { env } from '../config.js';
 import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
 import { isPayfastConfigured } from '../lib/integrations/payments/index.js';
@@ -16,18 +18,23 @@ function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
 }
 
+/** Whether the salon has post-confirm online payment enabled (legacy column alias supported). */
+export function salonRequiresPostConfirmPayment(salon: {
+  botRequirePaymentStep?: boolean | null;
+  botRequireDepositStep?: boolean | null;
+}): boolean {
+  if (typeof salon.botRequirePaymentStep === 'boolean') return salon.botRequirePaymentStep;
+  if (typeof salon.botRequireDepositStep === 'boolean') return salon.botRequireDepositStep;
+  return true;
+}
+
 /** Full PayFast checkout after booking confirmation — full price or nothing. */
 export function resolvePostConfirmPayment(input: {
   bookingTotalCents: number;
   loyaltyRedeemed: boolean;
   requirePaymentStep: boolean;
 }): { amountCents: number } | null {
-  if (
-    !input.requirePaymentStep ||
-    input.loyaltyRedeemed ||
-    !isPayfastConfigured() ||
-    input.bookingTotalCents <= 0
-  ) {
+  if (!input.requirePaymentStep || input.loyaltyRedeemed || input.bookingTotalCents <= 0) {
     return null;
   }
   return { amountCents: input.bookingTotalCents };
@@ -40,37 +47,51 @@ export async function createPaymentCheckoutSession(input: {
   service: Service;
   amountCents: number;
 }): Promise<string | null> {
-  if (!env.PAYFAST_MERCHANT_ID || !env.PAYFAST_MERCHANT_KEY) return null;
+  if (!isPayfastConfigured()) {
+    logger.warn({ salonId: input.salonId, appointmentId: input.appointmentId }, 'payfast_not_configured');
+    return null;
+  }
   if (input.amountCents <= 0) return null;
 
   const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const reference = appointmentPaymentReference(input.appointmentId);
 
-  const result = await payfastAdapter.createCheckout({
-    salonId: input.salonId,
-    customerId: input.customerId,
-    amountCents: input.amountCents,
-    currency: 'ZAR',
-    reference,
-    description: input.service.name,
-    returnUrl: `${baseUrl}/pay/success?ref=${reference}`,
-    cancelUrl: `${baseUrl}/pay/cancel?ref=${reference}`,
-    notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
-  });
-
-  await prisma.payment.create({
-    data: {
+  try {
+    const result = await payfastAdapter.createCheckout({
       salonId: input.salonId,
-      appointmentId: input.appointmentId,
       customerId: input.customerId,
-      status: 'PENDING',
       amountCents: input.amountCents,
       currency: 'ZAR',
-      metadata: { reference, provider: 'payfast' },
-    },
-  });
+      reference,
+      description: input.service.name,
+      returnUrl: `${baseUrl}/pay/success?ref=${reference}`,
+      cancelUrl: `${baseUrl}/pay/cancel?ref=${reference}`,
+      notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
+    });
 
-  return result.redirectUrl;
+    await getTenantDb().payment.create({
+      data: {
+        salonId: input.salonId,
+        appointmentId: input.appointmentId,
+        customerId: input.customerId,
+        provider: 'PAYFAST',
+        status: 'PENDING',
+        amountCents: input.amountCents,
+        currency: 'ZAR',
+        externalReference: reference,
+        payfastMerchantRef: reference,
+        metadata: { reference, provider: 'payfast' },
+      },
+    });
+
+    return result.redirectUrl;
+  } catch (err) {
+    logger.error(
+      { err, salonId: input.salonId, appointmentId: input.appointmentId },
+      'payment_checkout_create_failed',
+    );
+    return null;
+  }
 }
 export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
   const verified = payfastAdapter.verifyWebhook(body, {});
