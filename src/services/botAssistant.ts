@@ -303,7 +303,6 @@ export async function tryAiAssist(
           };
         }
 
-        const first = quickPickOptions[0]!;
         const bookLead = sanitizeAiBookReply(ai.empathyNote?.trim() || ai.reply);
         return {
           handled: true,
@@ -317,9 +316,6 @@ export async function tryAiAssist(
           ].join('\n'),
           step: ConversationStep.PICK_SLOT,
           contextPatch: {
-            selectedServiceId: first.serviceId,
-            selectedStaffId: first.staffId,
-            localDateStr: first.localDateStr,
             quickPickOptions,
           },
         };

@@ -1758,8 +1758,8 @@ const SESSION_STALE_MS = 30 * 60 * 1000; // 30 minutes
 async function goBackToMainMenu(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
-  await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
-  syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+  await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.MENU, ctx(conv));
+  syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.MENU);
   await replyMenu(conv);
 }
 
@@ -2085,8 +2085,8 @@ async function routeConversation(
     conv.lastMessageAt &&
     Date.now() - new Date(conv.lastMessageAt).getTime() > SESSION_STALE_MS
   ) {
-    await saveCtx(conv.id, {}, ConversationStep.IDLE);
-    syncConvContext(conv, {}, ConversationStep.IDLE);
+    await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.IDLE);
+    syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.IDLE);
     await replyWithMenu(conv, '👋 It\'s been a while — your previous session has ended. Here\'s the menu to start fresh:');
     return;
   }
@@ -2206,6 +2206,9 @@ async function startBookingFlow(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
   const salon = conv.salon;
+
+  await saveCtx(conv.id, BOOKING_CTX_CLEAR, undefined, ctx(conv));
+  syncConvContext(conv, BOOKING_CTX_CLEAR, conv.step);
 
   const branches = await getTenantDb().branch.findMany({
     where: { salonId: salon.id, isActive: true },
@@ -2765,7 +2768,17 @@ async function menuActionShowServicesForOption(
   }
 
   const lines = services.map((s, i) => `${i + 1}. ${sanitize(s.name)} (${fmtMoney(s.priceCents)})`);
-  const filterPatch = { serviceFilterIds: services.map((s) => s.id), menuCategory: undefined };
+  const filterPatch = {
+    serviceFilterIds: services.map((s) => s.id),
+    menuCategory: undefined,
+    selectedServiceId: undefined,
+    selectedStaffId: undefined,
+    localDateStr: undefined,
+    slotStartIso: undefined,
+    quickPickOptions: undefined,
+    anyStaff: undefined,
+    staffOrderIds: undefined,
+  };
   await saveCtx(conv.id, filterPatch, ConversationStep.PICK_SERVICE, ctx(conv));
   syncConvContext(conv, filterPatch, ConversationStep.PICK_SERVICE);
   const body = [`*${sanitize(label)}*`, ...lines, '', 'Reply with a number to book, or BACK.'].join('\n');
@@ -3316,7 +3329,10 @@ async function handlePickService(
   }
 
   const n = parseInt(text, 10);
-  if (!Number.isFinite(n) || n < 1 || n > services.length) {
+  const page = (ctx(conv).servicePage as number | undefined) ?? 0;
+  const pageStart = page * SVC_PAGE_SIZE;
+  const pageEnd = Math.min(pageStart + SVC_PAGE_SIZE, services.length);
+  if (!Number.isFinite(n) || n < pageStart + 1 || n > pageEnd) {
     if (clearedStaleFilter) {
       await saveCtx(conv.id, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
       syncConvContext(conv, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
@@ -3362,7 +3378,12 @@ async function continueAfterServicePick(
     const assignedStaff = availableStaff[0]!;
     await saveCtx(
       conv.id,
-      { selectedServiceId: service.id, selectedStaffId: assignedStaff.id, anyStaff: true },
+      {
+        selectedServiceId: service.id,
+        selectedStaffId: assignedStaff.id,
+        anyStaff: true,
+        quickPickOptions: undefined,
+      },
       ConversationStep.PICK_DATE,
     );
     await handlePickDate(conv, '');
@@ -3381,12 +3402,16 @@ async function continueAfterServicePick(
   }
   await saveCtx(
     conv.id,
-    { selectedServiceId: service.id, staffOrderIds: staff.map((s) => s.id) },
+    {
+      selectedServiceId: service.id,
+      staffOrderIds: staff.map((s) => s.id),
+      quickPickOptions: undefined,
+    },
     ConversationStep.PICK_STAFF,
   );
   const header = preferredId
-    ? `Last time you booked with ${sanitize(staff[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
-    : 'Choose stylist:';
+    ? `*${sanitize(service.name)}*\nLast time you booked with ${sanitize(staff[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
+    : `*${sanitize(service.name)}*\nChoose stylist:`;
   await replyMaybeInteractive(
     conv,
     [header, ...staffMenuLines(staff, preferredId), '', 'BACK'].join('\n'),
@@ -3485,11 +3510,11 @@ async function handlePickStaff(
 
   await saveCtx(
     conv.id,
-    { selectedStaffId: staffId, anyStaff: isAny, staffOrderIds: undefined },
+    { selectedStaffId: staffId, anyStaff: isAny, staffOrderIds: undefined, quickPickOptions: undefined },
     ConversationStep.PICK_DATE,
   );
   const lines = formatDateMenuLines(dates.slice(0, 10));
-  const prefix = 'Pick a date (next available days):';
+  const prefix = `*${sanitize(service.name)}*\nPick a date (next available days):`;
   await replyMaybeInteractive(
     conv,
     [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
@@ -3573,7 +3598,7 @@ async function handlePickDate(
     return;
   }
 
-  await saveCtx(conv.id, { localDateStr }, ConversationStep.PICK_SLOT);
+  await saveCtx(conv.id, { localDateStr, quickPickOptions: undefined }, ConversationStep.PICK_SLOT);
   void getTenantDb().analyticsEvent.create({
     data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
   }).catch(() => {});
@@ -3583,7 +3608,7 @@ async function handlePickDate(
     slots.length > MAX_SLOT_OPTIONS
       ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
       : '';
-  const header = `🗓 *${localDt.toFormat('cccc, d MMMM')}*\nPick a time:`;
+  const header = `🗓 *${sanitize(service.name)}* · ${localDt.toFormat('cccc, d MMMM')}\nPick a time:`;
   await replyMaybeInteractive(
     conv,
     [header, ...lines, extra, '', 'Reply *BACK* to choose a different date.'].join('\n'),
@@ -3596,54 +3621,25 @@ async function handlePickSlot(
   text: string,
 ) {
   const c = ctx(conv);
-  const quickPick = matchQuickPick(text, c.quickPickOptions);
-  if (quickPick) {
-    const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: quickPick.serviceId } });
-    const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: quickPick.staffId } });
-    await saveCtx(
-      conv.id,
-      {
-        selectedServiceId: quickPick.serviceId,
-        selectedStaffId: quickPick.staffId,
-        localDateStr: quickPick.localDateStr,
-        slotStartIso: quickPick.slotStartIso,
-        quickPickOptions: undefined,
-        // §6.1 — quick-pick staff is auto-assigned unless the customer named
-        // them; anyStaff=true suppresses the preference write in handleConfirm.
-        anyStaff: !quickPick.explicitStaff,
-      },
-      ConversationStep.CONFIRM_BOOKING,
-    );
-    const dt = DateTime.fromISO(quickPick.slotStartIso).setZone(conv.salon.timezone);
-    const confirmBody = [
-      `Perfect — let's lock this in:`,
-      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-      '',
-      `Reply YES to confirm and continue to payment, or BACK to choose another time.`,
-    ].join('\n');
-    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
-    return;
-  }
+  const serviceId = c.selectedServiceId as string | undefined;
+  const staffId = c.selectedStaffId as string | undefined;
+  const localDateStr = c.localDateStr as string | undefined;
+  const inStructuredBooking = Boolean(serviceId && staffId && localDateStr);
+  const looksLikeSlotNumber = /^\d+$/.test(text.trim());
 
   if (isBrowseServicesRequest(text)) {
     await beginAllServicesPicker(conv, 'Sure — here are all our cuts and services:');
     return;
   }
 
-  const serviceId = c.selectedServiceId as string | undefined;
-  const staffId = c.selectedStaffId as string | undefined;
-  const localDateStr = c.localDateStr as string | undefined;
-  const looksLikeSlotNumber = /^\d+$/.test(text.trim());
-
-  if (looksLikeSlotNumber && serviceId && staffId && localDateStr) {
+  if (inStructuredBooking && looksLikeSlotNumber) {
     const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
     const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
     const { slots, tooLong } = await getAvailableSlots({
       salonId: conv.salonId,
       service,
       staff,
-      localDateStr,
+      localDateStr: localDateStr!,
     });
     if (tooLong || slots.length === 0) {
       await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
@@ -3688,6 +3684,36 @@ async function handlePickSlot(
       invalidBody,
       buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
     );
+    return;
+  }
+
+  const quickPick = matchQuickPick(text, c.quickPickOptions);
+  if (quickPick) {
+    const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: quickPick.serviceId } });
+    const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: quickPick.staffId } });
+    await saveCtx(
+      conv.id,
+      {
+        selectedServiceId: quickPick.serviceId,
+        selectedStaffId: quickPick.staffId,
+        localDateStr: quickPick.localDateStr,
+        slotStartIso: quickPick.slotStartIso,
+        quickPickOptions: undefined,
+        // §6.1 — quick-pick staff is auto-assigned unless the customer named
+        // them; anyStaff=true suppresses the preference write in handleConfirm.
+        anyStaff: !quickPick.explicitStaff,
+      },
+      ConversationStep.CONFIRM_BOOKING,
+    );
+    const dt = DateTime.fromISO(quickPick.slotStartIso).setZone(conv.salon.timezone);
+    const confirmBody = [
+      `Perfect — let's lock this in:`,
+      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+      '',
+      `Reply YES to confirm and continue to payment, or BACK to choose another time.`,
+    ].join('\n');
+    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
     return;
   }
 
