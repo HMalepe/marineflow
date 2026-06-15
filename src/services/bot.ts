@@ -235,7 +235,9 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
 };
 
 function isProfileIncomplete(customer: Customer): boolean {
-  return !customer.firstName || !customer.email;
+  // Only firstName is required. email and dateOfBirth are optional — requiring them
+  // caused the POPIA gate to re-trigger every session for customers who skipped those fields.
+  return !customer.firstName;
 }
 
 /** Max time slots shown in one WhatsApp list (was 8 — too restrictive on busy days). */

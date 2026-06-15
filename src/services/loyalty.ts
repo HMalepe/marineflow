@@ -19,6 +19,14 @@ export async function ensureLoyaltyProgram(salonId: string, tx?: Tx) {
       rewardKind: 'FREE_SERVICE_TIER',
     },
     update: {},
+    // Only select fields that are guaranteed to exist on baselined DBs.
+    // rewardDescription was added later and may be missing until ensureSchema runs.
+    select: {
+      id: true,
+      salonId: true,
+      stampsPerReward: true,
+      rewardKind: true,
+    },
   });
 }
 
