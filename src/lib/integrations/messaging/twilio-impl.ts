@@ -2,6 +2,7 @@ import { sendWhatsAppReply } from '../../twilio.js';
 import { normalizeWaId } from '../../phone.js';
 import { validateTwilioRequest } from '../../twilioValidate.js';
 import { env } from '../../../config.js';
+import { sendTwilioInteractive } from './twilioContent.js';
 import type {
   MessagingProvider,
   NormalisedInboundMessage,
@@ -11,6 +12,10 @@ import type {
 
 export const twilioMessaging: MessagingProvider = {
   async sendText(options: SendOptions): Promise<SentMessage> {
+    if (options.interactive) {
+      const sid = await sendTwilioInteractive(options.to, options.interactive);
+      return { providerMessageId: sid, timestamp: new Date() };
+    }
     const sid = await sendWhatsAppReply(options.to, options.body, options.mediaUrl);
     return { providerMessageId: sid, timestamp: new Date() };
   },
