@@ -60,9 +60,8 @@ export function encryptFlowResponse(
   aesKey: Buffer,
   iv: Buffer,
 ): string {
-  // Flip first bit of IV per WhatsApp Flows spec
-  const flippedIv = Buffer.from(iv);
-  flippedIv[0] ^= 0xff;
+  // Flip all bits of every IV byte per WhatsApp Flows spec
+  const flippedIv = Buffer.from(iv.map((b) => b ^ 0xff));
 
   const cipher = crypto.createCipheriv('aes-128-gcm', aesKey, flippedIv);
   const encrypted = Buffer.concat([
