@@ -2215,9 +2215,33 @@ async function sendBookingFlow(
   const salonName = conv.salon.tradingName?.trim() || conv.salon.name;
   const welcomeBody = `Hi ${conv.customer.firstName ?? 'there'} 👋\nLet's book your appointment at *${salonName}* — tap the button below.`;
 
-  const payload = buildFlowTriggerMessage({ salonName, flowId, flowToken, welcomeBody });
+  const triggerPayload = buildFlowTriggerMessage({ salonName, flowId, flowToken, welcomeBody });
+  const phoneNumberId = conv.salon.whatsappPhoneId!;
+  const { env } = await import('../config.js');
 
-  await reply(conv, welcomeBody, null, { interactive: payload as import('../lib/integrations/messaging/types.js').InteractiveMessage });
+  // Flow messages use type:'flow' which bypasses our list/button interactive builder
+  const res = await fetch(
+    `https://graph.facebook.com/${env.META_API_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.META_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: conv.customer.waId.replace(/^\+/, ''),
+        ...triggerPayload,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    logger.error({ err, convId: conv.id }, 'flow_trigger_send_failed');
+    throw new Error(`Flow trigger send failed (${res.status}): ${err}`);
+  }
+
   await saveCtx(conv.id, { awaitingFlowCompletion: true }, ConversationStep.PICK_SERVICE);
   syncConvContext(conv, { awaitingFlowCompletion: true }, ConversationStep.PICK_SERVICE);
 }
