@@ -52,10 +52,26 @@ export async function sendWithFallback(params: {
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
+      // Parse structured Meta error so Railway doesn't truncate the one-line JSON
+      const metaErrMatch = errMsg.match(/\((\d+)\):\s*(\{.+)/s);
+      let metaErrParsed: Record<string, unknown> = {};
+      if (metaErrMatch) {
+        try { metaErrParsed = JSON.parse(metaErrMatch[2]!) as Record<string, unknown>; } catch { /* ignore */ }
+      }
+      const metaError = (metaErrParsed as { error?: { code?: number; error_subcode?: number; message?: string; type?: string } }).error;
+      const logCtx = {
+        cloudPhoneId,
+        httpStatus: metaErrMatch?.[1],
+        metaCode: metaError?.code,
+        metaSubcode: metaError?.error_subcode,
+        metaType: metaError?.type,
+        metaMessage: metaError?.message,
+        rawErr: errMsg,
+      };
       if (params.interactive) {
-        logger.warn({ err: errMsg, cloudPhoneId }, 'whatsapp_cloud_interactive_failed_retry_plain');
+        logger.warn(logCtx, 'whatsapp_cloud_interactive_failed_retry_plain');
       } else {
-        logger.warn({ err: errMsg, cloudPhoneId }, 'whatsapp_cloud_fallthrough');
+        logger.warn(logCtx, 'whatsapp_cloud_fallthrough');
       }
     }
 
