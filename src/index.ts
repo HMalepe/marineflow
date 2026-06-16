@@ -32,7 +32,27 @@ try {
   const err = e as { stderr?: string; stdout?: string; message?: string };
   const errOutput = err.stderr || err.stdout || err.message || '';
 
-  if (!errOutput.includes('P3005')) {
+  if (errOutput.includes('P3018')) {
+    // A previously-failed migration is blocking deploy — mark it as rolled back and retry.
+    const match = errOutput.match(/Migration name:\s*(\S+)/);
+    if (match) {
+      const failedName = match[1]!;
+      console.log(`[STARTUP] P3018 detected — resolving failed migration as rolled-back: ${failedName}`);
+      try {
+        execSync(`npx prisma migrate resolve --rolled-back "${failedName}"`, {
+          encoding: 'utf-8',
+          cwd: join(__dirname, '..'),
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        console.log('[STARTUP] Migrations OK after P3018 resolve:', deploy().trim() || '(no output)');
+      } catch (resolveErr) {
+        const re = resolveErr as { stderr?: string; stdout?: string; message?: string };
+        console.error('[STARTUP] P3018 resolve failed — server starting anyway:', re.stderr || re.stdout || re.message);
+      }
+    } else {
+      console.error('[STARTUP] P3018 detected but could not parse migration name — server starting anyway:', errOutput);
+    }
+  } else if (!errOutput.includes('P3005')) {
     console.error('[STARTUP] Migration FAILED — server starting anyway:', errOutput);
   } else {
     // P3005: DB has tables but no migration history — baseline then retry.
