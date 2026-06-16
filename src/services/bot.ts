@@ -22,7 +22,7 @@ import { isConversationWakeMessage, staffHandoffExpired } from '../lib/conversat
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { DateTime } from 'luxon';
-import { getAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
+import { getAvailableSlots, getNextAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
 import {
   ensureLoyaltyProgram,
   getStampBalance,
@@ -96,6 +96,7 @@ import {
   buildBranchPickerInteractive,
   buildCategoryServiceListInteractive,
   buildCategorySubMenuInteractive,
+  buildCombinedSlotPickerInteractive,
   buildConfirmBookingInteractive,
   buildConfirmCancelInteractive,
   buildDatePickerInteractive,
@@ -155,6 +156,10 @@ export type BotContext = Record<string, unknown> & {
   negativeSentimentEscalated?: boolean;
   /** AI-suggested quick book slots (A/B/C). */
   quickPickOptions?: QuickPickOption[];
+  /** Flattened date+time options shown by the combined PICK_DATE picker — one tap books both. */
+  flatSlotOptions?: { startIso: string; localDateStr: string }[];
+  /** True once the customer tapped "More dates" and is now browsing the date-only list. */
+  awaitingDateList?: boolean;
   /**
    * Staff ids in the exact order last rendered in the PICK_STAFF menu.
    * Replies are parsed against this snapshot so the number the customer saw
@@ -279,6 +284,24 @@ function formatSlotMenuLines(
 
 function visibleSlotCount(slotCount: number): number {
   return Math.min(slotCount, MAX_SLOT_OPTIONS);
+}
+
+function formatFlatSlotMenuLines(
+  slots: { start: Date; localDateStr: string }[],
+  timezone: string,
+  hasMore: boolean,
+): string[] {
+  const today = DateTime.now().setZone(timezone).startOf('day');
+  const lines = slots.slice(0, 9).map((s, i) => {
+    const dt = DateTime.fromJSDate(s.start).setZone(timezone);
+    const dayDiff = Math.round(dt.startOf('day').diff(today, 'days').days);
+    const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Tomorrow' : dt.toFormat('ccc dd LLL');
+    return `${i + 1}. ${dayLabel} ${dt.toFormat('HH:mm')}`;
+  });
+  if (hasMore) {
+    lines.push(`${lines.length + 1}. More dates`);
+  }
+  return lines;
 }
 
 const WHATSAPP_MENU_STEPS: ConversationStep[] = [
@@ -3467,8 +3490,18 @@ async function handlePickStaff(
     staffId = counts[0]!.id;
   }
 
-  const dates = await suggestBookingDates(conv.salonId, 14);
-  if (dates.length === 0) {
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+  const { slots: flatSlots, tooLong, hasMore } = await getNextAvailableSlots({
+    salonId: conv.salonId,
+    service,
+    staff,
+  });
+  if (tooLong) {
+    await saveCtx(conv.id, {}, ConversationStep.MENU);
+    await replyWithMenu(conv, `Sorry, this service is too long to fit within business hours. Please contact us directly.`);
+    return;
+  }
+  if (flatSlots.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     const phone = conv.salon.phoneDisplay?.trim();
     const msg = phone
@@ -3480,15 +3513,21 @@ async function handlePickStaff(
 
   await saveCtx(
     conv.id,
-    { selectedStaffId: staffId, anyStaff: isAny, staffOrderIds: undefined },
+    {
+      selectedStaffId: staffId,
+      anyStaff: isAny,
+      staffOrderIds: undefined,
+      flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
+      awaitingDateList: undefined,
+    },
     ConversationStep.PICK_DATE,
   );
-  const lines = formatDateMenuLines(dates.slice(0, 10));
-  const prefix = 'Pick a date (next available days):';
+  const prefix = '⚡ Next available — pick a date & time:';
+  const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
     conv,
-    [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
-    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+    [prefix, ...lines, '', 'Reply BACK to go back.'].join('\n'),
+    buildCombinedSlotPickerInteractive(flatSlots, conv.salon.timezone, conv.salon, { hasMore, header: prefix }),
   );
 }
 
@@ -3510,6 +3549,7 @@ async function handlePickDate(
   const suggestions = await suggestBookingDates(conv.salonId, 14);
 
   const showDateList = async (prefix: string) => {
+    await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: true });
     if (suggestions.length === 0) {
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       const phone = conv.salon.phoneDisplay?.trim();
@@ -3534,6 +3574,47 @@ async function handlePickDate(
       buildDatePickerInteractive(suggestions.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
     );
   };
+
+  const flatSlotOptions = c.flatSlotOptions as { startIso: string; localDateStr: string }[] | undefined;
+  const awaitingDateList = c.awaitingDateList as boolean | undefined;
+
+  if (flatSlotOptions && flatSlotOptions.length > 0 && !awaitingDateList) {
+    const flatN = parseInt(text, 10);
+    if (Number.isFinite(flatN) && flatN >= 1 && flatN <= flatSlotOptions.length) {
+      const picked = flatSlotOptions[flatN - 1]!;
+      await saveCtx(
+        conv.id,
+        { localDateStr: picked.localDateStr, slotStartIso: picked.startIso, flatSlotOptions: undefined },
+        ConversationStep.CONFIRM_BOOKING,
+      );
+      void getTenantDb().analyticsEvent.create({
+        data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
+      }).catch(() => {});
+      const dt = DateTime.fromISO(picked.startIso).setZone(conv.salon.timezone);
+      const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
+        ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
+        : 'Reply YES to confirm, or BACK to choose another time.';
+      const confirmBody = [
+        `Confirm booking?`,
+        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+        '',
+        confirmFooter,
+      ].join('\n');
+      await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+      return;
+    }
+    if (Number.isFinite(flatN) && flatN === flatSlotOptions.length + 1) {
+      await showDateList('📅 Pick a different date:');
+      return;
+    }
+    const explicitDate = parseAppointmentLocalDate(text) ?? undefined;
+    if (!explicitDate) {
+      await showDateList(`I didn't recognise that. Pick a number above, or choose a date below:`);
+      return;
+    }
+    await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: true });
+  }
 
   let localDateStr: string | undefined;
   const n = parseInt(text, 10);

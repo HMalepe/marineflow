@@ -129,6 +129,61 @@ export async function suggestBookingDates(salonId: string, days = 14): Promise<s
   return out;
 }
 
+export type FlatSlot = Slot & { localDateStr: string };
+
+/**
+ * Flatten available slots across the soonest upcoming days into one chronological
+ * list, capped at maxSlots total (with at most maxPerDay per day) so the customer
+ * can pick a date+time in a single tap instead of two round trips.
+ */
+export async function getNextAvailableSlots(input: {
+  salonId: string;
+  service: Service;
+  staff: Staff;
+  maxSlots?: number;
+  maxPerDay?: number;
+  scanDays?: number;
+}): Promise<{ slots: FlatSlot[]; tooLong: boolean; hasMore: boolean }> {
+  const maxSlots = input.maxSlots ?? 9;
+  const maxPerDay = input.maxPerDay ?? 4;
+  const scanDays = input.scanDays ?? 14;
+
+  const dates = await suggestBookingDates(input.salonId, scanDays);
+  const flat: FlatSlot[] = [];
+  let hasMore = false;
+  let sawAnyDay = false;
+
+  for (const localDateStr of dates) {
+    const { slots, tooLong } = await getAvailableSlots({
+      salonId: input.salonId,
+      service: input.service,
+      staff: input.staff,
+      localDateStr,
+    });
+    if (tooLong) return { slots: [], tooLong: true, hasMore: false };
+    if (slots.length === 0) continue;
+    sawAnyDay = true;
+
+    const dayTake = slots.slice(0, maxPerDay);
+    if (slots.length > dayTake.length) hasMore = true;
+
+    for (const s of dayTake) {
+      if (flat.length >= maxSlots) {
+        hasMore = true;
+        break;
+      }
+      flat.push({ ...s, localDateStr });
+    }
+    if (flat.length >= maxSlots) {
+      hasMore = true;
+      break;
+    }
+  }
+
+  if (!sawAnyDay) return { slots: [], tooLong: false, hasMore: false };
+  return { slots: flat, tooLong: false, hasMore };
+}
+
 export async function getStaffForService(
   salonId: string,
   serviceId: string,

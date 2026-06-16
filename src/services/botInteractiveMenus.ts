@@ -190,6 +190,44 @@ export function buildDatePickerInteractive(
   );
 }
 
+/**
+ * Flattened date+time picker: each row is a specific day+time slot (e.g. "Today 14:00",
+ * "Tomorrow 09:00"), so the customer picks both in one tap. An optional trailing row
+ * offers "More dates" for customers who want a day further out than the soonest options.
+ */
+export function buildCombinedSlotPickerInteractive(
+  slots: Array<{ start: Date; localDateStr: string }>,
+  timezone: string,
+  salon: SalonMenuInput,
+  options: { hasMore?: boolean; header?: string } = {},
+): InteractiveMessage | null {
+  if (slots.length === 0) return null;
+  const today = DateTime.now().setZone(timezone).startOf('day');
+
+  const items = slots.slice(0, MAX_LIST_ROWS - 1).map((s, i) => {
+    const dt = DateTime.fromJSDate(s.start).setZone(timezone);
+    const dayDiff = Math.round(dt.startOf('day').diff(today, 'days').days);
+    const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Tomorrow' : dt.toFormat('ccc dd LLL');
+    return {
+      id: String(i + 1),
+      title: truncateListField(`${dayLabel} ${dt.toFormat('HH:mm')}`, 24),
+      description: dayDiff <= 1 ? dt.toFormat('ccc dd LLL') : undefined,
+    };
+  });
+
+  if (options.hasMore) {
+    items.push({ id: String(items.length + 1), title: 'More dates', description: 'See a different day' });
+  }
+
+  return numberedList(
+    truncateListField(options.header ?? '⚡ Next available — pick a date & time:', 1024),
+    'Pick a time',
+    'Available',
+    items,
+    footerForSalon(salon),
+  );
+}
+
 export function buildSlotPickerInteractive(
   slots: Array<{ start: Date }>,
   timezone: string,
