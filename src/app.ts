@@ -338,7 +338,7 @@ export async function buildApp() {
       // Health-check ping arrives encrypted — respond with encrypted active status
       if (flowReq.action === 'ping') {
         const pingResp = encryptFlowResponse({ data: { status: 'active' } }, aesKey, iv);
-        return reply.send(pingResp);
+        return reply.type('text/plain').send(pingResp);
       }
 
       const [salonId] = (flowReq.flow_token ?? '').split(':');
@@ -361,7 +361,7 @@ export async function buildApp() {
       }
 
       const encrypted = encryptFlowResponse(responseBody, aesKey, iv);
-      return reply.send(encrypted);
+      return reply.type('text/plain').send(encrypted);
     });
   });
 
