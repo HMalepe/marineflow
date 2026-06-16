@@ -51,10 +51,11 @@ export async function sendWithFallback(params: {
         logger.warn({ salonId: params.salonId }, 'whatsapp_cloud_interactive_empty_id_retry_plain');
       }
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       if (params.interactive) {
-        logger.warn({ err }, 'whatsapp_cloud_interactive_failed_retry_plain');
+        logger.warn({ err: errMsg, cloudPhoneId }, 'whatsapp_cloud_interactive_failed_retry_plain');
       } else {
-        logger.warn({ err }, 'whatsapp_cloud_fallthrough');
+        logger.warn({ err: errMsg, cloudPhoneId }, 'whatsapp_cloud_fallthrough');
       }
     }
 
