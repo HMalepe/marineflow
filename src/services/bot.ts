@@ -23,6 +23,7 @@ import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { DateTime } from 'luxon';
 import { getAvailableSlots, getNextAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
+import { parseNaturalDateTime } from './naturalDateTime.js';
 import {
   ensureLoyaltyProgram,
   getStampBalance,
@@ -362,7 +363,7 @@ async function resolveServicesForPicker(
   return { services: all, clearedStaleFilter: true };
 }
 
-const APPOINTMENT_DATE_HINT = 'Or type a date DD/MM/YYYY (e.g. 15/06/2026)';
+const APPOINTMENT_DATE_HINT = 'Or type a date like *Saturday 15:00* or DD/MM/YYYY (e.g. 15/06/2026)';
 
 function isoDateFromParts(y: number, m: number, d: number): string | null {
   const date = new Date(y, m - 1, d);
@@ -3544,7 +3545,7 @@ async function handlePickStaff(
   const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
     conv,
-    [prefix, ...lines, '', 'Reply BACK to go back.'].join('\n'),
+    [prefix, ...lines, '', 'Want a date further out? Type something like *Saturday 15:00*.', '', 'Reply BACK to go back.'].join('\n'),
     buildCombinedSlotPickerInteractive(flatSlots, conv.salon.timezone, conv.salon, { hasMore, header: prefix }),
   );
 }
@@ -3596,6 +3597,46 @@ async function handlePickDate(
   const flatSlotOptions = c.flatSlotOptions as { startIso: string; localDateStr: string }[] | undefined;
   const awaitingDateList = c.awaitingDateList as boolean | undefined;
 
+  const tryConfirmExactTime = async (parsed: { localDateStr: string; hour?: number; minute?: number }): Promise<boolean> => {
+    if (parsed.hour == null) return false;
+    const { slots, tooLong } = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr: parsed.localDateStr });
+    if (tooLong || slots.length === 0) return false;
+    const wantedMin = parsed.hour * 60 + (parsed.minute ?? 0);
+    const match =
+      slots.find((s) => {
+        const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+        return dt.hour * 60 + dt.minute === wantedMin;
+      }) ??
+      slots.find((s) => {
+        const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+        return dt.hour * 60 + dt.minute >= wantedMin;
+      });
+    if (!match) return false;
+    await saveCtx(
+      conv.id,
+      { localDateStr: parsed.localDateStr, slotStartIso: match.start.toISOString(), flatSlotOptions: undefined, awaitingDateList: undefined },
+      ConversationStep.CONFIRM_BOOKING,
+    );
+    void getTenantDb().analyticsEvent.create({
+      data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
+    }).catch(() => {});
+    const dt = DateTime.fromJSDate(match.start).setZone(conv.salon.timezone);
+    const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
+      ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
+      : 'Reply YES to confirm, or BACK to choose another time.';
+    const confirmBody = [
+      `Confirm booking?`,
+      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+      '',
+      confirmFooter,
+    ].join('\n');
+    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+    return true;
+  };
+
+  let manualLocalDateStr: string | undefined;
+
   if (flatSlotOptions && flatSlotOptions.length > 0 && !awaitingDateList) {
     const flatN = parseInt(text, 10);
     if (Number.isFinite(flatN) && flatN >= 1 && flatN <= flatSlotOptions.length) {
@@ -3627,24 +3668,41 @@ async function handlePickDate(
       return;
     }
     const explicitDate = parseAppointmentLocalDate(text) ?? undefined;
-    if (!explicitDate) {
-      await showDateList(`I didn't recognise that. Pick a number above, or choose a date below:`);
-      return;
+    if (explicitDate) {
+      await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: true });
+      manualLocalDateStr = explicitDate;
+    } else {
+      const parsed = await parseNaturalDateTime(text, conv.salon.timezone);
+      if (!parsed) {
+        await showDateList(`I didn't recognise that. Pick a number above, type something like *Saturday 15:00*, or choose a date below:`);
+        return;
+      }
+      if (await tryConfirmExactTime(parsed)) return;
+      await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: true });
+      manualLocalDateStr = parsed.localDateStr;
     }
-    await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: true });
   }
 
-  let localDateStr: string | undefined;
-  const n = parseInt(text, 10);
-  if (Number.isFinite(n) && n >= 1 && n <= Math.min(suggestions.length, 10)) {
-    localDateStr = suggestions[n - 1];
-  } else {
-    localDateStr = parseAppointmentLocalDate(text) ?? undefined;
+  let localDateStr: string | undefined = manualLocalDateStr;
+  if (!localDateStr) {
+    const n = parseInt(text, 10);
+    if (Number.isFinite(n) && n >= 1 && n <= Math.min(suggestions.length, 10)) {
+      localDateStr = suggestions[n - 1];
+    } else {
+      localDateStr = parseAppointmentLocalDate(text) ?? undefined;
+      if (!localDateStr) {
+        const parsed = await parseNaturalDateTime(text, conv.salon.timezone);
+        if (parsed) {
+          if (await tryConfirmExactTime(parsed)) return;
+          localDateStr = parsed.localDateStr;
+        }
+      }
+    }
   }
 
   if (!localDateStr) {
     const prefix = text.trim()
-      ? `I didn't recognise that date. Pick a number below or type a date in DD/MM/YYYY format:`
+      ? `I didn't recognise that date. Pick a number below, type something like *Saturday 15:00*, or type a date in DD/MM/YYYY format:`
       : `📅 When would you like to come in? Pick a date:`;
     await showDateList(prefix);
     return;
