@@ -9,8 +9,21 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+// Default helmet CSP (script-src 'self', form-action 'self') silently blocks both
+// this page's inline auto-submit script and the POST to PayFast's external domain —
+// override it here so the redirect actually fires instead of hanging.
+const CHECKOUT_CSP = {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      formAction: ["'self'", 'https://www.payfast.co.za', 'https://sandbox.payfast.co.za'],
+    },
+  },
+};
+
 export async function payCheckoutRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/pay/checkout/:paymentId', async (request, reply) => {
+  app.get('/pay/checkout/:paymentId', { helmet: CHECKOUT_CSP }, async (request, reply) => {
     const { paymentId } = request.params as { paymentId: string };
 
     const payment = await prisma.payment.findUnique({
@@ -59,7 +72,7 @@ export async function payCheckoutRoutes(app: FastifyInstance): Promise<void> {
       <p>Redirecting you to PayFast…</p>
       <form id="payfast" method="post" action="${escapeHtml(form.action)}">
         ${inputs}
-        <noscript><button type="submit">Continue to PayFast</button></noscript>
+        <button type="submit">Continue to PayFast</button>
       </form>
     </div>
     <script>document.getElementById('payfast').submit();</script>
