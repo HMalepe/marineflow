@@ -703,6 +703,14 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
     timeHour < 12 ? 'Good morning' : timeHour < 17 ? 'Good afternoon' : 'Good evening';
 
   if (isProfileIncomplete(customer)) {
+    await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
+    syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
+    let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
+    try {
+      interactive = buildMainMenuInteractive(conv.salon);
+    } catch (err) {
+      logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
+    }
     await reply(
       conv,
       [
@@ -710,6 +718,8 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
         '',
         `Let's get you set up.`,
       ].join('\n'),
+      null,
+      interactive ? { interactive } : undefined,
     );
     return;
   }
@@ -734,6 +744,14 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
     }
   }
 
+  await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
+  syncConvContext(conv, { menuCategory: undefined }, ConversationStep.MENU);
+  let interactive: ReturnType<typeof buildMainMenuInteractive> | undefined;
+  try {
+    interactive = buildMainMenuInteractive(conv.salon);
+  } catch (err) {
+    logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
+  }
   await reply(
     conv,
     [
@@ -741,8 +759,9 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
       '',
       `Great to see you again. ${usualLine}`,
     ].join('\n'),
+    null,
+    interactive ? { interactive } : undefined,
   );
-  await replyMenu(conv);
 }
 
 async function recoverBookingFlowToMenu(
