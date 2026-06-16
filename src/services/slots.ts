@@ -33,6 +33,10 @@ export async function getAvailableSlots(input: {
   service: Service;
   staff: Staff;
   localDateStr: string;
+  /** Override the salon's default slot grid (e.g. step by the service's own
+   *  duration so a 45-min cut and a 30-min kids cut naturally space out
+   *  differently, instead of both using one fixed 15-min grid). */
+  slotStepOverrideMin?: number;
 }): Promise<AvailableSlotsResult> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: input.salonId },
@@ -40,7 +44,7 @@ export async function getAvailableSlots(input: {
   });
   const tz = salon.timezone;
   const automations = parseAutomationsFromMetadata(salon.metadata);
-  const slotStep = automations.booking.slotIntervalMin;
+  const slotStep = input.slotStepOverrideMin ?? automations.booking.slotIntervalMin;
 
   const dayStart = DateTime.fromISO(input.localDateStr, { zone: tz }).startOf('day');
   if (!dayStart.isValid) return { slots: [], tooLong: false };
@@ -145,8 +149,12 @@ export async function getNextAvailableSlots(input: {
   scanDays?: number;
 }): Promise<{ slots: FlatSlot[]; tooLong: boolean; hasMore: boolean }> {
   const maxSlots = input.maxSlots ?? 9;
-  const maxPerDay = input.maxPerDay ?? 4;
+  const maxPerDay = input.maxPerDay ?? 3;
   const scanDays = input.scanDays ?? 14;
+  // Step by the service's own length (clamped to a sane range) so a 45-min adult
+  // cut and a 30-min kids/teen cut naturally space differently — this spreads the
+  // capped list across more days instead of clustering near-duplicate same-day times.
+  const slotStepOverrideMin = Math.min(60, Math.max(15, input.service.durationMin));
 
   const dates = await suggestBookingDates(input.salonId, scanDays);
   const flat: FlatSlot[] = [];
@@ -159,6 +167,7 @@ export async function getNextAvailableSlots(input: {
       service: input.service,
       staff: input.staff,
       localDateStr,
+      slotStepOverrideMin,
     });
     if (tooLong) return { slots: [], tooLong: true, hasMore: false };
     if (slots.length === 0) continue;
