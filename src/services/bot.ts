@@ -708,7 +708,7 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
       [
         `${timeGreeting}! 👋 Welcome to *${salonName}* — we're happy to have you!`,
         '',
-        'Reply *MENU* to see our services, book an appointment, or browse FAQs.',
+        `Let's get you set up.`,
       ].join('\n'),
     );
     return;
@@ -740,10 +740,9 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
       `${timeGreeting}! Welcome back, *${firstName}* 😊`,
       '',
       `Great to see you again. ${usualLine}`,
-      '',
-      '_Just tell me what you need, or type *MENU* to see all options._',
     ].join('\n'),
   );
+  await replyMenu(conv);
 }
 
 async function recoverBookingFlowToMenu(
