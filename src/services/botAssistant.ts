@@ -6,7 +6,13 @@ import { formatCentsZar } from '../lib/formatPrice.js';
 import { isAnthropicConfigured, orchestrateConversation, semanticSearch, claudeText } from '../lib/integrations/ai/index.js';
 import { loadSalonServiceCatalog, sanitizeAiBookReply, filterBookableCatalogServices, isAddonCatalogService } from './serviceCatalogDisplay.js';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
+import { parseNaturalDateTime } from './naturalDateTime.js';
 import { logger } from '../lib/logger.js';
+
+/** EC-13: Strip WhatsApp markdown chars from user-controlled strings to prevent formatting injection. */
+function sanitize(s: string): string {
+  return s.replace(/[*_~`[\]]/g, '');
+}
 
 export interface QuickPickOption {
   key: string;
@@ -196,6 +202,131 @@ const STRUCTURED_BOOKING_STEPS: ConversationStep[] = [
   ConversationStep.CONFIRM_BOOKING,
 ];
 
+async function pickLeastBusyStaff<T extends { id: string }>(staffList: T[]): Promise<T> {
+  const counts = await Promise.all(
+    staffList.map(async (s) => ({
+      id: s.id,
+      count: await getTenantDb().appointment.count({
+        where: {
+          staffId: s.id,
+          start: { gte: new Date() },
+          status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
+        },
+      }),
+    })),
+  );
+  counts.sort((a, b) => a.count - b.count);
+  return staffList.find((s) => s.id === counts[0]!.id)!;
+}
+
+/**
+ * When a free-text booking request already names a date/time (parsed via
+ * parseNaturalDateTime), try to resolve it directly to a bookable slot so the
+ * customer can bypass staff-pick, date-pick, and slot-pick in one message.
+ * Falls back to the generic quick-pick flow by returning null.
+ */
+async function tryDirectDateTimeBooking(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  trimmed: string,
+  serviceId: string,
+  explicitStaffId: string | null,
+): Promise<AiAssistResult | null> {
+  const parsed = await parseNaturalDateTime(trimmed, conv.salon.timezone);
+  if (!parsed) return null;
+
+  const service = await getTenantDb().service.findUnique({
+    where: { id: serviceId },
+    include: { category: true },
+  });
+  if (!service || isAddonCatalogService(service)) return null;
+
+  const staffList = await getStaffForService(conv.salonId, serviceId);
+  if (staffList.length === 0) return null;
+
+  const explicitMatch = explicitStaffId ? staffList.find((s) => s.id === explicitStaffId) : undefined;
+  const explicitStaff = Boolean(explicitMatch);
+  const staff = explicitMatch ?? (await pickLeastBusyStaff(staffList));
+
+  const { slots, tooLong } = await getAvailableSlots({
+    salonId: conv.salonId,
+    service,
+    staff,
+    localDateStr: parsed.localDateStr,
+  });
+  if (tooLong || slots.length === 0) return null;
+
+  let matched: { start: Date; end: Date } | undefined;
+  if (parsed.hour != null) {
+    const wantedMin = parsed.hour * 60 + (parsed.minute ?? 0);
+    matched =
+      slots.find((s) => {
+        const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+        return dt.hour * 60 + dt.minute === wantedMin;
+      }) ??
+      slots.find((s) => {
+        const dt = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+        return dt.hour * 60 + dt.minute >= wantedMin;
+      });
+  }
+
+  if (matched) {
+    const dt = DateTime.fromJSDate(matched.start).setZone(conv.salon.timezone);
+    return {
+      handled: true,
+      reply: [
+        'Confirm booking?',
+        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
+        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+        '',
+        'Reply YES to confirm, or BACK to choose another time.',
+      ].join('\n'),
+      step: ConversationStep.CONFIRM_BOOKING,
+      contextPatch: {
+        selectedServiceId: service.id,
+        selectedStaffId: staff.id,
+        anyStaff: !explicitStaff,
+        localDateStr: parsed.localDateStr,
+        slotStartIso: matched.start.toISOString(),
+        quickPickOptions: undefined,
+      },
+    };
+  }
+
+  // Date resolved but no exact/near-enough time — offer that day's open slots.
+  const keys = ['A', 'B', 'C'];
+  const dayOptions: QuickPickOption[] = slots.slice(0, 3).map((s, i) => {
+    const d = DateTime.fromJSDate(s.start).setZone(conv.salon.timezone);
+    const key = keys[i]!;
+    return {
+      key,
+      serviceId: service.id,
+      staffId: staff.id,
+      slotStartIso: s.start.toISOString(),
+      localDateStr: parsed.localDateStr,
+      label: `${key}) ${d.toFormat('ccc dd LLL HH:mm')} — ${sanitize(service.name)} with ${sanitize(staff.name)} (${fmtMoney(service.priceCents)})`,
+      explicitStaff,
+    };
+  });
+  if (dayOptions.length === 0) return null;
+
+  return {
+    handled: true,
+    reply: [
+      `Here's what's open on ${DateTime.fromISO(parsed.localDateStr).toFormat('cccc dd LLL')} — reply with A, B, or C:`,
+      ...dayOptions.map((o) => o.label),
+      '',
+      'Or reply BACK for the main menu.',
+    ].join('\n'),
+    step: ConversationStep.PICK_SLOT,
+    contextPatch: {
+      selectedServiceId: service.id,
+      selectedStaffId: staff.id,
+      localDateStr: parsed.localDateStr,
+      quickPickOptions: dayOptions,
+    },
+  };
+}
+
 export async function tryAiAssist(
   conv: Conversation & { customer: Customer; salon: Salon },
   inboundText: string,
@@ -286,6 +417,13 @@ export async function tryAiAssist(
             contextPatch: { menuCategory: undefined },
           };
         }
+
+        // Customer may have volunteered a date/time up front (e.g. "Monday 18
+        // November 14:45") — when we can resolve that to a real slot, skip
+        // straight past staff/date/slot picking into a confirm prompt instead
+        // of always showing the generic "next 3 available" quick-picks.
+        const directBooking = await tryDirectDateTimeBooking(conv, trimmed, serviceId, ai.staffId ?? null);
+        if (directBooking) return directBooking;
 
         const quickPickOptions = await buildQuickPickOptions({
           salonId: conv.salonId,
