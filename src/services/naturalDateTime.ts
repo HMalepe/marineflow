@@ -72,6 +72,19 @@ function parseDeterministic(text: string, timezone: string): ParsedDateTime | nu
     if (dt.isValid) return { localDateStr: dt.toISODate()!, ...(time ?? {}) };
   }
 
+  // DD/MM (no year) — rolls forward to next year if the date already passed.
+  const slashNoYear = t.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  if (slashNoYear) {
+    let dt = DateTime.fromObject(
+      { day: parseInt(slashNoYear[1]!, 10), month: parseInt(slashNoYear[2]!, 10), year: now.year },
+      { zone: timezone },
+    );
+    if (dt.isValid) {
+      if (dt.startOf('day') < now) dt = dt.plus({ years: 1 });
+      return { localDateStr: dt.toISODate()!, ...(time ?? {}) };
+    }
+  }
+
   // Weekday name, optionally prefixed with "next" — only used when no explicit
   // calendar date was found above.
   const weekdayMatch = t.match(/\b(next\s+)?(sun(day)?|mon(day)?|tue(s|sday)?|wed(s|nesday)?|thu(r|rs|rsday)?|fri(day)?|sat(urday)?)\b/);

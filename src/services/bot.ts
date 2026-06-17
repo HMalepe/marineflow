@@ -3545,7 +3545,7 @@ async function handlePickStaff(
   const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
     conv,
-    [prefix, ...lines, '', 'Want a date further out? Type something like *Saturday 15:00*.', '', 'Reply BACK to go back.'].join('\n'),
+    [prefix, ...lines, '', 'Want a date further out? Just type it — e.g. *30/08 15:00* or *Saturday 15:00*.', '', 'Reply BACK to go back.'].join('\n'),
     buildCombinedSlotPickerInteractive(flatSlots, conv.salon.timezone, conv.salon, { hasMore, header: prefix }),
   );
 }
