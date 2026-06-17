@@ -8,13 +8,11 @@ import { sendWithFallback } from './channelRouter.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
-import { MessageDirection, ConversationStep } from '@prisma/client';
+import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
+import { MessageDirection } from '@prisma/client';
 import type { Service } from '@prisma/client';
 
 const PAYFAST_NOTIFY_PATH = '/webhooks/payfast/appointment';
-
-const BOOKING_RATING_PROMPT =
-  'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.';
 
 function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
@@ -112,12 +110,12 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
   if (!reference?.startsWith('appt_')) return;
   const appointmentId = reference.replace('appt_', '');
 
-  await prisma.$transaction(async (tx) => {
+  const ratingSchedule = await prisma.$transaction(async (tx) => {
     const appt = await tx.appointment.findUnique({
       where: { id: appointmentId },
       include: { service: true, staff: true, customer: true, salon: true },
     });
-    if (!appt || appt.status === 'CONFIRMED_PAID') return;
+    if (!appt || appt.status === 'CONFIRMED_PAID') return null;
 
     const priorSucceededPayments = await tx.payment.count({
       where: { customerId: appt.customerId, status: 'SUCCEEDED' },
@@ -137,7 +135,7 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     });
 
     const waId = appt.customer.waId;
-    if (!waId) return;
+    if (!waId) return null;
 
     const salonName = appt.salon.tradingName?.trim() || appt.salon.name;
 
@@ -163,35 +161,26 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       confirmSid = result.providerMessageId ?? null;
     } catch { /* best-effort */ }
 
-    if (conv) {
-      await tx.message.create({
-        data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
-      });
+    if (!conv) return null;
 
-      let ratingSid: string | null = null;
-      try {
-        const { result } = await sendWithFallback({ salonId: appt.salonId, to: waId, body: BOOKING_RATING_PROMPT });
-        ratingSid = result.providerMessageId ?? null;
-      } catch { /* best-effort */ }
+    await tx.message.create({
+      data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
+    });
 
-      await tx.message.create({
-        data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: BOOKING_RATING_PROMPT, providerSid: ratingSid },
-      });
-
+    if (includePopiaHint) {
       const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
       await tx.conversation.update({
         where: { id: conv.id },
-        data: {
-          step: ConversationStep.BOOKING_RATING,
-          context: {
-            ...currentCtx,
-            pendingAppointmentId: appointmentId,
-            ...(includePopiaHint ? { popiaRightsNotified: true } : {}),
-          } as object,
-        },
+        data: { context: { ...currentCtx, popiaRightsNotified: true } as object },
       });
     }
+
+    return { conversationId: conv.id, salonId: appt.salonId, customerId: appt.customerId, waId, appointmentId };
   });
+
+  if (ratingSchedule) {
+    await scheduleBookingRatingPrompt(ratingSchedule);
+  }
 
   const confirmed = await prisma.appointment.findUnique({
     where: { id: appointmentId },

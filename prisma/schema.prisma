@@ -138,6 +138,7 @@ enum ConversationStep {
   CLOSED
   BOOKING_RATING
   CONFIRM_CANCEL
+  WRITE_REVIEW
 }
 
 model Salon {

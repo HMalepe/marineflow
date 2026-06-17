@@ -20,3 +20,8 @@ export function isBackToMainMenuCommand(text: string): boolean {
 export function isContinueCommand(text: string): boolean {
   return /^continue$/i.test(text.trim());
 }
+
+/** "Write Feedback" tap from the post-booking review follow-up. */
+export function isWriteReviewCommand(text: string): boolean {
+  return /^write\s*(feedback|review)?$/i.test(text.trim());
+}

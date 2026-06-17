@@ -32,7 +32,7 @@ import {
 import { createPaymentCheckoutSession, resolvePostConfirmPayment, salonRequiresPostConfirmPayment } from './payments.js';
 import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
-import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand, isContinueCommand } from '../lib/botNavigation.js';
+import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand, isContinueCommand, isWriteReviewCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import { getTimeGreeting, getOccasionLine, isBirthdayToday, pickCompliment } from './personalization.js';
 import {
@@ -95,6 +95,7 @@ import {
   SERVICE_SUBMENU_PRICES,
 } from './serviceMenuCatalog.js';
 import {
+  buildBookingReviewFollowUpInteractive,
   buildBranchPickerInteractive,
   buildCategoryServiceListInteractive,
   buildCategorySubMenuInteractive,
@@ -1267,6 +1268,20 @@ async function processInboundWhatsApp(
     return;
   }
 
+  // Tapped "Leave Google Review" on the post-booking review follow-up — the link
+  // was already sent as plain text in the same message, so just acknowledge.
+  if (lower === 'leave google review') {
+    await reply(conv, "Thank you so much — we really appreciate it! 🙏");
+    return;
+  }
+
+  // Tapped "Write Feedback" on the post-booking review follow-up.
+  if (isWriteReviewCommand(text)) {
+    await saveCtx(conv.id, {}, ConversationStep.WRITE_REVIEW);
+    await reply(conv, "We'd love to hear it — please type your feedback below:");
+    return;
+  }
+
   if (isConversationWakeMessage(text)) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
     syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
@@ -2248,6 +2263,9 @@ async function routeConversation(
       break;
     case ConversationStep.BOOKING_RATING:
       await handleBookingRating(conv, t);
+      break;
+    case ConversationStep.WRITE_REVIEW:
+      await handleWriteReview(conv, t);
       break;
     case ConversationStep.HANDOFF:
     case ConversationStep.CLOSED:
@@ -4324,6 +4342,42 @@ async function handleBookingRating(
   }
   await reply(conv, thankYou);
   await saveCtx(conv.id, {}, ConversationStep.IDLE);
+
+  const googleReviewUrl = conv.salon.googleReviewUrl?.trim();
+  const hasGoogleLink = isValidGoogleReviewUrl(googleReviewUrl);
+  if (rating >= 4) {
+    const followUpBody = hasGoogleLink
+      ? `Loved booking with us? We'd be so grateful for a quick Google review:\n${googleReviewUrl}\n\nOr tap below to write us your feedback directly.`
+      : "We'd love to hear more — tap below to write us your feedback directly.";
+    await replyMaybeInteractive(
+      conv,
+      followUpBody,
+      buildBookingReviewFollowUpInteractive(conv.salon, followUpBody, hasGoogleLink),
+    );
+  }
+}
+
+async function handleWriteReview(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  if (isBackToMainMenuCommand(text)) {
+    await goBackToMainMenu(conv);
+    return;
+  }
+  const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: appointmentId ?? null,
+      type: 'written_review',
+      payload: { text: text.trim() },
+    },
+  });
+  await reply(conv, "Thank you for taking the time to share that with us! 🙏");
+  await saveCtx(conv.id, {}, ConversationStep.MENU);
+  await replyMenu(conv);
 }
 
 async function handleManageBooking(

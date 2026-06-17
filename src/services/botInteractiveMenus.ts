@@ -295,6 +295,23 @@ export function buildInactivityReminderInteractive(salon: SalonMenuInput, body: 
   )!;
 }
 
+export function buildBookingReviewFollowUpInteractive(
+  salon: SalonMenuInput,
+  body: string,
+  hasGoogleLink: boolean,
+): InteractiveButtons {
+  return quickButtons(
+    body,
+    hasGoogleLink
+      ? [
+          { id: 'google_review', title: 'Leave Google Review' },
+          { id: 'write_review', title: 'Write Feedback' },
+        ]
+      : [{ id: 'write_review', title: 'Write Feedback' }],
+    footerForSalon(salon),
+  )!;
+}
+
 export function buildConfirmBookingInteractive(salon: SalonMenuInput): InteractiveButtons {
   return quickButtons(
     'Reply YES to confirm this booking, or tap below.',

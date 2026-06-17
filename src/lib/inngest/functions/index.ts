@@ -3,6 +3,7 @@ export { appointmentReminder } from './appointmentReminder.js';
 export { refreshMaterializedViews } from './refreshMaterializedViews.js';
 export { executeScheduledCampaign, checkScheduledCampaigns } from './executeCampaign.js';
 export { conversationInactivity } from './conversationInactivity.js';
+export { bookingRatingPrompt } from './bookingRatingPrompt.js';
 export { appointmentRating, googleReviewRequest } from './appointmentRating.js';
 export { reactivationCampaign } from './reactivationCampaign.js';
 export { winbackCampaign } from './winbackCampaign.js';

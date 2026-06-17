@@ -24,7 +24,7 @@ import { payfastAdapter } from './lib/integrations/payments/payfast.js';
 import { handleFlowDataExchange } from './lib/whatsappFlows/dataExchange.js';
 import { decryptFlowRequest, encryptFlowResponse } from './lib/whatsappFlows/crypto.js';
 import { serve } from 'inngest/fastify';
-import { inngest, inngestIsDev, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity, winbackCampaign, birthdayCampaign, appointmentRating, googleReviewRequest, reactivationCampaign } from './lib/inngest/index.js';
+import { inngest, inngestIsDev, sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity, bookingRatingPrompt, winbackCampaign, birthdayCampaign, appointmentRating, googleReviewRequest, reactivationCampaign } from './lib/inngest/index.js';
 import { authRoutes } from './routes/auth.js';
 import { clientAuthRoutes } from './routes/clientAuth.js';
 import { dashboardApiRoutes } from './routes/dashboardApi.js';
@@ -388,7 +388,7 @@ export async function buildApp() {
     url: '/api/inngest',
     handler: serve({
       client: inngest,
-      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity, winbackCampaign, birthdayCampaign, appointmentRating, googleReviewRequest, reactivationCampaign],
+      functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity, bookingRatingPrompt, winbackCampaign, birthdayCampaign, appointmentRating, googleReviewRequest, reactivationCampaign],
     }),
   });
 
