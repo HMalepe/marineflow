@@ -21,11 +21,13 @@ const MONTHS: Record<string, number> = {
 };
 
 function extractTime(text: string): { hour: number; minute: number } | null {
-  const m = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/i);
+  // Require an explicit ":mm" or "am/pm" marker — a bare number like the "25" in
+  // "25 July" is a day-of-month, not a time, so it must never match here.
+  const m = text.match(/\b(\d{1,2}):(\d{2})\s*(am|pm)?\b/i) ?? text.match(/\b(\d{1,2})\s*(am|pm)\b/i);
   if (!m) return null;
   let hour = parseInt(m[1]!, 10);
-  const minute = m[2] ? parseInt(m[2], 10) : 0;
-  const ampm = m[3]?.toLowerCase();
+  const minute = m[2] && /^\d+$/.test(m[2]) ? parseInt(m[2], 10) : 0;
+  const ampm = (m[2] && !/^\d+$/.test(m[2]) ? m[2] : m[3])?.toLowerCase();
   if (hour > 23 || minute > 59) return null;
   if (ampm === 'pm' && hour < 12) hour += 12;
   if (ampm === 'am' && hour === 12) hour = 0;
@@ -40,23 +42,9 @@ function parseDeterministic(text: string, timezone: string): ParsedDateTime | nu
   const time = extractTime(t);
   const now = DateTime.now().setZone(timezone).startOf('day');
 
-  // Weekday name, optionally prefixed with "next"
-  const weekdayMatch = t.match(/\b(next\s+)?(sun(day)?|mon(day)?|tue(s|sday)?|wed(s|nesday)?|thu(r|rs|rsday)?|fri(day)?|sat(urday)?)\b/);
-  if (weekdayMatch) {
-    const isNext = Boolean(weekdayMatch[1]);
-    const key = weekdayMatch[2]!.replace(/s$/, '').slice(0, 3);
-    const wantedLuxonWeekday = WEEKDAYS[weekdayMatch[2]!] ?? WEEKDAYS[key];
-    if (wantedLuxonWeekday !== undefined) {
-      const wanted = wantedLuxonWeekday === 0 ? 7 : wantedLuxonWeekday; // luxon Sun=7
-      let diff = wanted - now.weekday;
-      if (diff <= 0) diff += 7;
-      if (isNext) diff += 7;
-      const dt = now.plus({ days: diff });
-      return { localDateStr: dt.toISODate()!, ...(time ?? {}) };
-    }
-  }
-
-  // "15 July" / "July 15", optional year
+  // "15 July" / "July 15", optional year — checked before weekday names, since a
+  // phrase like "Saturday 25 July" should resolve to the explicit date, not the
+  // nearest upcoming Saturday from today.
   const dayMonth = t.match(/\b(\d{1,2})\s+([a-z]+)\b/);
   const monthDay = t.match(/\b([a-z]+)\s+(\d{1,2})\b/);
   const monthName = (dayMonth?.[2] ?? monthDay?.[1])?.toLowerCase();
@@ -82,6 +70,23 @@ function parseDeterministic(text: string, timezone: string): ParsedDateTime | nu
       { zone: timezone },
     );
     if (dt.isValid) return { localDateStr: dt.toISODate()!, ...(time ?? {}) };
+  }
+
+  // Weekday name, optionally prefixed with "next" — only used when no explicit
+  // calendar date was found above.
+  const weekdayMatch = t.match(/\b(next\s+)?(sun(day)?|mon(day)?|tue(s|sday)?|wed(s|nesday)?|thu(r|rs|rsday)?|fri(day)?|sat(urday)?)\b/);
+  if (weekdayMatch) {
+    const isNext = Boolean(weekdayMatch[1]);
+    const key = weekdayMatch[2]!.replace(/s$/, '').slice(0, 3);
+    const wantedLuxonWeekday = WEEKDAYS[weekdayMatch[2]!] ?? WEEKDAYS[key];
+    if (wantedLuxonWeekday !== undefined) {
+      const wanted = wantedLuxonWeekday === 0 ? 7 : wantedLuxonWeekday; // luxon Sun=7
+      let diff = wanted - now.weekday;
+      if (diff <= 0) diff += 7;
+      if (isNext) diff += 7;
+      const dt = now.plus({ days: diff });
+      return { localDateStr: dt.toISODate()!, ...(time ?? {}) };
+    }
   }
 
   return null;
