@@ -32,7 +32,7 @@ import {
 import { createPaymentCheckoutSession, resolvePostConfirmPayment, salonRequiresPostConfirmPayment } from './payments.js';
 import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOption } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
-import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
+import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand, isContinueCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import { getTimeGreeting, getOccasionLine, isBirthdayToday, pickCompliment } from './personalization.js';
 import {
@@ -1258,6 +1258,12 @@ async function processInboundWhatsApp(
   // ── WhatsApp core flows (always win over dashboard marketing / follow-up settings) ──
   if (isBackToMainMenuCommand(text) && !WHATSAPP_BOOKING_STEPS.includes(conv.step)) {
     await goBackToMainMenu(conv);
+    return;
+  }
+
+  // Tapped "Continue" on the inactivity reminder — just dismiss it, no state change.
+  if (isContinueCommand(text)) {
+    await reply(conv, "Great — pick up right where you left off 👍");
     return;
   }
 

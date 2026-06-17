@@ -1,8 +1,9 @@
 import { ConversationStep, MessageDirection } from '@prisma/client';
 import { inngest } from '../client.js';
 import { prisma } from '../../prisma.js';
-import { buildMainMenuText } from '../../hierarchicalMenu.js';
 import { sendWithFallback } from '../../../services/channelRouter.js';
+import { buildInactivityReminderInteractive } from '../../../services/botInteractiveMenus.js';
+import type { InteractiveMessage } from '../../integrations/messaging/types.js';
 import { logger } from '../../logger.js';
 
 export type ConversationActivityEvent = {
@@ -37,8 +38,9 @@ async function sendAndRecord(opts: {
   salonId: string;
   to: string;
   body: string;
+  interactive?: InteractiveMessage;
 }) {
-  await sendWithFallback({ salonId: opts.salonId, to: opts.to, body: opts.body });
+  await sendWithFallback({ salonId: opts.salonId, to: opts.to, body: opts.body, interactive: opts.interactive });
   await prisma.message.create({
     data: {
       conversationId: opts.conversationId,
@@ -59,7 +61,7 @@ export const conversationInactivity = inngest.createFunction(
     const { conversationId, salonId, customerWaId, activityAt } =
       event.data as ConversationActivityEvent['data'];
 
-    // Load salon to get owner-configured delays and messages
+    // Load salon to get owner-configured delay/message + customer's first name for personalisation
     const salon = await step.run('load-salon', () =>
       withJobTenant(salonId, () =>
         prisma.salon.findUniqueOrThrow({
@@ -71,69 +73,40 @@ export const conversationInactivity = inngest.createFunction(
             botLoyaltyEnabled: true,
             inactivityMessage1: true,
             inactivityMessage1DelayMin: true,
-            inactivityMessage2: true,
-            inactivityMessage2DelayMin: true,
           },
         }),
       ),
     );
 
-    const delay1Min = salon.inactivityMessage1DelayMin ?? 10;
-    const delay2Min = salon.inactivityMessage2DelayMin ?? 30;
+    // Single reminder — defaults to 15 minutes of inactivity.
+    const delayMin = salon.inactivityMessage1DelayMin ?? 15;
+    await step.sleep('wait-reminder', `${delayMin}m`);
 
-    // First follow-up
-    await step.sleep('wait-followup-1', `${delay1Min}m`);
-
-    await step.run('followup-1', async () =>
+    await step.run('send-reminder', async () =>
       withJobTenant(salonId, async () => {
-        const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
+        const conv = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          include: { customer: { select: { firstName: true } } },
+        });
         if (!conv) return;
         if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
         if (await hasInboundSince(conversationId, activityAt)) return;
 
+        const firstName = conv.customer.firstName?.trim();
         const body =
           salon.inactivityMessage1?.trim() ||
-          `Hi — still there? Just reply when you're ready, or type BACK for the main menu 😊`;
+          (firstName
+            ? `Hey *${firstName}*, still there? No rush — just tap below when you're ready to carry on 😊`
+            : `Hi — still there? No rush — just tap below when you're ready to carry on 😊`);
 
-        await sendAndRecord({ conversationId, customerId: conv.customerId, salonId, to: customerWaId, body });
-      }),
-    );
-
-    // Second follow-up (waits the *additional* time beyond the first)
-    const additionalWait = Math.max(1, delay2Min - delay1Min);
-    await step.sleep('wait-followup-2', `${additionalWait}m`);
-
-    await step.run('followup-2-and-reset', async () =>
-      withJobTenant(salonId, async () => {
-        const conv = await prisma.conversation.findUnique({ where: { id: conversationId } });
-        if (!conv) return;
-        if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
-        if (await hasInboundSince(conversationId, activityAt)) return;
-
-        const salonRow = await prisma.salon.findUniqueOrThrow({
-          where: { id: salonId },
-          select: {
-            name: true,
-            tradingName: true,
-            welcomeMessage: true,
-            botLoyaltyEnabled: true,
-            metadata: true,
-          },
+        await sendAndRecord({
+          conversationId,
+          customerId: conv.customerId,
+          salonId,
+          to: customerWaId,
+          body,
+          interactive: buildInactivityReminderInteractive(salon, body),
         });
-
-        const menu = buildMainMenuText(salonRow);
-
-        const nudge =
-          salon.inactivityMessage2?.trim() ||
-          `No worries — we'll be here whenever you're ready 💚`;
-        const body = `${nudge}\n\nI'll take you back to the main menu:\n\n${menu}`;
-
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { step: ConversationStep.MENU, context: {}, lastMessageAt: new Date() },
-        });
-
-        await sendAndRecord({ conversationId, customerId: conv.customerId, salonId, to: customerWaId, body });
       }),
     );
   },

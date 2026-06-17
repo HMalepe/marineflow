@@ -15,3 +15,8 @@ export function isMainMenuCommand(text: string): boolean {
 export function isBackToMainMenuCommand(text: string): boolean {
   return isMainMenuCommand(text) || isBackCommand(text);
 }
+
+/** "Continue" tap from the inactivity reminder — a no-op that just dismisses the nudge. */
+export function isContinueCommand(text: string): boolean {
+  return /^continue$/i.test(text.trim());
+}

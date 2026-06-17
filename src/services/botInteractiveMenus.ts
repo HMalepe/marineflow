@@ -284,6 +284,17 @@ export function buildServiceCategoryPickerInteractive(
   );
 }
 
+export function buildInactivityReminderInteractive(salon: SalonMenuInput, body: string): InteractiveButtons {
+  return quickButtons(
+    body,
+    [
+      { id: 'continue', title: 'Continue' },
+      { id: 'menu', title: 'Main Menu' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
 export function buildConfirmBookingInteractive(salon: SalonMenuInput): InteractiveButtons {
   return quickButtons(
     'Reply YES to confirm this booking, or tap below.',
