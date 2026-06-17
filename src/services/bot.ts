@@ -3674,7 +3674,7 @@ async function handlePickDate(
     } else {
       const parsed = await parseNaturalDateTime(text, conv.salon.timezone);
       if (!parsed) {
-        await showDateList(`I didn't recognise that. Pick a number above, type something like *Saturday 15:00*, or choose a date below:`);
+        await showDateList(`Hmm, I couldn't quite place that date. Try something like *30/08 15:00* or *Saturday 15:00*, pick a number above, or choose a date below:`);
         return;
       }
       if (await tryConfirmExactTime(parsed)) return;
@@ -3702,7 +3702,7 @@ async function handlePickDate(
 
   if (!localDateStr) {
     const prefix = text.trim()
-      ? `I didn't recognise that date. Pick a number below, type something like *Saturday 15:00*, or type a date in DD/MM/YYYY format:`
+      ? `Hmm, I couldn't quite place that date. Try something like *30/08 15:00* or *Saturday 15:00*, pick a number below, or type a date in DD/MM/YYYY format:`
       : `📅 When would you like to come in? Pick a date:`;
     await showDateList(prefix);
     return;

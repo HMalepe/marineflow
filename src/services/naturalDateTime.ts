@@ -93,6 +93,14 @@ function parseDeterministic(text: string, timezone: string): ParsedDateTime | nu
     const key = weekdayMatch[2]!.replace(/s$/, '').slice(0, 3);
     const wantedLuxonWeekday = WEEKDAYS[weekdayMatch[2]!] ?? WEEKDAYS[key];
     if (wantedLuxonWeekday !== undefined) {
+      // Bail to the AI fallback if there's a leftover number we didn't account
+      // for (e.g. "15th" in "Saturday 15th", or a spelled-out time like "3
+      // thirty") — better to ask Claude than to silently return the nearest
+      // Saturday while ignoring a day-of-month or time the customer typed.
+      const withoutTime = time ? t.replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b|\b\d{1,2}\s*(am|pm)\b/i, '') : t;
+      const withoutWeekday = withoutTime.replace(weekdayMatch[0], '');
+      if (/\d/.test(withoutWeekday)) return null;
+
       const wanted = wantedLuxonWeekday === 0 ? 7 : wantedLuxonWeekday; // luxon Sun=7
       let diff = wanted - now.weekday;
       if (diff <= 0) diff += 7;
