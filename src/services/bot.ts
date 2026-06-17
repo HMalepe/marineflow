@@ -34,6 +34,7 @@ import { matchQuickPick, tryAiAssist, isBrowseServicesRequest, type QuickPickOpt
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
+import { getTimeGreeting, getOccasionLine, isBirthdayToday, pickCompliment } from './personalization.js';
 import {
   buildMainMenuText,
   buildSubMenuText,
@@ -682,6 +683,29 @@ async function startMarketingConsentGate(
   );
 }
 
+/** Shared "Confirm booking?" body — leads with a first-name compliment so it
+ *  doesn't read like a generic system message. Used by every path that lands
+ *  the customer on CONFIRM_BOOKING (manual time, flat-slot pick, numbered slot pick). */
+function buildConfirmBookingBody(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  serviceName: string,
+  staffName: string,
+  dt: DateTime,
+): string {
+  const firstName = conv.customer.firstName?.trim();
+  const opener = firstName ? `${pickCompliment()} *${sanitize(firstName)}*, here's the booking:` : `${pickCompliment()} Here's the booking:`;
+  const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
+    ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
+    : 'Reply YES to confirm, or BACK to choose another time.';
+  return [
+    opener,
+    `${sanitize(serviceName)} with ${sanitize(staffName)}`,
+    dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+    '',
+    confirmFooter,
+  ].join('\n');
+}
+
 function shouldPromptMarketingConsentBeforeMenu(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): boolean {
@@ -699,9 +723,9 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
   const salon = conv.salon;
   const salonName = salon.tradingName?.trim() || salon.name;
   const customer = conv.customer;
-  const timeHour = DateTime.now().setZone(salon.timezone).hour;
-  const timeGreeting =
-    timeHour < 12 ? 'Good morning' : timeHour < 17 ? 'Good afternoon' : 'Good evening';
+  const localNow = DateTime.now().setZone(salon.timezone);
+  const timeGreeting = getTimeGreeting(localNow);
+  const occasionLine = getOccasionLine(localNow);
 
   if (isProfileIncomplete(customer)) {
     await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.MENU);
@@ -716,6 +740,7 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
       conv,
       [
         `${timeGreeting}! 👋 Welcome to *${salonName}* — we're happy to have you!`,
+        ...(occasionLine ? [occasionLine] : []),
         '',
         `Let's get you set up.`,
       ].join('\n'),
@@ -727,6 +752,7 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
 
   // Returning customer — personalise only after at least one successful payment.
   const firstName = customer.firstName?.trim() ?? 'there';
+  const birthdayToday = isBirthdayToday(localNow, customer.dateOfBirth);
   const hasPaymentHistory = await customerHasSucceededPayments(customer.id, salon.id);
   let usualLine = 'What can we do for you today?';
   if (hasPaymentHistory) {
@@ -753,10 +779,14 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
   } catch (err) {
     logger.warn({ err, convId: conv.id }, 'main_menu_interactive_build_failed');
   }
+  const greetingLine = birthdayToday
+    ? `🎉 Happy birthday, *${sanitize(firstName)}*! Hope it's a great one.`
+    : `${timeGreeting}! Welcome back, *${sanitize(firstName)}* 😊`;
   await reply(
     conv,
     [
-      `${timeGreeting}! Welcome back, *${firstName}* 😊`,
+      greetingLine,
+      ...(!birthdayToday && occasionLine ? [occasionLine] : []),
       '',
       `Great to see you again. ${usualLine}`,
     ].join('\n'),
@@ -3621,16 +3651,7 @@ async function handlePickDate(
       data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
     }).catch(() => {});
     const dt = DateTime.fromJSDate(match.start).setZone(conv.salon.timezone);
-    const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
-      ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
-      : 'Reply YES to confirm, or BACK to choose another time.';
-    const confirmBody = [
-      `Confirm booking?`,
-      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-      '',
-      confirmFooter,
-    ].join('\n');
+    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
     await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
     return true;
   };
@@ -3650,16 +3671,7 @@ async function handlePickDate(
         data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
       }).catch(() => {});
       const dt = DateTime.fromISO(picked.startIso).setZone(conv.salon.timezone);
-      const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
-        ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
-        : 'Reply YES to confirm, or BACK to choose another time.';
-      const confirmBody = [
-        `Confirm booking?`,
-        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-        '',
-        confirmFooter,
-      ].join('\n');
+      const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
       await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
       return;
     }
@@ -3820,16 +3832,7 @@ async function handlePickSlot(
         ConversationStep.CONFIRM_BOOKING,
       );
       const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
-      const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
-        ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
-        : 'Reply YES to confirm, or BACK to choose another time.';
-      const confirmBody = [
-        `Confirm booking?`,
-        `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-        dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-        '',
-        confirmFooter,
-      ].join('\n');
+      const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
       await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
       return;
     }
@@ -4165,11 +4168,14 @@ async function handleConfirm(
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
 
   const bookingNotes = [redeem.note, reviewCredit.note].filter(Boolean).join('\n');
+  const confirmFirstName = conv.customer.firstName?.trim();
   await reply(
     conv,
     [
       bookingNotes ? `${bookingNotes}\n` : '',
-      `✅ *Booking confirmed!*`,
+      confirmFirstName
+        ? `✅ *You're all set, ${sanitize(confirmFirstName)}!*`
+        : `✅ *Booking confirmed!*`,
       '',
       `📋 *${sanitize(service.name)}*`,
       `👤 with ${sanitize(staff.name)}`,
@@ -4178,7 +4184,9 @@ async function handleConfirm(
       '',
       `🔖 Ref: *${appointment.id.slice(0, 8).toUpperCase()}*`,
       '',
-      `_Reply *MENU* anytime to manage your bookings._`,
+      confirmFirstName
+        ? `_See you then, ${sanitize(confirmFirstName)}! Reply *MENU* anytime to manage your bookings._`
+        : `_Reply *MENU* anytime to manage your bookings._`,
     ]
       .filter(Boolean)
       .join('\n'),

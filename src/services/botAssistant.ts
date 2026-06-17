@@ -7,6 +7,7 @@ import { isAnthropicConfigured, orchestrateConversation, semanticSearch, claudeT
 import { loadSalonServiceCatalog, sanitizeAiBookReply, filterBookableCatalogServices, isAddonCatalogService } from './serviceCatalogDisplay.js';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
 import { parseNaturalDateTime } from './naturalDateTime.js';
+import { pickCompliment } from './personalization.js';
 import { logger } from '../lib/logger.js';
 
 /** EC-13: Strip WhatsApp markdown chars from user-controlled strings to prevent formatting injection. */
@@ -271,10 +272,14 @@ async function tryDirectDateTimeBooking(
 
   if (matched) {
     const dt = DateTime.fromJSDate(matched.start).setZone(conv.salon.timezone);
+    const firstName = conv.customer.firstName?.trim();
+    const opener = firstName
+      ? `${pickCompliment()} *${sanitize(firstName)}*, here's the booking:`
+      : `${pickCompliment()} Here's the booking:`;
     return {
       handled: true,
       reply: [
-        'Confirm booking?',
+        opener,
         `${sanitize(service.name)} with ${sanitize(staff.name)}`,
         dt.toFormat('cccc, dd LLL yyyy HH:mm'),
         '',
@@ -309,10 +314,14 @@ async function tryDirectDateTimeBooking(
   });
   if (dayOptions.length === 0) return null;
 
+  const dayFirstName = conv.customer.firstName?.trim();
+  const dayOpener = dayFirstName
+    ? `Good eye, *${sanitize(dayFirstName)}* — here's what's open on ${DateTime.fromISO(parsed.localDateStr).toFormat('cccc dd LLL')}. Reply with A, B, or C:`
+    : `Here's what's open on ${DateTime.fromISO(parsed.localDateStr).toFormat('cccc dd LLL')} — reply with A, B, or C:`;
   return {
     handled: true,
     reply: [
-      `Here's what's open on ${DateTime.fromISO(parsed.localDateStr).toFormat('cccc dd LLL')} — reply with A, B, or C:`,
+      dayOpener,
       ...dayOptions.map((o) => o.label),
       '',
       'Or reply BACK for the main menu.',
