@@ -14,6 +14,7 @@ import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from 
 import { isIndustryTemplateId } from '../lib/industryTemplates.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
 import { businessTypeFromIndustryTemplate } from '../lib/labels.js';
+import { emitPlatformEvent } from '../services/platformEvents.js';
 import {
   getPlatformInboxUnreadCount,
   listPlatformInboxAlerts,
@@ -31,6 +32,7 @@ import {
 import { getAdminRevenue } from '../api/admin/revenue.js';
 import { getAdminBotHealth } from '../api/admin/bot-health.js';
 import { getAdminTenantHealth } from '../api/admin/tenants/health.js';
+import { getAdminPlatformEvents } from '../api/admin/events.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -222,6 +224,12 @@ export async function adminApiRoutes(app: FastifyInstance) {
       });
 
       return { salon, user };
+    });
+
+    emitPlatformEvent({
+      type: 'TENANT_CREATED',
+      salonId: result.salon.id,
+      metadata: { name: result.salon.name, slug: result.salon.slug, source: 'admin' },
     });
 
     return {
@@ -624,6 +632,13 @@ export async function adminApiRoutes(app: FastifyInstance) {
   // ─── Tenant health (churn signals) ─────────────────────────────────
   app.get('/tenants/health', async () => {
     return getAdminTenantHealth();
+  });
+
+  // ─── Platform activity feed (SUPER_ADMIN only) ───────────────────────
+  app.get('/events', { preHandler: requireSuperAdmin }, async (request) => {
+    const q = request.query as { limit?: string };
+    const limit = parseInt(q.limit ?? '50', 10) || 50;
+    return getAdminPlatformEvents(limit);
   });
 
   // ─── Platform Usage Summary ────────────────────────────────────────

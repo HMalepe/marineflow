@@ -11,6 +11,7 @@ import { StatCard } from '@/components/StatCard';
 import { BusinessTypeBreakdown, type BusinessTypeCount } from '@/components/BusinessTypeBreakdown';
 import { RevenueRow, type AdminRevenueData } from '@/components/RevenueRow';
 import { BotHealthPanel, type BotHealthData } from '@/components/BotHealthPanel';
+import { ActivityFeed } from '@/components/ActivityFeed';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
@@ -163,6 +164,8 @@ async function SuperAdminView({ token }: { token: string | null }) {
       {revenue && <RevenueRow data={revenue} />}
 
       {botHealth && <BotHealthPanel data={botHealth} />}
+
+      {token && <ActivityFeed token={token} />}
 
       {tenantHealth && tenantHealth.atRiskCount > 0 && (
         <Link

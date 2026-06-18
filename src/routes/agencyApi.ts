@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
+import { emitPlatformEvent } from '../services/platformEvents.js';
 
 /**
  * Agency/reseller routes — guarded by agency JWT (isAgency: true in token).
@@ -155,6 +156,12 @@ export async function agencyApiRoutes(app: FastifyInstance) {
         name: body.name,
         role: 'OWNER',
       },
+    });
+
+    emitPlatformEvent({
+      type: 'TENANT_CREATED',
+      salonId: salon.id,
+      metadata: { name: salon.name, slug: salon.slug, source: 'agency' },
     });
 
     return { salon };

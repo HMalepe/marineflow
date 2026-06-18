@@ -127,6 +127,15 @@ enum PlatformAlertStatus {
   ARCHIVED
 }
 
+enum PlatformEventType {
+  TENANT_CREATED
+  APPOINTMENT_BOOKED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  BOT_ERROR
+  BOT_UNHANDLED
+}
+
 enum MarketingConsentStatus {
   PENDING
   ACCEPTED
@@ -268,6 +277,7 @@ model Salon {
   reviewIncentiveClaims ReviewIncentiveClaim[]
   platformAlerts PlatformAlert[]
   messageLogs      MessageLog[]
+  platformEvents   PlatformEvent[]
 }
 
 model Branch {
@@ -895,6 +905,19 @@ model PlatformAlert {
 
   @@index([salonId, status, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
+}
+
+/// Platform-wide activity log for super-admin situational awareness.
+model PlatformEvent {
+  id        String            @id @default(cuid())
+  type      PlatformEventType
+  salonId   String?
+  salon     Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  metadata  Json              @default("{}")
+  createdAt DateTime          @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([salonId, createdAt(sort: Desc)])
 }
 
 // ─── Push Notifications ───────────────────────────────────────────────

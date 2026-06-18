@@ -60,6 +60,7 @@ import {
 } from '../lib/hierarchicalMenu.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
 import { recordBotPlatformAlert } from './platformInbox.js';
+import { emitPlatformEvent } from './platformEvents.js';
 import {
   afterServiceSelected,
   handleReferralMenuItem,
@@ -1095,6 +1096,19 @@ export async function handleInboundWhatsApp(input: {
       direction: 'INBOUND',
       status: inboundStatus,
     });
+    if (inboundStatus === 'UNHANDLED') {
+      emitPlatformEvent({
+        type: 'BOT_UNHANDLED',
+        salonId: inboundSalonId,
+        metadata: { twilioTo: input.twilioTo ?? null },
+      });
+    } else if (inboundStatus === 'FAILED') {
+      emitPlatformEvent({
+        type: 'BOT_ERROR',
+        salonId: inboundSalonId,
+        metadata: { twilioTo: input.twilioTo ?? null },
+      });
+    }
   }
 }
 
@@ -4145,6 +4159,9 @@ async function handleConfirm(
   });
   const reschedulingId = c.managingAppointmentId as string | undefined;
 
+  const isFirstSalonBooking =
+    (await tx.appointment.count({ where: { salonId: conv.salonId } })) === 0;
+
   const appointment = await tx.appointment.create({
     data: {
       salonId: conv.salonId,
@@ -4221,6 +4238,17 @@ async function handleConfirm(
     source: 'whatsapp',
     rescheduledFromId: reschedulingId ?? null,
   });
+  if (isFirstSalonBooking && !reschedulingId) {
+    emitPlatformEvent({
+      type: 'APPOINTMENT_BOOKED',
+      salonId: conv.salonId,
+      metadata: {
+        appointmentId: appointment.id,
+        serviceName: service.name,
+        firstBooking: true,
+      },
+    });
+  }
   if (reschedulingId) {
     notifyAppointmentChangedLater(conv.salonId, reschedulingId, {
       status: 'RESCHEDULED',
