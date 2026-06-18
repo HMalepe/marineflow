@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "MarineFlow Dashboard",
-  description: "Salon management dashboard",
+  description: "Business management dashboard",
 };
 
 export default function RootLayout({

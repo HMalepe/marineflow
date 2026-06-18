@@ -11,6 +11,13 @@ datasource db {
 }
 
 /// Maps to Nexus spec `tenant_status`
+enum BusinessType {
+  SALON
+  RESTAURANT
+  CAR_WASH
+  OTHER
+}
+
 enum TenantStatus {
   LEAD
   TRIAL
@@ -160,6 +167,7 @@ model Salon {
   legalName      String?
   slug           String       @unique
   industryTemplate String     @default("salon")
+  businessType     BusinessType @default(SALON)
   status         TenantStatus @default(TRIAL)
   statusChangedAt DateTime    @default(now())
   trialEndsAt    DateTime?

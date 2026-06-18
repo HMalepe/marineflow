@@ -13,6 +13,7 @@ import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twili
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 import { isIndustryTemplateId } from '../lib/industryTemplates.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
+import { businessTypeFromIndustryTemplate } from '../lib/labels.js';
 import {
   getPlatformInboxUnreadCount,
   listPlatformInboxAlerts,
@@ -186,6 +187,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           timezone: body.timezone?.trim() || 'Africa/Johannesburg',
           defaultCurrency: body.currency?.trim().toLowerCase() || 'zar',
           industryTemplate: body.industryTemplate?.trim() || 'salon',
+          businessType: businessTypeFromIndustryTemplate(body.industryTemplate?.trim() || 'salon'),
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
           ...(twilioWhatsAppFrom && { twilioWhatsAppFrom }),
         },
@@ -265,6 +267,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           tier: true,
           botName: true,
           industryTemplate: true,
+          businessType: true,
           createdAt: true,
           trialEndsAt: true,
           _count: {
@@ -289,6 +292,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
       status: s.status,
       tier: s.tier,
       industryTemplate: s.industryTemplate,
+      businessType: s.businessType,
       createdAt: s.createdAt,
       trialEndsAt: s.trialEndsAt,
       staffUserCount: s._count.staffUsers,
@@ -335,6 +339,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         tier: true,
         botName: true,
         industryTemplate: true,
+        businessType: true,
         timezone: true,
         createdAt: true,
         trialEndsAt: true,
@@ -525,6 +530,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'invalid_industry_template' });
       }
       data.industryTemplate = template;
+      data.businessType = businessTypeFromIndustryTemplate(template);
     }
     if (body.whatsappNumber !== undefined) {
       const raw = body.whatsappNumber.trim();
@@ -563,6 +569,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         tier: salon.tier,
         timezone: salon.timezone,
         industryTemplate: salon.industryTemplate,
+        businessType: salon.businessType,
         twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
         createdAt: salon.createdAt,
       },
@@ -603,18 +610,46 @@ export async function adminApiRoutes(app: FastifyInstance) {
 
   // ─── Platform Usage Summary ────────────────────────────────────────
   app.get('/stats', async () => {
-    const [totalSalons, activeSalons, totalCustomers, totalAppointments, recentSignups] =
-      await Promise.all([
-        prisma.salon.count(),
-        prisma.salon.count({ where: { status: 'ACTIVE' } }),
-        prisma.customer.count(),
-        prisma.appointment.count(),
-        prisma.salon.count({
-          where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-        }),
-      ]);
+    const [
+      totalBusinesses,
+      activeBusinesses,
+      totalCustomers,
+      totalAppointments,
+      recentSignups,
+      byBusinessType,
+    ] = await Promise.all([
+      prisma.salon.count({ where: { deletedAt: null } }),
+      prisma.salon.count({ where: { status: 'ACTIVE', deletedAt: null } }),
+      prisma.customer.count(),
+      prisma.appointment.count(),
+      prisma.salon.count({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+      prisma.salon.groupBy({
+        by: ['businessType'],
+        where: { deletedAt: null },
+        _count: { id: true },
+      }),
+    ]);
 
-    return { totalSalons, activeSalons, totalCustomers, totalAppointments, recentSignups };
+    return {
+      totalBusinesses,
+      activeBusinesses,
+      /** @deprecated use totalBusinesses */
+      totalSalons: totalBusinesses,
+      /** @deprecated use activeBusinesses */
+      activeSalons: activeBusinesses,
+      totalCustomers,
+      totalAppointments,
+      recentSignups,
+      byBusinessType: byBusinessType.map((row) => ({
+        type: row.businessType,
+        count: row._count.id,
+      })),
+    };
   });
 
   // ─── Usage Alerts ──────────────────────────────────────────────────

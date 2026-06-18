@@ -3,15 +3,22 @@ import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { AdminSalonList } from './admin-salon-list';
 import { AdminPlatformInbox } from './admin-platform-inbox';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
+import { StatCard } from '@/components/StatCard';
+import { BusinessTypeBreakdown, type BusinessTypeCount } from '@/components/BusinessTypeBreakdown';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 interface PlatformStats {
-  totalSalons: number;
-  activeSalons: number;
+  totalBusinesses: number;
+  activeBusinesses: number;
   totalCustomers: number;
   totalAppointments: number;
   recentSignups: number;
+  byBusinessType?: BusinessTypeCount[];
+  /** @deprecated */
+  totalSalons?: number;
+  /** @deprecated */
+  activeSalons?: number;
 }
 
 interface Alert {
@@ -70,12 +77,16 @@ export default async function AdminPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <KpiCard label="Total Businesses" value={stats.totalSalons} />
-        <KpiCard label="Active" value={stats.activeSalons} />
-        <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
-        <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
-        <KpiCard label="New (7d)" value={stats.recentSignups} />
+        <StatCard label="Total Businesses" value={stats.totalBusinesses ?? stats.totalSalons ?? 0} />
+        <StatCard label="Active Businesses" value={stats.activeBusinesses ?? stats.activeSalons ?? 0} />
+        <StatCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
+        <StatCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
+        <StatCard label="New (7d)" value={stats.recentSignups} />
       </div>
+
+      {stats.byBusinessType && stats.byBusinessType.length > 0 && (
+        <BusinessTypeBreakdown counts={stats.byBusinessType} />
+      )}
 
       {/* Alerts */}
       {alerts && (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0) && (
@@ -115,15 +126,6 @@ export default async function AdminPage() {
 
       {/* Business list by category */}
       <AdminSalonList token={token ?? ''} />
-    </div>
-  );
-}
-
-function KpiCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="border rounded-lg p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
     </div>
   );
 }

@@ -440,7 +440,7 @@ export function AutomationsClient({ token }: Props) {
             checked={draft.welcomeJourney.enabled}
             onChange={(v) => patch('welcomeJourney', { enabled: v })}
             label="Welcome first-time customers"
-            description="Salon intro, popular services, and subtle POPIA/marketing consent context."
+            description="Business intro, popular services, and subtle POPIA/marketing consent context."
           />
           <div className="space-y-1.5">
             <Label className="text-xs">Introduction message</Label>

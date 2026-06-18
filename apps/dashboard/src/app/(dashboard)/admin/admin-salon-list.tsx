@@ -2,6 +2,9 @@
 
 import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { BusinessTypeBadge } from '@/components/BusinessTypeBreakdown';
+import type { BusinessType } from '@/lib/labels';
+import { businessTypeFromIndustryTemplate, isBusinessType } from '@/lib/labels';
 import { formatSaPhone, isValidSaPhoneLocal, stripPhoneDigits, formatSaPhoneDisplay } from '@/lib/phone';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
@@ -42,6 +45,7 @@ interface Salon {
   status: string;
   tier: string;
   industryTemplate: string;
+  businessType: BusinessType;
   createdAt: string;
   staffUserCount: number;
   customerCount: number;
@@ -345,11 +349,18 @@ export function AdminSalonList({ token }: Props) {
   async function handleChangeIndustry(salon: Salon, industryTemplate: string) {
     if (industryTemplate === salon.industryTemplate) return;
     try {
-      await adminFetch(`/salons/${salon.id}`, token, {
+      const res = await adminFetch<{ salon: Salon }>(`/salons/${salon.id}`, token, {
         method: 'PATCH',
         body: JSON.stringify({ industryTemplate }),
       });
-      setSalons((prev) => prev.map((s) => (s.id === salon.id ? { ...s, industryTemplate } : s)));
+      const nextType = isBusinessType(res.salon.businessType)
+        ? res.salon.businessType
+        : businessTypeFromIndustryTemplate(industryTemplate);
+      setSalons((prev) =>
+        prev.map((s) =>
+          s.id === salon.id ? { ...s, industryTemplate, businessType: nextType } : s,
+        ),
+      );
       showToast('Industry template updated', 'success');
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Update failed', 'error');
@@ -412,6 +423,7 @@ export function AdminSalonList({ token }: Props) {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Tier</TableHead>
                 <TableHead>Industry</TableHead>
@@ -424,14 +436,14 @@ export function AdminSalonList({ token }: Props) {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                     Loading businesses…
                   </TableCell>
                 </TableRow>
               )}
               {!loading && salons.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                     No businesses found.
                   </TableCell>
                 </TableRow>
@@ -440,7 +452,7 @@ export function AdminSalonList({ token }: Props) {
                 salonsByCategory.map((group) => (
                   <Fragment key={`cat-${group.value}`}>
                     <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableCell colSpan={8} className="py-2">
+                      <TableCell colSpan={9} className="py-2">
                         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                           {group.label}
                         </span>
@@ -461,6 +473,16 @@ export function AdminSalonList({ token }: Props) {
                           {s.slug} · assistant: {s.botName?.trim() || PLATFORM_BOT_NAME}
                         </p>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <BusinessTypeBadge
+                        type={
+                          isBusinessType(s.businessType)
+                            ? s.businessType
+                            : businessTypeFromIndustryTemplate(s.industryTemplate)
+                        }
+                        short
+                      />
                     </TableCell>
                     <TableCell><StatusBadge status={s.status} /></TableCell>
                     <TableCell><TierBadge tier={s.tier} /></TableCell>

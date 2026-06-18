@@ -7,6 +7,8 @@ import { apiFetch } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { KPIStrip, type OverviewKpiData } from '@/components/KPIStrip';
 import { MiniBarChart } from '@/components/MiniBarChart';
+import { StatCard } from '@/components/StatCard';
+import { BusinessTypeBreakdown, type BusinessTypeCount } from '@/components/BusinessTypeBreakdown';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
@@ -36,11 +38,16 @@ interface Appointment {
 // ---------------------------------------------------------------------------
 
 interface PlatformStats {
-  totalSalons: number;
-  activeSalons: number;
+  totalBusinesses: number;
+  activeBusinesses: number;
   totalCustomers: number;
   totalAppointments: number;
   recentSignups: number;
+  byBusinessType?: BusinessTypeCount[];
+  /** @deprecated */
+  totalSalons?: number;
+  /** @deprecated */
+  activeSalons?: number;
 }
 
 interface Alert {
@@ -118,13 +125,29 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
       {/* KPI cards */}
       {stats ? (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <KpiCard label="Total Businesses" value={stats.totalSalons} />
-          <KpiCard label="Active" value={stats.activeSalons} />
-          <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
-          <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
-          <KpiCard label="New This Week" value={stats.recentSignups} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <StatCard
+              label="Total Businesses"
+              value={stats.totalBusinesses ?? stats.totalSalons ?? 0}
+              href="/admin"
+            />
+            <StatCard
+              label="Active Businesses"
+              value={stats.activeBusinesses ?? stats.activeSalons ?? 0}
+              href="/admin"
+            />
+            <StatCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
+            <StatCard
+              label={`Total ${APPOINTMENTS_LABEL}`}
+              value={stats.totalAppointments.toLocaleString()}
+            />
+            <StatCard label="New This Week" value={stats.recentSignups} />
+          </div>
+          {stats.byBusinessType && stats.byBusinessType.length > 0 && (
+            <BusinessTypeBreakdown counts={stats.byBusinessType} />
+          )}
+        </>
       ) : (
         <p className="text-sm text-destructive">Failed to load platform stats.</p>
       )}
@@ -169,15 +192,6 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
         </section>
       )}
-    </div>
-  );
-}
-
-function KpiCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="border rounded-lg p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
     </div>
   );
 }

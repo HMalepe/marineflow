@@ -144,7 +144,7 @@ async function AdminBillingPage({ token }: { token: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Salon</TableHead>
+                  <TableHead>Business</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Price/mo</TableHead>

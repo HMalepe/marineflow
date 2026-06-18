@@ -113,7 +113,7 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
       <div>
         <h3 className="text-base font-semibold">Business hours</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Default salon hours for WhatsApp, booking, and the staff roster. Saving updates all team
+          Default business hours for WhatsApp, booking, and the staff roster. Saving updates all team
           shifts to match.
         </p>
       </div>

@@ -39,7 +39,7 @@ export const SALON_NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: 'Salon setup',
+    title: 'Business setup',
     items: [
       { href: '/services', label: 'Services' },
       { href: '/roster', label: 'Staff Roster' },
