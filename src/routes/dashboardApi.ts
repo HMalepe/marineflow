@@ -22,6 +22,7 @@ import {
   createPayfastSubscription,
   cancelSubscription,
   checkQuota,
+  recordCheckoutAbandoned,
 } from '../services/subscription.js';
 import { billingReturnUrl, resolveDashboardOrigin } from '../lib/billingUrls.js';
 import { revokeStaffTokens } from '../lib/staffTokenAuth.js';
@@ -3696,6 +3697,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           formData: result.formData,
           summary: result.summary,
         };
+      });
+    },
+  );
+
+  app.post(
+    '/subscription/checkout-abandoned',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        await recordCheckoutAbandoned(user.salonId);
+        return { ok: true };
       });
     },
   );

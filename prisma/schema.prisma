@@ -1197,6 +1197,11 @@ enum SubscriptionStatus {
   TRIAL
 }
 
+enum SubscriptionBillingIssueKind {
+  PAYMENT_DECLINED
+  CHECKOUT_ABANDONED
+}
+
 model SubscriptionPlan {
   id             String   @id @default(cuid())
   name           String   /// e.g. "Starter", "Pro", "Enterprise"
@@ -1232,11 +1237,17 @@ model SalonSubscription {
   cancelAtPeriodEnd     Boolean            @default(false)
   cancelledAt           DateTime?
   trialEndsAt           DateTime?
+  lastPaymentAt         DateTime?
+  lastPaymentAmountCents Int?
+  lastBillingIssueKind  SubscriptionBillingIssueKind?
+  lastBillingIssueAt    DateTime?
+  lastBillingIssueDetail String?
   createdAt             DateTime           @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([salonId])
   @@index([status])
+  @@index([lastBillingIssueKind])
 }
 
 // ─── POPIA/GDPR Consent ───────────────────────────────────────────────

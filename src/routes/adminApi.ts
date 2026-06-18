@@ -760,9 +760,15 @@ export async function adminApiRoutes(app: FastifyInstance) {
       trialEndsAt: sub.trialEndsAt,
       cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
       createdAt: sub.salon.createdAt,
+      lastBillingIssueKind: sub.lastBillingIssueKind,
+      lastBillingIssueAt: sub.lastBillingIssueAt,
+      lastBillingIssueDetail: sub.lastBillingIssueDetail,
+      lastPaymentAt: sub.lastPaymentAt,
     }));
 
-    return { mrr, arr, byStatus, subscriptions };
+    const paymentIssues = subscriptions.filter((s) => s.lastBillingIssueKind != null);
+
+    return { mrr, arr, byStatus, subscriptions, paymentIssuesCount: paymentIssues.length, paymentIssues };
   });
 
   // ─── Platform analytics (all businesses or one) ───────────────────────

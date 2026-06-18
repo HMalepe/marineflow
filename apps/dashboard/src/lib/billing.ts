@@ -94,8 +94,8 @@ export function subscriptionStatusMeta(status: string): SubscriptionStatusMeta {
       badgeClass: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30',
     },
     PAST_DUE: {
-      label: 'Past due',
-      description: 'Payment failed. Update your PayFast subscription to restore access.',
+      label: 'Payment failed',
+      description: 'Your last PayFast payment did not go through. Retry below to restore full access.',
       badgeClass: 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border-orange-500/30',
     },
     CANCELLED: {
@@ -121,4 +121,44 @@ export function isSubscriptionActive(
   subscription: { status: string; cancelAtPeriodEnd?: boolean } | null | undefined,
 ): boolean {
   return subscription?.status === 'ACTIVE' && !subscription.cancelAtPeriodEnd;
+}
+
+export type BillingIssueKind = 'PAYMENT_DECLINED' | 'CHECKOUT_ABANDONED';
+
+export type BillingIssue = {
+  kind: BillingIssueKind;
+  at: string;
+  detail: string | null;
+};
+
+export function billingIssueMeta(issue: BillingIssue | null | undefined): {
+  title: string;
+  message: string;
+  variant: 'error' | 'warning';
+} | null {
+  if (!issue) return null;
+
+  if (issue.kind === 'PAYMENT_DECLINED') {
+    return {
+      title: 'Monthly PayFast payment failed',
+      message:
+        issue.detail ??
+        'PayFast could not collect your subscription (often insufficient funds or a declined card). Retry payment below.',
+      variant: 'error',
+    };
+  }
+
+  return {
+    title: 'PayFast checkout not completed',
+    message:
+      issue.detail ??
+      'You opened PayFast but did not finish payment. Complete checkout below when you are ready.',
+    variant: 'warning',
+  };
+}
+
+export function adminBillingIssueLabel(kind: BillingIssueKind | null | undefined): string {
+  if (kind === 'PAYMENT_DECLINED') return 'Declined / insufficient funds';
+  if (kind === 'CHECKOUT_ABANDONED') return 'Ignored checkout';
+  return '—';
 }

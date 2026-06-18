@@ -27,6 +27,25 @@ const EVENT_COPY: Record<string, { icon: string; label: string }> = {
   ONBOARDING_INCOMPLETE: { icon: '⏳', label: 'Onboarding incomplete (48h+)' },
 };
 
+function eventLabel(ev: PlatformEventItem): { icon: string; label: string } {
+  const base = EVENT_COPY[ev.type] ?? { icon: '•', label: ev.type.replace(/_/g, ' ').toLowerCase() };
+  if (ev.type !== 'PAYMENT_FAILED') return base;
+
+  const source = ev.metadata?.source;
+  const kind = ev.metadata?.kind;
+  if (source === 'subscription') {
+    if (kind === 'CHECKOUT_ABANDONED') {
+      return { icon: '🚪', label: 'Ignored PayFast checkout' };
+    }
+    if (kind === 'PAYMENT_DECLINED') {
+      return { icon: '💸', label: 'PayFast subscription payment failed' };
+    }
+    return { icon: '⚠️', label: 'Subscription payment issue' };
+  }
+
+  return base;
+}
+
 function formatTimeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60_000);
@@ -101,7 +120,7 @@ export function ActivityFeed({ token, limit = 50, className }: Props) {
           </p>
         )}
         {events.map((ev) => {
-          const copy = EVENT_COPY[ev.type] ?? { icon: '•', label: ev.type.replace(/_/g, ' ').toLowerCase() };
+          const copy = eventLabel(ev);
           const tenant = ev.tenantName ?? 'Unknown business';
           return (
             <div key={ev.id} className="px-4 py-3 flex items-start gap-3 text-sm hover:bg-muted/30 transition-colors">
