@@ -28,6 +28,7 @@ import {
   getAdminStaffRevenue,
   listAnalyticsBusinesses,
 } from '../services/adminAnalytics.js';
+import { getAdminRevenue } from '../api/admin/revenue.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -608,6 +609,11 @@ export async function adminApiRoutes(app: FastifyInstance) {
     return { token, salon: { id: salon.id, name: salon.name }, impersonating: owner.email };
   });
 
+  // ─── Platform Revenue (SUPER_ADMIN only) ───────────────────────────
+  app.get('/revenue', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminRevenue();
+  });
+
   // ─── Platform Usage Summary ────────────────────────────────────────
   app.get('/stats', async () => {
     const [
@@ -862,6 +868,19 @@ export async function adminApiRoutes(app: FastifyInstance) {
       }
     },
   );
+}
+
+async function requireSuperAdmin(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    await request.jwtVerify();
+    const payload = request.user as { isSuperAdmin?: boolean; role?: string };
+    if (payload.isSuperAdmin || payload.role === 'SUPER_ADMIN') {
+      return;
+    }
+    return reply.code(403).send({ error: 'super_admin_required' });
+  } catch {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
 }
 
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {
