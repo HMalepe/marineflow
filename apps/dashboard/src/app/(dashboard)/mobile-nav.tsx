@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { LogoutButton, LogoutIconButton } from './logout-button';
 import { DashboardSearch } from '@/components/dashboard-search';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 // Icons as inline SVG to avoid adding a new dependency
 function HomeIcon({ className }: { className?: string }) {
@@ -147,6 +148,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
         </div>
         <span className="font-semibold text-sm truncate flex-1 min-w-0">{businessName}</span>
         <DashboardSearch isAdmin={isAdmin} isOwner={isOwner} variant="compact" />
+        <ThemeToggle />
         <LogoutIconButton className="-mr-1" />
         {/* MarineFlow badge */}
         <div className="flex items-center gap-1.5 shrink-0">

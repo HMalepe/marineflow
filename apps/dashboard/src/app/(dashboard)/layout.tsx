@@ -8,6 +8,7 @@ import { NavLinks } from './nav-links';
 import { DashboardSearch } from '@/components/dashboard-search';
 import { DashboardStickyHeader } from '@/components/dashboard-sticky-header';
 import { ImpersonationBanner } from '@/components/impersonation-banner';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 function formatRole(role: string): string {
   return role
@@ -90,6 +91,7 @@ export default async function DashboardLayout({
               <p className="text-[11px] text-muted-foreground leading-tight truncate flex-1 min-w-0">
                 {ownerName}
               </p>
+              <ThemeToggle />
               <LogoutIconButton />
             </div>
             {user.phone && (
