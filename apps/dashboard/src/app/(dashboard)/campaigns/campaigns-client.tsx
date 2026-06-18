@@ -44,6 +44,10 @@ import {
 import { cn } from '@/lib/utils';
 import { CampaignMediaUpload, type CampaignMediaType } from './campaign-media-upload';
 import { CampaignSchedulePicker } from './campaign-schedule-picker';
+import {
+  CampaignTemplatePicker,
+  type CampaignTemplate,
+} from './campaign-template-picker';
 import { EmojiBar } from './emoji-bar';
 
 type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'COMPLETED' | 'CANCELLED';
@@ -105,12 +109,6 @@ const emptyForm: CampaignForm = {
 
 const MESSAGE_MAX = 1024;
 const PREVIEW_NAME = 'Thandi';
-
-const MESSAGE_STARTERS = [
-  'Hi! ✨ Book this week and enjoy 15% off your next visit!',
-  'We miss you 💚 Come back this month for a complimentary treatment add-on.',
-  'Slow Tuesday? Walk-ins welcome — reply BOOK to reserve your spot 📅',
-];
 
 function defaultScheduleLocal(): string {
   const d = new Date(Date.now() + 60 * 60_000);
@@ -437,6 +435,10 @@ export function CampaignsClient({ token }: Props) {
   const [confirmSendInSheet, setConfirmSendInSheet] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [contentTab, setContentTab] = useState<'templates' | 'custom'>('templates');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const { error: saveError, clear: clearSaveFeedback, reportError } = useSaveFeedback();
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
@@ -533,12 +535,28 @@ export function CampaignsClient({ token }: Props) {
     return { drafts, scheduled, sent };
   }, [campaigns]);
 
+  const loadTemplates = useCallback(async () => {
+    if (!token) return;
+    setTemplatesLoading(true);
+    try {
+      const res = await apiFetch<{ templates: CampaignTemplate[] }>('/campaigns/templates', {}, token);
+      setTemplates(res.templates);
+    } catch {
+      setTemplates([]);
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, [token]);
+
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...emptyForm, scheduledAtLocal: defaultScheduleLocal() });
     setAudienceCount(null);
     setConfirmSendInSheet(false);
+    setContentTab('templates');
+    setSelectedTemplateId(null);
     setSheetOpen(true);
+    void loadTemplates();
   };
 
   const openEdit = (c: Campaign) => {
@@ -546,13 +564,40 @@ export function CampaignsClient({ token }: Props) {
     setForm(formFromCampaign(c));
     setAudienceCount(null);
     setConfirmSendInSheet(false);
+    setContentTab(c.message.trim() ? 'custom' : 'templates');
+    setSelectedTemplateId(null);
     setSheetOpen(true);
+    void loadTemplates();
   };
 
   const closeSheet = () => {
     setSheetOpen(false);
     setEditingId(null);
     setConfirmSendInSheet(false);
+    setContentTab('templates');
+    setSelectedTemplateId(null);
+  };
+
+  const applyTemplate = (template: CampaignTemplate) => {
+    setSelectedTemplateId(template.id);
+    setForm((f) => ({
+      ...f,
+      message: template.message,
+      name: f.name.trim() ? f.name : template.name,
+      audienceType: template.category === 'win-back' ? 'inactive' : f.audienceType,
+    }));
+    setContentTab('custom');
+  };
+
+  const clearTemplateSelection = () => {
+    setSelectedTemplateId(null);
+    setForm((f) => ({ ...f, message: '' }));
+    setContentTab('templates');
+  };
+
+  const clearMessage = () => {
+    setSelectedTemplateId(null);
+    setForm((f) => ({ ...f, message: '' }));
   };
 
   const toggleTag = (tag: string) => {
@@ -1053,7 +1098,7 @@ export function CampaignsClient({ token }: Props) {
 
       {/* Composer sheet */}
       <Sheet open={sheetOpen} onOpenChange={(o) => !o && closeSheet()}>
-        <SheetContent className="w-full sm:max-w-lg overflow-y-auto px-6">
+        <SheetContent className="w-full sm:max-w-xl overflow-y-auto px-6">
           <SheetHeader className="text-left pb-2">
             <SheetTitle className="text-xl">
               {editingId ? 'Edit newsletter' : 'Create newsletter'}
@@ -1064,7 +1109,19 @@ export function CampaignsClient({ token }: Props) {
           </SheetHeader>
 
           <div className="space-y-8 py-4">
-            <FormSection step={1} title="Newsletter content" description="Caption, media, and emojis your customers receive">
+            <FormSection step={1} title="Newsletter content" description="Pick a template or write your own message">
+              <CampaignTemplatePicker
+                templates={templates}
+                loading={templatesLoading}
+                selectedTemplateId={selectedTemplateId}
+                onSelect={applyTemplate}
+                onClearSelection={clearTemplateSelection}
+                contentTab={contentTab}
+                onContentTabChange={setContentTab}
+              />
+
+              {contentTab === 'custom' && (
+              <>
               <div className="space-y-2">
                 <Label htmlFor="camp-name">Internal name</Label>
                 <Input
@@ -1090,9 +1147,18 @@ export function CampaignsClient({ token }: Props) {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="camp-msg">Caption &amp; message</Label>
                   <div className="flex items-center gap-2">
+                    {form.message.trim() && (
+                      <button
+                        type="button"
+                        onClick={clearMessage}
+                        className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        Clear message
+                      </button>
+                    )}
                     <button
                       type="button"
                       title="Bold (*text*)"
@@ -1123,26 +1189,14 @@ export function CampaignsClient({ token }: Props) {
                   className="flex w-full rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm shadow-xs placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#128c7e]/30 resize-y min-h-[108px] leading-relaxed"
                 />
                 <EmojiBar onInsert={insertEmoji} />
-                {!form.message.trim() && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {MESSAGE_STARTERS.map((starter) => (
-                      <button
-                        key={starter}
-                        type="button"
-                        onClick={() => setForm((f) => ({ ...f, message: starter }))}
-                        className="text-left text-[11px] rounded-full border px-2.5 py-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                      >
-                        {starter.slice(0, 52)}…
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <WhatsAppPreview
                   message={form.message}
                   mediaUrl={form.mediaUrl}
                   mediaType={form.mediaType}
                 />
               </div>
+              </>
+              )}
             </FormSection>
 
             <Separator />

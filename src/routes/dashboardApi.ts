@@ -69,7 +69,10 @@ import {
   sanitizeFollowUpMessage,
   validateFollowUpSettings,
 } from '../lib/followUpMessages.js';
-import { SEASONAL_CAMPAIGN_TEMPLATES } from '../lib/campaignTemplates.js';
+import {
+  CAMPAIGN_TEMPLATES,
+  CAMPAIGN_TEMPLATE_CATEGORIES,
+} from '../lib/campaignTemplates.js';
 import { maybeSendReferralPrompt } from '../services/referralProgram.js';
 import {
   notifyAppointmentChangedLater,
@@ -732,7 +735,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   app.get('/campaigns/templates', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
-      return { templates: SEASONAL_CAMPAIGN_TEMPLATES };
+      return { templates: CAMPAIGN_TEMPLATES, categories: CAMPAIGN_TEMPLATE_CATEGORIES };
     });
   });
 
