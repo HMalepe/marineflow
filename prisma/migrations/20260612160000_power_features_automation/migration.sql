@@ -8,6 +8,35 @@ ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "penaltyWaivedBy" TEXT;
 ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "cancellationPenaltyApplied" BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "addonServiceIds" TEXT[] DEFAULT ARRAY[]::TEXT[];
 
+-- ReferralCode may be missing if week30 migration was baselined without running SQL.
+CREATE TABLE IF NOT EXISTS "ReferralCode" (
+    "id" TEXT NOT NULL,
+    "salonId" TEXT NOT NULL,
+    "customerId" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "usageCount" INTEGER NOT NULL DEFAULT 0,
+    "maxUses" INTEGER NOT NULL DEFAULT 0,
+    "rewardStamps" INTEGER NOT NULL DEFAULT 1,
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "ReferralCode_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS "ReferralCode_code_key" ON "ReferralCode"("code");
+CREATE INDEX IF NOT EXISTS "ReferralCode_salonId_idx" ON "ReferralCode"("salonId");
+
+DO $$ BEGIN
+    ALTER TABLE "ReferralCode" ADD CONSTRAINT "ReferralCode_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE "ReferralCode" ADD CONSTRAINT "ReferralCode_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
 ALTER TABLE "ReferralCode" ADD COLUMN IF NOT EXISTS "rewardCents" INTEGER NOT NULL DEFAULT 5000;
 
 CREATE TABLE IF NOT EXISTS "ServiceAddon" (

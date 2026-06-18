@@ -13,10 +13,10 @@ import type {
 export const twilioMessaging: MessagingProvider = {
   async sendText(options: SendOptions): Promise<SentMessage> {
     if (options.interactive) {
-      const sid = await sendTwilioInteractive(options.to, options.interactive);
+      const sid = await sendTwilioInteractive(options.to, options.interactive, options.twilioFrom);
       return { providerMessageId: sid, timestamp: new Date() };
     }
-    const sid = await sendWhatsAppReply(options.to, options.body, options.mediaUrl);
+    const sid = await sendWhatsAppReply(options.to, options.body, options.mediaUrl, options.twilioFrom);
     return { providerMessageId: sid, timestamp: new Date() };
   },
 

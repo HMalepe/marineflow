@@ -4,15 +4,60 @@ import { whatsappCloudMessaging } from '../lib/integrations/messaging/whatsapp-c
 import { smsMessaging } from '../lib/integrations/messaging/sms-impl.js';
 import { callBookingConfirmation } from '../lib/integrations/messaging/voice.js';
 import { logger } from '../lib/logger.js';
-import { isTwilioConfigured } from '../config.js';
+import { env, isTwilioAccountConfigured } from '../config.js';
+import { normalizeTwilioWhatsAppFrom } from '../lib/salonDefaults.js';
 import type { InteractiveMessage, SentMessage } from '../lib/integrations/messaging/types.js';
 
 export type Channel = 'whatsapp' | 'sms' | 'voice';
 
+function logCloudApiFallthrough(cloudPhoneId: string, err: unknown): void {
+  const errMsg = err instanceof Error ? err.message : String(err);
+  const metaErrMatch = errMsg.match(/\((\d+)\):\s*(\{.+)/s);
+  let metaErrParsed: Record<string, unknown> = {};
+  if (metaErrMatch) {
+    try { metaErrParsed = JSON.parse(metaErrMatch[2]!) as Record<string, unknown>; } catch { /* ignore */ }
+  }
+  const metaError = (metaErrParsed as { error?: { code?: number; error_subcode?: number; message?: string; type?: string } }).error;
+  logger.warn({
+    cloudPhoneId,
+    httpStatus: metaErrMatch?.[1],
+    metaCode: metaError?.code,
+    metaSubcode: metaError?.error_subcode,
+    metaType: metaError?.type,
+    metaMessage: metaError?.message,
+    rawErr: errMsg,
+  }, 'whatsapp_cloud_fallthrough');
+}
+
+function resolveTwilioFrom(salonTwilioWhatsAppFrom: string | null): string | null {
+  const raw = salonTwilioWhatsAppFrom?.trim() || env.TWILIO_WHATSAPP_FROM?.trim();
+  if (!raw) return null;
+  return normalizeTwilioWhatsAppFrom(raw);
+}
+
+function twilioToAddress(e164: string): string {
+  const digits = e164.replace(/^whatsapp:/i, '').replace(/^\+/, '');
+  return `whatsapp:+${digits}`;
+}
+
+function twilioSendOpts(
+  params: { to: string; body: string; mediaUrl?: string; mediaType?: 'image' | 'video' | 'document' | 'audio'; interactive?: InteractiveMessage },
+  twilioFrom: string,
+) {
+  return {
+    to: twilioToAddress(params.to),
+    body: params.body,
+    mediaUrl: params.mediaUrl,
+    mediaType: params.mediaType,
+    interactive: params.interactive,
+    twilioFrom,
+  };
+}
+
 /**
- * Channel priority: WhatsApp (Cloud API) > WhatsApp (Twilio) > SMS > Voice.
- * Attempts delivery on the highest-priority available channel.
- * Falls back to the next channel on failure.
+ * Channel priority:
+ * - Interactive (lists/buttons): Twilio Content API only — Meta interactive permissions not used.
+ * - Plain text: WhatsApp Cloud API > Twilio WhatsApp > SMS.
  */
 export async function sendWithFallback(params: {
   salonId: string;
@@ -35,31 +80,29 @@ export async function sendWithFallback(params: {
     mediaType: params.mediaType,
   };
 
-  // Interactive content (list/button) is sent natively via Twilio's Content API —
-  // no Meta Cloud API dependency for interactive messages.
+  const cloudPhoneId = salon.whatsappPhoneId?.trim();
+  const twilioFrom = resolveTwilioFrom(salon.twilioWhatsAppFrom);
+  const twilioReady = isTwilioAccountConfigured() && twilioFrom != null;
+
+  // Interactive lists/buttons — Twilio Content API only (no Meta Cloud interactive).
   if (params.interactive) {
-    if (salon.twilioWhatsAppFrom || isTwilioConfigured()) {
+    if (twilioReady && twilioFrom) {
       try {
-        const result = await twilioMessaging.sendText({
-          ...sendOpts,
-          to: `whatsapp:${params.to}`,
-          interactive: params.interactive,
-        });
+        const result = await twilioMessaging.sendText(
+          twilioSendOpts({ ...sendOpts, interactive: params.interactive }, twilioFrom),
+        );
         if (result.providerMessageId) {
           return { channel: 'whatsapp', result };
         }
+        logger.warn({ salonId: params.salonId }, 'twilio_interactive_empty_id_retry_plain');
       } catch (err) {
         logger.warn({ err, salonId: params.salonId }, 'twilio_interactive_fallthrough');
       }
-    }
 
-    // Interactive send failed — retry as plain text on Twilio before giving up to SMS.
-    if (salon.twilioWhatsAppFrom || isTwilioConfigured()) {
       try {
-        const result = await twilioMessaging.sendText({
-          ...sendOpts,
-          to: `whatsapp:${params.to}`,
-        });
+        const result = await twilioMessaging.sendText(
+          twilioSendOpts(sendOpts, twilioFrom),
+        );
         if (result.providerMessageId) {
           return { channel: 'whatsapp', result };
         }
@@ -67,53 +110,37 @@ export async function sendWithFallback(params: {
         logger.warn({ err }, 'twilio_whatsapp_fallthrough');
       }
     }
-  } else {
-    // Try WhatsApp Cloud API
-    const cloudPhoneId = salon.whatsappPhoneId?.trim();
-    if (cloudPhoneId) {
-      try {
-        const result = await whatsappCloudMessaging.sendText({
-          ...sendOpts,
-          phoneNumberId: cloudPhoneId,
-        });
-        if (result.providerMessageId) {
-          return { channel: 'whatsapp', result };
-        }
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        // Parse structured Meta error so Railway doesn't truncate the one-line JSON
-        const metaErrMatch = errMsg.match(/\((\d+)\):\s*(\{.+)/s);
-        let metaErrParsed: Record<string, unknown> = {};
-        if (metaErrMatch) {
-          try { metaErrParsed = JSON.parse(metaErrMatch[2]!) as Record<string, unknown>; } catch { /* ignore */ }
-        }
-        const metaError = (metaErrParsed as { error?: { code?: number; error_subcode?: number; message?: string; type?: string } }).error;
-        logger.warn({
-          cloudPhoneId,
-          httpStatus: metaErrMatch?.[1],
-          metaCode: metaError?.code,
-          metaSubcode: metaError?.error_subcode,
-          metaType: metaError?.type,
-          metaMessage: metaError?.message,
-          rawErr: errMsg,
-        }, 'whatsapp_cloud_fallthrough');
+  } else if (cloudPhoneId) {
+    try {
+      const result = await whatsappCloudMessaging.sendText({
+        ...sendOpts,
+        phoneNumberId: cloudPhoneId,
+      });
+      if (result.providerMessageId) {
+        return { channel: 'whatsapp', result };
       }
+    } catch (err) {
+      logCloudApiFallthrough(cloudPhoneId, err);
     }
 
-    // Try WhatsApp via Twilio — gate on DB field OR env-level config so that
-    // deployments that set TWILIO_* env vars without the salon DB field still work.
-    if (salon.twilioWhatsAppFrom || isTwilioConfigured()) {
+    if (twilioReady && twilioFrom) {
       try {
-        const result = await twilioMessaging.sendText({
-          ...sendOpts,
-          to: `whatsapp:${params.to}`,
-        });
+        const result = await twilioMessaging.sendText(twilioSendOpts(sendOpts, twilioFrom));
         if (result.providerMessageId) {
           return { channel: 'whatsapp', result };
         }
       } catch (err) {
         logger.warn({ err }, 'twilio_whatsapp_fallthrough');
       }
+    }
+  } else if (twilioReady && twilioFrom) {
+    try {
+      const result = await twilioMessaging.sendText(twilioSendOpts(sendOpts, twilioFrom));
+      if (result.providerMessageId) {
+        return { channel: 'whatsapp', result };
+      }
+    } catch (err) {
+      logger.warn({ err }, 'twilio_whatsapp_fallthrough');
     }
   }
 
@@ -124,7 +151,7 @@ export async function sendWithFallback(params: {
         to: params.to,
         body: params.body,
       });
-      if (result.providerMessageId) {
+      if (result?.providerMessageId) {
         return { channel: 'sms', result };
       }
     } catch (err) {
@@ -132,7 +159,6 @@ export async function sendWithFallback(params: {
     }
   }
 
-  // All channels failed
   logger.error({ to: params.to, salonId: params.salonId }, 'all_channels_failed');
   return { channel: 'sms', result: { providerMessageId: null } };
 }
