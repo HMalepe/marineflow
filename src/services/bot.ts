@@ -29,7 +29,8 @@ import {
 import { checkBotRateLimits } from '../lib/botRateLimit.js';
 import { BOT_DEBUG, debugMsg } from '../lib/botDebug.js';
 import { logger } from '../lib/logger.js';
-import { redis } from '../lib/redis.js';
+import { redis, touchBotSession } from '../lib/redis.js';
+import { logMessageLog } from './messageLog.js';
 import { DateTime } from 'luxon';
 import { getAvailableSlots, getNextAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
 import { parseNaturalDateTime } from './naturalDateTime.js';
@@ -964,119 +965,136 @@ export async function handleInboundWhatsApp(input: {
   const waId = normalizeWaId(input.from);
   const text = (input.body ?? '').trim();
 
-  const tenant = await resolveTenantForInbound({
-    twilioTo: input.twilioTo,
-    metaPhoneNumberId: input.metaPhoneNumberId,
-  });
-  logger.info({ tenantId: tenant?.id ?? null, tenantSlug: tenant?.slug ?? null, twilioTo: input.twilioTo }, 'bot_tenant_resolved');
-  if (!tenant) {
-    logger.error({ twilioTo: input.twilioTo }, 'tenant_not_resolved');
-    return;
-  }
-
-  try {
-    assertTenantActive(tenant);
-  } catch {
-    logger.warn({ tenantId: tenant.id, status: tenant.status }, 'bot_tenant_inactive');
-    await sendTenantWhatsApp(
-      tenant.id,
-      waId,
-      'This business is not accepting bookings right now. Please try again later.',
-    );
-    return;
-  }
-
-  if (!(await rateLimitOrReject(waId, tenant.id))) {
-    await sendTenantWhatsApp(tenant.id, waId, 'Too many messages — please wait a minute and try again.');
-    return;
-  }
-
-  logger.info({ tenantId: tenant.id, waId, textLen: text.length }, 'bot_processing');
-
-  // EC-19: Per-user Redis mutex to serialise concurrent messages from the same number
-  const lockKey = `conv:lock:${tenant.id}:${waId}`;
+  let inboundStatus: 'DELIVERED' | 'FAILED' | 'UNHANDLED' = 'DELIVERED';
+  let inboundSalonId: string | null = null;
   let lockAcquired = false;
+  let lockKey = '';
+
   try {
-    let acquired: string | null = null;
-    try {
-      acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
-    } catch {
-      // Redis unavailable — skip deduplication, process anyway
-      acquired = 'OK';
+    const tenant = await resolveTenantForInbound({
+      twilioTo: input.twilioTo,
+      metaPhoneNumberId: input.metaPhoneNumberId,
+    });
+    logger.info({ tenantId: tenant?.id ?? null, tenantSlug: tenant?.slug ?? null, twilioTo: input.twilioTo }, 'bot_tenant_resolved');
+    if (!tenant) {
+      logger.error({ twilioTo: input.twilioTo }, 'tenant_not_resolved');
+      inboundStatus = 'UNHANDLED';
+      return;
     }
-    lockAcquired = acquired === 'OK';
-    if (!lockAcquired) {
-      logger.warn({ tenantId: tenant.id, waId }, 'concurrent_message_blocked');
+
+    inboundSalonId = tenant.id;
+    await touchBotSession(tenant.id, waId);
+
+    try {
+      assertTenantActive(tenant);
+    } catch {
+      logger.warn({ tenantId: tenant.id, status: tenant.status }, 'bot_tenant_inactive');
       await sendTenantWhatsApp(
         tenant.id,
         waId,
-        'Still working on your last message — please wait a moment before sending another. 🙂',
+        'This business is not accepting bookings right now. Please try again later.',
       );
       return;
     }
-    await runWithBotRequest(async () => {
-      try {
-        await withTenantContext(tenant.id, async () => {
-          await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
-        });
-      } finally {
-        await flushPendingOutbound();
-        await flushPendingConsentAudits();
-        const job = takePendingWelcomeJourney();
-        if (job) {
-          void withTenantContext(job.salonId, () =>
-            sendWelcomeJourneyIfNeeded({
-              salonId: job.salonId,
-              customerId: job.customerId,
-              isFirstInteraction: job.isFirstInteraction,
-              send: (body) => sendTenantWhatsApp(job.salonId, job.waId, body),
-            }),
-          ).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
-        }
-      }
-    });
-  } catch (err) {
-    const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
-    logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
-    void recordBotPlatformAlert({
-      salonId: tenant.id,
-      title: 'Bot transaction failed',
-      body: err instanceof Error ? err.message : String(err),
-      metadata: { errCode, waId, event: 'bot_transaction_failed' },
-    }).catch(() => {});
-    // Last resort — send an error notice so users know something went wrong (not a silent menu)
+
+    if (!(await rateLimitOrReject(waId, tenant.id))) {
+      await sendTenantWhatsApp(tenant.id, waId, 'Too many messages — please wait a minute and try again.');
+      return;
+    }
+
+    logger.info({ tenantId: tenant.id, waId, textLen: text.length }, 'bot_processing');
+
+    // EC-19: Per-user Redis mutex to serialise concurrent messages from the same number
+    lockKey = `conv:lock:${tenant.id}:${waId}`;
     try {
-      const salon = await prisma.salon.findUnique({
-        where: { id: tenant.id },
-        select: {
-          name: true,
-          tradingName: true,
-          welcomeMessage: true,
-          botLoyaltyEnabled: true,
-          metadata: true,
-          openTime: true,
-          closeTime: true,
-          timezone: true,
-          whatsappPhoneId: true,
-          addressLine: true,
-          phoneDisplay: true,
-          parkingNotes: true,
-          accessibility: true,
-        },
-      });
-      if (BOT_DEBUG) {
-        const dbgText = debugMsg('bot_transaction_failed', err, { errCode, tenantId: tenant.id });
-        await sendTenantWhatsApp(tenant.id, waId, dbgText);
-      } else if (salon) {
-        await sendTenantWhatsApp(tenant.id, waId, buildMainMenuText(salon as Salon));
+      let acquired: string | null = null;
+      try {
+        acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
+      } catch {
+        // Redis unavailable — skip deduplication, process anyway
+        acquired = 'OK';
       }
-    } catch (fallbackErr) {
-      logger.error({ err: fallbackErr }, 'bot_fallback_send_failed');
+      lockAcquired = acquired === 'OK';
+      if (!lockAcquired) {
+        logger.warn({ tenantId: tenant.id, waId }, 'concurrent_message_blocked');
+        await sendTenantWhatsApp(
+          tenant.id,
+          waId,
+          'Still working on your last message — please wait a moment before sending another. 🙂',
+        );
+        return;
+      }
+      await runWithBotRequest(async () => {
+        try {
+          await withTenantContext(tenant.id, async () => {
+            await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
+          });
+        } finally {
+          await flushPendingOutbound();
+          await flushPendingConsentAudits();
+          const job = takePendingWelcomeJourney();
+          if (job) {
+            void withTenantContext(job.salonId, () =>
+              sendWelcomeJourneyIfNeeded({
+                salonId: job.salonId,
+                customerId: job.customerId,
+                isFirstInteraction: job.isFirstInteraction,
+                send: (body) => sendTenantWhatsApp(job.salonId, job.waId, body),
+              }),
+            ).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
+          }
+        }
+      });
+    } catch (err) {
+      inboundStatus = 'FAILED';
+      const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
+      logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
+      void recordBotPlatformAlert({
+        salonId: tenant.id,
+        title: 'Bot transaction failed',
+        body: err instanceof Error ? err.message : String(err),
+        metadata: { errCode, waId, event: 'bot_transaction_failed' },
+      }).catch(() => {});
+      // Last resort — send an error notice so users know something went wrong (not a silent menu)
+      try {
+        const salon = await prisma.salon.findUnique({
+          where: { id: tenant.id },
+          select: {
+            name: true,
+            tradingName: true,
+            welcomeMessage: true,
+            botLoyaltyEnabled: true,
+            metadata: true,
+            openTime: true,
+            closeTime: true,
+            timezone: true,
+            whatsappPhoneId: true,
+            addressLine: true,
+            phoneDisplay: true,
+            parkingNotes: true,
+            accessibility: true,
+          },
+        });
+        if (BOT_DEBUG) {
+          const dbgText = debugMsg('bot_transaction_failed', err, { errCode, tenantId: tenant.id });
+          await sendTenantWhatsApp(tenant.id, waId, dbgText);
+        } else if (salon) {
+          await sendTenantWhatsApp(tenant.id, waId, buildMainMenuText(salon as Salon));
+        }
+      } catch (fallbackErr) {
+        logger.error({ err: fallbackErr }, 'bot_fallback_send_failed');
+      }
+    } finally {
+      if (lockAcquired && lockKey) {
+        await redis.del(lockKey).catch(() => {});
+      }
     }
   } finally {
-    if (lockAcquired) {
-      await redis.del(lockKey).catch(() => {});
-    }
+    logMessageLog({
+      salonId: inboundSalonId,
+      direction: 'INBOUND',
+      status: inboundStatus,
+    });
   }
 }
 

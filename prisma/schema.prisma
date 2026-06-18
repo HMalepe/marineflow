@@ -103,6 +103,13 @@ enum MessageStatus {
   FAILED
 }
 
+/// Bot delivery telemetry — separate from conversation Message rows.
+enum MessageLogStatus {
+  DELIVERED
+  FAILED
+  UNHANDLED
+}
+
 enum TicketStatus {
   OPEN
   WAITING_CUSTOMER
@@ -260,6 +267,7 @@ model Salon {
   auditLogs      AuditLog[]
   reviewIncentiveClaims ReviewIncentiveClaim[]
   platformAlerts PlatformAlert[]
+  messageLogs      MessageLog[]
 }
 
 model Branch {
@@ -388,6 +396,19 @@ model Message {
 
   @@index([conversationId])
   @@index([customerId, createdAt])
+}
+
+model MessageLog {
+  id        String            @id @default(cuid())
+  salonId   String?
+  salon     Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  direction MessageDirection
+  status    MessageLogStatus
+  createdAt DateTime          @default(now())
+
+  @@index([salonId, createdAt])
+  @@index([direction, createdAt])
+  @@index([status, createdAt])
 }
 
 model ServiceCategory {

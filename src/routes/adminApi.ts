@@ -29,6 +29,7 @@ import {
   listAnalyticsBusinesses,
 } from '../services/adminAnalytics.js';
 import { getAdminRevenue } from '../api/admin/revenue.js';
+import { getAdminBotHealth } from '../api/admin/bot-health.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -612,6 +613,11 @@ export async function adminApiRoutes(app: FastifyInstance) {
   // ─── Platform Revenue (SUPER_ADMIN only) ───────────────────────────
   app.get('/revenue', { preHandler: requireSuperAdmin }, async () => {
     return getAdminRevenue();
+  });
+
+  // ─── Bot Health (SUPER_ADMIN only) ─────────────────────────────────
+  app.get('/bot-health', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminBotHealth();
   });
 
   // ─── Platform Usage Summary ────────────────────────────────────────
