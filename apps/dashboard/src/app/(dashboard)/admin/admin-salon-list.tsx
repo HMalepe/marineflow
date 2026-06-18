@@ -48,6 +48,11 @@ const INDUSTRY_TEMPLATE_OPTIONS = [
   { value: 'salon', label: 'Hair & Beauty Salon' },
   { value: 'barbershop', label: 'Barbershop' },
   { value: 'restaurant', label: 'Restaurant' },
+  { value: 'spa', label: 'Spa & Wellness' },
+  { value: 'fitness', label: 'Fitness Studio' },
+  { value: 'clinic', label: 'Medical / Dental Clinic' },
+  { value: 'petgrooming', label: 'Pet Grooming' },
+  { value: 'carwash', label: 'Car Wash & Detailing' },
 ];
 
 interface CreatedSalonCredentials {

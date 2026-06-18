@@ -1,9 +1,26 @@
 /** Vertical-specific vocabulary for the bot — same flow/menu structure for every
  *  industry, just different labels/keywords/copy. Keyed by `Salon.industryTemplate`. */
 
-export type IndustryTemplateId = 'salon' | 'barbershop' | 'restaurant';
+export type IndustryTemplateId =
+  | 'salon'
+  | 'barbershop'
+  | 'restaurant'
+  | 'spa'
+  | 'fitness'
+  | 'clinic'
+  | 'petgrooming'
+  | 'carwash';
 
-export const INDUSTRY_TEMPLATE_IDS: IndustryTemplateId[] = ['salon', 'barbershop', 'restaurant'];
+export const INDUSTRY_TEMPLATE_IDS: IndustryTemplateId[] = [
+  'salon',
+  'barbershop',
+  'restaurant',
+  'spa',
+  'fitness',
+  'clinic',
+  'petgrooming',
+  'carwash',
+];
 
 export function isIndustryTemplateId(value: unknown): value is IndustryTemplateId {
   return typeof value === 'string' && (INDUSTRY_TEMPLATE_IDS as string[]).includes(value);
@@ -74,6 +91,81 @@ export const INDUSTRY_TEMPLATES: Record<IndustryTemplateId, IndustryTemplate> = 
       mains: ['main', 'meal', 'lunch', 'dinner', 'plate'],
       drinks: ['drink', 'beverage', 'cocktail', 'wine', 'beer'],
       desserts: ['dessert', 'sweet', 'cake'],
+    },
+  },
+  spa: {
+    id: 'spa',
+    label: 'Spa & Wellness',
+    bookAction: 'Book a treatment',
+    servicesLabel: 'Treatments',
+    providerNoun: 'therapist',
+    providerNounPlural: 'Therapists',
+    bookingExample: 'book a massage',
+    nextBookingNoun: 'treatment',
+    serviceCategoryAliases: {
+      massage: ['massage', 'body', 'deep tissue', 'hot stone', 'reflexology'],
+      facial: ['facial', 'skin', 'peel', 'microdermabrasion'],
+      wellness: ['wellness', 'sauna', 'steam', 'wrap', 'aromatherapy'],
+    },
+  },
+  fitness: {
+    id: 'fitness',
+    label: 'Fitness Studio',
+    bookAction: 'Book a class',
+    servicesLabel: 'Classes',
+    providerNoun: 'trainer',
+    providerNounPlural: 'Trainers',
+    bookingExample: 'book a personal training session',
+    nextBookingNoun: 'session',
+    serviceCategoryAliases: {
+      classes: ['class', 'yoga', 'pilates', 'spin', 'hiit', 'bootcamp'],
+      personal: ['personal training', 'pt', 'one on one', '1 on 1', 'coaching'],
+      assessment: ['assessment', 'consult', 'body composition'],
+    },
+  },
+  clinic: {
+    id: 'clinic',
+    label: 'Medical / Dental Clinic',
+    bookAction: 'Book a consultation',
+    servicesLabel: 'Treatments',
+    providerNoun: 'practitioner',
+    providerNounPlural: 'Practitioners',
+    bookingExample: 'book a consultation',
+    nextBookingNoun: 'visit',
+    serviceCategoryAliases: {
+      consult: ['consult', 'consultation', 'checkup', 'check up', 'exam'],
+      dental: ['dental', 'teeth', 'cleaning', 'filling', 'extraction'],
+      followup: ['follow up', 'followup', 'review', 'results'],
+    },
+  },
+  petgrooming: {
+    id: 'petgrooming',
+    label: 'Pet Grooming',
+    bookAction: 'Book a grooming slot',
+    servicesLabel: 'Services',
+    providerNoun: 'groomer',
+    providerNounPlural: 'Groomers',
+    bookingExample: 'book a grooming session',
+    nextBookingNoun: 'groom',
+    serviceCategoryAliases: {
+      grooming: ['groom', 'grooming', 'bath', 'wash', 'haircut', 'trim'],
+      nails: ['nail', 'nail clip', 'claw'],
+      extras: ['flea', 'tick', 'deshedding', 'teeth cleaning'],
+    },
+  },
+  carwash: {
+    id: 'carwash',
+    label: 'Car Wash & Detailing',
+    bookAction: 'Book a wash slot',
+    servicesLabel: 'Services',
+    providerNoun: 'detailer',
+    providerNounPlural: 'Detailers',
+    bookingExample: 'book a full valet',
+    nextBookingNoun: 'wash',
+    serviceCategoryAliases: {
+      wash: ['wash', 'exterior', 'quick wash'],
+      valet: ['valet', 'interior', 'full valet', 'detailing'],
+      protection: ['wax', 'polish', 'ceramic', 'coating'],
     },
   },
 };
