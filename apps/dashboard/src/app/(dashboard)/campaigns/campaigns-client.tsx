@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { CampaignMediaUpload, type CampaignMediaType } from './campaign-media-upload';
+import { CampaignSchedulePicker } from './campaign-schedule-picker';
 import { EmojiBar } from './emoji-bar';
 
 type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'COMPLETED' | 'CANCELLED';
@@ -1303,20 +1304,11 @@ export function CampaignsClient({ token }: Props) {
               ))}
 
               {form.deliveryMode === 'schedule' && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="schedule-at">Send at</Label>
-                  <Input
-                    id="schedule-at"
-                    type="datetime-local"
-                    value={form.scheduledAtLocal}
-                    min={toLocalDatetimeInput(new Date(Date.now() + 5 * 60_000))}
-                    onChange={(e) => setForm((f) => ({ ...f, scheduledAtLocal: e.target.value }))}
-                  />
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    We check every 5 minutes — delivery may begin up to 5 minutes after your chosen
-                    time.
-                  </p>
-                </div>
+                <CampaignSchedulePicker
+                  value={form.scheduledAtLocal}
+                  onChange={(scheduledAtLocal) => setForm((f) => ({ ...f, scheduledAtLocal }))}
+                  minIso={toLocalDatetimeInput(new Date(Date.now() + 5 * 60_000))}
+                />
               )}
 
               {confirmSendInSheet && form.deliveryMode === 'now' && (
