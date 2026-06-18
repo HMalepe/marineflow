@@ -113,8 +113,8 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
       )}
 
       {/* Salon Table */}
-      <div className="border rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="border rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left p-3 font-medium">Salon</th>

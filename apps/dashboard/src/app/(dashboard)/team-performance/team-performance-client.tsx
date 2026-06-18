@@ -126,8 +126,8 @@ export function TeamPerformanceClient({ token }: Props) {
             </Card>
           )}
 
-          <div className="rounded-xl border overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="rounded-xl border overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b bg-muted/50 text-left">
                   <th className="p-3 font-medium w-12">#</th>

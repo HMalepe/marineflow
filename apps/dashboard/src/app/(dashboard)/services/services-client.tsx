@@ -670,7 +670,7 @@ export function ServicesClient({ token }: Props) {
 
                   {/* Category actions (non-other groups) */}
                   {!isOther && group.category && (
-                    <div className="flex items-center gap-1 opacity-0 group-hover/header:opacity-100 transition-opacity shrink-0">
+                    <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100 transition-opacity shrink-0">
                       {catEditId === group.category.id ? (
                         <div className="flex items-center gap-1">
                           <input
@@ -729,7 +729,7 @@ export function ServicesClient({ token }: Props) {
                   <button
                     type="button"
                     onClick={() => openCreate(isOther ? '' : (group.category?.id ?? ''))}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/header:opacity-100"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors shrink-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100"
                     title="Add service to this category"
                   >
                     <Plus className="size-3" />
