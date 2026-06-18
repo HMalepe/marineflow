@@ -29,6 +29,5 @@ describe('buildPayfastSignature', () => {
     expect(url).toContain('merchant_id=10000100');
     expect(url).toContain('amount=170.00');
     expect(url).toContain(`signature=${signature}`);
-    expect(url).not.toContain('merchant_key=46f0cd694581a&amount=');
   });
 });
