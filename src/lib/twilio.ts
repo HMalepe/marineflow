@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import { env, isTwilioAccountConfigured } from '../config.js';
+import { normalizeTwilioWhatsAppFrom } from './salonDefaults.js';
 import { logger } from './logger.js';
 
 let client: ReturnType<typeof twilio> | null = null;
@@ -22,17 +23,17 @@ export async function sendWhatsAppReply(
   toWaId: string,
   body: string,
   mediaUrl?: string,
+  twilioFrom?: string,
 ): Promise<string | null> {
   const tw = getTwilioClient();
-  if (!tw || !env.TWILIO_WHATSAPP_FROM) {
-    logger.error({ hasClient: !!tw, hasFrom: !!env.TWILIO_WHATSAPP_FROM }, 'twilio_send_aborted_no_config');
+  const from = twilioFrom
+    ?? (env.TWILIO_WHATSAPP_FROM ? normalizeTwilioWhatsAppFrom(env.TWILIO_WHATSAPP_FROM) : null);
+  if (!tw || !from) {
+    logger.error({ hasClient: !!tw, hasFrom: !!from }, 'twilio_send_aborted_no_config');
     return null;
   }
   const toDigits = toWaId.replace(/^whatsapp:/i, '').replace(/^\+/, '');
   const to = `whatsapp:+${toDigits}`;
-  const from = env.TWILIO_WHATSAPP_FROM.startsWith('whatsapp:')
-    ? env.TWILIO_WHATSAPP_FROM
-    : `whatsapp:+${env.TWILIO_WHATSAPP_FROM.replace(/^\+/, '')}`;
   try {
     const msg = await tw.messages.create({
       from,

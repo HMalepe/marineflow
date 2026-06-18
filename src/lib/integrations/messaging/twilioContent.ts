@@ -1,4 +1,5 @@
 import { env, isTwilioAccountConfigured } from '../../../config.js';
+import { normalizeTwilioWhatsAppFrom } from '../../salonDefaults.js';
 import { logger } from '../../logger.js';
 import { truncateListField } from './interactiveList.js';
 import type { InteractiveMessage } from './types.js';
@@ -83,17 +84,17 @@ async function createContent(interactive: InteractiveMessage): Promise<string> {
 export async function sendTwilioInteractive(
   to: string,
   interactive: InteractiveMessage,
+  twilioFrom?: string,
 ): Promise<string | null> {
-  if (!isTwilioAccountConfigured() || !env.TWILIO_WHATSAPP_FROM) {
+  const from = twilioFrom
+    ?? (env.TWILIO_WHATSAPP_FROM ? normalizeTwilioWhatsAppFrom(env.TWILIO_WHATSAPP_FROM) : null);
+  if (!isTwilioAccountConfigured() || !from) {
     logger.error('twilio_interactive_send_aborted_no_config');
     return null;
   }
 
   const toDigits = to.replace(/^whatsapp:/i, '').replace(/^\+/, '');
   const toAddr = `whatsapp:+${toDigits}`;
-  const from = env.TWILIO_WHATSAPP_FROM.startsWith('whatsapp:')
-    ? env.TWILIO_WHATSAPP_FROM
-    : `whatsapp:+${env.TWILIO_WHATSAPP_FROM.replace(/^\+/, '')}`;
 
   try {
     const contentSid = await createContent(interactive);

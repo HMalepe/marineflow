@@ -36,6 +36,8 @@ export interface SendOptions {
   templateParams?: TemplateParam[];
   /** Meta Cloud API interactive list — body is used as plain-text fallback */
   interactive?: InteractiveMessage;
+  /** Twilio WhatsApp sender address (salon DB field or env fallback) */
+  twilioFrom?: string;
 }
 
 /** WhatsApp reply buttons (Meta Cloud API) — max 3 buttons per message. */

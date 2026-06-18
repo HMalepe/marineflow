@@ -34,6 +34,7 @@ vi.mock('../config.js', async (importOriginal) => {
   return {
     ...actual,
     isTwilioConfigured: () => false,
+    isTwilioAccountConfigured: () => true,
   };
 });
 
@@ -53,12 +54,12 @@ describe('sendWithFallback — interactive list delivery', () => {
     findUniqueOrThrowMock.mockReset();
   });
 
-  it('sends interactive list on Cloud API tenant', async () => {
+  it('sends interactive list via Twilio Content API (never Meta Cloud interactive)', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: 'PHONE123',
-      twilioWhatsAppFrom: null,
+      twilioWhatsAppFrom: 'whatsapp:+14155238886',
     });
-    sendTextMock.mockResolvedValueOnce({ providerMessageId: 'wamid.interactive' });
+    twilioSendMock.mockResolvedValueOnce({ providerMessageId: 'SM.interactive' });
 
     const result = await sendWithFallback({
       salonId: 'salon-1',
@@ -68,23 +69,25 @@ describe('sendWithFallback — interactive list delivery', () => {
     });
 
     expect(result.channel).toBe('whatsapp');
-    expect(result.result.providerMessageId).toBe('wamid.interactive');
-    expect(sendTextMock).toHaveBeenCalledTimes(1);
-    expect(sendTextMock.mock.calls[0]![0]).toMatchObject({
-      phoneNumberId: 'PHONE123',
+    expect(result.result.providerMessageId).toBe('SM.interactive');
+    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(twilioSendMock).toHaveBeenCalledTimes(1);
+    expect(twilioSendMock.mock.calls[0]![0]).toMatchObject({
+      to: 'whatsapp:+27820000000',
       interactive: interactiveMenu,
       body: 'Plain fallback body',
+      twilioFrom: 'whatsapp:+14155238886',
     });
   });
 
-  it('retries plain text when interactive send throws — customer never sees error', async () => {
+  it('retries plain text on Twilio when interactive send throws', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: 'PHONE123',
-      twilioWhatsAppFrom: null,
+      twilioWhatsAppFrom: '+14155238886',
     });
-    sendTextMock
-      .mockRejectedValueOnce(new Error('Meta: interactive not enabled'))
-      .mockResolvedValueOnce({ providerMessageId: 'wamid.plain' });
+    twilioSendMock
+      .mockRejectedValueOnce(new Error('Twilio Content API error'))
+      .mockResolvedValueOnce({ providerMessageId: 'SM.plain' });
 
     const result = await sendWithFallback({
       salonId: 'salon-1',
@@ -93,20 +96,21 @@ describe('sendWithFallback — interactive list delivery', () => {
       interactive: interactiveMenu,
     });
 
-    expect(result.result.providerMessageId).toBe('wamid.plain');
-    expect(sendTextMock).toHaveBeenCalledTimes(2);
-    expect(sendTextMock.mock.calls[0]![0].interactive).toBeDefined();
-    expect(sendTextMock.mock.calls[1]![0].interactive).toBeUndefined();
+    expect(result.result.providerMessageId).toBe('SM.plain');
+    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(twilioSendMock).toHaveBeenCalledTimes(2);
+    expect(twilioSendMock.mock.calls[0]![0].interactive).toBeDefined();
+    expect(twilioSendMock.mock.calls[1]![0].interactive).toBeUndefined();
   });
 
-  it('retries plain text when interactive returns empty providerMessageId', async () => {
+  it('retries plain text on Twilio when interactive returns empty providerMessageId', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
-      whatsappPhoneId: 'PHONE123',
-      twilioWhatsAppFrom: null,
+      whatsappPhoneId: null,
+      twilioWhatsAppFrom: '+14155238886',
     });
-    sendTextMock
+    twilioSendMock
       .mockResolvedValueOnce({ providerMessageId: null })
-      .mockResolvedValueOnce({ providerMessageId: 'wamid.plain' });
+      .mockResolvedValueOnce({ providerMessageId: 'SM.plain' });
 
     const result = await sendWithFallback({
       salonId: 'salon-1',
@@ -115,11 +119,12 @@ describe('sendWithFallback — interactive list delivery', () => {
       interactive: interactiveMenu,
     });
 
-    expect(result.result.providerMessageId).toBe('wamid.plain');
-    expect(sendTextMock).toHaveBeenCalledTimes(2);
+    expect(result.result.providerMessageId).toBe('SM.plain');
+    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(twilioSendMock).toHaveBeenCalledTimes(2);
   });
 
-  it('does not attempt Cloud API when whatsappPhoneId is whitespace', async () => {
+  it('uses Twilio when whatsappPhoneId is whitespace', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: '   ',
       twilioWhatsAppFrom: '+14155238886',
@@ -137,7 +142,7 @@ describe('sendWithFallback — interactive list delivery', () => {
     expect(twilioSendMock).toHaveBeenCalled();
   });
 
-  it('never passes interactive to Twilio (plain body only)', async () => {
+  it('passes interactive payload to Twilio on Twilio-only tenant', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: null,
       twilioWhatsAppFrom: '+14155238886',
@@ -156,8 +161,9 @@ describe('sendWithFallback — interactive list delivery', () => {
       expect.objectContaining({
         body: 'Plain menu',
         to: 'whatsapp:+27820000000',
+        interactive: interactiveMenu,
+        twilioFrom: 'whatsapp:+14155238886',
       }),
     );
-    expect(twilioSendMock.mock.calls[0]![0]).not.toHaveProperty('interactive');
   });
 });
