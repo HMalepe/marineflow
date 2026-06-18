@@ -128,3 +128,39 @@ const ADMIN_MOBILE_TAB_HREFS = new Set(ADMIN_MOBILE_TAB_ITEMS.map((item) => item
 export function adminMobileMoreItems(): NavItem[] {
   return ADMIN_NAV_ITEMS.filter((item) => !ADMIN_MOBILE_TAB_HREFS.has(item.href));
 }
+
+/** Flat list for sticky header navigation. */
+export function flatDashboardNavItems(input: { isAdmin: boolean; isOwner: boolean }): NavItem[] {
+  if (input.isAdmin) return ADMIN_NAV_ITEMS;
+  return [
+    SALON_OVERVIEW_ITEM,
+    ...visibleSalonNavGroups(input.isOwner).flatMap((g) => g.items),
+  ];
+}
+
+/** Grouped items for sticky header — preserves section labels. */
+export function stickyHeaderNavGroups(input: { isAdmin: boolean; isOwner: boolean }): NavGroup[] {
+  if (input.isAdmin) {
+    return [
+      { title: 'Platform', items: ADMIN_NAV_ITEMS.filter((i) => ['/', '/agency', '/admin'].includes(i.href)) },
+      { title: 'Reports', items: ADMIN_NAV_ITEMS.filter((i) => ['/analytics', '/billing'].includes(i.href)) },
+    ];
+  }
+  return [{ title: 'Overview', items: [SALON_OVERVIEW_ITEM] }, ...visibleSalonNavGroups(input.isOwner)];
+}
+
+export type SettingsSectionLink = { id: string; label: string };
+
+/** In-page jump links on Settings — keep in sync with section ids in settings pages. */
+export const SETTINGS_SECTION_LINKS: SettingsSectionLink[] = [
+  { id: 'settings-profile', label: 'Profile' },
+  { id: 'settings-logo', label: 'Logo' },
+  { id: 'settings-business-name', label: 'Business name' },
+  { id: 'settings-bot-behaviour', label: 'Bot behaviour' },
+  { id: 'settings-conversation-flow', label: 'Conversation flow' },
+  { id: 'settings-messages', label: 'Bot messages' },
+  { id: 'settings-hours', label: 'Business hours' },
+  { id: 'settings-location', label: 'Location' },
+  { id: 'settings-password', label: 'Password' },
+  { id: 'settings-integrations', label: 'Integrations' },
+];

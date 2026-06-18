@@ -26,41 +26,48 @@ export function BranchShell({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border bg-card p-4 sm:p-5 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1 min-w-0">
-            <Link
-              href="/branches"
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="size-3.5" />
-              All branches
-            </Link>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">{branch.name}</h1>
-            <p className="text-sm text-muted-foreground max-w-2xl">
-              This location has its own roster and staff. Services, prices, and the WhatsApp bot are shared across all branches.
-            </p>
-          </div>
-          {branch._count && (
-            <div className="flex gap-4 text-sm text-muted-foreground shrink-0">
-              <span>{branch._count.staff} staff</span>
-              <span>{branch._count.appointments} appointments</span>
+      <div className="rounded-xl border bg-card overflow-hidden">
+        <div className="p-4 sm:p-5 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-1 min-w-0">
+              <Link
+                href="/branches"
+                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="size-3.5" />
+                All branches
+              </Link>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">{branch.name}</h1>
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                This location has its own roster and staff. Services, prices, and the WhatsApp bot are shared across all branches.
+              </p>
             </div>
-          )}
+            {branch._count && (
+              <div className="flex gap-4 text-sm text-muted-foreground shrink-0">
+                <span>{branch._count.staff} staff</span>
+                <span>{branch._count.appointments} appointments</span>
+              </div>
+            )}
+          </div>
         </div>
 
-        <nav className="flex flex-wrap gap-1.5">
+        <nav
+          className={cn(
+            'sticky z-30 flex gap-1.5 overflow-x-auto overscroll-x-contain px-4 sm:px-5 py-2.5',
+            'border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85',
+            'top-[var(--dashboard-sticky-offset,0px)]',
+            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          )}
+        >
           {NAV.map(({ segment, label, icon: Icon }) => {
             const href = segment ? branchPath(branch.id, segment) : base;
-            const active = segment
-              ? pathname.startsWith(href)
-              : pathname === base;
+            const active = segment ? pathname.startsWith(href) : pathname === base;
             return (
               <Link
                 key={segment || 'overview'}
                 href={href}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap',
                   active
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',

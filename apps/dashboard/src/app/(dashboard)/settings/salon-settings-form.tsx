@@ -583,7 +583,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   return (
     <div className="space-y-8">
       {/* WhatsApp business name */}
-      <section className="space-y-4">
+      <section id="settings-business-name" className="dashboard-section-anchor space-y-4">
         <div>
           <h3 className="text-base font-semibold">WhatsApp business name</h3>
           <p className="text-sm text-muted-foreground mt-1">
@@ -741,7 +741,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* WhatsApp Bot Messages */}
-      <section className="space-y-4">
+      <section id="settings-messages" className="dashboard-section-anchor space-y-4">
         <div>
           <h3 className="text-base font-semibold">WhatsApp bot messages</h3>
           <p className="text-sm text-muted-foreground mt-1">
@@ -888,7 +888,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* Location & Contact */}
-      <section className="space-y-4">
+      <section id="settings-location" className="dashboard-section-anchor space-y-4">
         <div>
           <h3 className="text-base font-semibold">Location &amp; Contact</h3>
           <p className="text-sm text-muted-foreground mt-1">
@@ -967,7 +967,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* Bot Behaviour */}
-      <section className="space-y-4">
+      <section id="settings-bot-behaviour" className="dashboard-section-anchor space-y-4">
         <div>
           <h3 className="text-base font-semibold">Bot behaviour</h3>
           <p className="text-sm text-muted-foreground mt-1">

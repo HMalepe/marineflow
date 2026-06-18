@@ -59,7 +59,7 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <Card>
+      <Card id="settings-profile" className="dashboard-section-anchor">
         <CardHeader>
           <CardTitle>Profile</CardTitle>
           <CardDescription>Your account information</CardDescription>
@@ -74,7 +74,7 @@ export default async function SettingsPage() {
       </Card>
 
       {canEditSalon && salonSettings && (
-        <Card>
+        <Card id="settings-logo" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Logo</CardTitle>
             <CardDescription>Your salon&apos;s brand mark — shown in the sidebar</CardDescription>
@@ -86,7 +86,7 @@ export default async function SettingsPage() {
       )}
 
       {canEditSalon && (
-        <Card>
+        <Card id="settings-salon" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Business &amp; WhatsApp Bot</CardTitle>
             <CardDescription>Dashboard display name, hours, automated messages, and bot availability</CardDescription>
@@ -101,7 +101,7 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      <Card>
+      <Card id="settings-password" className="dashboard-section-anchor">
         <CardHeader>
           <CardTitle>Change Password</CardTitle>
           <CardDescription>Update your dashboard login password</CardDescription>
@@ -116,7 +116,7 @@ export default async function SettingsPage() {
       </Card>
 
       {canEditSalon && (
-        <Card>
+        <Card id="settings-integrations" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Integrations</CardTitle>
             <CardDescription>Connect external services</CardDescription>

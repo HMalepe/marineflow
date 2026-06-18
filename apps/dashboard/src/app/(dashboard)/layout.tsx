@@ -5,6 +5,7 @@ import { LogoutButton, LogoutIconButton } from './logout-button';
 import { MobileNav } from './mobile-nav';
 import { NavLinks } from './nav-links';
 import { DashboardSearch } from '@/components/dashboard-search';
+import { DashboardStickyHeader } from '@/components/dashboard-sticky-header';
 
 function formatRole(role: string): string {
   return role
@@ -48,7 +49,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row">
+    <div className="min-h-dvh flex flex-col md:flex-row">
       {/* Mobile header + bottom nav */}
       <MobileNav
         isAdmin={isAdmin}
@@ -58,11 +59,11 @@ export default async function DashboardLayout({
         handoffCount={handoffCount}
       />
 
-      {/* Sidebar (desktop only) */}
-      <aside className="w-64 border-r bg-card hidden md:flex flex-col">
+      {/* Sidebar (desktop only) — pinned to viewport while main content scrolls */}
+      <aside className="w-64 shrink-0 border-r bg-card hidden md:flex md:flex-col md:sticky md:top-0 md:h-dvh md:overflow-hidden">
 
         {/* Business identity */}
-        <div className="px-4 py-4 border-b flex items-center gap-3">
+        <div className="shrink-0 px-4 py-4 border-b flex items-center gap-3">
           {/* Logo / initials avatar — white bg keeps dark logos visible */}
           <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
             {logoUrl ? (
@@ -92,17 +93,17 @@ export default async function DashboardLayout({
         </div>
 
         {/* Search */}
-        <div className="px-3 pt-3">
+        <div className="shrink-0 px-3 pt-3">
           <DashboardSearch isAdmin={isAdmin} isOwner={isOwner} />
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 p-3 overflow-y-auto space-y-0.5">
+        {/* Nav — scrolls independently inside the fixed sidebar */}
+        <nav className="flex-1 min-h-0 p-3 overflow-y-auto overscroll-contain space-y-0.5">
           <NavLinks isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
         </nav>
 
         {/* Product watermark */}
-        <div className="px-5 py-3 border-t border-b">
+        <div className="shrink-0 px-5 py-3 border-t border-b">
           <div className="flex items-center gap-2">
             {/* WhatsApp-green pulse dot */}
             <span className="relative flex h-2 w-2 shrink-0">
@@ -129,14 +130,17 @@ export default async function DashboardLayout({
         </div>
 
         {/* Logout */}
-        <div className="p-4">
+        <div className="shrink-0 p-4">
           <LogoutButton />
         </div>
       </aside>
 
       {/* Main */}
-      <main className="flex-1 p-4 pb-24 md:p-8 md:pb-8 bg-muted/30 min-w-0">
-        {children}
+      <main className="flex-1 min-w-0 min-h-dvh flex flex-col bg-muted/30">
+        <DashboardStickyHeader isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
+        <div className="flex-1 p-4 pb-24 md:p-8 md:pb-8 min-w-0">
+          {children}
+        </div>
       </main>
     </div>
   );

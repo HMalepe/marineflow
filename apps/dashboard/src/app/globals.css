@@ -126,5 +126,10 @@
   }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
   }
+}
+
+.dashboard-section-anchor {
+  scroll-margin-top: calc(var(--dashboard-sticky-offset, 3.5rem) + 0.75rem);
 }

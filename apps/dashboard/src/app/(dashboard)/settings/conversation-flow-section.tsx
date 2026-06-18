@@ -338,7 +338,7 @@ export function ConversationFlowSection({ initialSettings, onSaved }: Props) {
   }
 
   return (
-    <section className="space-y-4">
+    <section id="settings-conversation-flow" className="dashboard-section-anchor space-y-4">
       <div>
         <h3 className="text-base font-semibold">Conversation flow</h3>
         <p className="text-sm text-muted-foreground mt-1">
