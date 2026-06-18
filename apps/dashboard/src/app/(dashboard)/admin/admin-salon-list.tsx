@@ -107,6 +107,7 @@ export function AdminSalonList({ token }: Props) {
     healthParam === 'AT_RISK' || healthParam === 'CHURNING' || healthParam === 'HEALTHY'
       ? healthParam
       : null;
+  const incompleteOnly = searchParams.get('onboarding') === 'incomplete';
 
   const [tenants, setTenants] = useState<TenantHealthRow[]>([]);
   const [atRiskCount, setAtRiskCount] = useState(0);
@@ -145,10 +146,13 @@ export function AdminSalonList({ token }: Props) {
 
   const filteredTenants = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tenants;
-    return tenants.filter(
-      (t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q),
-    );
+    let rows = tenants;
+    if (q) {
+      rows = rows.filter(
+        (t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q),
+      );
+    }
+    return rows;
   }, [tenants, search]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -362,9 +366,13 @@ export function AdminSalonList({ token }: Props) {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
         {HEALTH_FILTERS.map((f) => {
-          const href = f.value === 'ALL' ? '/admin' : `/admin?health=${f.value}`;
+          const params = new URLSearchParams();
+          if (f.value !== 'ALL') params.set('health', f.value);
+          if (incompleteOnly) params.set('onboarding', 'incomplete');
+          const qs = params.toString();
+          const href = qs ? `/admin?${qs}` : '/admin';
           const active = f.value === 'ALL' ? !healthFilter : healthFilter === f.value;
           return (
             <Link
@@ -381,12 +389,30 @@ export function AdminSalonList({ token }: Props) {
             </Link>
           );
         })}
+        <Link
+          href={
+            incompleteOnly
+              ? healthFilter
+                ? `/admin?health=${healthFilter}`
+                : '/admin'
+              : `/admin?onboarding=incomplete${healthFilter ? `&health=${healthFilter}` : ''}`
+          }
+          className={cn(
+            'inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+            incompleteOnly
+              ? 'border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+              : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40',
+          )}
+        >
+          Incomplete onboarding only
+        </Link>
       </div>
 
       <TenantHealthTable
         tenants={filteredTenants}
         loading={loading}
         healthFilter={healthFilter}
+        incompleteOnly={incompleteOnly}
         actions={(t) => (
           <div className="flex justify-end gap-1 flex-wrap items-center">
             <OpenClientDashboardButton

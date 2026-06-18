@@ -1,5 +1,11 @@
 import type { BusinessType } from '@prisma/client';
 import { prisma } from '../../../lib/prisma.js';
+import { redis } from '../../../lib/redis.js';
+import {
+  alertStaleIncompleteOnboarding,
+  computeOnboardingBatch,
+  type OnboardingStatus,
+} from './onboarding.js';
 
 export type TenantHealthStatus = 'HEALTHY' | 'AT_RISK' | 'CHURNING';
 
@@ -18,6 +24,8 @@ export type TenantHealthRow = {
   customerCount: number;
   staffUserCount: number;
   healthStatus: TenantHealthStatus;
+  onboarding: OnboardingStatus;
+  onboardingComplete: boolean;
 };
 
 export type AdminTenantHealthSummary = {
@@ -49,6 +57,8 @@ export function computeTenantHealthStatus(input: {
 
 /** Per-tenant health — Salon + Appointment + MessageLog + subscription plan. */
 export async function getAdminTenantHealth(): Promise<AdminTenantHealthSummary> {
+  void maybeAlertStaleOnboarding();
+
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * MS_DAY);
   const fourteenDaysAgo = new Date(now.getTime() - 14 * MS_DAY);
@@ -66,8 +76,12 @@ export async function getAdminTenantHealth(): Promise<AdminTenantHealthSummary> 
         status: true,
         tier: true,
         businessType: true,
-        subscription: { select: { plan: { select: { name: true } } } },
-        _count: { select: { customers: true, staffUsers: true } },
+        whatsappPhoneId: true,
+        twilioWhatsAppFrom: true,
+        subscription: {
+          select: { status: true, payfastSubscriptionId: true, plan: { select: { name: true } } },
+        },
+        _count: { select: { customers: true, staffUsers: true, staff: true, appointments: true } },
       },
     }),
     prisma.appointment.groupBy({
@@ -113,6 +127,15 @@ export async function getAdminTenantHealth(): Promise<AdminTenantHealthSummary> 
       s.subscription?.plan?.name ??
       (s.tier ? s.tier.charAt(0).toUpperCase() + s.tier.slice(1) : 'Starter');
 
+    const onboarding = computeOnboardingBatch({
+      whatsappPhoneId: s.whatsappPhoneId,
+      twilioWhatsAppFrom: s.twilioWhatsAppFrom,
+      subscription: s.subscription,
+      appointmentCount: s._count.appointments,
+      staffUserCount: s._count.staffUsers,
+      staffRosterCount: s._count.staff,
+    });
+
     return {
       id: s.id,
       name: s.name,
@@ -128,8 +151,27 @@ export async function getAdminTenantHealth(): Promise<AdminTenantHealthSummary> 
       customerCount: s._count.customers,
       staffUserCount: s._count.staffUsers,
       healthStatus,
+      onboarding: {
+        whatsappConfigured: onboarding.whatsappConfigured,
+        stripeConnected: onboarding.stripeConnected,
+        firstBookingMade: onboarding.firstBookingMade,
+        staffAdded: onboarding.staffAdded,
+      },
+      onboardingComplete: onboarding.complete,
     };
   });
 
   return { tenants, atRiskCount, churningCount };
+}
+
+async function maybeAlertStaleOnboarding(): Promise<void> {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const acquired = await redis.set(`onboarding_stale_scan:${day}`, '1', 'EX', 86400, 'NX');
+    if (acquired === 'OK') {
+      void alertStaleIncompleteOnboarding().catch(() => undefined);
+    }
+  } catch {
+    // non-blocking
+  }
 }

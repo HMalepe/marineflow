@@ -24,6 +24,7 @@ const EVENT_COPY: Record<string, { icon: string; label: string }> = {
   PAYMENT_FAILED: { icon: '⚠️', label: 'Payment failed' },
   BOT_UNHANDLED: { icon: '❓', label: 'Unhandled bot message' },
   BOT_ERROR: { icon: '🤖', label: 'Bot error' },
+  ONBOARDING_INCOMPLETE: { icon: '⏳', label: 'Onboarding incomplete (48h+)' },
 };
 
 function formatTimeAgo(iso: string): string {

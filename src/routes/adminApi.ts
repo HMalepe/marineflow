@@ -32,6 +32,7 @@ import {
 import { getAdminRevenue } from '../api/admin/revenue.js';
 import { getAdminBotHealth } from '../api/admin/bot-health.js';
 import { getAdminTenantHealth } from '../api/admin/tenants/health.js';
+import { getTenantOnboarding } from '../api/admin/tenants/onboarding.js';
 import { getAdminPlatformEvents } from '../api/admin/events.js';
 
 const BCRYPT_ROUNDS = 12;
@@ -632,6 +633,13 @@ export async function adminApiRoutes(app: FastifyInstance) {
   // ─── Tenant health (churn signals) ─────────────────────────────────
   app.get('/tenants/health', async () => {
     return getAdminTenantHealth();
+  });
+
+  app.get('/tenants/:id/onboarding', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const onboarding = await getTenantOnboarding(id);
+    if (!onboarding) return reply.code(404).send({ error: 'not_found' });
+    return onboarding;
   });
 
   // ─── Platform activity feed (SUPER_ADMIN only) ───────────────────────

@@ -134,6 +134,7 @@ enum PlatformEventType {
   PAYMENT_FAILED
   BOT_ERROR
   BOT_UNHANDLED
+  ONBOARDING_INCOMPLETE
 }
 
 enum MarketingConsentStatus {

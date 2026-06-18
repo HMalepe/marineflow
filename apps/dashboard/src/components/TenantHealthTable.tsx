@@ -17,6 +17,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
+import { OnboardingPips, type OnboardingStatus, isOnboardingComplete } from '@/components/OnboardingPips';
 
 export type TenantHealthStatus = 'HEALTHY' | 'AT_RISK' | 'CHURNING';
 
@@ -35,7 +36,11 @@ export type TenantHealthRow = {
   customerCount: number;
   staffUserCount: number;
   healthStatus: TenantHealthStatus;
+  onboarding: OnboardingStatus;
+  onboardingComplete: boolean;
 };
+
+export type { OnboardingStatus };
 
 type SortKey =
   | 'name'
@@ -44,7 +49,8 @@ type SortKey =
   | 'lastBotActivity'
   | 'appointmentsLast30d'
   | 'customerCount'
-  | 'healthStatus';
+  | 'healthStatus'
+  | 'onboardingComplete';
 
 type SortDir = 'asc' | 'desc';
 
@@ -97,6 +103,9 @@ function compareRows(a: TenantHealthRow, b: TenantHealthRow, key: SortKey, dir: 
     case 'healthStatus':
       cmp = healthRank(a.healthStatus) - healthRank(b.healthStatus);
       break;
+    case 'onboardingComplete':
+      cmp = Number(a.onboardingComplete) - Number(b.onboardingComplete);
+      break;
   }
   return dir === 'asc' ? cmp : -cmp;
 }
@@ -105,17 +114,20 @@ type Props = {
   tenants: TenantHealthRow[];
   loading?: boolean;
   healthFilter?: TenantHealthStatus | null;
+  incompleteOnly?: boolean;
   actions?: (tenant: TenantHealthRow) => React.ReactNode;
 };
 
-export function TenantHealthTable({ tenants, loading, healthFilter, actions }: Props) {
+export function TenantHealthTable({ tenants, loading, healthFilter, incompleteOnly, actions }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('healthStatus');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
   const filtered = useMemo(() => {
-    if (!healthFilter) return tenants;
-    return tenants.filter((t) => t.healthStatus === healthFilter);
-  }, [tenants, healthFilter]);
+    let rows = tenants;
+    if (healthFilter) rows = rows.filter((t) => t.healthStatus === healthFilter);
+    if (incompleteOnly) rows = rows.filter((t) => !isOnboardingComplete(t.onboarding));
+    return rows;
+  }, [tenants, healthFilter, incompleteOnly]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => compareRows(a, b, sortKey, sortDir));
@@ -155,7 +167,7 @@ export function TenantHealthTable({ tenants, loading, healthFilter, actions }: P
     );
   }
 
-  const colSpan = actions ? 8 : 7;
+  const colSpan = actions ? 9 : 8;
 
   return (
     <Card>
@@ -169,6 +181,7 @@ export function TenantHealthTable({ tenants, loading, healthFilter, actions }: P
               <SortableHead label="Last active" column="lastBotActivity" />
               <SortableHead label="Appts (30d)" column="appointmentsLast30d" className="text-right" />
               <SortableHead label="Customers" column="customerCount" className="text-right" />
+              <SortableHead label="Onboarding" column="onboardingComplete" />
               <SortableHead label="Health" column="healthStatus" />
               {actions && <TableHead className="text-right w-[220px]">Actions</TableHead>}
             </TableRow>
@@ -186,7 +199,9 @@ export function TenantHealthTable({ tenants, loading, healthFilter, actions }: P
                 <TableCell colSpan={colSpan} className="text-center py-10 text-muted-foreground">
                   {healthFilter
                     ? `No ${healthFilter.replace('_', ' ').toLowerCase()} tenants.`
-                    : 'No businesses found.'}
+                    : incompleteOnly
+                      ? 'No incomplete onboarding tenants.'
+                      : 'No businesses found.'}
                 </TableCell>
               </TableRow>
             )}
@@ -213,6 +228,9 @@ export function TenantHealthTable({ tenants, loading, healthFilter, actions }: P
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{t.appointmentsLast30d}</TableCell>
                   <TableCell className="text-right tabular-nums">{t.customerCount}</TableCell>
+                  <TableCell>
+                    <OnboardingPips status={t.onboarding} />
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
