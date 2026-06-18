@@ -1,8 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { apiFetch, ApiError } from '@/lib/api';
+import { resolveApiUrl } from '@/lib/api-config';
+import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -122,6 +125,37 @@ interface CampaignRow {
 
 interface Props {
   token: string;
+  isAdmin?: boolean;
+  initialBusinessId?: string;
+}
+
+interface BusinessOption {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+}
+
+async function adminFetch<T>(path: string, token: string): Promise<T> {
+  const res = await fetch(resolveApiUrl('admin', path, { forBrowser: true }), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.error ?? 'Request failed');
+  }
+  return res.json() as Promise<T>;
+}
+
+function analyticsQuery(isAdmin: boolean, selectedBusinessId: string, selectedMonth: string) {
+  const params = new URLSearchParams();
+  if (isAdmin && selectedBusinessId) params.set('salonId', selectedBusinessId);
+  if (selectedMonth) params.set('month', selectedMonth);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
 }
 
 function currentMonthStr(): string {
@@ -140,7 +174,9 @@ function formatMonthLabel(month: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
 }
 
-export function AnalyticsClient({ token }: Props) {
+export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = '' }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [data, setData]       = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -155,41 +191,85 @@ export function AnalyticsClient({ token }: Props) {
   const [funnel, setFunnel]     = useState<FunnelStep[]>([]);
   const [optOuts, setOptOuts]   = useState<OptOutData | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr());
+  const [businesses, setBusinesses] = useState<BusinessOption[]>([]);
+  const [selectedBusinessId, setSelectedBusinessId] = useState(initialBusinessId);
   const isCurrentMonth = selectedMonth === currentMonthStr();
+  const isPlatformView = isAdmin && !selectedBusinessId;
+
+  const selectedBusinessName = useMemo(
+    () => businesses.find((b) => b.id === selectedBusinessId)?.name ?? null,
+    [businesses, selectedBusinessId],
+  );
+
+  useEffect(() => {
+    if (!isAdmin || !token) return;
+    void adminFetch<{ businesses: BusinessOption[] }>('/analytics/businesses', token)
+      .then((res) => setBusinesses(res.businesses))
+      .catch(() => setBusinesses([]));
+  }, [isAdmin, token]);
 
   const load = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
-    const monthQ = `?month=${selectedMonth}`;
+    const q = analyticsQuery(isAdmin, selectedBusinessId, selectedMonth);
     try {
-      const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData, campaignData] = await Promise.all([
-        apiFetch<AnalyticsData>(`/analytics/overview${monthQ}`, {}, token),
-        apiFetch<MonthlyReport>(`/analytics/monthly-report${monthQ}`, {}, token).catch(() => null),
-        apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
-        apiFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>('/analytics/no-show-patterns', {}, token).catch(() => null),
-        apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
-        apiFetch<OptOutData>('/analytics/opt-outs', {}, token).catch(() => null),
-        apiFetch<{ staff: StaffRevRow[] }>('/analytics/staff-revenue', {}, token).catch(() => null),
-        apiFetch<{ campaigns: CampaignRow[] }>('/campaigns', {}, token).catch(() => null),
-      ]);
-      setData(overview);
-      setReport(monthlyReport);
-      setLoyalty(loyaltyData);
-      setNoShowByStaff(noShowData?.byStaff ?? []);
-      setNoShowByService(noShowData?.byService ?? []);
-      setFunnel(funnelData?.steps ?? []);
-      setOptOuts(optOutData);
-      setStaffRevenue(staffRevData?.staff ?? []);
-      setCampaigns((campaignData?.campaigns ?? []).slice(0, 10));
+      if (isAdmin) {
+        const [overview, monthlyReport, noShowData, funnelData, staffRevData] = await Promise.all([
+          adminFetch<AnalyticsData>(`/analytics/overview${q}`, token),
+          adminFetch<MonthlyReport>(`/analytics/monthly-report${q}`, token).catch(() => null),
+          adminFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>(`/analytics/no-show-patterns${analyticsQuery(isAdmin, selectedBusinessId, '')}`, token).catch(() => null),
+          adminFetch<{ steps: FunnelStep[] }>(`/analytics/funnel${analyticsQuery(isAdmin, selectedBusinessId, '')}`, token).catch(() => null),
+          adminFetch<{ staff: StaffRevRow[] }>(`/analytics/staff-revenue${analyticsQuery(isAdmin, selectedBusinessId, '')}`, token).catch(() => null),
+        ]);
+        setData(overview);
+        setReport(monthlyReport);
+        setLoyalty(null);
+        setNoShowByStaff(noShowData?.byStaff ?? []);
+        setNoShowByService(noShowData?.byService ?? []);
+        setFunnel(funnelData?.steps ?? []);
+        setOptOuts(null);
+        setStaffRevenue(staffRevData?.staff ?? []);
+        setCampaigns([]);
+      } else {
+        const monthQ = `?month=${selectedMonth}`;
+        const [overview, monthlyReport, loyaltyData, noShowData, funnelData, optOutData, staffRevData, campaignData] = await Promise.all([
+          apiFetch<AnalyticsData>(`/analytics/overview${monthQ}`, {}, token),
+          apiFetch<MonthlyReport>(`/analytics/monthly-report${monthQ}`, {}, token).catch(() => null),
+          apiFetch<LoyaltyKpi>('/analytics/loyalty', {}, token).catch(() => null),
+          apiFetch<{ byStaff: NoShowRow[]; byService: NoShowRow[] }>('/analytics/no-show-patterns', {}, token).catch(() => null),
+          apiFetch<{ steps: FunnelStep[] }>('/analytics/funnel', {}, token).catch(() => null),
+          apiFetch<OptOutData>('/analytics/opt-outs', {}, token).catch(() => null),
+          apiFetch<{ staff: StaffRevRow[] }>('/analytics/staff-revenue', {}, token).catch(() => null),
+          apiFetch<{ campaigns: CampaignRow[] }>('/campaigns', {}, token).catch(() => null),
+        ]);
+        setData(overview);
+        setReport(monthlyReport);
+        setLoyalty(loyaltyData);
+        setNoShowByStaff(noShowData?.byStaff ?? []);
+        setNoShowByService(noShowData?.byService ?? []);
+        setFunnel(funnelData?.steps ?? []);
+        setOptOuts(optOutData);
+        setStaffRevenue(staffRevData?.staff ?? []);
+        setCampaigns((campaignData?.campaigns ?? []).slice(0, 10));
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Failed to load analytics');
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, isAdmin, selectedBusinessId, selectedMonth]);
 
-  useEffect(() => { void load(); }, [load, selectedMonth]);
+  useEffect(() => { void load(); }, [load]);
+
+  function handleBusinessChange(nextId: string) {
+    setSelectedBusinessId(nextId);
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextId) params.set('business', nextId);
+    else params.delete('business');
+    const qs = params.toString();
+    router.replace(qs ? `/analytics?${qs}` : '/analytics', { scroll: false });
+  }
 
   const sendReportToWhatsApp = async () => {
     setSendingReport(true);
@@ -216,9 +296,36 @@ export function AnalyticsClient({ token }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground text-sm mt-1">Business performance at a glance.</p>
+          <p className="text-muted-foreground text-sm mt-1">
+            {isAdmin
+              ? isPlatformView
+                ? 'Platform-wide performance across all MarineFlow businesses.'
+                : `Performance for ${selectedBusinessName ?? 'selected business'}.`
+              : 'Business performance at a glance.'}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && selectedBusinessId && selectedBusinessName && (
+            <OpenClientDashboardButton
+              businessId={selectedBusinessId}
+              businessName={selectedBusinessName}
+              variant="default"
+              size="sm"
+            />
+          )}
+          {isAdmin && (
+            <select
+              value={selectedBusinessId}
+              onChange={(e) => handleBusinessChange(e.target.value)}
+              className="h-9 min-w-[200px] max-w-[280px] rounded-lg border bg-card px-3 text-sm shadow-sm"
+              aria-label="Filter by business"
+            >
+              <option value="">All businesses (platform)</option>
+              {businesses.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          )}
           {/* Month navigator */}
           <div className="flex items-center gap-1 rounded-xl border bg-card px-1 py-1 shadow-sm">
             <button
@@ -286,7 +393,9 @@ export function AnalyticsClient({ token }: Props) {
           <div className="rounded-lg border border-dashed p-10 text-center space-y-2">
             <p className="text-sm font-medium">No activity yet</p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-              Analytics populate automatically once your first bookings come through WhatsApp.
+              {isAdmin
+                ? 'Metrics appear here once businesses start taking bookings through WhatsApp.'
+                : 'Analytics populate automatically once your first bookings come through WhatsApp.'}
             </p>
           </div>
         </div>
@@ -327,14 +436,16 @@ export function AnalyticsClient({ token }: Props) {
                   {sendStatus}
                 </span>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void sendReportToWhatsApp()}
-                disabled={sendingReport}
-              >
-                {sendingReport ? 'Sending…' : '📱 Send to my WhatsApp'}
-              </Button>
+              {!isAdmin && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void sendReportToWhatsApp()}
+                  disabled={sendingReport}
+                >
+                  {sendingReport ? 'Sending…' : '📱 Send to my WhatsApp'}
+                </Button>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

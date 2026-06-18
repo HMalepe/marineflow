@@ -433,7 +433,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
                   ))}
                   <li className="flex items-start gap-2 text-sm text-muted-foreground">
                     <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
-                    Up to {selectedPlan.maxStaff} staff · {selectedPlan.maxBranches} branches · unlimited services
+                    Unlimited staff · up to {selectedPlan.maxBranches} branches · unlimited services
                   </li>
                 </ul>
 

@@ -219,12 +219,12 @@
   },
   {
     "id": "admin",
-    "label": "Admin",
+    "label": "Businesses",
     "href": "/admin",
     "group": "Admin",
-    "description": "Super admin — create salons, manage users, and assistant branding",
-    "keywords": ["admin", "super admin", "platform", "create salon"],
-    "aliases": ["superadmin", "administration"],
+    "description": "Super admin — all businesses by category, inbox, and per-business analytics",
+    "keywords": ["admin", "businesses", "platform", "create business"],
+    "aliases": ["superadmin", "administration", "salons"],
     "adminOnly": true
   }
 ]

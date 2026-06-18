@@ -2,6 +2,7 @@ import { getToken } from '@/lib/auth';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { AdminSalonList } from './admin-salon-list';
 import { AdminPlatformInbox } from './admin-platform-inbox';
+import { AdminQuickAccess } from '@/components/admin-quick-access';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -22,7 +23,6 @@ interface Alert {
 interface AlertsData {
   pastDue: Alert[];
   trialExpiring: (Alert & { trialEndsAt: string })[];
-  overQuota: (Alert & { tier: string; _count: { staff: number } })[];
 }
 
 async function adminFetch<T>(path: string, token: string | null): Promise<T | null> {
@@ -62,9 +62,9 @@ export default async function AdminPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Panel</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Platform</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Platform-wide management and monitoring.
+          Platform-wide management — click any business for stats, team, and alerts.
         </p>
       </div>
 
@@ -78,7 +78,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Alerts */}
-      {alerts && (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0 || alerts.overQuota.length > 0) && (
+      {alerts && (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0) && (
         <section className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
           <h2 className="text-sm font-bold text-amber-800">Alerts</h2>
           {alerts.pastDue.length > 0 && (
@@ -105,20 +105,10 @@ export default async function AdminPage() {
               </div>
             </div>
           )}
-          {alerts.overQuota.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-amber-700">Over Quota ({alerts.overQuota.length})</p>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {alerts.overQuota.map((s) => (
-                  <span key={s.id} className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
-                    {s.name} ({s._count.staff} staff on {s.tier})
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
       )}
+
+      <AdminQuickAccess token={token ?? ''} />
 
       {/* Platform inbox — owner messages + bot errors */}
       <AdminPlatformInbox token={token ?? ''} />

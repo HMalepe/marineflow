@@ -65,14 +65,7 @@ export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) 
     return (
       <div className="space-y-4">
         <NavSection label="Platform">
-          {ADMIN_NAV_ITEMS.filter((i) => ['/', '/agency', '/admin'].includes(i.href)).map((item) => (
-            <NavItemLink key={item.href} href={item.href}>
-              {item.label}
-            </NavItemLink>
-          ))}
-        </NavSection>
-        <NavSection label="Reports">
-          {ADMIN_NAV_ITEMS.filter((i) => ['/analytics', '/billing'].includes(i.href)).map((item) => (
+          {ADMIN_NAV_ITEMS.map((item) => (
             <NavItemLink key={item.href} href={item.href}>
               {item.label}
             </NavItemLink>

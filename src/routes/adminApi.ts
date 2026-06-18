@@ -12,12 +12,21 @@ import {
 import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 import { isIndustryTemplateId } from '../lib/industryTemplates.js';
+import { getIndustryTemplate } from '../lib/industryTemplates.js';
 import {
   getPlatformInboxUnreadCount,
   listPlatformInboxAlerts,
   listPlatformInboxByCategory,
   updatePlatformAlertStatus,
 } from '../services/platformInbox.js';
+import {
+  getAdminAnalyticsFunnel,
+  getAdminAnalyticsOverview,
+  getAdminMonthlyReport,
+  getAdminNoShowPatterns,
+  getAdminStaffRevenue,
+  listAnalyticsBusinesses,
+} from '../services/adminAnalytics.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -314,6 +323,107 @@ export async function adminApiRoutes(app: FastifyInstance) {
     return { salon };
   });
 
+  app.get('/salons/:id/summary', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const salon = await prisma.salon.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        status: true,
+        tier: true,
+        botName: true,
+        industryTemplate: true,
+        timezone: true,
+        createdAt: true,
+        trialEndsAt: true,
+        phoneDisplay: true,
+        contactEmail: true,
+        subscription: {
+          select: {
+            status: true,
+            trialEndsAt: true,
+            plan: { select: { name: true, priceMonthly: true } },
+          },
+        },
+        _count: {
+          select: {
+            staff: true,
+            staffUsers: true,
+            customers: true,
+            appointments: true,
+            branches: true,
+            services: true,
+            conversations: true,
+            tickets: true,
+            campaigns: true,
+          },
+        },
+      },
+    });
+
+    if (!salon) return reply.code(404).send({ error: 'not_found' });
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      funnel,
+      unreadAlerts,
+      appointments7d,
+      appointments30d,
+      completed7d,
+      messages7d,
+      staffUsers,
+      inbox,
+    ] = await Promise.all([
+      getConversationFunnel(id),
+      prisma.platformAlert.count({ where: { salonId: id, status: 'UNREAD' } }),
+      prisma.appointment.count({ where: { salonId: id, createdAt: { gte: sevenDaysAgo } } }),
+      prisma.appointment.count({ where: { salonId: id, createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.appointment.count({
+        where: { salonId: id, status: 'COMPLETED', updatedAt: { gte: sevenDaysAgo } },
+      }),
+      prisma.message.count({
+        where: {
+          createdAt: { gte: sevenDaysAgo },
+          conversation: { salonId: id },
+        },
+      }),
+      prisma.staffUser.findMany({
+        where: { salonId: id },
+        select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+      listPlatformInboxAlerts({ salonId: id, limit: 15 }),
+    ]);
+
+    const industry = getIndustryTemplate(salon.industryTemplate);
+
+    return {
+      business: {
+        ...salon,
+        industryLabel: industry.label,
+        createdAt: salon.createdAt.toISOString(),
+        trialEndsAt: salon.trialEndsAt?.toISOString() ?? null,
+      },
+      stats: {
+        appointments7d,
+        appointments30d,
+        completed7d,
+        messages7d,
+        unreadAlerts,
+      },
+      funnel,
+      staffUsers: staffUsers.map((u) => ({
+        ...u,
+        createdAt: u.createdAt.toISOString(),
+      })),
+      alerts: inbox.alerts,
+    };
+  });
+
   // ─── Add Staff User to Salon ───────────────────────────────────────
   app.post('/salons/:id/users', async (request, reply) => {
     const { id: salonId } = request.params as { id: string };
@@ -509,7 +619,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
 
   // ─── Usage Alerts ──────────────────────────────────────────────────
   app.get('/alerts', async () => {
-    const [pastDue, trialExpiring, overQuota] = await Promise.all([
+    const [pastDue, trialExpiring] = await Promise.all([
       prisma.salon.findMany({
         where: { status: 'PAST_DUE' },
         select: { id: true, name: true, slug: true, statusChangedAt: true },
@@ -521,23 +631,9 @@ export async function adminApiRoutes(app: FastifyInstance) {
         },
         select: { id: true, name: true, slug: true, trialEndsAt: true },
       }),
-      prisma.salon
-        .findMany({
-          where: {
-            tier: 'starter',
-            staff: { some: {} },
-          },
-          select: {
-            id: true,
-            name: true,
-            tier: true,
-            _count: { select: { staff: true } },
-          },
-        })
-        .then((salons) => salons.filter((s) => s._count.staff > 3)),
     ]);
 
-    return { pastDue, trialExpiring, overQuota };
+    return { pastDue, trialExpiring };
   });
 
   // ─── Billing Overview ─────────────────────────────────────────────
@@ -591,6 +687,81 @@ export async function adminApiRoutes(app: FastifyInstance) {
     }));
 
     return { mrr, arr, byStatus, subscriptions };
+  });
+
+  // ─── Platform analytics (all businesses or one) ───────────────────────
+  function parseAnalyticsSalonId(query: { salonId?: string }) {
+    const raw = query.salonId?.trim();
+    if (!raw || raw === 'all') return undefined;
+    return raw;
+  }
+
+  app.get('/analytics/businesses', async () => {
+    const businesses = await listAnalyticsBusinesses();
+    return { businesses };
+  });
+
+  app.get('/analytics/overview', async (request, reply) => {
+    try {
+      const q = request.query as { salonId?: string; month?: string };
+      const salonId = parseAnalyticsSalonId(q);
+      const data = await getAdminAnalyticsOverview(salonId);
+      return data;
+    } catch (e) {
+      if (e instanceof Error && e.message === 'business_not_found') {
+        return reply.code(404).send({ error: 'business_not_found' });
+      }
+      throw e;
+    }
+  });
+
+  app.get('/analytics/monthly-report', async (request, reply) => {
+    try {
+      const q = request.query as { salonId?: string; month?: string };
+      const salonId = parseAnalyticsSalonId(q);
+      return await getAdminMonthlyReport(salonId, q.month);
+    } catch (e) {
+      if (e instanceof Error && e.message === 'business_not_found') {
+        return reply.code(404).send({ error: 'business_not_found' });
+      }
+      throw e;
+    }
+  });
+
+  app.get('/analytics/funnel', async (request, reply) => {
+    try {
+      const salonId = parseAnalyticsSalonId(request.query as { salonId?: string });
+      return await getAdminAnalyticsFunnel(salonId);
+    } catch (e) {
+      if (e instanceof Error && e.message === 'business_not_found') {
+        return reply.code(404).send({ error: 'business_not_found' });
+      }
+      throw e;
+    }
+  });
+
+  app.get('/analytics/no-show-patterns', async (request, reply) => {
+    try {
+      const salonId = parseAnalyticsSalonId(request.query as { salonId?: string });
+      return await getAdminNoShowPatterns(salonId);
+    } catch (e) {
+      if (e instanceof Error && e.message === 'business_not_found') {
+        return reply.code(404).send({ error: 'business_not_found' });
+      }
+      throw e;
+    }
+  });
+
+  app.get('/analytics/staff-revenue', async (request, reply) => {
+    try {
+      const salonId = parseAnalyticsSalonId(request.query as { salonId?: string });
+      return await getAdminStaffRevenue(salonId);
+    } catch (e) {
+      if (e instanceof Error && e.message === 'business_not_found') {
+        return reply.code(404).send({ error: 'business_not_found' });
+      }
+      throw e;
+    }
   });
 
   // ─── Observability ───────────────────────────────────────────────────

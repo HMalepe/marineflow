@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Bell, Bot, ChevronDown, ChevronRight, MessageSquare, User } from 'lucide-react';
+import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -170,18 +171,31 @@ export function AdminPlatformInbox({ token }: { token: string }) {
                   {open && (
                     <div className="divide-y">
                       {cat.businesses.map((biz) => (
-                        <button
+                        <div
                           key={biz.id}
-                          type="button"
-                          onClick={() => setSelectedBusinessId(selectedBusinessId === biz.id ? null : biz.id)}
                           className={cn(
-                            'w-full flex items-center justify-between gap-2 px-4 py-2 text-sm hover:bg-accent/50 transition-colors text-left',
+                            'flex items-center justify-between gap-2 px-4 py-2 hover:bg-accent/50 transition-colors',
                             selectedBusinessId === biz.id && 'bg-primary/5',
                           )}
                         >
-                          <span className="font-medium truncate">{biz.name}</span>
-                          <Badge className="shrink-0">{biz.unreadCount}</Badge>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedBusinessId(selectedBusinessId === biz.id ? null : biz.id)}
+                            className="flex-1 min-w-0 text-left text-sm font-medium truncate"
+                          >
+                            {biz.name}
+                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Badge>{biz.unreadCount}</Badge>
+                            <OpenClientDashboardButton
+                              businessId={biz.id}
+                              businessName={biz.name}
+                              variant="outline"
+                              size="xs"
+                              compact
+                            />
+                          </div>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -224,7 +238,14 @@ export function AdminPlatformInbox({ token }: { token: string }) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                    <OpenClientDashboardButton
+                      businessId={alert.business.id}
+                      businessName={alert.business.name}
+                      variant="outline"
+                      size="xs"
+                      compact
+                    />
                     <Badge variant="outline" className="text-[10px]">
                       {alert.kind === 'BOT_ERROR' ? 'Bot error' : 'Owner message'}
                     </Badge>

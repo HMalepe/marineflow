@@ -1,4 +1,5 @@
 import { getToken, getUser } from '@/lib/auth';
+import { getImpersonationActive } from '@/app/(dashboard)/admin/actions';
 import { apiFetch } from '@/lib/api';
 import { redirect } from 'next/navigation';
 import { LogoutButton, LogoutIconButton } from './logout-button';
@@ -6,6 +7,7 @@ import { MobileNav } from './mobile-nav';
 import { NavLinks } from './nav-links';
 import { DashboardSearch } from '@/components/dashboard-search';
 import { DashboardStickyHeader } from '@/components/dashboard-sticky-header';
+import { ImpersonationBanner } from '@/components/impersonation-banner';
 
 function formatRole(role: string): string {
   return role
@@ -21,6 +23,8 @@ export default async function DashboardLayout({
 }) {
   const user = await getUser();
   if (!user) redirect('/login');
+
+  const impersonating = await getImpersonationActive();
 
   const token = await getToken();
   const ownerName = user.name;
@@ -49,7 +53,9 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-dvh flex flex-col md:flex-row">
+    <div className="min-h-dvh flex flex-col">
+      {impersonating && <ImpersonationBanner businessName={businessName} />}
+      <div className="min-h-dvh flex flex-col md:flex-row flex-1">
       {/* Mobile header + bottom nav */}
       <MobileNav
         isAdmin={isAdmin}
@@ -142,6 +148,7 @@ export default async function DashboardLayout({
           {children}
         </div>
       </main>
+      </div>
     </div>
   );
 }

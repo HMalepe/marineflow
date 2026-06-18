@@ -212,11 +212,15 @@ export function checkQuota(
   resource: 'staff' | 'branches' | 'services',
   currentCount: number,
 ): { allowed: boolean; limit: number } {
+  if (resource === 'staff') {
+    return { allowed: true, limit: 9999 };
+  }
+
   const limits: Record<string, Record<string, number>> = {
-    starter: { staff: 3, branches: 1, services: 10 },
-    marineflow: { staff: 20, branches: 5, services: 9999 },
-    pro: { staff: 10, branches: 3, services: 50 },
-    enterprise: { staff: 9999, branches: 9999, services: 9999 },
+    starter: { branches: 1, services: 10 },
+    marineflow: { branches: 5, services: 9999 },
+    pro: { branches: 3, services: 50 },
+    enterprise: { branches: 9999, services: 9999 },
   };
 
   const tierLimits = limits[tier] ?? limits.starter;

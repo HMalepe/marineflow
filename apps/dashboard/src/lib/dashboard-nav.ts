@@ -67,8 +67,7 @@ export const SALON_NAV_GROUPS: NavGroup[] = [
 
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview' },
-  { href: '/agency', label: 'Businesses' },
-  { href: '/admin', label: 'Admin' },
+  { href: '/admin', label: 'Businesses' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/billing', label: 'Billing' },
 ];
@@ -84,6 +83,9 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   }
   if (href === '/branches') {
     return pathname.startsWith('/branches') || pathname.startsWith('/branch/');
+  }
+  if (href === '/admin') {
+    return pathname === '/admin' || pathname.startsWith('/admin/businesses/');
   }
   return pathname.startsWith(href);
 }
@@ -118,7 +120,7 @@ export function mobileMoreNavGroups(isOwner: boolean): NavGroup[] {
 
 export const ADMIN_MOBILE_TAB_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview' },
-  { href: '/agency', label: 'Businesses' },
+  { href: '/admin', label: 'Businesses' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/billing', label: 'Billing' },
 ];
@@ -141,10 +143,7 @@ export function flatDashboardNavItems(input: { isAdmin: boolean; isOwner: boolea
 /** Grouped items for sticky header — preserves section labels. */
 export function stickyHeaderNavGroups(input: { isAdmin: boolean; isOwner: boolean }): NavGroup[] {
   if (input.isAdmin) {
-    return [
-      { title: 'Platform', items: ADMIN_NAV_ITEMS.filter((i) => ['/', '/agency', '/admin'].includes(i.href)) },
-      { title: 'Reports', items: ADMIN_NAV_ITEMS.filter((i) => ['/analytics', '/billing'].includes(i.href)) },
-    ];
+    return [{ title: 'Platform', items: ADMIN_NAV_ITEMS }];
   }
   return [{ title: 'Overview', items: [SALON_OVERVIEW_ITEM] }, ...visibleSalonNavGroups(input.isOwner)];
 }

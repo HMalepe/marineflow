@@ -1,8 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
-import { impersonateSalon } from './actions';
 import { formatSaPhone, isValidSaPhoneLocal, stripPhoneDigits, formatSaPhoneDisplay } from '@/lib/phone';
+import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -141,7 +142,6 @@ export function AdminSalonList({ token }: Props) {
   const [brandSalon, setBrandSalon] = useState<Salon | null>(null);
   const [brandBotName, setBrandBotName] = useState('');
   const [savingBrand, setSavingBrand] = useState(false);
-  const [impersonating, setImpersonating] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<CreatedSalonCredentials | null>(null);
 
   const [createForm, setCreateForm] = useState({
@@ -213,7 +213,7 @@ export function AdminSalonList({ token }: Props) {
       setSalons(data.salons);
       setTotal(data.total);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Failed to load salons', 'error');
+      showToast(e instanceof ApiError ? e.message : 'Failed to load businesses', 'error');
     } finally {
       setLoading(false);
     }
@@ -283,14 +283,14 @@ export function AdminSalonList({ token }: Props) {
       });
       setCreateOpen(false);
       resetCreateForm();
-      showToast('Salon created', 'success');
+      showToast('Business created', 'success');
       await loadSalons();
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.message.includes('whatsapp_not_on_twilio')) {
           showToast('That number is not on your Twilio account', 'error');
         } else if (e.message.includes('whatsapp_already_assigned')) {
-          showToast('That number is already assigned to another salon', 'error');
+          showToast('That number is already assigned to another business', 'error');
         } else {
           showToast(e.message, 'error');
         }
@@ -387,16 +387,6 @@ export function AdminSalonList({ token }: Props) {
     }
   }
 
-  async function handleImpersonate(salon: Salon) {
-    setImpersonating(salon.id);
-    try {
-      const res = await adminFetch<{ token: string }>(`/salons/${salon.id}/impersonate`, token, { method: 'POST' });
-      await impersonateSalon(res.token);
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Impersonation failed', 'error');
-      setImpersonating(null);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -461,7 +451,12 @@ export function AdminSalonList({ token }: Props) {
                   <TableRow key={s.id}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{s.name}</p>
+                        <Link
+                          href={`/admin/businesses/${s.id}`}
+                          className="font-medium hover:text-primary hover:underline underline-offset-2"
+                        >
+                          {s.name}
+                        </Link>
                         <p className="text-xs text-muted-foreground">
                           {s.slug} · assistant: {s.botName?.trim() || PLATFORM_BOT_NAME}
                         </p>
@@ -486,12 +481,17 @@ export function AdminSalonList({ token }: Props) {
                     <TableCell className="text-right tabular-nums">{s.staffUserCount}</TableCell>
                     <TableCell className="text-right tabular-nums">{s.customerCount}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1 flex-wrap">
+                      <div className="flex justify-end gap-1 flex-wrap items-center">
+                        <OpenClientDashboardButton
+                          businessId={s.id}
+                          businessName={s.name}
+                          onError={(msg) => showToast(msg, 'error')}
+                        />
+                        <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/admin/businesses/${s.id}`} />}>
+                          Stats
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => openBrandEditor(s)}>
                           Brand
-                        </Button>
-                        <Button variant="ghost" size="sm" disabled={impersonating === s.id} onClick={() => void handleImpersonate(s)}>
-                          {impersonating === s.id ? '…' : 'Login as'}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => setAddUserSalon(s)}>
                           Add User
@@ -705,7 +705,7 @@ export function AdminSalonList({ token }: Props) {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Shown in greetings (&quot;Hi! I&apos;m …&quot;). Salon owners cannot change this — they edit their
+                Shown in greetings (&quot;Hi! I&apos;m …&quot;). Business owners cannot change this — they edit their
                 business name in Settings instead.
               </p>
             </div>
