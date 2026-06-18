@@ -41,6 +41,31 @@ export function buildPopiaConsentMessage(salonName: string): string {
   ].join('\n');
 }
 
+/** Combined first-contact gate: POPIA data-storage consent + optional marketing opt-in, asked
+ *  once instead of asking POPIA again later when the customer starts booking. */
+export function buildCombinedConsentMessage(salonName: string): string {
+  return [
+    `Welcome to *${salonName}*! 👋`,
+    '',
+    `Before we get started we need your OK on two quick things:`,
+    `• We'll store your basic details (name, contact) to manage your bookings — required under POPIA.`,
+    `• We'd also love to send the occasional promo or salon news on WhatsApp — totally optional.`,
+    '',
+    'Your POPIA rights: reply *MYDATA* to see stored data · *DELETE* to remove personal info.',
+  ].join('\n');
+}
+
+export type CombinedConsentChoice = 'accept_all' | 'booking_only' | 'decline';
+
+/** Parse a reply to the combined consent gate — matches the three button titles plus typed synonyms. */
+export function parseCombinedConsentReply(text: string): CombinedConsentChoice | null {
+  const t = text.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (t === 'accept all' || t === 'acceptall' || t === 'accept') return 'accept_all';
+  if (t === 'booking only' || t === 'bookingonly' || t === 'booking') return 'booking_only';
+  if (t === 'no thanks' || t === 'nothanks' || t === 'decline') return 'decline';
+  return null;
+}
+
 export function buildConsentAcceptedMessage(): string {
   return 'Thanks — you\'re opted in to marketing messages. Reply STOP anytime to opt out.';
 }

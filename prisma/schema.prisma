@@ -290,6 +290,7 @@ model Customer {
   marketingConsent        Boolean                 @default(false)
   marketingConsentStatus  MarketingConsentStatus  @default(PENDING)
   marketingConsentAt      DateTime?
+  popiaConsentAt          DateTime?
   preferredStaffId    String?
   preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id], onDelete: SetNull)
   passwordHash        String?

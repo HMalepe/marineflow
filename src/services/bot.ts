@@ -72,16 +72,16 @@ import {
 } from './reviewIncentive.js';
 import {
   applyMarketingConsentChoice,
+  buildCombinedConsentMessage,
   buildConsentAcceptedMessage,
   buildConsentDeclinedMessage,
   buildConsentStopMessage,
-  buildPopiaConsentMessage,
   flushPendingConsentAudits,
   isGlobalMarketingOptIn,
   isGlobalMarketingOptOut,
   marketingConsentGatePending,
   needsMarketingConsentPrompt,
-  parseMarketingConsentReply,
+  parseCombinedConsentReply,
 } from './marketingConsent.js';
 import {
   BIRTHDAY_MSG_LOOKBACK_DAYS,
@@ -98,6 +98,7 @@ import {
   buildBookingReviewFollowUpInteractive,
   buildBranchPickerInteractive,
   buildCategoryServiceListInteractive,
+  buildCombinedConsentInteractive,
   buildCategorySubMenuInteractive,
   buildCombinedSlotPickerInteractive,
   buildConfirmBookingInteractive,
@@ -111,7 +112,6 @@ import {
   buildTeamListInteractive,
   buildManageBookingActionsInteractive,
   buildManageBookingListInteractive,
-  buildMarketingConsentInteractive,
   buildQuickPickInteractive,
   buildServiceCategoryPickerInteractive,
   buildServicePickerInteractive,
@@ -677,10 +677,11 @@ async function startMarketingConsentGate(
   await saveCtx(conv.id, {}, ConversationStep.MARKETING_CONSENT);
   syncConvContext(conv, {}, ConversationStep.MARKETING_CONSENT);
   pendingWelcomeJourney = null;
+  const body = buildCombinedConsentMessage(salonDisplayName(conv.salon));
   await replyMaybeInteractive(
     conv,
-    buildPopiaConsentMessage(salonDisplayName(conv.salon)),
-    buildMarketingConsentInteractive(conv.salon),
+    body,
+    buildCombinedConsentInteractive(conv.salon, body),
   );
 }
 
@@ -1801,25 +1802,60 @@ async function handleMarketingConsentFlow(
     return true;
   }
 
-  const choice = parseMarketingConsentReply(text);
+  const choice = parseCombinedConsentReply(text);
   if (choice) {
+    if (choice === 'decline') {
+      const newStatus = await applyMarketingConsentChoice({
+        customerId: conv.customerId,
+        salonId: salon.id,
+        choice: 'decline',
+        source: 'whatsapp',
+      });
+      conv.customer.marketingConsentStatus = newStatus;
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
+      await replyWithMenu(
+        conv,
+        'No problem — we won\'t store your details or send marketing messages for now. ' +
+          'You\'re welcome to browse, and we\'ll ask again if you decide to book. Reply ACCEPT anytime to opt in.',
+      );
+      return true;
+    }
+
+    const marketingChoice = choice === 'accept_all' ? 'accept' : 'decline';
     const newStatus = await applyMarketingConsentChoice({
       customerId: conv.customerId,
       salonId: salon.id,
-      choice,
+      choice: marketingChoice,
       source: 'whatsapp',
     });
     conv.customer.marketingConsentStatus = newStatus;
+
+    await getTenantDb().customer.update({
+      where: { id: conv.customerId },
+      data: { popiaConsentAt: new Date() },
+    });
+    conv.customer.popiaConsentAt = new Date();
+    await getTenantDb().auditLog.create({
+      data: {
+        salonId: salon.id,
+        action: 'booking_profile_consent_granted',
+        entity: 'Customer',
+        entityId: conv.customerId,
+        payload: { source: 'whatsapp_combined_gate' },
+      },
+    }).catch(() => {});
+
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU, ctx(conv));
-    const ack = choice === 'accept' ? buildConsentAcceptedMessage() : buildConsentDeclinedMessage();
+    const ack = choice === 'accept_all' ? buildConsentAcceptedMessage() : buildConsentDeclinedMessage();
     await replyWithMenu(conv, ack);
     return true;
   }
 
+  const reprompt = buildCombinedConsentMessage(salonDisplayName(conv.salon));
   await replyMaybeInteractive(
     conv,
-    'Please reply *ACCEPT* or *DECLINE* for marketing messages (POPIA).',
-    buildMarketingConsentInteractive(conv.salon),
+    'Please tap an option below.\n\n' + reprompt,
+    buildCombinedConsentInteractive(conv.salon, reprompt),
   );
   return true;
 }
@@ -2565,6 +2601,10 @@ async function handleBookingPopiaConsent(
       payload: { source: 'whatsapp' },
     },
   });
+  await db.customer.update({
+    where: { id: conv.customerId },
+    data: { popiaConsentAt: new Date() },
+  });
 
   await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
   await reply(
@@ -2590,6 +2630,17 @@ async function menuActionStartBooking(
     });
 
     if (isProfileIncomplete(customer)) {
+      if (customer.popiaConsentAt) {
+        // Already gave POPIA consent at the combined first-contact gate — go
+        // straight to collecting their name instead of asking again.
+        await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
+        syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
+        await reply(
+          conv,
+          ['Let\'s get your details set up.', '', 'What is your *first name*?', '(Letters only — reply BACK for menu.)'].join('\n'),
+        );
+        return;
+      }
       await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
       syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
       await replyMaybeInteractive(
