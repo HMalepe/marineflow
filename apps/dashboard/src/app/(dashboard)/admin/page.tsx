@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import { getToken } from '@/lib/auth';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { AdminSalonList } from './admin-salon-list';
@@ -124,8 +125,10 @@ export default async function AdminPage() {
       {/* Platform inbox — owner messages + bot errors */}
       <AdminPlatformInbox token={token ?? ''} />
 
-      {/* Business list by category */}
-      <AdminSalonList token={token ?? ''} />
+      {/* Tenant health table */}
+      <Suspense fallback={<p className="text-sm text-muted-foreground py-8 text-center">Loading businesses…</p>}>
+        <AdminSalonList token={token ?? ''} />
+      </Suspense>
     </div>
   );
 }

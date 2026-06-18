@@ -96,13 +96,15 @@ async function SuperAdminView({ token }: { token: string | null }) {
   let alerts: AlertsData | null = null;
   let revenue: AdminRevenueData | null = null;
   let botHealth: BotHealthData | null = null;
+  let tenantHealth: { atRiskCount: number; churningCount: number } | null = null;
 
   try {
-    [stats, alerts, revenue, botHealth] = await Promise.all([
+    [stats, alerts, revenue, botHealth, tenantHealth] = await Promise.all([
       adminFetch<PlatformStats>('/admin/stats', token),
       adminFetch<AlertsData>('/admin/alerts', token),
       adminFetch<AdminRevenueData>('/admin/revenue', token),
       adminFetch<BotHealthData>('/admin/bot-health', token),
+      adminFetch<{ atRiskCount: number; churningCount: number }>('/admin/tenants/health', token),
     ]);
   } catch {
     // swallow — handled below
@@ -161,6 +163,20 @@ async function SuperAdminView({ token }: { token: string | null }) {
       {revenue && <RevenueRow data={revenue} />}
 
       {botHealth && <BotHealthPanel data={botHealth} />}
+
+      {tenantHealth && tenantHealth.atRiskCount > 0 && (
+        <Link
+          href="/admin?health=AT_RISK"
+          className="block rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 hover:border-amber-500/60 transition-colors"
+        >
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            {tenantHealth.atRiskCount} tenant{tenantHealth.atRiskCount !== 1 ? 's' : ''} at risk
+          </p>
+          <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+            No recent bookings or bot activity — review before they churn silently.
+          </p>
+        </Link>
+      )}
 
       {/* Alerts */}
       {hasAlerts && alerts && (
