@@ -114,6 +114,12 @@ enum TicketStatus {
   OPEN
   WAITING_CUSTOMER
   RESOLVED
+  AUTO_RESOLVED
+}
+
+enum TicketType {
+  GENERAL
+  AFTER_HOURS_MESSAGE
 }
 
 enum PlatformAlertKind {
@@ -755,7 +761,9 @@ model Ticket {
   salon       Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
   customerId  String
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type        TicketType   @default(GENERAL)
   status      TicketStatus @default(OPEN)
+  inboundCount Int         @default(0)
   subject     String?
   assigneeStaffUserId String?
   createdAt   DateTime     @default(now())
@@ -764,6 +772,7 @@ model Ticket {
   messages    TicketMessage[]
 
   @@index([salonId])
+  @@index([salonId, type, status])
 }
 
 model TicketMessage {

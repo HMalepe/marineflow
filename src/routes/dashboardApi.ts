@@ -1489,8 +1489,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
         // Atomic update — guards against concurrent resolve requests both sending WhatsApp
         const updated = await db.ticket.updateMany({
-          where: { id: ticket.id, status: { not: 'RESOLVED' } },
-          data: { status: 'RESOLVED' },
+          where: { id: ticket.id, status: { in: ['OPEN', 'WAITING_CUSTOMER'] } },
+          data: { status: 'RESOLVED', updatedAt: new Date() },
         });
         if (updated.count === 0) {
           return { ok: true }; // already resolved (race or double-click)

@@ -1113,6 +1113,55 @@ export async function handleInboundWhatsApp(input: {
   }
 }
 
+/**
+ * Track after-hours inbound as queue noise — first message keeps inboundCount at 0;
+ * follow-ups increment so the auto-resolve job only closes silent threads.
+ */
+async function trackAfterHoursTicket(input: {
+  salonId: string;
+  customerId: string;
+  text: string;
+}): Promise<void> {
+  const db = getTenantDb();
+  const existing = await db.ticket.findFirst({
+    where: {
+      salonId: input.salonId,
+      customerId: input.customerId,
+      type: 'AFTER_HOURS_MESSAGE',
+      status: { in: ['OPEN', 'WAITING_CUSTOMER'] },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (existing) {
+    await db.ticket.update({
+      where: { id: existing.id },
+      data: {
+        inboundCount: { increment: 1 },
+        updatedAt: new Date(),
+        messages: {
+          create: { direction: 'in', body: input.text },
+        },
+      },
+    });
+    return;
+  }
+
+  await db.ticket.create({
+    data: {
+      salonId: input.salonId,
+      customerId: input.customerId,
+      type: 'AFTER_HOURS_MESSAGE',
+      status: 'OPEN',
+      inboundCount: 0,
+      subject: 'After-hours message',
+      messages: {
+        create: { direction: 'in', body: input.text },
+      },
+    },
+  });
+}
+
 async function processInboundWhatsApp(
   tenant: ResolvedTenant,
   input: { waId: string; text: string; messageSid: string },
@@ -1212,6 +1261,19 @@ async function processInboundWhatsApp(
     customerWaId: waId,
     activityAt: inboundAt,
   }).catch(() => {});
+
+  if (
+    (salon.status === 'ACTIVE' || salon.status === 'TRIAL') &&
+    !isWithinBusinessHours(salon) &&
+    !WHATSAPP_BOOKING_STEPS.includes(conv.step) &&
+    conv.step !== ConversationStep.HANDOFF
+  ) {
+    trackAfterHoursTicket({
+      salonId: salon.id,
+      customerId: customer.id,
+      text,
+    }).catch((err) => logger.warn({ err }, 'after_hours_ticket_track_failed'));
+  }
 
   const isFirstEverMessage = conv.messageCount === 0;
   if (isFirstEverMessage) {

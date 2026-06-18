@@ -1,7 +1,14 @@
 /**
- * Background worker entry — attach BullMQ processors / cron here.
- * Keeps default `npm run worker` safe without requiring queue wiring for CI.
+ * Background worker — BullMQ scheduled jobs (after-hours ticket cleanup, etc.).
  */
 import { logger } from './lib/logger.js';
+import { registerScheduledJobs } from './jobs/index.js';
 
-logger.info({ msg: 'worker_stub_ready' }, 'Attach BullMQ processors for reminders and reconciliation.');
+registerScheduledJobs()
+  .then(() => {
+    logger.info('worker_ready');
+  })
+  .catch((err) => {
+    logger.error({ err }, 'worker_start_failed');
+    process.exit(1);
+  });
