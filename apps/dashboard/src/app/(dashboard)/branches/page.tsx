@@ -27,7 +27,8 @@ export default async function BranchesPage() {
     <BranchesClient
       token={token ?? ''}
       initialBranches={branches}
-      canManage={user?.role === 'OWNER'}
+      canAdd={user?.role === 'OWNER'}
+      canEdit={user?.role === 'OWNER' || user?.role === 'MANAGER'}
     />
   );
 }

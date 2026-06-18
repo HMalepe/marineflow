@@ -778,7 +778,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.get('/appointments', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
-      const q = request.query as { from?: string; to?: string };
+      const q = request.query as { from?: string; to?: string; branchId?: string };
       const fromParsed = q.from ? new Date(q.from) : null;
       const toParsed = q.to ? new Date(q.to) : null;
       const from = fromParsed && !isNaN(fromParsed.getTime()) ? fromParsed : new Date(Date.now() - 7 * 86400000);
@@ -787,6 +787,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const rows = await db.appointment.findMany({
         where: {
           start: { gte: from, lte: to },
+          ...(q.branchId ? { branchId: q.branchId } : {}),
         },
         include: {
           service: true,
@@ -1596,9 +1597,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.get('/staff', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
+      const q = request.query as { branchId?: string };
       const now = new Date();
       const staff = await db.staff.findMany({
-        where: { deletedAt: null },
+        where: {
+          deletedAt: null,
+          ...(q.branchId ? { branchId: q.branchId } : {}),
+        },
         include: {
           services: { include: { service: true } },
           workingHours: true,
@@ -1632,14 +1637,22 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       specialties?: string[];
       isBookable?: boolean;
       avatarUrl?: string | null;
+      branchId?: string | null;
     };
   }>('/staff', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
-      const { name, displayName, bio, specialties, isBookable, avatarUrl } = request.body;
+      const { name, displayName, bio, specialties, isBookable, avatarUrl, branchId } = request.body;
       if (!name?.trim()) {
         reply.code(400);
         return { error: 'missing_name', message: 'Name is required.' };
+      }
+      if (branchId) {
+        const branch = await db.branch.findFirst({ where: { id: branchId, salonId: user.salonId } });
+        if (!branch) {
+          reply.code(400);
+          return { error: 'invalid_branch', message: 'Branch not found.' };
+        }
       }
       const maxOrder = await db.staff.aggregate({
         where: { salonId: user.salonId, deletedAt: null },
@@ -1654,6 +1667,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           specialties: specialties ?? [],
           isBookable: isBookable ?? true,
           avatarUrl: avatarUrl ?? null,
+          branchId: branchId ?? null,
           sortOrder: (maxOrder._max.sortOrder ?? 0) + 1,
         },
         include: { workingHours: true },
@@ -1857,7 +1871,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.get('/roster', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
-      const q = request.query as { from?: string; to?: string };
+      const q = request.query as { from?: string; to?: string; branchId?: string };
 
       const now = new Date();
       const from = parseRosterDate(q.from, now);
@@ -1865,7 +1879,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const clampedTo = clampRosterEnd(from, to);
 
       const staff = await db.staff.findMany({
-        where: { deletedAt: null },
+        where: {
+          deletedAt: null,
+          ...(q.branchId ? { branchId: q.branchId } : {}),
+        },
         include: {
           workingHours: true,
           timeOff: {
@@ -2335,6 +2352,21 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get<{ Params: { id: string } }>('/branches/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const db = getTenantDb();
+      const branch = await db.branch.findFirst({
+        where: { id: request.params.id },
+        include: { _count: { select: { staff: true, appointments: true } } },
+      });
+      if (!branch) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { branch };
+    });
+  });
+
   app.post<{ Body: { name: string; address?: string; city?: string; province?: string; postalCode?: string; phone?: string; email?: string; timezone?: string; slug?: string } }>(
     '/branches',
     { preHandler: requireRole('OWNER') },
@@ -2383,7 +2415,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const updated = await db.branch.update({
           where: { id: existing.id },
           data: {
-            ...(name !== undefined && { name }),
+            ...(name !== undefined && { name: name.trim() }),
             ...(address !== undefined && { address }),
             ...(city !== undefined && { city }),
             ...(province !== undefined && { province }),

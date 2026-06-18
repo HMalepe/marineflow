@@ -76,8 +76,14 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
 /** True when pathname matches a nav href (including roster ↔ staff alias). */
 export function isNavItemActive(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
+  if (href === '/appointments') {
+    return pathname.startsWith('/appointments') || (pathname.includes('/branch/') && pathname.includes('/appointments'));
+  }
   if (href === '/roster') {
-    return pathname.startsWith('/roster') || pathname.startsWith('/staff');
+    return pathname.startsWith('/roster') || pathname.startsWith('/staff') || (pathname.includes('/branch/') && pathname.includes('/roster'));
+  }
+  if (href === '/branches') {
+    return pathname.startsWith('/branches') || pathname.startsWith('/branch/');
   }
   return pathname.startsWith(href);
 }

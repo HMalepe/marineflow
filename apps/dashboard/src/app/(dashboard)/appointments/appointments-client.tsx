@@ -83,10 +83,14 @@ export function AppointmentsClient({
   upcoming: initialUpcoming,
   past: initialPast,
   token,
+  branchId,
+  hidePageHeader = false,
 }: {
   upcoming: AppointmentData[];
   past: AppointmentData[];
   token: string;
+  branchId?: string;
+  hidePageHeader?: boolean;
 }) {
   const [upcoming, setUpcoming] = useState(initialUpcoming);
   const [past, setPast] = useState(initialPast);
@@ -126,7 +130,8 @@ export function AppointmentsClient({
   const refreshAppointments = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await apiFetch<{ appointments: AppointmentData[] }>('/appointments', {}, token);
+      const branchQuery = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+      const data = await apiFetch<{ appointments: AppointmentData[] }>(`/appointments${branchQuery}`, {}, token);
       const now = Date.now();
       const all = data.appointments ?? [];
       setUpcoming(
@@ -141,7 +146,7 @@ export function AppointmentsClient({
     } catch {
       // keep last good snapshot
     }
-  }, [token]);
+  }, [token, branchId]);
 
   const onLiveUpdate = useCallback(
     (type: string) => {
@@ -241,6 +246,7 @@ export function AppointmentsClient({
       )}
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
+        {!hidePageHeader && (
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
           <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2 flex-wrap">
@@ -253,7 +259,17 @@ export function AppointmentsClient({
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+        )}
+        {hidePageHeader && liveConnected && (
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            Bookings at this location.
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+              Live sync
+            </span>
+          </p>
+        )}
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto ml-auto">
           {/* Search */}
           <div className="relative flex-1 sm:flex-none sm:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />

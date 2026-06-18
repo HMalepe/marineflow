@@ -51,6 +51,8 @@ interface Shift { startTime: string; endTime: string }
 interface Props {
   token: string;
   openAddStaff?: boolean;
+  branchId?: string;
+  hidePageHeader?: boolean;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -115,7 +117,7 @@ function getDayInfo(s: StaffMember, date: Date): { shift: Shift | null; isTimeOf
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function RosterClient({ token, openAddStaff = false }: Props) {
+export function RosterClient({ token, openAddStaff = false, branchId, hidePageHeader = false }: Props) {
   const todayRef = useRef<Date>((() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); return d;
   })());
@@ -154,8 +156,9 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
       setError(null);
     }
     try {
+      const branchQuery = branchId ? `&branchId=${encodeURIComponent(branchId)}` : '';
       const data = await apiFetch<{ staff: StaffMember[] }>(
-        `/roster?from=${toIso(from)}&to=${toIso(to)}`, {}, token,
+        `/roster?from=${toIso(from)}&to=${toIso(to)}${branchQuery}`, {}, token,
       );
       setStaff(data.staff ?? []);
       setError(null);
@@ -166,7 +169,7 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [token]);
+  }, [token, branchId]);
 
   useEffect(() => { fetchRoster(month, monthEnd); }, [fetchRoster, month, monthEnd]);
 
@@ -184,6 +187,7 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
     <div className="space-y-5">
 
       {/* Header */}
+      {!hidePageHeader && (
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Roster</h1>
@@ -214,6 +218,36 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
           </div>
         )}
       </div>
+      )}
+
+      {hidePageHeader && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground flex items-center gap-2">
+            Click any date to manage shifts and time off.
+            {liveConnected && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                Live sync
+              </span>
+            )}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            {copiedShift && (
+              <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary rounded-full px-3 py-1 text-xs font-medium">
+                <ClipboardPaste className="w-3 h-3" />
+                {copiedShift.startTime}–{copiedShift.endTime}
+                <button onClick={() => setCopiedShift(null)} className="opacity-60 hover:opacity-100">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+            <Button size="sm" onClick={() => setAddStaffOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add staff
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Month navigation */}
       <div className="flex items-center gap-3">
@@ -249,7 +283,7 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
         <div className="rounded-xl border border-dashed px-8 py-16 text-center space-y-3">
           <p className="text-muted-foreground">No staff members yet.</p>
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Add your team so they appear on the roster and in WhatsApp booking.
+            Add your team for this location so they appear on the roster and in WhatsApp booking.
           </p>
           <Button size="sm" onClick={() => setAddStaffOpen(true)}>
             <Plus className="w-4 h-4 mr-1" />
@@ -400,6 +434,7 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
 
       <AddStaffSheet
         token={token}
+        branchId={branchId}
         open={addStaffOpen}
         onOpenChange={setAddStaffOpen}
         onCreated={() => {
@@ -741,13 +776,14 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
 
 interface AddStaffSheetProps {
   token: string;
+  branchId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
   onError: (message: string) => void;
 }
 
-function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddStaffSheetProps) {
+function AddStaffSheet({ token, branchId, open, onOpenChange, onCreated, onError }: AddStaffSheetProps) {
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [specialties, setSpecialties] = useState('');
@@ -791,6 +827,7 @@ function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddSta
             specialties: specialtyList,
             isBookable,
             avatarUrl,
+            ...(branchId ? { branchId } : {}),
           }),
         },
         token,
