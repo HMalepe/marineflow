@@ -12,6 +12,7 @@ import { MessageDirection, ConversationStep } from '@prisma/client';
 import { emitMessageReceived } from '../lib/eventBus.js';
 import { searchDashboard } from '../lib/dashboardSearch.js';
 import { getTenantOverviewKpis } from '../api/tenant/overview-kpis.js';
+import { getTenantSetupHealth } from '../api/tenant/setup-health.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -830,6 +831,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         select: { timezone: true },
       });
       return getTenantOverviewKpis(db, user.salonId, salon.timezone || 'Africa/Johannesburg');
+    });
+  });
+
+  app.get('/tenant/setup-health', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      return getTenantSetupHealth(db, user.salonId);
     });
   });
 

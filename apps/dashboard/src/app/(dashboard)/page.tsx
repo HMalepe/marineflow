@@ -14,6 +14,7 @@ import { BotHealthPanel, type BotHealthData } from '@/components/BotHealthPanel'
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard';
 import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
+import { SetupHealthScore, type SetupHealthData } from '@/components/SetupHealthScore';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
@@ -242,17 +243,20 @@ async function SuperAdminView({ token }: { token: string | null }) {
 async function AppointmentView({ token }: { token: string | null }) {
   let appointments: Appointment[] = [];
   let overviewKpis: OverviewKpiData | null = null;
+  let setupHealth: SetupHealthData | null = null;
   let error: string | null = null;
   let onboardingDone = true;
 
   try {
-    const [apptData, settingsData, kpiData] = await Promise.all([
+    const [apptData, settingsData, kpiData, healthData] = await Promise.all([
       apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
       apiFetch<{ salon: { onboardingCompletedAt: string | null; whatsappPhoneId: string | null } }>('/settings', {}, token),
       apiFetch<OverviewKpiData>('/tenant/overview-kpis', {}, token).catch(() => null),
+      apiFetch<SetupHealthData>('/tenant/setup-health', {}, token).catch(() => null),
     ]);
     appointments = apptData.appointments;
     overviewKpis = kpiData;
+    setupHealth = healthData;
     onboardingDone = !!(settingsData.salon.onboardingCompletedAt || settingsData.salon.whatsappPhoneId);
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load';
@@ -263,6 +267,11 @@ async function AppointmentView({ token }: { token: string | null }) {
   return (
     <div className="space-y-6 lg:space-y-8">
       {token && <SalonLiveRouterRefresh token={token} />}
+
+      {setupHealth && setupHealth.checks.length > 0 && (
+        <SetupHealthScore data={setupHealth} />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
