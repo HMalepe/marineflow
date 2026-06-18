@@ -11,6 +11,7 @@ import { sendWithFallback } from '../services/channelRouter.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import { emitMessageReceived } from '../lib/eventBus.js';
 import { searchDashboard } from '../lib/dashboardSearch.js';
+import { getTenantOverviewKpis } from '../api/tenant/overview-kpis.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -817,6 +818,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.get('/campaigns/templates', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       return { templates: CAMPAIGN_TEMPLATES, categories: CAMPAIGN_TEMPLATE_CATEGORIES };
+    });
+  });
+
+  app.get('/tenant/overview-kpis', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: { timezone: true },
+      });
+      return getTenantOverviewKpis(db, user.salonId, salon.timezone || 'Africa/Johannesburg');
     });
   });
 

@@ -1,11 +1,15 @@
+import type React from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { KPIStrip, type OverviewKpiData } from '@/components/KPIStrip';
+import { MiniBarChart } from '@/components/MiniBarChart';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
-import { Calendar, CheckCircle, Clock, Users, MessageSquare, BarChart2 } from 'lucide-react';
+import { AdminQuickAccess } from '@/components/admin-quick-access';
+import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -48,7 +52,6 @@ interface Alert {
 interface AlertsData {
   pastDue: Alert[];
   trialExpiring: (Alert & { trialEndsAt: string })[];
-  overQuota: (Alert & { tier: string; _count: { staff: number } })[];
 }
 
 async function adminFetch<T>(path: string, token: string | null): Promise<T | null> {
@@ -94,7 +97,7 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
   const hasAlerts =
     alerts !== null &&
-    (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0 || alerts.overQuota.length > 0);
+    (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0);
 
   return (
     <div className="space-y-6">
@@ -107,15 +110,17 @@ async function SuperAdminView({ token }: { token: string | null }) {
           href="/admin"
           className="inline-flex items-center text-sm font-medium text-primary hover:underline"
         >
-          Go to Admin Panel &rarr;
+          Manage businesses &rarr;
         </Link>
       </div>
+
+      {token && <AdminQuickAccess token={token} title="Quick access — open any client dashboard" />}
 
       {/* KPI cards */}
       {stats ? (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <KpiCard label="Total Salons" value={stats.totalSalons} />
-          <KpiCard label="Active Salons" value={stats.activeSalons} />
+          <KpiCard label="Total Businesses" value={stats.totalSalons} />
+          <KpiCard label="Active" value={stats.activeSalons} />
           <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
           <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
           <KpiCard label="New This Week" value={stats.recentSignups} />
@@ -162,23 +167,6 @@ async function SuperAdminView({ token }: { token: string | null }) {
             </div>
           )}
 
-          {alerts.overQuota.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-amber-700">
-                Over Quota ({alerts.overQuota.length})
-              </p>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {alerts.overQuota.map((s) => (
-                  <span
-                    key={s.id}
-                    className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded"
-                  >
-                    {s.name} ({s._count.staff} staff on {s.tier})
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
       )}
     </div>
@@ -200,23 +188,24 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
 
 async function AppointmentView({ token }: { token: string | null }) {
   let appointments: Appointment[] = [];
+  let overviewKpis: OverviewKpiData | null = null;
   let error: string | null = null;
   let onboardingDone = true;
 
   try {
-    const [apptData, settingsData] = await Promise.all([
+    const [apptData, settingsData, kpiData] = await Promise.all([
       apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
       apiFetch<{ salon: { onboardingCompletedAt: string | null; whatsappPhoneId: string | null } }>('/settings', {}, token),
+      apiFetch<OverviewKpiData>('/tenant/overview-kpis', {}, token).catch(() => null),
     ]);
     appointments = apptData.appointments;
+    overviewKpis = kpiData;
     onboardingDone = !!(settingsData.salon.onboardingCompletedAt || settingsData.salon.whatsappPhoneId);
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load';
   }
 
   const today = new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' });
-  const confirmed = appointments.filter((a) => a.status === 'CONFIRMED' || a.status === 'CONFIRMED_PAID').length;
-  const pending = appointments.filter((a) => a.status === 'HELD' || a.status === 'PENDING_PAYMENT').length;
 
   return (
     <div className="space-y-6 lg:space-y-8">
@@ -224,8 +213,11 @@ async function AppointmentView({ token }: { token: string | null }) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Overview</h1>
           <p className="text-muted-foreground text-sm mt-1">{today}</p>
+          <p className="text-xs text-muted-foreground/80 mt-1 max-w-xl">
+            Today&apos;s bookings, revenue, and bot activity at a glance.
+          </p>
         </div>
         <Link
           href="/appointments"
@@ -235,6 +227,13 @@ async function AppointmentView({ token }: { token: string | null }) {
           View all {APPOINTMENTS_LABEL.toLowerCase()} →
         </Link>
       </div>
+
+      {overviewKpis && (
+        <>
+          <KPIStrip data={overviewKpis} />
+          <MiniBarChart data={overviewKpis.revenueLast7Days} />
+        </>
+      )}
 
       {/* Onboarding banner */}
       {!onboardingDone && (
@@ -253,13 +252,6 @@ async function AppointmentView({ token }: { token: string | null }) {
           </Link>
         </div>
       )}
-
-      {/* KPI row */}
-      <div className="grid gap-3 grid-cols-3 lg:grid-cols-3">
-        <StatCard title="Today&apos;s bookings" value={appointments.length} icon={<Calendar className="w-5 h-5" />} />
-        <StatCard title="Confirmed" value={confirmed} icon={<CheckCircle className="w-5 h-5" />} accent="green" />
-        <StatCard title="Pending payment" value={pending} icon={<Clock className="w-5 h-5" />} accent={pending > 0 ? 'amber' : undefined} />
-      </div>
 
       {/* Quick links — desktop only bonus */}
       <div className="hidden lg:grid grid-cols-3 gap-4">
@@ -336,22 +328,3 @@ async function AppointmentView({ token }: { token: string | null }) {
     </div>
   );
 }
-
-function StatCard({ title, value, icon, accent }: { title: string; value: number; icon?: React.ReactNode; accent?: 'green' | 'amber' }) {
-  return (
-    <Card className={accent === 'green' && value > 0 ? 'ring-1 ring-green-500/20' : accent === 'amber' && value > 0 ? 'ring-1 ring-amber-500/20' : ''}>
-      <CardContent className="pt-4 pb-4">
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-xs text-muted-foreground leading-tight">{title}</p>
-          {icon && <span className={`shrink-0 ${accent === 'green' && value > 0 ? 'text-green-500' : accent === 'amber' && value > 0 ? 'text-amber-500' : 'text-muted-foreground/40'}`}>{icon}</span>}
-        </div>
-        <p className={`text-2xl sm:text-3xl font-bold mt-1.5 tabular-nums ${accent === 'green' && value > 0 ? 'text-green-600 dark:text-green-400' : accent === 'amber' && value > 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
-          {value}
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// React type for JSX
-import type React from 'react';
