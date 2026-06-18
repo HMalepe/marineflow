@@ -5,6 +5,7 @@
 
 RECOVERABLE_FAILED_MIGRATIONS="
 20260612160000_power_features_automation
+20260612170000_add_review_incentive
 "
 
 for migration in $RECOVERABLE_FAILED_MIGRATIONS; do
