@@ -16,6 +16,8 @@ import {
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Copy, Check, X, ClipboardPaste, Plus } from 'lucide-react';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
+import { StaffAvatar } from '@/components/staff-avatar';
+import { StaffAvatarUpload } from '@/components/staff-avatar-upload';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,21 +113,6 @@ function getDayInfo(s: StaffMember, date: Date): { shift: Shift | null; isTimeOf
   return { shift, isTimeOff, timeOffId: timeOffEntry?.id ?? null };
 }
 
-function avatarColor(name: string) {
-  const colors = [
-    'bg-violet-500', 'bg-blue-500', 'bg-emerald-500',
-    'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-pink-500',
-  ];
-  let hash = 0;
-  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) & 0xffff;
-  return colors[hash % colors.length]!;
-}
-
-function initials(s: StaffMember) {
-  return (s.displayName ?? s.name)
-    .split(' ').map((w) => w[0]).join('').substring(0, 2).toUpperCase();
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function RosterClient({ token, openAddStaff = false }: Props) {
@@ -145,6 +132,7 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
   const [toast, setToast]       = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const toastTimerRef           = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [addStaffOpen, setAddStaffOpen] = useState(openAddStaff);
+  const [editStaff, setEditStaff] = useState<StaffMember | null>(null);
 
   const monthEnd = useMemo(() => addDays(getMonthStart(addMonths(month, 1)), -1), [month]);
   const weeks    = useMemo(() => buildCalendarWeeks(month), [month]);
@@ -274,10 +262,20 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
       {!loading && staff.length > 0 && (
         <div className="flex flex-wrap gap-3">
           {staff.map((s) => (
-            <div key={s.id} className="flex items-start gap-2 rounded-xl border bg-card px-3 py-2 min-w-0">
-              <div className={cn('size-7 rounded-full text-white flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5', avatarColor(s.name))}>
-                {initials(s)}
-              </div>
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setEditStaff(s)}
+              className="flex items-start gap-2 rounded-xl border bg-card px-3 py-2 min-w-0 text-left hover:border-primary/40 hover:bg-accent/5 transition-colors"
+              title="Edit profile photo"
+            >
+              <StaffAvatar
+                name={s.name}
+                displayName={s.displayName}
+                avatarUrl={s.avatarUrl}
+                size="sm"
+                className="mt-0.5"
+              />
               <div className="min-w-0">
                 <p className="text-xs font-semibold leading-tight truncate">{s.displayName ?? s.name}</p>
                 {s.serviceNames && s.serviceNames.length > 0 ? (
@@ -288,7 +286,7 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
                   <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-tight mt-0.5">No services linked</p>
                 )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -343,22 +341,43 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
                         <div className="flex flex-wrap gap-[3px] mt-0.5">
                           {staff.map((s) => {
                             const { shift, isTimeOff } = getDayInfo(s, date);
-                            const isScheduled = !!getDayInfo(s, date).shift || isTimeOff;
+                            const label = s.displayName ?? s.name;
+                            const tooltip = `${label}${isTimeOff ? ' — Off' : shift ? ` — ${shift.startTime}–${shift.endTime}` : ' — Not scheduled'}`;
+
+                            if (isTimeOff) {
+                              return (
+                                <div
+                                  key={s.id}
+                                  title={tooltip}
+                                  className="size-[18px] rounded-full bg-destructive/80 text-white flex items-center justify-center text-[9px] font-bold flex-shrink-0 ring-1 ring-background"
+                                >
+                                  ×
+                                </div>
+                              );
+                            }
+
+                            if (!shift) {
+                              return (
+                                <div
+                                  key={s.id}
+                                  title={tooltip}
+                                  className="size-[18px] rounded-full bg-muted-foreground/20 flex items-center justify-center text-[8px] text-muted-foreground flex-shrink-0"
+                                >
+                                  ·
+                                </div>
+                              );
+                            }
+
                             return (
-                              <div
+                              <StaffAvatar
                                 key={s.id}
-                                title={`${s.displayName ?? s.name}${isTimeOff ? ' — Off' : shift ? ` — ${shift.startTime}–${shift.endTime}` : ' — Not scheduled'}`}
-                                className={cn(
-                                  'w-4 h-4 rounded-full text-white flex items-center justify-center text-[8px] font-bold flex-shrink-0',
-                                  isTimeOff
-                                    ? 'bg-destructive/80'
-                                    : shift
-                                      ? avatarColor(s.name)
-                                      : 'bg-muted-foreground/20',
-                                )}
-                              >
-                                {isTimeOff ? '×' : isScheduled ? '' : '·'}
-                              </div>
+                                name={s.name}
+                                displayName={s.displayName}
+                                avatarUrl={s.avatarUrl}
+                                size="xs"
+                                title={tooltip}
+                                className="ring-1 ring-background"
+                              />
                             );
                           })}
                         </div>
@@ -389,6 +408,20 @@ export function RosterClient({ token, openAddStaff = false }: Props) {
         }}
         onError={(msg) => showToast(msg, 'error')}
       />
+
+      {editStaff && (
+        <EditStaffSheet
+          token={token}
+          staff={editStaff}
+          onClose={() => setEditStaff(null)}
+          onSaved={() => {
+            setEditStaff(null);
+            fetchRoster(month, monthEnd);
+            showToast('Profile updated', 'success');
+          }}
+          onError={(msg) => showToast(msg, 'error')}
+        />
+      )}
 
       {/* Day detail sheet */}
       {selectedDate && (
@@ -571,7 +604,6 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
             const { shift, isTimeOff, timeOffId } = getDayInfo(s, date);
             const busy = busyId === s.id;
             const isExpanded = expandId === s.id;
-            const color = avatarColor(s.name);
 
             return (
               <div
@@ -583,13 +615,12 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
               >
                 {/* Staff row */}
                 <div className="flex items-center gap-3">
-                  {/* Avatar */}
-                  <div className={cn('w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0 overflow-hidden', color)}>
-                    {s.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.avatarUrl} alt={s.name} className="w-full h-full object-cover" />
-                    ) : initials(s)}
-                  </div>
+                  <StaffAvatar
+                    name={s.name}
+                    displayName={s.displayName}
+                    avatarUrl={s.avatarUrl}
+                    size="md"
+                  />
 
                   {/* Name + current status */}
                   <div className="flex-1 min-w-0">
@@ -720,6 +751,7 @@ function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddSta
   const [name, setName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [specialties, setSpecialties] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isBookable, setIsBookable] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -728,6 +760,7 @@ function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddSta
     setName('');
     setDisplayName('');
     setSpecialties('');
+    setAvatarUrl(null);
     setIsBookable(true);
     setFormError(null);
   }
@@ -757,6 +790,7 @@ function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddSta
             displayName: displayName.trim() || null,
             specialties: specialtyList,
             isBookable,
+            avatarUrl,
           }),
         },
         token,
@@ -790,6 +824,15 @@ function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddSta
         </SheetHeader>
 
         <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
+          <StaffAvatarUpload
+            token={token}
+            name={name || 'Staff'}
+            displayName={displayName || null}
+            avatarUrl={avatarUrl}
+            onChange={setAvatarUrl}
+            disabled={saving}
+          />
+
           <div className="space-y-1.5">
             <Label htmlFor="staff-name">Full name *</Label>
             <Input
@@ -846,6 +889,96 @@ function AddStaffSheet({ token, open, onOpenChange, onCreated, onError }: AddSta
             </Button>
             <Button type="submit" disabled={saving || !name.trim()}>
               {saving ? 'Adding…' : 'Add staff'}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ─── Edit staff sheet ─────────────────────────────────────────────────────────
+
+interface EditStaffSheetProps {
+  token: string;
+  staff: StaffMember;
+  onClose: () => void;
+  onSaved: () => void;
+  onError: (message: string) => void;
+}
+
+function EditStaffSheet({ token, staff, onClose, onSaved, onError }: EditStaffSheetProps) {
+  const [displayName, setDisplayName] = useState(staff.displayName ?? '');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(staff.avatarUrl);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    try {
+      await apiFetch(
+        `/staff/${staff.id}`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            displayName: displayName.trim() || null,
+            avatarUrl,
+          }),
+        },
+        token,
+      );
+      onSaved();
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Failed to update profile';
+      setFormError(msg);
+      onError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>{staff.displayName ?? staff.name}</SheetTitle>
+          <SheetDescription>
+            Update their profile photo and display name shown on the roster.
+          </SheetDescription>
+        </SheetHeader>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="mt-6 space-y-4">
+          <StaffAvatarUpload
+            token={token}
+            name={staff.name}
+            displayName={displayName || staff.displayName}
+            avatarUrl={avatarUrl}
+            onChange={setAvatarUrl}
+            disabled={saving}
+          />
+
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-staff-display">Display name</Label>
+            <Input
+              id="edit-staff-display"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={staff.name}
+              maxLength={80}
+            />
+            <p className="text-xs text-muted-foreground">Legal name: {staff.name}</p>
+          </div>
+
+          {formError && <p className="text-sm text-destructive">{formError}</p>}
+
+          <SheetFooter className="gap-2 sm:gap-0 pt-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? 'Saving…' : 'Save profile'}
             </Button>
           </SheetFooter>
         </form>

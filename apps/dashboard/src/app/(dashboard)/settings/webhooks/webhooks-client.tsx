@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { resolveApiUrl } from '@/lib/api-config';
 
 interface WebhookSub {
   id: string;
@@ -38,7 +38,7 @@ export function WebhooksClient({ token }: Props) {
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/webhooks`, {
+    fetch(resolveApiUrl('api', '/webhooks', { forBrowser: true }), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
@@ -49,7 +49,7 @@ export function WebhooksClient({ token }: Props) {
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const res = await fetch(`${API_URL}/api/webhooks`, {
+    const res = await fetch(resolveApiUrl('api', '/webhooks', { forBrowser: true }), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -70,7 +70,7 @@ export function WebhooksClient({ token }: Props) {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`${API_URL}/api/webhooks/${id}`, {
+    await fetch(resolveApiUrl('api', `/webhooks/${id}`, { forBrowser: true }), {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     });

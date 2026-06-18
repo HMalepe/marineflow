@@ -78,7 +78,9 @@
 2. Set root directory to `apps/dashboard`
 3. Framework preset: Next.js
 4. Environment variables:
-   - `NEXT_PUBLIC_API_URL` = `https://your-api.railway.app`
+   - `NEXT_PUBLIC_API_URL` = `https://marineflow.co.za` (or your Railway API URL)
+   - Optional: `API_UPSTREAM_URL` — same as above; used by Next.js rewrites to proxy API calls through the dashboard domain (helps salon owners on restrictive corporate WiFi)
+5. On Railway API, set `CORS_ORIGINS` to include `https://dashboard.marineflow.co.za` (auto-included if unset) and `DASHBOARD_URL=https://dashboard.marineflow.co.za`
 
 ## 5. Inngest (Cloud)
 

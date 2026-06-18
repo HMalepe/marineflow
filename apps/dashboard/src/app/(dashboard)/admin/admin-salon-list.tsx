@@ -29,7 +29,7 @@ import {
 import { cn } from '@/lib/utils';
 import { DashboardToast } from '@/components/dashboard-toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { resolveApiUrl } from '@/lib/api-config';
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL ?? 'https://dashboard.marineflow.co.za';
 
 interface Salon {
@@ -111,7 +111,7 @@ async function adminFetch<T>(
   token: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${API_URL}/admin${path}`, {
+  const res = await fetch(resolveApiUrl('admin', path, { forBrowser: true }), {
     ...options,
     headers: {
       'Content-Type': 'application/json',

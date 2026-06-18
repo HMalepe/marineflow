@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import bcrypt from 'bcryptjs';
 import type { StaffUser } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
+import { revokeStaffTokens, assertStaffSessionActive } from '../lib/staffTokenAuth.js';
 import { normalizeLoginPhone } from '../lib/phone.js';
 import {
   findSalonByWhatsAppPhone,
@@ -32,7 +33,7 @@ function issueToken(app: FastifyInstance, user: StaffUser) {
       salonId: user.salonId,
       role: user.role,
     },
-    { expiresIn: '7d' },
+    { expiresIn: '8h' },
   );
 
   return {
@@ -133,6 +134,7 @@ export async function authRoutes(app: FastifyInstance) {
         where: { id: owner.id },
         data: { phone, passwordHash },
       });
+      await revokeStaffTokens(owner.id);
     } else {
       owner = await prisma.staffUser.create({
         data: {
@@ -190,6 +192,7 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply) 
   } catch {
     return reply.code(401).send({ error: 'unauthorized' });
   }
+  if (!(await assertStaffSessionActive(request, reply))) return;
 }
 
 export function requireRole(...roles: string[]) {

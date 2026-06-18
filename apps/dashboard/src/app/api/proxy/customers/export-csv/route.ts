@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getToken } from '@/lib/auth';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { getServerApiBaseUrl } from '@/lib/api-config';
+
+const API_URL = getServerApiBaseUrl();
 
 export async function GET() {
   const token = await getToken();

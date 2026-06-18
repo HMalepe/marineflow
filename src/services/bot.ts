@@ -18,7 +18,16 @@ import { sendWithFallback } from './channelRouter.js';
 import { buildMainMenuInteractive } from './mainMenuInteractive.js';
 import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
-import { isConversationWakeMessage, staffHandoffExpired } from '../lib/conversationWake.js';
+import { isConversationWakeMessage, shouldResetConversationOnWake, staffHandoffExpired } from '../lib/conversationWake.js';
+import {
+  getBotRequestStore,
+  queuePendingWelcomeJourney,
+  runWithBotRequest,
+  takePendingWelcomeJourney,
+  type PendingOutbound,
+} from '../lib/botRequestContext.js';
+import { checkBotRateLimits } from '../lib/botRateLimit.js';
+import { BOT_DEBUG, debugMsg } from '../lib/botDebug.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
 import { DateTime } from 'luxon';
@@ -200,30 +209,12 @@ export type BotContext = Record<string, unknown> & {
   pendingDateOfBirth?: string;
   /** Appointment ID pending customer confirmation before cancel fires. */
   pendingCancelApptId?: string;
+  /** Legacy addon upsell phase flag — cleared when stale. */
+  addonPhase?: boolean;
 };
 
 const PROFILE_NAME_REGEX = /^[a-zA-Z\s'-]{1,80}$/;
 const PROFILE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-// ─── Debug mode ─────────────────────────────────────────────────────────────
-// Set BOT_DEBUG=true in Railway env vars to surface real errors in WhatsApp.
-// MUST be false in production — exposes stack traces to customers.
-const BOT_DEBUG = process.env.BOT_DEBUG === 'true';
-if (BOT_DEBUG) {
-  console.warn('[BOT] ⚠️  BOT_DEBUG=true — raw errors are being sent to customers via WhatsApp. Set BOT_DEBUG=false before going live.');
-}
-
-function debugMsg(label: string, err: unknown, extra?: Record<string, unknown>): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  const code =
-    err instanceof Prisma.PrismaClientKnownRequestError ? ` [Prisma ${err.code}]` : '';
-  const stack =
-    err instanceof Error && err.stack
-      ? '\n' + err.stack.split('\n').slice(1, 4).join('\n')
-      : '';
-  const extraStr = extra ? '\n' + JSON.stringify(extra, null, 2) : '';
-  return `🛠 *[BOT DEBUG — ${label}]*\n${msg}${code}${stack}${extraStr}`;
-}
 
 const PENDING_PROFILE_CLEAR: Pick<
   BotContext,
@@ -468,13 +459,17 @@ function buildBookingPopiaConsentMessage(): string {
 
 
 const RATE_KEY_PREFIX = 'ratelimit:wa:';
+const RATE_SALON_KEY_PREFIX = 'ratelimit:salon:';
 
-async function rateLimitOrReject(waId: string): Promise<boolean> {
+async function rateLimitOrReject(waId: string, salonId: string): Promise<boolean> {
   try {
-    const key = `${RATE_KEY_PREFIX}${waId}`;
-    const n = await redis.incr(key);
-    if (n === 1) await redis.pexpire(key, 60_000);
-    return n <= 30;
+    const waKey = `${RATE_KEY_PREFIX}${waId}`;
+    const salonKey = `${RATE_SALON_KEY_PREFIX}${salonId}`;
+    const waN = await redis.incr(waKey);
+    if (waN === 1) await redis.pexpire(waKey, 60_000);
+    const salonN = await redis.incr(salonKey);
+    if (salonN === 1) await redis.pexpire(salonKey, 60_000);
+    return checkBotRateLimits(waN, salonN);
   } catch {
     return true; // Allow through if Redis is unavailable
   }
@@ -525,15 +520,6 @@ function syncConvContext(
   if (step) conv.step = step;
 }
 
-type PendingOutbound = {
-  salonId: string;
-  convId: string;
-  customerId: string;
-  waId: string;
-  body: string;
-  interactive?: InteractiveMessage;
-};
-
 function salonInteractive(
   _salon: Salon,
   interactive: InteractiveMessage | null | undefined,
@@ -549,22 +535,6 @@ async function replyMaybeInteractive(
 ): Promise<void> {
   const msg = salonInteractive(conv.salon, interactive);
   await reply(conv, body, null, msg ? { interactive: msg } : undefined);
-}
-
-/** When set, reply() queues WhatsApp sends until after the DB transaction commits. */
-let pendingOutbound: PendingOutbound[] | null = null;
-
-type PendingWelcomeJourney = {
-  salonId: string;
-  customerId: string;
-  isFirstInteraction: boolean;
-  waId: string;
-};
-
-let pendingWelcomeJourney: PendingWelcomeJourney | null = null;
-
-function startOutboundDeferral(): void {
-  pendingOutbound = [];
 }
 
 async function recordOutboundMessage(
@@ -586,9 +556,7 @@ async function recordOutboundMessage(
   });
 }
 
-async function deliverOutboundNow(
-  msg: PendingOutbound,
-): Promise<void> {
+async function deliverOutboundNow(msg: PendingOutbound): Promise<void> {
   try {
     const { result } = await sendWithFallback({
       salonId: msg.salonId,
@@ -610,16 +578,17 @@ async function deliverOutboundNow(
 }
 
 async function flushPendingOutbound(): Promise<void> {
-  const queue = pendingOutbound;
-  pendingOutbound = null;
-  if (!queue?.length) return;
+  const store = getBotRequestStore();
+  if (!store?.pendingOutbound.length) return;
+  const queue = [...store.pendingOutbound];
+  store.pendingOutbound.length = 0;
   for (const msg of queue) {
     await deliverOutboundNow(msg);
   }
 }
 
 function hasPendingOutboundForConv(convId: string): boolean {
-  return pendingOutbound?.some((m) => m.convId === convId) ?? false;
+  return getBotRequestStore()?.pendingOutbound.some((m) => m.convId === convId) ?? false;
 }
 
 async function reply(
@@ -628,8 +597,9 @@ async function reply(
   outboundSid?: string | null,
   sendOptions?: { interactive?: InteractiveMessage },
 ): Promise<void> {
-  if (!outboundSid && pendingOutbound) {
-    pendingOutbound.push({
+  const deferQueue = getBotRequestStore()?.pendingOutbound;
+  if (!outboundSid && deferQueue) {
+    deferQueue.push({
       salonId: conv.salonId,
       convId: conv.id,
       customerId: conv.customerId,
@@ -677,7 +647,8 @@ async function startMarketingConsentGate(
 ): Promise<void> {
   await saveCtx(conv.id, {}, ConversationStep.MARKETING_CONSENT);
   syncConvContext(conv, {}, ConversationStep.MARKETING_CONSENT);
-  pendingWelcomeJourney = null;
+  const store = getBotRequestStore();
+  if (store) store.pendingWelcomeJourney = null;
   const body = buildCombinedConsentMessage(salonDisplayName(conv.salon));
   await replyMaybeInteractive(
     conv,
@@ -1002,7 +973,7 @@ export async function handleInboundWhatsApp(input: {
     return;
   }
 
-  if (!(await rateLimitOrReject(waId))) {
+  if (!(await rateLimitOrReject(waId, tenant.id))) {
     await sendTenantWhatsApp(tenant.id, waId, 'Too many messages — please wait a minute and try again.');
     return;
   }
@@ -1030,27 +1001,27 @@ export async function handleInboundWhatsApp(input: {
       );
       return;
     }
-    startOutboundDeferral();
-    try {
-      await withTenantContext(tenant.id, async () => {
-        await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
-      });
-    } finally {
-      await flushPendingOutbound();
-      await flushPendingConsentAudits();
-      if (pendingWelcomeJourney) {
-        const job = pendingWelcomeJourney;
-        pendingWelcomeJourney = null;
-        void withTenantContext(job.salonId, () =>
-          sendWelcomeJourneyIfNeeded({
-            salonId: job.salonId,
-            customerId: job.customerId,
-            isFirstInteraction: job.isFirstInteraction,
-            send: (body) => sendTenantWhatsApp(job.salonId, job.waId, body),
-          }),
-        ).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
+    await runWithBotRequest(async () => {
+      try {
+        await withTenantContext(tenant.id, async () => {
+          await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
+        });
+      } finally {
+        await flushPendingOutbound();
+        await flushPendingConsentAudits();
+        const job = takePendingWelcomeJourney();
+        if (job) {
+          void withTenantContext(job.salonId, () =>
+            sendWelcomeJourneyIfNeeded({
+              salonId: job.salonId,
+              customerId: job.customerId,
+              isFirstInteraction: job.isFirstInteraction,
+              send: (body) => sendTenantWhatsApp(job.salonId, job.waId, body),
+            }),
+          ).catch((err) => logger.warn({ err }, 'welcome_journey_failed'));
+        }
       }
-    }
+    });
   } catch (err) {
     const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
     logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
@@ -1188,12 +1159,12 @@ async function processInboundWhatsApp(
 
   const isFirstEverMessage = conv.messageCount === 0;
   if (isFirstEverMessage) {
-    pendingWelcomeJourney = {
+    queuePendingWelcomeJourney({
       salonId: salon.id,
       customerId: customer.id,
       isFirstInteraction: customer.bookingCount === 0,
       waId,
-    };
+    });
   }
 
   if (salon.status !== 'ACTIVE' && salon.status !== 'TRIAL') {
@@ -1284,7 +1255,7 @@ async function processInboundWhatsApp(
     return;
   }
 
-  if (isConversationWakeMessage(text)) {
+  if (isConversationWakeMessage(text) && shouldResetConversationOnWake(conv.step)) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
     syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.GREETING);
     conv = await reloadConversation(conv.id);
@@ -2831,9 +2802,7 @@ async function menuActionShowContact(
   const parts = [
     `📞 *Contact ${salonDisplayName(salon)}*`,
     salon.phoneDisplay ? `Phone: ${salon.phoneDisplay}` : null,
-    (salon as unknown as { contactEmail?: string }).contactEmail
-      ? `Email: ${(salon as unknown as { contactEmail?: string }).contactEmail}`
-      : null,
+    salon.contactEmail ? `Email: ${salon.contactEmail}` : null,
   ].filter(Boolean);
   if (parts.length === 1) parts.push('No contact details on file yet.');
   await reply(conv, parts.join('\n'));
@@ -5134,7 +5103,7 @@ async function handlePickBranch(
   const branchId = branchOptions[idx];
   await saveCtx(conv.id, { selectedBranchId: branchId }, ConversationStep.PICK_SERVICE);
 
-  const services = await loadSalonServiceCatalog(conv.salon.id);
+  const services = await loadActiveServicesForBooking(conv.salon.id);
   // EC-05: guard against empty service list after branch selection
   if (services.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -5154,44 +5123,65 @@ async function handlePickBranch(
   );
 }
 
-// ─── Reschedule ────────────────────────────────────────────────────────
+// ─── Reschedule (legacy RESCHEDULE step — aligned with manage-booking flow) ─
 async function handleReschedule(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  const c = ctx(conv);
-  const appointmentId = c.rescheduleAppointmentId as string | undefined;
-
   if (text.toUpperCase() === 'CANCEL' || isBackToMainMenuCommand(text)) {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyMenu(conv);
+    await goBackToMainMenu(conv);
     return;
   }
 
+  const c = ctx(conv);
+  const appointmentId = (c.managingAppointmentId ?? c.rescheduleAppointmentId) as string | undefined;
   if (!appointmentId) {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await reply(conv, 'Something went wrong. Let me take you back to the menu.');
-    await replyMenu(conv);
+    await goBackToMainMenu(conv);
     return;
   }
 
-  // Cancel the old appointment and redirect to booking flow
-  await getTenantDb().appointment.update({
-    where: { id: appointmentId },
-    data: { status: 'RESCHEDULED' },
+  const appt = await getTenantDb().appointment.findFirst({
+    where: {
+      id: appointmentId,
+      customerId: conv.customerId,
+      status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW', 'RESCHEDULED'] },
+    },
+    include: { service: true, staff: true },
   });
+  if (!appt) {
+    await goBackToMainMenu(conv);
+    return;
+  }
 
-  notifyAppointmentChangedLater(conv.salonId, appointmentId, {
-    status: 'RESCHEDULED',
-    source: 'whatsapp',
+  const { checkCancellationAllowed } = await import('./cancellationRules.js');
+  const rescheduleCheck = checkCancellationAllowed({
+    salon: conv.salon,
+    appointment: appt,
+    action: 'reschedule',
   });
+  if (!rescheduleCheck.allowed) {
+    await reply(conv, rescheduleCheck.message);
+    return;
+  }
 
-  await reply(conv, "Got it! Your old booking is cancelled. Let's pick a new time.");
-  await saveCtx(conv.id, {}, ConversationStep.PICK_SERVICE);
+  await saveCtx(
+    conv.id,
+    {
+      selectedServiceId: appt.serviceId,
+      selectedStaffId: appt.staffId,
+      managingAppointmentId: appt.id,
+    },
+    ConversationStep.PICK_DATE,
+  );
 
-  const services = await loadSalonServiceCatalog(conv.salon.id);
-  const lines = services.map((s, i) => `${i + 1}. ${s.name} (${fmtMoney(s.priceCents)})`);
-  await reply(conv, ['Pick a service:', ...lines, '', 'Reply BACK for menu.'].join('\n'));
+  const dates = await suggestBookingDates(conv.salonId);
+  const dateLines = formatDateMenuLines(dates.slice(0, 10));
+  const prefix = `🔄 Rescheduling *${sanitize(appt.service.name)}* with ${sanitize(appt.staff.name)}.\n\nPick a new date:`;
+  await replyMaybeInteractive(
+    conv,
+    [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
+    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+  );
 }
 
 // ─── CSAT Survey ───────────────────────────────────────────────────────

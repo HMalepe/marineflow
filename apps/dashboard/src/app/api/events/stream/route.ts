@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { getServerApiBaseUrl } from '@/lib/api-config';
+
+const API_URL = getServerApiBaseUrl();
 
 export async function GET(request: NextRequest) {
   // Accept token via cookie (secure) or query param (fallback for EventSource)

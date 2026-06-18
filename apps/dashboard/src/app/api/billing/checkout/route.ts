@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { getServerApiBaseUrl } from '@/lib/api-config';
+
+const API_URL = getServerApiBaseUrl();
 
 export async function POST(request: Request) {
   const { planTier, billingCycle, token } = await request.json();

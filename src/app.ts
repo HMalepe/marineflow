@@ -60,10 +60,21 @@ export async function buildApp() {
     contentSecurityPolicy: env.NODE_ENV === 'production' ? undefined : false,
   });
 
-  // CORS
-  const corsOrigins = process.env.CORS_ORIGINS;
+  // CORS — always allow the production dashboard origin (salon owners on corporate WiFi
+  // use same-origin proxy, but direct API access and dev still need CORS).
+  const corsFromEnv = process.env.CORS_ORIGINS?.trim();
+  const defaultOrigins = [
+    'http://localhost:3001',
+    'http://localhost:3000',
+    env.DASHBOARD_URL,
+    'https://dashboard.marineflow.co.za',
+  ].filter((v): v is string => Boolean(v));
   const corsOrigin: string | string[] | boolean =
-    corsOrigins === '*' ? true : corsOrigins ? corsOrigins.split(',') : ['http://localhost:3001'];
+    corsFromEnv === '*'
+      ? true
+      : corsFromEnv
+        ? [...new Set([...corsFromEnv.split(',').map((s) => s.trim()).filter(Boolean), ...defaultOrigins])]
+        : defaultOrigins;
   await app.register(cors, {
     origin: corsOrigin,
     credentials: true,
@@ -128,10 +139,16 @@ export async function buildApp() {
 
     const sigValid = twilioMessaging.verifyWebhook(params, signature);
     if (!sigValid) {
-      logger.warn({
-        expectedUrl: `${env.TWILIO_WEBHOOK_BASE_URL}/webhooks/twilio/whatsapp`,
-        hasSig: !!signature,
-      }, 'twilio_signature_failed_bypassing');
+      const allowUnsignedDev =
+        env.NODE_ENV !== 'production' && !env.TWILIO_AUTH_TOKEN?.trim();
+      if (!allowUnsignedDev) {
+        logger.warn({
+          expectedUrl: `${env.TWILIO_WEBHOOK_BASE_URL}/webhooks/twilio/whatsapp`,
+          hasSig: !!signature,
+        }, 'twilio_signature_invalid');
+        return reply.code(403).send('Forbidden');
+      }
+      logger.warn({ hasSig: !!signature }, 'twilio_signature_skipped_dev');
     }
 
     const messageSid = params['MessageSid'] ?? '';

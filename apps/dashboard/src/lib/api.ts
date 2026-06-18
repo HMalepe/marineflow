@@ -1,6 +1,4 @@
-import { getApiBaseUrl } from './api-config';
-
-const API_URL = getApiBaseUrl();
+import { resolveApiUrl } from './api-config';
 
 export class ApiError extends Error {
   constructor(
@@ -44,7 +42,7 @@ export async function apiFetch<T>(
     headers['Content-Type'] = 'application/json';
   }
 
-  const res = await fetch(`${API_URL}/api${path}`, {
+  const res = await fetch(resolveApiUrl('api', path), {
     ...options,
     method,
     body,
@@ -68,7 +66,7 @@ export async function apiUploadFile(
   purpose: string,
   token: string,
 ): Promise<{ publicUrl: string; fileKey: string }> {
-  const res = await fetch(`${API_URL}/api/uploads/file`, {
+  const res = await fetch(resolveApiUrl('api', '/uploads/file'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

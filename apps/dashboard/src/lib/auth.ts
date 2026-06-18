@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 
 const TOKEN_KEY = 'mf_token';
-const MAX_AGE = 7 * 24 * 60 * 60; // 7 days
+const MAX_AGE = 8 * 60 * 60; // match API JWT expiry (8h)
 
 export async function getToken(): Promise<string | null> {
   const store = await cookies();
@@ -26,7 +26,7 @@ export async function clearToken(): Promise<void> {
   store.delete(TOKEN_KEY);
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { getServerApiBaseUrl } from './api-config';
 
 export async function getUser(): Promise<{ sub: string; email: string; name: string; businessName: string; role: string; salonId: string; phone?: string } | null> {
   const token = await getToken();
@@ -49,7 +49,7 @@ export async function getUser(): Promise<{ sub: string; email: string; name: str
   // Fetch user from backend — this verifies the JWT signature and returns
   // authoritative claims (role, salonId) straight from the database.
   try {
-    const res = await fetch(`${API_URL}/api/me`, {
+    const res = await fetch(`${getServerApiBaseUrl()}/api/me`, {
       headers: { Authorization: `Bearer ${token}` },
       cache: 'no-store',
     });

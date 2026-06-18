@@ -18,6 +18,7 @@ import {
   checkQuota,
 } from '../services/subscription.js';
 import { billingReturnUrl, resolveDashboardOrigin } from '../lib/billingUrls.js';
+import { revokeStaffTokens } from '../lib/staffTokenAuth.js';
 import {
   generatePresignedUpload,
   confirmUpload,
@@ -227,6 +228,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       }
       const hash = await bcrypt.hash(newPassword, 12);
       await db.staffUser.update({ where: { id: user.sub }, data: { passwordHash: hash } });
+      await revokeStaffTokens(user.sub);
       await db.auditLog.create({
         data: {
           salonId: user.salonId,

@@ -29,7 +29,7 @@ interface Props {
   token: string;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { resolveApiUrl } from '@/lib/api-config';
 
 export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props) {
   const [salons, setSalons] = useState(initialSalons);
@@ -47,7 +47,7 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
       ownerPassword: form.get('ownerPassword') as string,
     };
 
-    const res = await fetch(`${API_URL}/agency/salons`, {
+    const res = await fetch(resolveApiUrl('agency', '/salons', { forBrowser: true }), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),

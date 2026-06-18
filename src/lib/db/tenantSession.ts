@@ -12,9 +12,17 @@ export function getTenantDb(): PrismaTx {
   return tenantStore.getStore() ?? (prisma as unknown as PrismaTx);
 }
 
+const SAVEPOINT_LABEL = /^[a-z][a-z0-9_]{0,31}$/;
+
+export function assertSavepointLabel(label: string): void {
+  if (!SAVEPOINT_LABEL.test(label)) {
+    throw new Error(`Invalid savepoint label: ${label}`);
+  }
+}
+
 function savepointId(label: string): string {
-  const safe = label.replace(/\W/g, '_').slice(0, 24);
-  return `mfs_${safe}_${Math.random().toString(36).slice(2, 9)}`;
+  assertSavepointLabel(label);
+  return `mfs_${label}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /**
@@ -49,9 +57,8 @@ export async function tryDbSavepoint<T>(label: string, fn: () => Promise<T>, fal
  * Run work scoped to one salon (tenant). Sets Postgres session vars for RLS.
  * All tenant-scoped code in `fn` should use getTenantDb().
  *
- * Timeout is 60s because bot flows include outbound network calls (Twilio/Meta)
- * and optional AI assist inside the transaction. Once Inngest handles outbound
- * sends, this can be reduced.
+ * Outbound WhatsApp sends are deferred until after commit (see botRequestContext).
+ * AI assist may still run inside the transaction; keep a moderate timeout.
  */
 export async function withTenantContext<T>(
   salonId: string,
@@ -65,7 +72,7 @@ export async function withTenantContext<T>(
       await tx.$executeRaw`SELECT set_config('app.current_tenant', ${salonId}, true)`;
       return tenantStore.run(tx, fn);
     },
-    { timeout: 60_000 },
+    { timeout: 30_000 },
   );
 }
 

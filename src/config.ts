@@ -26,7 +26,13 @@ const envSchema = z.object({
   PAYFAST_SANDBOX_MERCHANT_KEY: z.string().optional().transform((v) => v?.trim() || undefined),
   PAYFAST_SANDBOX_PASSPHRASE: z.string().optional().transform((v) => v?.trim() || undefined),
   PAYFAST_IS_TEST: z.coerce.boolean().default(false),
-  SESSION_SECRET: z.string().min(16),
+  SESSION_SECRET: z
+    .string()
+    .min(32)
+    .refine(
+      (s) => process.env.NODE_ENV !== 'production' || s !== 'change-me-to-a-random-32-char-string',
+      { message: 'SESSION_SECRET must be changed from the example value in production' },
+    ),
   DEFAULT_SALON_SLUG: z.string().default('demo-salon'),
   MESSAGING_PROVIDER: z.enum(['twilio', 'meta']).default('twilio'),
   META_APP_SECRET: z.string().optional(),
@@ -46,7 +52,7 @@ const envSchema = z.object({
   INNGEST_DEV: z.coerce.boolean().optional(),
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  CLAUDE_MODEL: z.string().default('claude-sonnet-4-20250514'),
+  CLAUDE_MODEL: z.string().default('claude-sonnet-4-5'),
   EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
   DASHBOARD_URL: z.string().url().optional(),
@@ -63,6 +69,10 @@ const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>;
 
 export const env: Env = envSchema.parse(process.env);
+
+if (env.NODE_ENV === 'production' && process.env.BOT_DEBUG === 'true') {
+  throw new Error('BOT_DEBUG must not be enabled in production');
+}
 
 export function isTwilioAccountConfigured(): boolean {
   return Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN);

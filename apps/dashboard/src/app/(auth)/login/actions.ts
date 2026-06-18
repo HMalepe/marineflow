@@ -1,9 +1,9 @@
 'use server';
 
 import { setToken } from '@/lib/auth';
-import { API_MISCONFIGURED_MESSAGE, getApiBaseUrl, isApiMisconfiguredForProduction } from '@/lib/api-config';
+import { API_MISCONFIGURED_MESSAGE, getServerApiBaseUrl, isApiMisconfiguredForProduction } from '@/lib/api-config';
 
-const API_URL = getApiBaseUrl();
+const API_URL = getServerApiBaseUrl();
 
 type LoginInput =
   | { method: 'email'; email: string; password: string }

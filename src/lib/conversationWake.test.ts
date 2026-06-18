@@ -1,6 +1,8 @@
+import { ConversationStep } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import {
   isConversationWakeMessage,
+  shouldResetConversationOnWake,
   staffHandoffExpired,
 } from './conversationWake.js';
 
@@ -18,6 +20,20 @@ describe('conversationWake', () => {
       expect(isConversationWakeMessage('1')).toBe(false);
       expect(isConversationWakeMessage('book a haircut tomorrow')).toBe(false);
       expect(isConversationWakeMessage('')).toBe(false);
+    });
+  });
+
+  describe('shouldResetConversationOnWake', () => {
+    it('allows reset from menu and booking steps', () => {
+      expect(shouldResetConversationOnWake(ConversationStep.MENU)).toBe(true);
+      expect(shouldResetConversationOnWake(ConversationStep.PICK_SERVICE)).toBe(true);
+    });
+
+    it('blocks reset during complaint, handoff, and other query', () => {
+      expect(shouldResetConversationOnWake(ConversationStep.COMPLAINT)).toBe(false);
+      expect(shouldResetConversationOnWake(ConversationStep.HANDOFF)).toBe(false);
+      expect(shouldResetConversationOnWake(ConversationStep.OTHER_QUERY)).toBe(false);
+      expect(shouldResetConversationOnWake(ConversationStep.CONFIRM_CANCEL)).toBe(false);
     });
   });
 
