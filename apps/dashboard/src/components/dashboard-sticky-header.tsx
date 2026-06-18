@@ -8,6 +8,7 @@ import {
   isNavItemActive,
   stickyHeaderNavGroups,
 } from '@/lib/dashboard-nav';
+import { useHandoffCount } from '@/components/Sidebar';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -80,6 +81,7 @@ function SectionAnchor({ id, label }: { id: string; label: string }) {
 export function DashboardStickyHeader({ isAdmin, isOwner, handoffCount = 0 }: Props) {
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
+  const liveHandoffCount = useHandoffCount(handoffCount);
   const onSettings = pathname.startsWith('/settings');
   const groups = stickyHeaderNavGroups({ isAdmin, isOwner });
 
@@ -126,7 +128,7 @@ export function DashboardStickyHeader({ isAdmin, isOwner, handoffCount = 0 }: Pr
                   href={item.href}
                   label={item.label}
                   active={isNavItemActive(pathname, item.href)}
-                  badge={item.href === '/conversations' ? handoffCount : undefined}
+                  badge={item.href === '/conversations' ? liveHandoffCount : undefined}
                 />
               ))}
             </div>

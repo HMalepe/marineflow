@@ -376,9 +376,11 @@ model Conversation {
   customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   step            ConversationStep  @default(GREETING)
   context         Json              @default("{}")
-  lastMessageAt   DateTime?
-  endedAt         DateTime?
-  handoffReason   String?
+  lastMessageAt           DateTime?
+  lastCustomerMessageAt   DateTime?
+  resolvedAt              DateTime?
+  endedAt                 DateTime?
+  handoffReason           String?
   messageCount    Int               @default(0)
   updatedAt   DateTime @default(now()) @updatedAt
   createdAt       DateTime          @default(now())

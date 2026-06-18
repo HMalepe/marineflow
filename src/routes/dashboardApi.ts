@@ -4451,12 +4451,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // These routes let staff reply to customers directly, take over a conversation
   // from the bot, or release it back to the bot.
 
-  /** Return the count of conversations currently in HANDOFF step for the current salon. */
+  /** Return conversations in "Needs you" state (HANDOFF, not yet resolved). */
   app.get('/conversations/handoff-count', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const count = await db.conversation.count({
-        where: { salonId: user.salonId, step: 'HANDOFF' },
+        where: { salonId: user.salonId, step: 'HANDOFF', resolvedAt: null },
       });
       return { count };
     });
@@ -4493,7 +4493,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           id: c.id,
           step: c.step,
           lastMessageAt: c.lastMessageAt,
-          isHandoff: c.step === 'HANDOFF' || c.step === 'CLOSED',
+          lastCustomerMessageAt: c.lastCustomerMessageAt,
+          resolvedAt: c.resolvedAt,
+          isHandoff: c.step === 'HANDOFF' && c.resolvedAt == null,
           customer: c.customer,
           lastMessage: c.messages[0] ?? null,
         })),
@@ -4636,6 +4638,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           where: { id: conv.id },
           data: {
             step: ConversationStep.HANDOFF,
+            resolvedAt: null,
             context: { ...existingCtx, handoffByStaff: true } as object,
           },
         });
@@ -4680,6 +4683,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: { id: conv.id },
         data: {
           step: ConversationStep.MENU,
+          resolvedAt: new Date(),
           context: cleanCtx as object,
         },
       });
@@ -4770,6 +4774,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           where: { id: conv.id },
           data: {
             step: ConversationStep.HANDOFF_RATING,
+            resolvedAt: new Date(),
             context: nextCtx as object,
           },
         });

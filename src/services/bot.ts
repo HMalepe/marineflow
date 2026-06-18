@@ -510,6 +510,7 @@ async function saveCtx(
     data: {
       context: next as object,
       ...(step ? { step } : {}),
+      ...(step === ConversationStep.HANDOFF ? { resolvedAt: null } : {}),
     },
   });
 }
@@ -1183,7 +1184,11 @@ async function processInboundWhatsApp(
 
   await getTenantDb().conversation.update({
     where: { id: conv.id },
-    data: { lastMessageAt: new Date(), messageCount: { increment: 1 } },
+    data: {
+      lastMessageAt: new Date(),
+      lastCustomerMessageAt: new Date(),
+      messageCount: { increment: 1 },
+    },
   });
 
   getTenantDb().analyticsEvent.create({

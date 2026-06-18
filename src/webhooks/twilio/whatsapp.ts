@@ -69,6 +69,7 @@ export async function handleTwilioWhatsAppWebhook(
   }
 
   try {
+    // Inbound customer messages update lastCustomerMessageAt in handleInboundWhatsApp (bot.ts).
     await handleInboundWhatsApp({
       from,
       body,

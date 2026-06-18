@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { LogoutButton, LogoutIconButton } from './logout-button';
 import { DashboardSearch } from '@/components/dashboard-search';
+import { useHandoffCount } from '@/components/Sidebar';
 
 // Icons as inline SVG to avoid adding a new dependency
 function HomeIcon({ className }: { className?: string }) {
@@ -117,6 +118,7 @@ const adminTabs = tabsFromNavItems(ADMIN_MOBILE_TAB_ITEMS);
 export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCount = 0 }: NavProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
+  const liveHandoffCount = useHandoffCount(handoffCount);
 
   const tabs = isAdmin ? adminTabs : ownerTabs;
   const moreGroups = useMemo(
@@ -172,7 +174,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t flex items-stretch safe-area-pb">
         {tabs.map((tab) => {
           const active = isActive(tab.href);
-          const showBadge = tab.href === '/conversations' && handoffCount > 0;
+          const showBadge = tab.href === '/conversations' && liveHandoffCount > 0;
           return (
             <Link
               key={tab.href}
@@ -186,7 +188,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
                 <tab.icon className={cn('size-5 transition-transform', active && 'scale-110')} />
                 {showBadge && (
                   <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
-                    {handoffCount > 9 ? '9+' : handoffCount}
+                    {liveHandoffCount > 9 ? '9+' : liveHandoffCount}
                   </span>
                 )}
               </div>
