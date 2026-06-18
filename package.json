@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "prisma generate && tsc",
-    "start": "prisma migrate deploy && node dist/index.js",
+    "start": "sh scripts/migrate-deploy.sh && node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/**/*.ts\"",
