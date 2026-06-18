@@ -335,8 +335,9 @@ export function buildBookingPopiaInteractive(salon: SalonMenuInput): Interactive
 }
 
 export function buildMarketingConsentInteractive(salon: SalonMenuInput): InteractiveButtons {
+  const name = salonDisplayName(salon);
   return quickButtons(
-    'Can we send you occasional promos and offers? (Booking updates are always sent.)',
+    `Welcome to *${name}*! 🎉\n\nWe'd love to treat you to the odd promo, special offer or bit of salon news from time to time. Your booking confirmations and reminders will always come through either way — that's never affected.\n\nCan we send you those occasional perks?`,
     [
       { id: 'accept', title: 'Accept' },
       { id: 'decline', title: 'Decline' },
