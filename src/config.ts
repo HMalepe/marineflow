@@ -70,8 +70,11 @@ export type Env = z.infer<typeof envSchema>;
 
 export const env: Env = envSchema.parse(process.env);
 
+/** BOT_DEBUG is ignored in production (see botDebug.ts); warn instead of crash-looping deploys. */
 if (env.NODE_ENV === 'production' && process.env.BOT_DEBUG === 'true') {
-  throw new Error('BOT_DEBUG must not be enabled in production');
+  console.warn(
+    '[config] BOT_DEBUG=true is set but ignored in production — remove it from Railway env vars.',
+  );
 }
 
 export function isTwilioAccountConfigured(): boolean {
