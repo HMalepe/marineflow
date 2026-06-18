@@ -1,9 +1,18 @@
 import type { Campaign, CampaignStatus } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
-import { inngest } from '../lib/inngest/client.js';
+import { inngest, inngestIsDev } from '../lib/inngest/client.js';
+import { env } from '../config.js';
 import { sendWithFallback } from './channelRouter.js';
 import { logger } from '../lib/logger.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
+
+/** User-facing validation errors from campaign create/update/send. */
+export class CampaignBusinessError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CampaignBusinessError';
+  }
+}
 
 export type AudienceFilterType = 'all' | 'tags' | 'inactive';
 
@@ -163,7 +172,7 @@ export async function createCampaign(params: {
   const db = getTenantDb();
   if (params.scheduledAt) {
     const capError = await assertScheduledCampaignCapacity(params.salonId);
-    if (capError) throw new Error(capError);
+    if (capError) throw new CampaignBusinessError(capError);
   }
   const status: CampaignStatus = params.scheduledAt ? 'SCHEDULED' : 'DRAFT';
 
@@ -211,7 +220,7 @@ export async function updateCampaign(
   if (params.scheduledAt !== undefined) {
     if (params.scheduledAt && existing.status !== 'SCHEDULED') {
       const capError = await assertScheduledCampaignCapacity(existing.salonId, campaignId);
-      if (capError) throw new Error(capError);
+      if (capError) throw new CampaignBusinessError(capError);
     }
     data.scheduledAt = params.scheduledAt;
     data.status = params.scheduledAt ? 'SCHEDULED' : 'DRAFT';
@@ -239,9 +248,25 @@ export async function queueCampaignSend(campaignId: string, salonId: string) {
     throw new Error('campaign_not_sendable');
   }
 
-  await inngest.send({
-    name: 'campaign/scheduled',
-    data: { campaignId, salonId },
+  const canUseInngest = Boolean(env.INNGEST_EVENT_KEY) || inngestIsDev;
+  if (canUseInngest) {
+    try {
+      await inngest.send({
+        name: 'campaign/scheduled',
+        data: { campaignId, salonId },
+      });
+      return { queued: true };
+    } catch (err) {
+      logger.warn({ err, campaignId, salonId }, 'inngest_campaign_send_failed_fallback');
+    }
+  } else {
+    logger.warn({ campaignId, salonId }, 'inngest_not_configured_campaign_inline');
+  }
+
+  setImmediate(() => {
+    void executeCampaign(campaignId).catch((err) => {
+      logger.error({ err, campaignId, salonId }, 'campaign_inline_execute_failed');
+    });
   });
 
   return { queued: true };

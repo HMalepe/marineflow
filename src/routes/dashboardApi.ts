@@ -84,6 +84,7 @@ import { logger } from '../lib/logger.js';
 export type MarketingConsentStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED';
 import {
   cancelCampaign,
+  CampaignBusinessError,
   countAudience,
   countOptedInCustomers,
   createCampaign,
@@ -138,6 +139,14 @@ function serializeFaq(item: {
     approvedAt: item.approvedAt?.toISOString() ?? null,
     approvedBy: item.approvedBy ?? null,
   };
+}
+
+function mapCampaignBusinessError(err: unknown, reply: FastifyReply): { error: string; message: string } | null {
+  if (err instanceof CampaignBusinessError) {
+    reply.code(400);
+    return { error: 'campaign_error', message: err.message };
+  }
+  return null;
 }
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
@@ -4739,6 +4748,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'empty_audience', message: 'No customers match this audience with marketing consent.' };
         }
 
+        try {
         const item = await createCampaign({
           salonId: user.salonId,
           name: name.trim(),
@@ -4765,6 +4775,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         return { campaign: serializeCampaign(item) };
+        } catch (err) {
+          const mapped = mapCampaignBusinessError(err, reply);
+          if (mapped) return mapped;
+          throw err;
+        }
       });
     },
   );
@@ -4892,6 +4907,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             reply.code(409);
             return { error: 'campaign_not_editable', message: 'Only draft or scheduled campaigns can be edited.' };
           }
+          const mapped = mapCampaignBusinessError(err, reply);
+          if (mapped) return mapped;
           throw err;
         }
       });

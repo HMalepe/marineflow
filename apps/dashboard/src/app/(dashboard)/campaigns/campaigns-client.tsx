@@ -117,6 +117,19 @@ function defaultScheduleLocal(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function parseScheduleIso(local: string): string | null {
+  if (!local?.includes('T')) return null;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function formatSaveError(err: unknown): string {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof Error && err.message) return err.message;
+  return 'Something went wrong — please try again';
+}
+
 function audienceFilterFromForm(form: CampaignForm): AudienceFilter {
   if (form.audienceType === 'tags') return { type: 'tags', tags: form.tags };
   if (form.audienceType === 'inactive') {
@@ -670,9 +683,28 @@ export function CampaignsClient({ token }: Props) {
       reportError('Still calculating audience — try again in a moment');
       return false;
     }
+    if (
+      (form.deliveryMode === 'now' || form.deliveryMode === 'schedule') &&
+      audienceCount === null &&
+      !audienceLoading
+    ) {
+      reportError('Could not calculate audience — wait a moment or refresh, then try again');
+      return false;
+    }
     if (audienceCount === 0 && (form.deliveryMode === 'now' || form.deliveryMode === 'schedule')) {
       reportError('No customers match this audience — adjust targeting or save as a draft first');
       return false;
+    }
+    if (form.deliveryMode === 'schedule') {
+      const scheduledIso = parseScheduleIso(form.scheduledAtLocal);
+      if (!scheduledIso) {
+        reportError('Choose a valid date and time for scheduling');
+        return false;
+      }
+      if (new Date(scheduledIso).getTime() <= Date.now() + 60_000) {
+        reportError('Schedule time must be at least 1 minute in the future');
+        return false;
+      }
     }
     clearSaveFeedback();
     return true;
@@ -689,7 +721,7 @@ export function CampaignsClient({ token }: Props) {
     try {
       const audienceFilter = audienceFilterFromForm(form);
       const scheduledAt =
-        form.deliveryMode === 'schedule' ? new Date(form.scheduledAtLocal).toISOString() : null;
+        form.deliveryMode === 'schedule' ? parseScheduleIso(form.scheduledAtLocal) : null;
       const contentPayload = {
         name: form.name.trim(),
         message: form.message.trim(),
@@ -704,7 +736,10 @@ export function CampaignsClient({ token }: Props) {
             `/campaigns/${editingId}`,
             {
               method: 'PATCH',
-              body: JSON.stringify(contentPayload),
+              body: JSON.stringify({
+                ...contentPayload,
+                scheduledAt: null,
+              }),
             },
             token,
           );
@@ -752,7 +787,7 @@ export function CampaignsClient({ token }: Props) {
       closeSheet();
       await loadAll(true);
     } catch (err) {
-      reportError(err instanceof ApiError ? err.message : 'Something went wrong — please try again');
+      reportError(formatSaveError(err));
     } finally {
       setSaving(false);
       setConfirmSendInSheet(false);
