@@ -1,6 +1,6 @@
 -- Week 25: Outbound webhook system (Zapier/Make/n8n integration)
 
-CREATE TABLE "WebhookSubscription" (
+CREATE TABLE IF NOT EXISTS "WebhookSubscription" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "url" TEXT NOT NULL,
@@ -13,18 +13,22 @@ CREATE TABLE "WebhookSubscription" (
   CONSTRAINT "WebhookSubscription_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "WebhookSubscription_salonId_idx" ON "WebhookSubscription"("salonId");
-CREATE INDEX "WebhookSubscription_salonId_active_idx" ON "WebhookSubscription"("salonId", "active");
+CREATE INDEX IF NOT EXISTS "WebhookSubscription_salonId_idx" ON "WebhookSubscription"("salonId");
+CREATE INDEX IF NOT EXISTS "WebhookSubscription_salonId_active_idx" ON "WebhookSubscription"("salonId", "active");
 
-ALTER TABLE "WebhookSubscription"
+DO $$ BEGIN
+    ALTER TABLE "WebhookSubscription"
   ADD CONSTRAINT "WebhookSubscription_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "WebhookSubscription" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY salon_isolation ON "WebhookSubscription"
   USING ("salonId" = current_setting('app.current_tenant', true));
 
-CREATE TABLE "WebhookDelivery" (
+CREATE TABLE IF NOT EXISTS "WebhookDelivery" (
   "id" TEXT NOT NULL,
   "subscriptionId" TEXT NOT NULL,
   "eventType" TEXT NOT NULL,
@@ -38,9 +42,13 @@ CREATE TABLE "WebhookDelivery" (
   CONSTRAINT "WebhookDelivery_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "WebhookDelivery_subscriptionId_createdAt_idx"
+CREATE INDEX IF NOT EXISTS "WebhookDelivery_subscriptionId_createdAt_idx"
   ON "WebhookDelivery"("subscriptionId", "createdAt");
 
-ALTER TABLE "WebhookDelivery"
+DO $$ BEGIN
+    ALTER TABLE "WebhookDelivery"
   ADD CONSTRAINT "WebhookDelivery_subscriptionId_fkey"
   FOREIGN KEY ("subscriptionId") REFERENCES "WebhookSubscription"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;

@@ -1,6 +1,6 @@
 -- Week 28: Waitlist + smart capacity
 
-CREATE TABLE "WaitlistEntry" (
+CREATE TABLE IF NOT EXISTS "WaitlistEntry" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "customerId" TEXT NOT NULL,
@@ -15,16 +15,24 @@ CREATE TABLE "WaitlistEntry" (
   CONSTRAINT "WaitlistEntry_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "WaitlistEntry_salonId_serviceId_idx" ON "WaitlistEntry"("salonId", "serviceId");
-CREATE INDEX "WaitlistEntry_salonId_notified_idx" ON "WaitlistEntry"("salonId", "notified");
+CREATE INDEX IF NOT EXISTS "WaitlistEntry_salonId_serviceId_idx" ON "WaitlistEntry"("salonId", "serviceId");
+CREATE INDEX IF NOT EXISTS "WaitlistEntry_salonId_notified_idx" ON "WaitlistEntry"("salonId", "notified");
 
-ALTER TABLE "WaitlistEntry"
+DO $$ BEGIN
+    ALTER TABLE "WaitlistEntry"
   ADD CONSTRAINT "WaitlistEntry_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE "WaitlistEntry"
+DO $$ BEGIN
+    ALTER TABLE "WaitlistEntry"
   ADD CONSTRAINT "WaitlistEntry_customerId_fkey"
   FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "WaitlistEntry" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY salon_isolation ON "WaitlistEntry"

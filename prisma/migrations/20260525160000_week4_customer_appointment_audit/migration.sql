@@ -13,8 +13,12 @@ ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "preferredStaffId" TEXT;
 ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "lastInteractionAt" TIMESTAMP(3);
 ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3);
 
-ALTER TABLE "Customer" ADD CONSTRAINT "Customer_preferredStaffId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "Customer" ADD CONSTRAINT "Customer_preferredStaffId_fkey"
     FOREIGN KEY ("preferredStaffId") REFERENCES "Staff"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "Customer_salonId_tags_idx" ON "Customer"("salonId", "tags");
 CREATE INDEX IF NOT EXISTS "Customer_salonId_email_idx" ON "Customer"("salonId", "email");
@@ -29,8 +33,12 @@ ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "noShowMarkedAt" TIMESTAMP(3)
 ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "confirmedAt" TIMESTAMP(3);
 ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "reminderSentAt" TIMESTAMP(3);
 
-ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_rescheduledFromId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_rescheduledFromId_fkey"
     FOREIGN KEY ("rescheduledFromId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "Appointment_customerId_start_idx" ON "Appointment"("customerId", "start");
 CREATE INDEX IF NOT EXISTS "Appointment_salonId_status_idx" ON "Appointment"("salonId", "status");
@@ -50,8 +58,12 @@ UPDATE "AuditLog" SET "salonId" = (
 -- Note: We leave this as nullable in migration to avoid blocking on existing data.
 -- The Prisma schema declares it required; new rows will always have it.
 
-ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_salonId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_salonId_fkey"
     FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 DROP INDEX IF EXISTS "AuditLog_createdAt_idx";
 CREATE INDEX IF NOT EXISTS "AuditLog_salonId_createdAt_idx" ON "AuditLog"("salonId", "createdAt");

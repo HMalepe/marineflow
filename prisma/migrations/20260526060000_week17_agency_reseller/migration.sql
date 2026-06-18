@@ -3,7 +3,7 @@
 CREATE TYPE "AgencyUserRole" AS ENUM ('OWNER', 'MANAGER', 'VIEWER');
 
 -- Agency table (platform-level, no RLS)
-CREATE TABLE "Agency" (
+CREATE TABLE IF NOT EXISTS "Agency" (
   "id" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "slug" TEXT NOT NULL,
@@ -17,11 +17,11 @@ CREATE TABLE "Agency" (
   CONSTRAINT "Agency_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "Agency_slug_key" ON "Agency"("slug");
-CREATE UNIQUE INDEX "Agency_domain_key" ON "Agency"("domain");
+CREATE UNIQUE INDEX IF NOT EXISTS "Agency_slug_key" ON "Agency"("slug");
+CREATE UNIQUE INDEX IF NOT EXISTS "Agency_domain_key" ON "Agency"("domain");
 
 -- Agency users (platform-level, no RLS)
-CREATE TABLE "AgencyUser" (
+CREATE TABLE IF NOT EXISTS "AgencyUser" (
   "id" TEXT NOT NULL,
   "agencyId" TEXT NOT NULL,
   "email" TEXT NOT NULL,
@@ -35,18 +35,26 @@ CREATE TABLE "AgencyUser" (
   CONSTRAINT "AgencyUser_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "AgencyUser_email_key" ON "AgencyUser"("email");
-CREATE INDEX "AgencyUser_agencyId_idx" ON "AgencyUser"("agencyId");
+CREATE UNIQUE INDEX IF NOT EXISTS "AgencyUser_email_key" ON "AgencyUser"("email");
+CREATE INDEX IF NOT EXISTS "AgencyUser_agencyId_idx" ON "AgencyUser"("agencyId");
 
-ALTER TABLE "AgencyUser"
+DO $$ BEGIN
+    ALTER TABLE "AgencyUser"
   ADD CONSTRAINT "AgencyUser_agencyId_fkey"
   FOREIGN KEY ("agencyId") REFERENCES "Agency"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Add agencyId to Salon
-ALTER TABLE "Salon" ADD COLUMN "agencyId" TEXT;
+ALTER TABLE "Salon" ADD COLUMN IF NOT EXISTS "agencyId" TEXT;
 
-ALTER TABLE "Salon"
+DO $$ BEGIN
+    ALTER TABLE "Salon"
   ADD CONSTRAINT "Salon_agencyId_fkey"
   FOREIGN KEY ("agencyId") REFERENCES "Agency"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE INDEX "Salon_agencyId_idx" ON "Salon"("agencyId");
+CREATE INDEX IF NOT EXISTS "Salon_agencyId_idx" ON "Salon"("agencyId");

@@ -19,4 +19,4 @@ CREATE TYPE "CancellationReason" AS ENUM (
 -- First drop the existing text column if it has data and recreate as enum
 -- Since this is a new field from Week 4 (no production data), safe to alter directly
 ALTER TABLE "Appointment" DROP COLUMN IF EXISTS "cancellationReason";
-ALTER TABLE "Appointment" ADD COLUMN "cancellationReason" "CancellationReason";
+ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "cancellationReason" "CancellationReason";

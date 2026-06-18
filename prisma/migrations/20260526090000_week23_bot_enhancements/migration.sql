@@ -17,12 +17,16 @@ CREATE TABLE IF NOT EXISTS "AnalyticsEvent" (
   CONSTRAINT "AnalyticsEvent_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "AnalyticsEvent_salonId_type_idx" ON "AnalyticsEvent"("salonId", "type");
-CREATE INDEX "AnalyticsEvent_createdAt_idx" ON "AnalyticsEvent"("createdAt");
+CREATE INDEX IF NOT EXISTS "AnalyticsEvent_salonId_type_idx" ON "AnalyticsEvent"("salonId", "type");
+CREATE INDEX IF NOT EXISTS "AnalyticsEvent_createdAt_idx" ON "AnalyticsEvent"("createdAt");
 
-ALTER TABLE "AnalyticsEvent"
+DO $$ BEGIN
+    ALTER TABLE "AnalyticsEvent"
   ADD CONSTRAINT "AnalyticsEvent_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS
 ALTER TABLE "AnalyticsEvent" ENABLE ROW LEVEL SECURITY;

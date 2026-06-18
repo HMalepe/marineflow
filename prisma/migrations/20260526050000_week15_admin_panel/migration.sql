@@ -1,6 +1,6 @@
 -- Week 15: Admin panel - platform-level admin users
 
-CREATE TABLE "AdminUser" (
+CREATE TABLE IF NOT EXISTS "AdminUser" (
   "id" TEXT NOT NULL,
   "email" TEXT NOT NULL,
   "passwordHash" TEXT NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE "AdminUser" (
   CONSTRAINT "AdminUser_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "AdminUser_email_key" ON "AdminUser"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "AdminUser_email_key" ON "AdminUser"("email");
 
 -- No RLS on AdminUser — it's a platform table, not tenant-scoped.
 -- Access is guarded at the application layer via admin JWT.

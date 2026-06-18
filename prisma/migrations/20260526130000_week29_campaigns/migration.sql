@@ -2,7 +2,7 @@
 
 CREATE TYPE "CampaignStatus" AS ENUM ('DRAFT', 'SCHEDULED', 'SENDING', 'COMPLETED', 'CANCELLED');
 
-CREATE TABLE "Campaign" (
+CREATE TABLE IF NOT EXISTS "Campaign" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "name" TEXT NOT NULL,
@@ -21,11 +21,15 @@ CREATE TABLE "Campaign" (
   CONSTRAINT "Campaign_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "Campaign_salonId_status_idx" ON "Campaign"("salonId", "status");
+CREATE INDEX IF NOT EXISTS "Campaign_salonId_status_idx" ON "Campaign"("salonId", "status");
 
-ALTER TABLE "Campaign"
+DO $$ BEGIN
+    ALTER TABLE "Campaign"
   ADD CONSTRAINT "Campaign_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "Campaign" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY salon_isolation ON "Campaign"

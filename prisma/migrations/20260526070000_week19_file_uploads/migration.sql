@@ -1,6 +1,6 @@
 -- Week 19: File uploads (S3-compatible storage)
 
-CREATE TABLE "UploadedFile" (
+CREATE TABLE IF NOT EXISTS "UploadedFile" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "key" TEXT NOT NULL,
@@ -14,13 +14,17 @@ CREATE TABLE "UploadedFile" (
   CONSTRAINT "UploadedFile_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "UploadedFile_key_key" ON "UploadedFile"("key");
-CREATE INDEX "UploadedFile_salonId_idx" ON "UploadedFile"("salonId");
-CREATE INDEX "UploadedFile_salonId_purpose_idx" ON "UploadedFile"("salonId", "purpose");
+CREATE UNIQUE INDEX IF NOT EXISTS "UploadedFile_key_key" ON "UploadedFile"("key");
+CREATE INDEX IF NOT EXISTS "UploadedFile_salonId_idx" ON "UploadedFile"("salonId");
+CREATE INDEX IF NOT EXISTS "UploadedFile_salonId_purpose_idx" ON "UploadedFile"("salonId", "purpose");
 
-ALTER TABLE "UploadedFile"
+DO $$ BEGIN
+    ALTER TABLE "UploadedFile"
   ADD CONSTRAINT "UploadedFile_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS
 ALTER TABLE "UploadedFile" ENABLE ROW LEVEL SECURITY;

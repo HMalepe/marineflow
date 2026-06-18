@@ -1,2 +1,2 @@
 -- CreateIndex
-CREATE UNIQUE INDEX "ReviewIncentiveClaim_appointmentId_key" ON "ReviewIncentiveClaim"("appointmentId");
+CREATE UNIQUE INDEX IF NOT EXISTS "ReviewIncentiveClaim_appointmentId_key" ON "ReviewIncentiveClaim"("appointmentId");

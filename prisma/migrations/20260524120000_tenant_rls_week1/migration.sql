@@ -48,7 +48,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS "WebhookEvent_provider_providerEventId_key" ON
 CREATE INDEX IF NOT EXISTS "WebhookEvent_salonId_createdAt_idx" ON "WebhookEvent"("salonId", "createdAt");
 
 ALTER TABLE "WebhookEvent" DROP CONSTRAINT IF EXISTS "WebhookEvent_salonId_fkey";
-ALTER TABLE "WebhookEvent" ADD CONSTRAINT "WebhookEvent_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "WebhookEvent" ADD CONSTRAINT "WebhookEvent_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- =============================================================================
 -- Row-Level Security: tenant isolation via app.current_tenant (= Salon.id)

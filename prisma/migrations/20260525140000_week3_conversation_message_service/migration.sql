@@ -43,8 +43,12 @@ CREATE TABLE IF NOT EXISTS "ServiceCategory" (
 CREATE UNIQUE INDEX IF NOT EXISTS "ServiceCategory_salonId_slug_key" ON "ServiceCategory"("salonId", "slug");
 CREATE INDEX IF NOT EXISTS "ServiceCategory_salonId_idx" ON "ServiceCategory"("salonId");
 
-ALTER TABLE "ServiceCategory" ADD CONSTRAINT "ServiceCategory_salonId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "ServiceCategory" ADD CONSTRAINT "ServiceCategory_salonId_fkey"
     FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Service table extensions
 ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "aliases" TEXT[] DEFAULT '{}';
@@ -56,8 +60,12 @@ CREATE INDEX IF NOT EXISTS "Service_categoryId_idx" ON "Service"("categoryId");
 -- Migrate existing category strings to categoryId (run after ServiceCategory data is populated)
 -- This is a data migration step that should be run manually or via seed if needed.
 
-ALTER TABLE "Service" ADD CONSTRAINT "Service_categoryId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "Service" ADD CONSTRAINT "Service_categoryId_fkey"
     FOREIGN KEY ("categoryId") REFERENCES "ServiceCategory"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Drop old category string column (after data migration)
 ALTER TABLE "Service" DROP COLUMN IF EXISTS "category";

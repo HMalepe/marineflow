@@ -1,6 +1,6 @@
 -- Week 30: Referral codes + loyalty tiers
 
-CREATE TABLE "ReferralCode" (
+CREATE TABLE IF NOT EXISTS "ReferralCode" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "customerId" TEXT NOT NULL,
@@ -13,22 +13,30 @@ CREATE TABLE "ReferralCode" (
   CONSTRAINT "ReferralCode_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "ReferralCode_code_key" ON "ReferralCode"("code");
-CREATE INDEX "ReferralCode_salonId_idx" ON "ReferralCode"("salonId");
+CREATE UNIQUE INDEX IF NOT EXISTS "ReferralCode_code_key" ON "ReferralCode"("code");
+CREATE INDEX IF NOT EXISTS "ReferralCode_salonId_idx" ON "ReferralCode"("salonId");
 
-ALTER TABLE "ReferralCode"
+DO $$ BEGIN
+    ALTER TABLE "ReferralCode"
   ADD CONSTRAINT "ReferralCode_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE "ReferralCode"
+DO $$ BEGIN
+    ALTER TABLE "ReferralCode"
   ADD CONSTRAINT "ReferralCode_customerId_fkey"
   FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "ReferralCode" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY salon_isolation ON "ReferralCode"
   USING ("salonId" = current_setting('app.current_tenant', true));
 
-CREATE TABLE "ReferralRedemption" (
+CREATE TABLE IF NOT EXISTS "ReferralRedemption" (
   "id" TEXT NOT NULL,
   "referralCodeId" TEXT NOT NULL,
   "referredCustomerId" TEXT NOT NULL,
@@ -36,14 +44,18 @@ CREATE TABLE "ReferralRedemption" (
   CONSTRAINT "ReferralRedemption_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "ReferralRedemption_code_customer_key"
+CREATE UNIQUE INDEX IF NOT EXISTS "ReferralRedemption_code_customer_key"
   ON "ReferralRedemption"("referralCodeId", "referredCustomerId");
 
-ALTER TABLE "ReferralRedemption"
+DO $$ BEGIN
+    ALTER TABLE "ReferralRedemption"
   ADD CONSTRAINT "ReferralRedemption_referralCodeId_fkey"
   FOREIGN KEY ("referralCodeId") REFERENCES "ReferralCode"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE "LoyaltyTier" (
+CREATE TABLE IF NOT EXISTS "LoyaltyTier" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "name" TEXT NOT NULL,
@@ -55,12 +67,16 @@ CREATE TABLE "LoyaltyTier" (
   CONSTRAINT "LoyaltyTier_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "LoyaltyTier_salonId_idx" ON "LoyaltyTier"("salonId");
-CREATE UNIQUE INDEX "LoyaltyTier_salonId_name_key" ON "LoyaltyTier"("salonId", "name");
+CREATE INDEX IF NOT EXISTS "LoyaltyTier_salonId_idx" ON "LoyaltyTier"("salonId");
+CREATE UNIQUE INDEX IF NOT EXISTS "LoyaltyTier_salonId_name_key" ON "LoyaltyTier"("salonId", "name");
 
-ALTER TABLE "LoyaltyTier"
+DO $$ BEGIN
+    ALTER TABLE "LoyaltyTier"
   ADD CONSTRAINT "LoyaltyTier_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 ALTER TABLE "LoyaltyTier" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY salon_isolation ON "LoyaltyTier"

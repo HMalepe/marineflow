@@ -41,10 +41,18 @@ CREATE TABLE IF NOT EXISTS "WorkingHour" (
 CREATE INDEX IF NOT EXISTS "WorkingHour_staffId_weekday_idx" ON "WorkingHour"("staffId", "weekday");
 CREATE INDEX IF NOT EXISTS "WorkingHour_salonId_idx" ON "WorkingHour"("salonId");
 
-ALTER TABLE "WorkingHour" ADD CONSTRAINT "WorkingHour_salonId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "WorkingHour" ADD CONSTRAINT "WorkingHour_salonId_fkey"
     FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "WorkingHour" ADD CONSTRAINT "WorkingHour_staffId_fkey"
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE "WorkingHour" ADD CONSTRAINT "WorkingHour_staffId_fkey"
     FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AvailabilityException table (overrides to recurring schedule)
 CREATE TABLE IF NOT EXISTS "AvailabilityException" (
@@ -62,10 +70,18 @@ CREATE TABLE IF NOT EXISTS "AvailabilityException" (
 CREATE INDEX IF NOT EXISTS "AvailabilityException_salonId_idx" ON "AvailabilityException"("salonId");
 CREATE INDEX IF NOT EXISTS "AvailabilityException_staffId_idx" ON "AvailabilityException"("staffId");
 
-ALTER TABLE "AvailabilityException" ADD CONSTRAINT "AvailabilityException_salonId_fkey"
+DO $$ BEGIN
+    ALTER TABLE "AvailabilityException" ADD CONSTRAINT "AvailabilityException_salonId_fkey"
     FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "AvailabilityException" ADD CONSTRAINT "AvailabilityException_staffId_fkey"
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE "AvailabilityException" ADD CONSTRAINT "AvailabilityException_staffId_fkey"
     FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS policies for new tables
 ALTER TABLE "WorkingHour" ENABLE ROW LEVEL SECURITY;

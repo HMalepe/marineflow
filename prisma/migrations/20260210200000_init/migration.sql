@@ -17,7 +17,7 @@ CREATE TYPE "TicketStatus" AS ENUM ('OPEN', 'WAITING_CUSTOMER', 'RESOLVED');
 CREATE TYPE "ConversationStep" AS ENUM ('GREETING', 'MENU', 'PICK_SERVICE', 'PICK_STAFF', 'PICK_DATE', 'PICK_SLOT', 'CONFIRM_BOOKING', 'MANAGE_BOOKING', 'COMPLAINT', 'FAQ', 'LOYALTY', 'IDLE');
 
 -- CreateTable
-CREATE TABLE "Salon" (
+CREATE TABLE IF NOT EXISTS "Salon" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE "Salon" (
 );
 
 -- CreateTable
-CREATE TABLE "Customer" (
+CREATE TABLE IF NOT EXISTS "Customer" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "waId" TEXT NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE "Customer" (
 );
 
 -- CreateTable
-CREATE TABLE "Conversation" (
+CREATE TABLE IF NOT EXISTS "Conversation" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -60,7 +60,7 @@ CREATE TABLE "Conversation" (
 );
 
 -- CreateTable
-CREATE TABLE "Message" (
+CREATE TABLE IF NOT EXISTS "Message" (
     "id" TEXT NOT NULL,
     "conversationId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE "Message" (
 );
 
 -- CreateTable
-CREATE TABLE "Service" (
+CREATE TABLE IF NOT EXISTS "Service" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE "Service" (
 );
 
 -- CreateTable
-CREATE TABLE "Staff" (
+CREATE TABLE IF NOT EXISTS "Staff" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -103,7 +103,7 @@ CREATE TABLE "Staff" (
 );
 
 -- CreateTable
-CREATE TABLE "StaffService" (
+CREATE TABLE IF NOT EXISTS "StaffService" (
     "staffId" TEXT NOT NULL,
     "serviceId" TEXT NOT NULL,
 
@@ -111,7 +111,7 @@ CREATE TABLE "StaffService" (
 );
 
 -- CreateTable
-CREATE TABLE "BusinessHour" (
+CREATE TABLE IF NOT EXISTS "BusinessHour" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "dayOfWeek" INTEGER NOT NULL,
@@ -122,7 +122,7 @@ CREATE TABLE "BusinessHour" (
 );
 
 -- CreateTable
-CREATE TABLE "TimeOff" (
+CREATE TABLE IF NOT EXISTS "TimeOff" (
     "id" TEXT NOT NULL,
     "staffId" TEXT NOT NULL,
     "start" TIMESTAMP(3) NOT NULL,
@@ -133,7 +133,7 @@ CREATE TABLE "TimeOff" (
 );
 
 -- CreateTable
-CREATE TABLE "Appointment" (
+CREATE TABLE IF NOT EXISTS "Appointment" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -152,7 +152,7 @@ CREATE TABLE "Appointment" (
 );
 
 -- CreateTable
-CREATE TABLE "Invoice" (
+CREATE TABLE IF NOT EXISTS "Invoice" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "appointmentId" TEXT,
@@ -167,7 +167,7 @@ CREATE TABLE "Invoice" (
 );
 
 -- CreateTable
-CREATE TABLE "Payment" (
+CREATE TABLE IF NOT EXISTS "Payment" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "appointmentId" TEXT,
@@ -187,7 +187,7 @@ CREATE TABLE "Payment" (
 );
 
 -- CreateTable
-CREATE TABLE "LoyaltyProgram" (
+CREATE TABLE IF NOT EXISTS "LoyaltyProgram" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "stampsPerReward" INTEGER NOT NULL DEFAULT 10,
@@ -198,7 +198,7 @@ CREATE TABLE "LoyaltyProgram" (
 );
 
 -- CreateTable
-CREATE TABLE "LoyaltyLedger" (
+CREATE TABLE IF NOT EXISTS "LoyaltyLedger" (
     "id" TEXT NOT NULL,
     "programId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -212,7 +212,7 @@ CREATE TABLE "LoyaltyLedger" (
 );
 
 -- CreateTable
-CREATE TABLE "Ticket" (
+CREATE TABLE IF NOT EXISTS "Ticket" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -226,7 +226,7 @@ CREATE TABLE "Ticket" (
 );
 
 -- CreateTable
-CREATE TABLE "TicketMessage" (
+CREATE TABLE IF NOT EXISTS "TicketMessage" (
     "id" TEXT NOT NULL,
     "ticketId" TEXT NOT NULL,
     "direction" TEXT NOT NULL,
@@ -237,7 +237,7 @@ CREATE TABLE "TicketMessage" (
 );
 
 -- CreateTable
-CREATE TABLE "FaqItem" (
+CREATE TABLE IF NOT EXISTS "FaqItem" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "question" TEXT NOT NULL,
@@ -249,7 +249,7 @@ CREATE TABLE "FaqItem" (
 );
 
 -- CreateTable
-CREATE TABLE "StaffUser" (
+CREATE TABLE IF NOT EXISTS "StaffUser" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -264,7 +264,7 @@ CREATE TABLE "StaffUser" (
 );
 
 -- CreateTable
-CREATE TABLE "AuditLog" (
+CREATE TABLE IF NOT EXISTS "AuditLog" (
     "id" TEXT NOT NULL,
     "actorUserId" TEXT,
     "action" TEXT NOT NULL,
@@ -277,7 +277,7 @@ CREATE TABLE "AuditLog" (
 );
 
 -- CreateTable
-CREATE TABLE "AnalyticsEvent" (
+CREATE TABLE IF NOT EXISTS "AnalyticsEvent" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "customerId" TEXT,
@@ -291,161 +291,297 @@ CREATE TABLE "AnalyticsEvent" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Salon_slug_key" ON "Salon"("slug");
+CREATE UNIQUE INDEX IF NOT EXISTS "Salon_slug_key" ON "Salon"("slug");
 
 -- CreateIndex
-CREATE INDEX "Customer_salonId_idx" ON "Customer"("salonId");
+CREATE INDEX IF NOT EXISTS "Customer_salonId_idx" ON "Customer"("salonId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Customer_salonId_waId_key" ON "Customer"("salonId", "waId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Customer_salonId_waId_key" ON "Customer"("salonId", "waId");
 
 -- CreateIndex
-CREATE INDEX "Conversation_customerId_idx" ON "Conversation"("customerId");
+CREATE INDEX IF NOT EXISTS "Conversation_customerId_idx" ON "Conversation"("customerId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Conversation_salonId_customerId_key" ON "Conversation"("salonId", "customerId");
+CREATE UNIQUE INDEX IF NOT EXISTS "Conversation_salonId_customerId_key" ON "Conversation"("salonId", "customerId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Message_providerSid_key" ON "Message"("providerSid");
+CREATE UNIQUE INDEX IF NOT EXISTS "Message_providerSid_key" ON "Message"("providerSid");
 
 -- CreateIndex
-CREATE INDEX "Message_conversationId_idx" ON "Message"("conversationId");
+CREATE INDEX IF NOT EXISTS "Message_conversationId_idx" ON "Message"("conversationId");
 
 -- CreateIndex
-CREATE INDEX "Service_salonId_idx" ON "Service"("salonId");
+CREATE INDEX IF NOT EXISTS "Service_salonId_idx" ON "Service"("salonId");
 
 -- CreateIndex
-CREATE INDEX "Staff_salonId_idx" ON "Staff"("salonId");
+CREATE INDEX IF NOT EXISTS "Staff_salonId_idx" ON "Staff"("salonId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "BusinessHour_salonId_dayOfWeek_key" ON "BusinessHour"("salonId", "dayOfWeek");
+CREATE UNIQUE INDEX IF NOT EXISTS "BusinessHour_salonId_dayOfWeek_key" ON "BusinessHour"("salonId", "dayOfWeek");
 
 -- CreateIndex
-CREATE INDEX "Appointment_salonId_start_idx" ON "Appointment"("salonId", "start");
+CREATE INDEX IF NOT EXISTS "Appointment_salonId_start_idx" ON "Appointment"("salonId", "start");
 
 -- CreateIndex
-CREATE INDEX "Appointment_staffId_start_idx" ON "Appointment"("staffId", "start");
+CREATE INDEX IF NOT EXISTS "Appointment_staffId_start_idx" ON "Appointment"("staffId", "start");
 
 -- CreateIndex
-CREATE INDEX "Payment_salonId_createdAt_idx" ON "Payment"("salonId", "createdAt");
+CREATE INDEX IF NOT EXISTS "Payment_salonId_createdAt_idx" ON "Payment"("salonId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "Payment_stripePaymentIntentId_idx" ON "Payment"("stripePaymentIntentId");
+CREATE INDEX IF NOT EXISTS "Payment_stripePaymentIntentId_idx" ON "Payment"("stripePaymentIntentId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "LoyaltyProgram_salonId_key" ON "LoyaltyProgram"("salonId");
+CREATE UNIQUE INDEX IF NOT EXISTS "LoyaltyProgram_salonId_key" ON "LoyaltyProgram"("salonId");
 
 -- CreateIndex
-CREATE INDEX "LoyaltyLedger_customerId_createdAt_idx" ON "LoyaltyLedger"("customerId", "createdAt");
+CREATE INDEX IF NOT EXISTS "LoyaltyLedger_customerId_createdAt_idx" ON "LoyaltyLedger"("customerId", "createdAt");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "StaffUser_email_key" ON "StaffUser"("email");
+CREATE UNIQUE INDEX IF NOT EXISTS "StaffUser_email_key" ON "StaffUser"("email");
 
 -- CreateIndex
-CREATE INDEX "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
+CREATE INDEX IF NOT EXISTS "AuditLog_createdAt_idx" ON "AuditLog"("createdAt");
 
 -- CreateIndex
-CREATE INDEX "AnalyticsEvent_salonId_type_createdAt_idx" ON "AnalyticsEvent"("salonId", "type", "createdAt");
+CREATE INDEX IF NOT EXISTS "AnalyticsEvent_salonId_type_createdAt_idx" ON "AnalyticsEvent"("salonId", "type", "createdAt");
 
 -- AddForeignKey
-ALTER TABLE "Customer" ADD CONSTRAINT "Customer_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Customer" ADD CONSTRAINT "Customer_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Message" ADD CONSTRAINT "Message_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Service" ADD CONSTRAINT "Service_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Service" ADD CONSTRAINT "Service_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Staff" ADD CONSTRAINT "Staff_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Staff" ADD CONSTRAINT "Staff_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "StaffService" ADD CONSTRAINT "StaffService_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "StaffService" ADD CONSTRAINT "StaffService_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "StaffService" ADD CONSTRAINT "StaffService_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "Service"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "StaffService" ADD CONSTRAINT "StaffService_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "Service"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "BusinessHour" ADD CONSTRAINT "BusinessHour_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "BusinessHour" ADD CONSTRAINT "BusinessHour_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "TimeOff" ADD CONSTRAINT "TimeOff_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "TimeOff" ADD CONSTRAINT "TimeOff_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "Service"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_serviceId_fkey" FOREIGN KEY ("serviceId") REFERENCES "Service"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Appointment" ADD CONSTRAINT "Appointment_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Invoice" ADD CONSTRAINT "Invoice_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Payment" ADD CONSTRAINT "Payment_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Payment" ADD CONSTRAINT "Payment_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Payment" ADD CONSTRAINT "Payment_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Payment" ADD CONSTRAINT "Payment_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Payment" ADD CONSTRAINT "Payment_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Payment" ADD CONSTRAINT "Payment_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Payment" ADD CONSTRAINT "Payment_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Payment" ADD CONSTRAINT "Payment_invoiceId_fkey" FOREIGN KEY ("invoiceId") REFERENCES "Invoice"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "LoyaltyProgram" ADD CONSTRAINT "LoyaltyProgram_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "LoyaltyProgram" ADD CONSTRAINT "LoyaltyProgram_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "LoyaltyLedger" ADD CONSTRAINT "LoyaltyLedger_programId_fkey" FOREIGN KEY ("programId") REFERENCES "LoyaltyProgram"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "LoyaltyLedger" ADD CONSTRAINT "LoyaltyLedger_programId_fkey" FOREIGN KEY ("programId") REFERENCES "LoyaltyProgram"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "LoyaltyLedger" ADD CONSTRAINT "LoyaltyLedger_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "LoyaltyLedger" ADD CONSTRAINT "LoyaltyLedger_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Ticket" ADD CONSTRAINT "Ticket_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Ticket" ADD CONSTRAINT "Ticket_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "Ticket" ADD CONSTRAINT "Ticket_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "Ticket" ADD CONSTRAINT "Ticket_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "TicketMessage" ADD CONSTRAINT "TicketMessage_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "Ticket"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "TicketMessage" ADD CONSTRAINT "TicketMessage_ticketId_fkey" FOREIGN KEY ("ticketId") REFERENCES "Ticket"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "FaqItem" ADD CONSTRAINT "FaqItem_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "FaqItem" ADD CONSTRAINT "FaqItem_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "StaffUser" ADD CONSTRAINT "StaffUser_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "StaffUser" ADD CONSTRAINT "StaffUser_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "StaffUser" ADD CONSTRAINT "StaffUser_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "StaffUser" ADD CONSTRAINT "StaffUser_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "StaffUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_actorUserId_fkey" FOREIGN KEY ("actorUserId") REFERENCES "StaffUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AnalyticsEvent" ADD CONSTRAINT "AnalyticsEvent_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "AnalyticsEvent" ADD CONSTRAINT "AnalyticsEvent_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AnalyticsEvent" ADD CONSTRAINT "AnalyticsEvent_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "AnalyticsEvent" ADD CONSTRAINT "AnalyticsEvent_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "AnalyticsEvent" ADD CONSTRAINT "AnalyticsEvent_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "AnalyticsEvent" ADD CONSTRAINT "AnalyticsEvent_staffId_fkey" FOREIGN KEY ("staffId") REFERENCES "Staff"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 

@@ -4,7 +4,7 @@
 CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'PAST_DUE', 'CANCELLED', 'PAUSED', 'TRIAL');
 
 -- Plans table (platform-level, no RLS)
-CREATE TABLE "SubscriptionPlan" (
+CREATE TABLE IF NOT EXISTS "SubscriptionPlan" (
   "id" TEXT NOT NULL,
   "name" TEXT NOT NULL,
   "tier" TEXT NOT NULL,
@@ -22,10 +22,10 @@ CREATE TABLE "SubscriptionPlan" (
   CONSTRAINT "SubscriptionPlan_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "SubscriptionPlan_tier_key" ON "SubscriptionPlan"("tier");
+CREATE UNIQUE INDEX IF NOT EXISTS "SubscriptionPlan_tier_key" ON "SubscriptionPlan"("tier");
 
 -- Salon subscription (tenant-scoped)
-CREATE TABLE "SalonSubscription" (
+CREATE TABLE IF NOT EXISTS "SalonSubscription" (
   "id" TEXT NOT NULL,
   "salonId" TEXT NOT NULL,
   "planId" TEXT NOT NULL,
@@ -42,19 +42,27 @@ CREATE TABLE "SalonSubscription" (
   CONSTRAINT "SalonSubscription_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "SalonSubscription_salonId_key" ON "SalonSubscription"("salonId");
-CREATE UNIQUE INDEX "SalonSubscription_payfastSubscriptionId_key" ON "SalonSubscription"("payfastSubscriptionId");
-CREATE INDEX "SalonSubscription_salonId_idx" ON "SalonSubscription"("salonId");
-CREATE INDEX "SalonSubscription_status_idx" ON "SalonSubscription"("status");
+CREATE UNIQUE INDEX IF NOT EXISTS "SalonSubscription_salonId_key" ON "SalonSubscription"("salonId");
+CREATE UNIQUE INDEX IF NOT EXISTS "SalonSubscription_payfastSubscriptionId_key" ON "SalonSubscription"("payfastSubscriptionId");
+CREATE INDEX IF NOT EXISTS "SalonSubscription_salonId_idx" ON "SalonSubscription"("salonId");
+CREATE INDEX IF NOT EXISTS "SalonSubscription_status_idx" ON "SalonSubscription"("status");
 
 -- Foreign keys
-ALTER TABLE "SalonSubscription"
+DO $$ BEGIN
+    ALTER TABLE "SalonSubscription"
   ADD CONSTRAINT "SalonSubscription_salonId_fkey"
   FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE "SalonSubscription"
+DO $$ BEGIN
+    ALTER TABLE "SalonSubscription"
   ADD CONSTRAINT "SalonSubscription_planId_fkey"
   FOREIGN KEY ("planId") REFERENCES "SubscriptionPlan"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- RLS for SalonSubscription
 ALTER TABLE "SalonSubscription" ENABLE ROW LEVEL SECURITY;

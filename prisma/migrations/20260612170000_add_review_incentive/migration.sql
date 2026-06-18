@@ -1,8 +1,8 @@
 -- AlterTable
-ALTER TABLE "Customer" ADD COLUMN "reviewCreditCents" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Customer" ADD COLUMN IF NOT EXISTS "reviewCreditCents" INTEGER NOT NULL DEFAULT 0;
 
 -- CreateTable
-CREATE TABLE "ReviewIncentiveClaim" (
+CREATE TABLE IF NOT EXISTS "ReviewIncentiveClaim" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -17,22 +17,34 @@ CREATE TABLE "ReviewIncentiveClaim" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ReviewIncentiveClaim_token_key" ON "ReviewIncentiveClaim"("token");
+CREATE UNIQUE INDEX IF NOT EXISTS "ReviewIncentiveClaim_token_key" ON "ReviewIncentiveClaim"("token");
 
 -- CreateIndex
-CREATE INDEX "ReviewIncentiveClaim_salonId_idx" ON "ReviewIncentiveClaim"("salonId");
+CREATE INDEX IF NOT EXISTS "ReviewIncentiveClaim_salonId_idx" ON "ReviewIncentiveClaim"("salonId");
 
 -- CreateIndex
-CREATE INDEX "ReviewIncentiveClaim_customerId_idx" ON "ReviewIncentiveClaim"("customerId");
+CREATE INDEX IF NOT EXISTS "ReviewIncentiveClaim_customerId_idx" ON "ReviewIncentiveClaim"("customerId");
 
 -- CreateIndex
-CREATE INDEX "ReviewIncentiveClaim_appointmentId_idx" ON "ReviewIncentiveClaim"("appointmentId");
+CREATE INDEX IF NOT EXISTS "ReviewIncentiveClaim_appointmentId_idx" ON "ReviewIncentiveClaim"("appointmentId");
 
 -- AddForeignKey
-ALTER TABLE "ReviewIncentiveClaim" ADD CONSTRAINT "ReviewIncentiveClaim_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "ReviewIncentiveClaim" ADD CONSTRAINT "ReviewIncentiveClaim_salonId_fkey" FOREIGN KEY ("salonId") REFERENCES "Salon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "ReviewIncentiveClaim" ADD CONSTRAINT "ReviewIncentiveClaim_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "ReviewIncentiveClaim" ADD CONSTRAINT "ReviewIncentiveClaim_customerId_fkey" FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "ReviewIncentiveClaim" ADD CONSTRAINT "ReviewIncentiveClaim_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "ReviewIncentiveClaim" ADD CONSTRAINT "ReviewIncentiveClaim_appointmentId_fkey" FOREIGN KEY ("appointmentId") REFERENCES "Appointment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
