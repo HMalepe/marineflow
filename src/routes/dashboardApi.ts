@@ -10,6 +10,7 @@ import { fuzzySearchCustomers } from '../services/customerSearch.js';
 import { sendWithFallback } from '../services/channelRouter.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import { emitMessageReceived } from '../lib/eventBus.js';
+import { searchDashboard } from '../lib/dashboardSearch.js';
 import {
   getPlans,
   getSalonSubscription,
@@ -275,6 +276,23 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.post<{ Body: { query?: string } }>(
+    '/search/dashboard',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const query = (request.body?.query ?? '').trim();
+        if (query.length > 120) {
+          reply.code(400);
+          return { error: 'query_too_long', message: 'Search query is too long.' };
+        }
+        const isAdmin = user.role === 'SUPER_ADMIN';
+        const isOwner = user.role === 'OWNER' || isAdmin;
+        return searchDashboard({ query, isAdmin, isOwner });
+      });
+    },
+  );
+
   app.get('/settings', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
@@ -479,7 +497,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           }
         }
 
-        if (request.body.botName !== undefined) {
+        const body = request.body as { botName?: string };
+        if (body.botName !== undefined) {
           reply.code(403);
           return {
             error: 'bot_name_readonly',

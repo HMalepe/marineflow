@@ -1,0 +1,230 @@
+[
+  {
+    "id": "overview",
+    "label": "Overview",
+    "href": "/",
+    "group": "Daily operations",
+    "description": "Dashboard home — today's snapshot and quick links",
+    "keywords": ["home", "dashboard", "summary", "today"],
+    "aliases": ["main", "start"]
+  },
+  {
+    "id": "appointments",
+    "label": "Appointments",
+    "href": "/appointments",
+    "group": "Daily operations",
+    "description": "View and manage bookings, check-ins, and cancellations",
+    "keywords": ["bookings", "calendar", "schedule", "appointments", "clients"],
+    "aliases": ["booking", "apointment", "apointments"]
+  },
+  {
+    "id": "conversations",
+    "label": "Conversations",
+    "href": "/conversations",
+    "group": "Daily operations",
+    "description": "Live WhatsApp inbox — reply when the bot hands off to your team",
+    "keywords": ["whatsapp", "chat", "inbox", "messages", "handoff", "live chat"],
+    "aliases": ["conversation", "convos", "msgs"]
+  },
+  {
+    "id": "customers",
+    "label": "Customers",
+    "href": "/customers",
+    "group": "Daily operations",
+    "description": "Customer list, profiles, loyalty, and marketing consent",
+    "keywords": ["clients", "crm", "contacts", "loyalty", "members"],
+    "aliases": ["customer", "client list"]
+  },
+  {
+    "id": "tickets",
+    "label": "Support tickets",
+    "href": "/tickets",
+    "group": "Daily operations",
+    "description": "Issues from complaints, report-a-problem, and low ratings",
+    "keywords": ["support", "complaints", "issues", "problems", "help desk"],
+    "aliases": ["ticket", "complaint", "support ticket"]
+  },
+  {
+    "id": "services",
+    "label": "Services",
+    "href": "/services",
+    "group": "Salon setup",
+    "description": "Services, prices, durations, categories, and add-ons",
+    "keywords": ["menu", "pricing", "treatments", "offerings", "addons", "add-ons"],
+    "aliases": ["service", "price list", "catalog"]
+  },
+  {
+    "id": "roster",
+    "label": "Staff Roster",
+    "href": "/roster",
+    "group": "Salon setup",
+    "description": "Staff schedules, shifts, time off, and roster management",
+    "keywords": ["staff", "roster", "schedule", "shifts", "stylists", "team", "working hours"],
+    "aliases": ["rota", "scheduling", "employees", "workers"]
+  },
+  {
+    "id": "add-staff",
+    "label": "Add staff member",
+    "href": "/roster?addStaff=1",
+    "group": "Salon setup",
+    "description": "Create a new stylist or team member on the roster",
+    "keywords": ["new staff", "hire", "add stylist", "create staff", "invite team"],
+    "aliases": ["add employee", "new team member"]
+  },
+  {
+    "id": "branches",
+    "label": "Branches",
+    "href": "/branches",
+    "group": "Salon setup",
+    "description": "Multiple locations — branches, addresses, and per-branch settings",
+    "keywords": ["locations", "stores", "sites", "multi-branch", "outlets"],
+    "aliases": ["branch", "location", "shop"]
+  },
+  {
+    "id": "faqs",
+    "label": "Bot FAQs",
+    "href": "/faqs",
+    "group": "Salon setup",
+    "description": "Questions and answers your WhatsApp bot uses for customer support",
+    "keywords": ["faq", "faqs", "questions", "answers", "bot knowledge", "help articles"],
+    "aliases": ["frequently asked", "q and a", "bot faq"]
+  },
+  {
+    "id": "campaigns",
+    "label": "Newsletter",
+    "href": "/campaigns",
+    "group": "Marketing & insights",
+    "description": "WhatsApp newsletters and broadcast campaigns to customers",
+    "keywords": ["newsletter", "campaign", "broadcast", "marketing message", "bulk send", "promo"],
+    "aliases": ["campaigns", "news letter", "mass message"]
+  },
+  {
+    "id": "automations",
+    "label": "Power Features",
+    "href": "/automations",
+    "group": "Marketing & insights",
+    "description": "Win-back, birthday messages, deposits, and other automations",
+    "keywords": ["automation", "winback", "win-back", "birthday", "deposits", "power features"],
+    "aliases": ["automations", "auto messages", "triggers"]
+  },
+  {
+    "id": "team-performance",
+    "label": "Team Performance",
+    "href": "/team-performance",
+    "group": "Marketing & insights",
+    "description": "Stylist leaderboard, ratings, and team metrics",
+    "keywords": ["performance", "leaderboard", "ratings", "stats", "stylist scores"],
+    "aliases": ["team stats", "staff performance"]
+  },
+  {
+    "id": "analytics",
+    "label": "Analytics",
+    "href": "/analytics",
+    "group": "Marketing & insights",
+    "description": "Reports, trends, and business insights",
+    "keywords": ["reports", "stats", "metrics", "insights", "data", "charts"],
+    "aliases": ["report", "statistics", "analytics dashboard"]
+  },
+  {
+    "id": "billing",
+    "label": "Billing",
+    "href": "/billing",
+    "group": "Account",
+    "description": "Subscription, plan, and payment for MarineFlow",
+    "keywords": ["subscription", "plan", "invoice", "payment", "upgrade"],
+    "aliases": ["bill", "pricing plan"],
+    "ownerOnly": true
+  },
+  {
+    "id": "settings",
+    "label": "Settings",
+    "href": "/settings",
+    "group": "Account",
+    "description": "Profile, password, salon settings, and WhatsApp bot configuration",
+    "keywords": ["settings", "config", "configuration", "preferences", "account"],
+    "aliases": ["setting", "setup", "options"]
+  },
+  {
+    "id": "settings-hours",
+    "label": "Business hours",
+    "href": "/settings",
+    "group": "Account",
+    "description": "Opening and closing times for your salon and WhatsApp after-hours messages",
+    "keywords": ["hours", "opening times", "closing time", "schedule", "after hours"],
+    "aliases": ["business hours", "open hours", "trading hours"]
+  },
+  {
+    "id": "settings-welcome",
+    "label": "Welcome message",
+    "href": "/settings",
+    "group": "Account",
+    "description": "Custom WhatsApp welcome text and bot greeting",
+    "keywords": ["welcome", "greeting", "hello message", "bot message"],
+    "aliases": ["welcome msg", "intro message"]
+  },
+  {
+    "id": "settings-business-name",
+    "label": "WhatsApp business name",
+    "href": "/settings",
+    "group": "Account",
+    "description": "The business name customers see in WhatsApp messages",
+    "keywords": ["business name", "company name", "salon name", "display name"],
+    "aliases": ["trading name", "brand name"]
+  },
+  {
+    "id": "settings-bot",
+    "label": "WhatsApp bot",
+    "href": "/settings",
+    "group": "Account",
+    "description": "Pause or activate the bot, conversation flow, and bot messages",
+    "keywords": ["bot", "whatsapp bot", "pause bot", "bot active", "chatbot"],
+    "aliases": ["turn off bot", "bot settings"]
+  },
+  {
+    "id": "settings-loyalty",
+    "label": "Loyalty program",
+    "href": "/settings",
+    "group": "Account",
+    "description": "Stamp card rewards and loyalty programme settings",
+    "keywords": ["loyalty", "stamps", "rewards", "stamp card"],
+    "aliases": ["loyalty programme", "points"]
+  },
+  {
+    "id": "settings-password",
+    "label": "Change password",
+    "href": "/settings",
+    "group": "Account",
+    "description": "Update your dashboard login password",
+    "keywords": ["password", "login", "security", "credentials"],
+    "aliases": ["reset password", "new password"]
+  },
+  {
+    "id": "settings-webhooks",
+    "label": "Webhooks",
+    "href": "/settings/webhooks",
+    "group": "Account",
+    "description": "Outbound webhook integrations for external systems",
+    "keywords": ["webhooks", "integrations", "api hooks", "callbacks"],
+    "aliases": ["webhook", "integration"]
+  },
+  {
+    "id": "agency",
+    "label": "Salons",
+    "href": "/agency",
+    "group": "Admin",
+    "description": "Agency view of all salons on the platform",
+    "keywords": ["agency", "salons", "tenants", "clients"],
+    "aliases": ["all salons"],
+    "adminOnly": true
+  },
+  {
+    "id": "admin",
+    "label": "Admin",
+    "href": "/admin",
+    "group": "Admin",
+    "description": "Super admin — create salons, manage users, and assistant branding",
+    "keywords": ["admin", "super admin", "platform", "create salon"],
+    "aliases": ["superadmin", "administration"],
+    "adminOnly": true
+  }
+]

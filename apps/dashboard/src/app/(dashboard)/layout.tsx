@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { LogoutButton, LogoutIconButton } from './logout-button';
 import { MobileNav } from './mobile-nav';
 import { NavLinks } from './nav-links';
+import { DashboardSearch } from '@/components/dashboard-search';
 
 function formatRole(role: string): string {
   return role
@@ -88,6 +89,11 @@ export default async function DashboardLayout({
               <p className="text-[10px] text-muted-foreground/70 mt-0.5 tabular-nums">{user.phone}</p>
             )}
           </div>
+        </div>
+
+        {/* Search */}
+        <div className="px-3 pt-3">
+          <DashboardSearch isAdmin={isAdmin} isOwner={isOwner} />
         </div>
 
         {/* Nav */}
