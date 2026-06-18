@@ -1,4 +1,4 @@
-import indexJson from '../../../../src/lib/dashboard-search-index.json';
+import indexJson from './dashboard-search-index.json';
 
 export type DashboardSearchEntry = {
   id: string;
