@@ -44,7 +44,7 @@ export interface AppointmentData {
     noShowCount?: number;
     bookingCount?: number;
   };
-  payments: { id: string; amountCents: number; status: string }[];
+  payments?: { id: string; amountCents: number; status: string }[];
   notes: string | null;
   cancellationReason: string | null;
   branch: { id: string; name: string } | null;
@@ -70,7 +70,7 @@ function riskSummary(noShowCount: number, bookingCount: number): string {
 }
 
 function getPaymentStatus(appt: AppointmentData): 'none' | 'paid' | 'unpaid' {
-  if (appt.status === 'CONFIRMED_PAID' || appt.payments.some((p) => p.status === 'SUCCEEDED')) {
+  if (appt.status === 'CONFIRMED_PAID' || (appt.payments ?? []).some((p) => p.status === 'SUCCEEDED')) {
     return 'paid';
   }
   if (appt.status === 'PENDING_PAYMENT' || appt.status === 'HELD') {

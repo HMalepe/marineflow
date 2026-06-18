@@ -49,7 +49,7 @@ export async function sendWithFallback(params: {
           return { channel: 'whatsapp', result };
         }
       } catch (err) {
-        logger.warn({ err }, 'twilio_interactive_fallthrough');
+        logger.warn({ err, salonId: params.salonId }, 'twilio_interactive_fallthrough');
       }
     }
 

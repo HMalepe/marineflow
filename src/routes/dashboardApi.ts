@@ -801,6 +801,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
               bookingCount: true,
             },
           },
+          payments: {
+            select: { id: true, amountCents: true, status: true },
+          },
         },
         orderBy: { start: 'asc' },
         take: 500,

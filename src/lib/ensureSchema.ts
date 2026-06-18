@@ -23,6 +23,10 @@ const LOYALTY_PROGRAM_COLUMN_GUARDS = [
   'ALTER TABLE "LoyaltyProgram" ADD COLUMN IF NOT EXISTS "rewardDescription" TEXT DEFAULT \'\'',
 ] as const;
 
+const STAFF_SERVICE_COLUMN_GUARDS = [
+  'ALTER TABLE "StaffService" ADD COLUMN IF NOT EXISTS "priceCentsOverride" INTEGER',
+] as const;
+
 const CUSTOMER_COLUMN_GUARDS = [
   `DO $$ BEGIN
     CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
@@ -38,9 +42,11 @@ const SCHEMA_COLUMN_GUARDS = [
   ...APPOINTMENT_COLUMN_GUARDS,
   ...SERVICE_COLUMN_GUARDS,
   ...LOYALTY_PROGRAM_COLUMN_GUARDS,
+  ...STAFF_SERVICE_COLUMN_GUARDS,
   ...CUSTOMER_COLUMN_GUARDS,
 ] as const;
 
+/** One statement per entry — PgBouncer/Prisma cannot run multi-command prepared statements. */
 const SERVICE_ADDON_TABLE_DDL = [
   `CREATE TABLE IF NOT EXISTS "ServiceAddon" (
     "id" TEXT NOT NULL,
