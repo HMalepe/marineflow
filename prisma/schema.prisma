@@ -609,6 +609,7 @@ model Appointment {
   rescheduledTo       Appointment?       @relation("RescheduleChain")
   noShowMarkedAt      DateTime?
   confirmedAt         DateTime?
+  paymentLinkSentAt   DateTime?
   reminderSentAt      DateTime?          /// @deprecated use reminder24hSentAt
   reminder24hSentAt   DateTime?
   reminder2hSentAt    DateTime?

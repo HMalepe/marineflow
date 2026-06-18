@@ -48,3 +48,36 @@ export async function sendWhatsAppReply(
     return null;
   }
 }
+
+/** Send PayFast checkout link to customer on WhatsApp (Twilio). */
+export async function sendPaymentLinkMessage(
+  phone: string,
+  link: string,
+  opts?: {
+    twilioFrom?: string;
+    salonName?: string;
+    serviceName?: string;
+    amountLabel?: string;
+  },
+): Promise<string | null> {
+  const header = opts?.salonName ? `*${opts.salonName}*` : 'Your booking';
+  const lines = [
+    header,
+    '',
+    opts?.serviceName
+      ? `Please complete payment for *${opts.serviceName}*${opts.amountLabel ? ` (${opts.amountLabel})` : ''}:`
+      : 'Please complete your booking payment:',
+    link,
+    '',
+    '_Pay securely via PayFast. Your booking is confirmed once payment is received._',
+  ];
+  return sendWhatsAppReply(phone, lines.join('\n'), undefined, opts?.twilioFrom);
+}
+
+export function formatZaWhatsAppPhone(waId: string): string {
+  const digits = waId.replace(/\D/g, '');
+  if (!digits) return waId;
+  if (digits.startsWith('27')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+27${digits.slice(1)}`;
+  return `+${digits}`;
+}

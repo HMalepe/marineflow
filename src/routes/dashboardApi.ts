@@ -13,6 +13,8 @@ import { emitMessageReceived } from '../lib/eventBus.js';
 import { searchDashboard } from '../lib/dashboardSearch.js';
 import { getTenantOverviewKpis } from '../api/tenant/overview-kpis.js';
 import { getTenantSetupHealth } from '../api/tenant/setup-health.js';
+import { sendAppointmentPaymentLink } from '../api/appointments/send-payment-link.js';
+import { markAppointmentCashPaid } from '../api/appointments/mark-cash-paid.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -919,6 +921,47 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { appointments: rows };
     });
   });
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/send-payment-link',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await sendAppointmentPaymentLink(db, {
+          salonId: user.salonId,
+          appointmentId: request.params.id,
+          actorUserId: user.sub,
+        });
+        if (!result.ok) {
+          const status =
+            result.error === 'not_found' ? 404 : result.error === 'send_failed' ? 502 : 400;
+          reply.code(status);
+        }
+        return result;
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/mark-cash-paid',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await markAppointmentCashPaid(db, {
+          salonId: user.salonId,
+          appointmentId: request.params.id,
+          actorUserId: user.sub,
+        });
+        if (!result.ok) {
+          const status = result.error === 'not_found' ? 404 : 400;
+          reply.code(status);
+        }
+        return result;
+      });
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     '/appointments/:id/complete',

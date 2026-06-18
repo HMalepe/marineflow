@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { WaivePenaltyButton } from './waive-penalty-button';
+import { AppointmentCard, type AppointmentData } from '@/components/AppointmentCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,54 +20,9 @@ interface WaitlistEntry {
   expiresAt: string | null;
 }
 
-type NoShowRisk = 'LOW' | 'MEDIUM' | 'HIGH';
 type PaymentFilter = 'all' | 'pending' | 'paid';
 
-export interface AppointmentData {
-  id: string;
-  start: string;
-  end: string;
-  status: string;
-  cancellationPenaltyApplied: boolean;
-  paymentForfeited: boolean;
-  penaltyWaivedAt: string | null;
-  reminder24hSentAt: string | null;
-  reminder2hSentAt: string | null;
-  reminder24hFailed: boolean;
-  reminder2hFailed: boolean;
-  service: { name: string };
-  staff: { name: string; displayName: string | null; deletedAt: string | null };
-  customer: {
-    displayName: string | null;
-    waId: string;
-    noShowRisk?: NoShowRisk;
-    noShowCount?: number;
-    bookingCount?: number;
-  };
-  payments?: { id: string; amountCents: number; status: string }[];
-  notes: string | null;
-  cancellationReason: string | null;
-  branch: { id: string; name: string } | null;
-}
-
-const ACTIONABLE_STATUSES = new Set([
-  'CONFIRMED',
-  'CONFIRMED_PAID',
-  'HELD',
-  'PENDING_PAYMENT',
-]);
-
-function shouldShowRiskBadge(appt: AppointmentData): boolean {
-  const risk = appt.customer.noShowRisk ?? 'LOW';
-  return (
-    (risk === 'MEDIUM' || risk === 'HIGH') &&
-    ACTIONABLE_STATUSES.has(appt.status)
-  );
-}
-
-function riskSummary(noShowCount: number, bookingCount: number): string {
-  return `Based on ${noShowCount} no-show${noShowCount === 1 ? '' : 's'} from ${bookingCount} booking${bookingCount === 1 ? '' : 's'}`;
-}
+export type { AppointmentData };
 
 function getPaymentStatus(appt: AppointmentData): 'none' | 'paid' | 'unpaid' {
   if (appt.status === 'CONFIRMED_PAID' || (appt.payments ?? []).some((p) => p.status === 'SUCCEEDED')) {
@@ -126,6 +81,13 @@ export function AppointmentsClient({
       setRemovingWaitlistId(null);
     }
   }
+
+  const patchAppointment = useCallback((patch: Partial<AppointmentData> & { id: string }) => {
+    const apply = (rows: AppointmentData[]) =>
+      rows.map((row) => (row.id === patch.id ? { ...row, ...patch } : row));
+    setUpcoming((prev) => apply(prev));
+    setPast((prev) => apply(prev));
+  }, []);
 
   const refreshAppointments = useCallback(async () => {
     if (!token) return;
@@ -368,7 +330,12 @@ export function AppointmentsClient({
                     />
                   )}
                   <div className="flex-1 min-w-0">
-                    <AppointmentRow appt={appt} showRisk token={token} />
+                    <AppointmentCard
+                      appt={appt}
+                      showRisk
+                      token={token}
+                      onUpdated={patchAppointment}
+                    />
                   </div>
                 </div>
               );
@@ -385,7 +352,7 @@ export function AppointmentsClient({
           <CardContent>
             <div className="space-y-3">
               {filteredPast.slice(0, 20).map((appt) => (
-                <AppointmentRow key={appt.id} appt={appt} />
+                <AppointmentCard key={appt.id} appt={appt} token={token} onUpdated={patchAppointment} />
               ))}
               {filteredPast.length > 20 && (
                 <p className="text-xs text-muted-foreground text-center pt-2">
@@ -438,163 +405,6 @@ export function AppointmentsClient({
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
-
-function NoShowRiskBadge({
-  risk,
-  noShowCount,
-  bookingCount,
-}: {
-  risk: NoShowRisk;
-  noShowCount: number;
-  bookingCount: number;
-}) {
-  const label = risk === 'HIGH' ? 'High risk' : 'Confirm?';
-  const className =
-    risk === 'HIGH'
-      ? 'bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-200 dark:border-red-900'
-      : 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-200 dark:border-yellow-900';
-
-  return (
-    <div className="flex flex-col items-end gap-0.5">
-      <span
-        className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${className}`}
-      >
-        {label}
-      </span>
-      <p className="text-[10px] text-muted-foreground leading-tight text-right max-w-[160px]">
-        {riskSummary(noShowCount, bookingCount)}
-      </p>
-    </div>
-  );
-}
-
-function ReminderPill({ sent, failed, label }: { sent: boolean; failed: boolean; label: string }) {
-  if (sent) return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-green-700 dark:text-green-400">
-      <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-      {label} sent
-    </span>
-  );
-  if (failed) return (
-    <span className="inline-flex items-center gap-1 text-[10px] text-destructive">
-      <span className="w-1.5 h-1.5 rounded-full bg-destructive inline-block" />
-      {label} failed
-    </span>
-  );
-  return null;
-}
-
-function AppointmentRow({
-  appt,
-  showRisk = false,
-  token = '',
-}: {
-  appt: AppointmentData;
-  showRisk?: boolean;
-  token?: string;
-}) {
-  const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-    CONFIRMED: 'default',
-    CONFIRMED_PAID: 'default',
-    HELD: 'secondary',
-    PENDING_PAYMENT: 'secondary',
-    CANCELLED: 'destructive',
-    NO_SHOW: 'destructive',
-    COMPLETED: 'secondary',
-    RESCHEDULED: 'outline',
-  };
-
-  const risk = appt.customer.noShowRisk ?? 'LOW';
-  const noShowCount = appt.customer.noShowCount ?? 0;
-  const bookingCount = appt.customer.bookingCount ?? 0;
-  const showBadge = showRisk && shouldShowRiskBadge(appt);
-
-  const isFormerStaff = !!appt.staff.deletedAt;
-  const staffLabel = appt.staff.displayName ?? appt.staff.name;
-
-  const paymentStatus = getPaymentStatus(appt);
-
-  return (
-    <div className="flex items-start justify-between p-3 rounded-lg border gap-3">
-      <div className="space-y-1 min-w-0 flex-1">
-        <p className="text-sm font-medium truncate">
-          {appt.customer.displayName ?? appt.customer.waId}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {appt.service.name} with{' '}
-          <span className={isFormerStaff ? 'line-through opacity-60' : ''}>
-            {staffLabel}
-          </span>
-          {isFormerStaff && (
-            <span className="ml-1 text-[10px] text-muted-foreground italic">(former)</span>
-          )}
-          {appt.branch && (
-            <span className="ml-2 text-[10px] bg-muted rounded px-1.5 py-0.5 font-medium">{appt.branch.name}</span>
-          )}
-        </p>
-        {/* Reminder status pills */}
-        {ACTIONABLE_STATUSES.has(appt.status) && (
-          <div className="flex gap-2 mt-0.5">
-            <ReminderPill sent={!!appt.reminder24hSentAt} failed={appt.reminder24hFailed} label="24h" />
-            <ReminderPill sent={!!appt.reminder2hSentAt} failed={appt.reminder2hFailed} label="2h" />
-          </div>
-        )}
-        {/* Penalty applied warning */}
-        {appt.cancellationPenaltyApplied && !appt.penaltyWaivedAt && (
-          <span className="text-[10px] text-destructive font-medium">⚠ Cancellation penalty applied</span>
-        )}
-        {appt.penaltyWaivedAt && (
-          <span className="text-[10px] text-green-700 dark:text-green-400 font-medium">✓ Penalty waived</span>
-        )}
-        {appt.paymentForfeited && (
-          <span className="text-[10px] text-destructive font-medium">⚠ Payment forfeited (no-show)</span>
-        )}
-        {/* Cancellation reason */}
-        {appt.cancellationReason && (
-          <span className="text-[10px] text-muted-foreground italic">
-            Reason: {appt.cancellationReason.replace(/_/g, ' ').toLowerCase()}
-          </span>
-        )}
-        {/* Notes */}
-        {appt.notes && (
-          <p className="text-xs text-muted-foreground border-l-2 border-muted pl-2 italic mt-1 line-clamp-2">{appt.notes}</p>
-        )}
-      </div>
-      <div className="text-right space-y-1 shrink-0">
-        <p className="text-sm whitespace-nowrap">
-          {new Date(appt.start).toLocaleDateString('en-ZA', {
-            day: 'numeric',
-            month: 'short',
-          })}{' '}
-          {new Date(appt.start).toLocaleTimeString('en-ZA', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </p>
-        <div className="flex flex-col items-end gap-1">
-          {showRisk && token && ACTIONABLE_STATUSES.has(appt.status) && (
-            <WaivePenaltyButton appointmentId={appt.id} token={token} />
-          )}
-          {showBadge && (
-            <NoShowRiskBadge risk={risk} noShowCount={noShowCount} bookingCount={bookingCount} />
-          )}
-          {paymentStatus !== 'none' && ACTIONABLE_STATUSES.has(appt.status) && (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
-              paymentStatus === 'paid'
-                ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
-                : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
-            }`}>
-              {paymentStatus === 'paid' ? 'Paid' : 'Payment pending'}
-            </span>
-          )}
-          <Badge variant={statusColors[appt.status] ?? 'secondary'}>
-            {appt.status.toLowerCase().replace(/_/g, ' ')}
-          </Badge>
-        </div>
-      </div>
     </div>
   );
 }
