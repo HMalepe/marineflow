@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { normalizeLoginPhone } from '../lib/phone.js';
 import {
   DEFAULT_BUSINESS_HOURS,
+  DEFAULT_BOT_NAME,
   isValidSalonSlug,
 } from '../lib/salonDefaults.js';
 import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
@@ -164,6 +165,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         data: {
           name,
           slug,
+          botName: DEFAULT_BOT_NAME,
           status: 'TRIAL',
           tier: 'starter',
           timezone: body.timezone?.trim() || 'Africa/Johannesburg',
@@ -246,6 +248,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           slug: true,
           status: true,
           tier: true,
+          botName: true,
           industryTemplate: true,
           createdAt: true,
           trialEndsAt: true,
@@ -267,6 +270,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
       id: s.id,
       slug: s.slug,
       name: s.name,
+      botName: s.botName,
       status: s.status,
       tier: s.tier,
       industryTemplate: s.industryTemplate,
@@ -363,6 +367,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const body = request.body as {
       name?: string;
+      botName?: string;
       status?: string;
       tier?: string;
       timezone?: string;
@@ -375,6 +380,13 @@ export async function adminApiRoutes(app: FastifyInstance) {
       const name = body.name.trim();
       if (!name) return reply.code(400).send({ error: 'invalid_name' });
       data.name = name;
+    }
+    if (body.botName !== undefined) {
+      const botName = body.botName.trim();
+      if (!botName || botName.length < 2 || botName.length > 40) {
+        return reply.code(400).send({ error: 'invalid_bot_name' });
+      }
+      data.botName = botName;
     }
     if (body.status) {
       if (!VALID_STATUSES.includes(body.status as TenantStatus)) {
@@ -430,6 +442,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         id: salon.id,
         slug: salon.slug,
         name: salon.name,
+        botName: salon.botName,
         status: salon.status,
         tier: salon.tier,
         timezone: salon.timezone,

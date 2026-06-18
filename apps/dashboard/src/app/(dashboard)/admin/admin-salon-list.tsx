@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { DashboardToast } from '@/components/dashboard-toast';
+import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 
 import { resolveApiUrl } from '@/lib/api-config';
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL ?? 'https://dashboard.marineflow.co.za';
@@ -36,6 +37,7 @@ interface Salon {
   id: string;
   name: string;
   slug: string;
+  botName?: string;
   status: string;
   tier: string;
   industryTemplate: string;
@@ -136,6 +138,9 @@ export function AdminSalonList({ token }: Props) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [addUserSalon, setAddUserSalon] = useState<Salon | null>(null);
+  const [brandSalon, setBrandSalon] = useState<Salon | null>(null);
+  const [brandBotName, setBrandBotName] = useState('');
+  const [savingBrand, setSavingBrand] = useState(false);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<CreatedSalonCredentials | null>(null);
 
@@ -337,6 +342,37 @@ export function AdminSalonList({ token }: Props) {
     }
   }
 
+  function openBrandEditor(salon: Salon) {
+    setBrandSalon(salon);
+    setBrandBotName(salon.botName?.trim() || PLATFORM_BOT_NAME);
+  }
+
+  async function handleSaveBrand(e: React.FormEvent) {
+    e.preventDefault();
+    if (!brandSalon) return;
+    const trimmed = brandBotName.trim();
+    if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
+      showToast('Bot name must be 2–40 characters', 'error');
+      return;
+    }
+    setSavingBrand(true);
+    try {
+      const res = await adminFetch<{ salon: Salon }>(`/salons/${brandSalon.id}`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({ botName: trimmed }),
+      });
+      setSalons((prev) =>
+        prev.map((s) => (s.id === brandSalon.id ? { ...s, botName: res.salon.botName ?? trimmed } : s)),
+      );
+      setBrandSalon(null);
+      showToast('Assistant name updated', 'success');
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Update failed', 'error');
+    } finally {
+      setSavingBrand(false);
+    }
+  }
+
   async function handleImpersonate(salon: Salon) {
     setImpersonating(salon.id);
     try {
@@ -378,7 +414,7 @@ export function AdminSalonList({ token }: Props) {
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Staff</TableHead>
                 <TableHead className="text-right">Customers</TableHead>
-                <TableHead className="text-right w-[160px]">Actions</TableHead>
+                <TableHead className="text-right w-[220px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -402,7 +438,9 @@ export function AdminSalonList({ token }: Props) {
                     <TableCell>
                       <div>
                         <p className="font-medium">{s.name}</p>
-                        <p className="text-xs text-muted-foreground">{s.slug}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {s.slug} · assistant: {s.botName?.trim() || PLATFORM_BOT_NAME}
+                        </p>
                       </div>
                     </TableCell>
                     <TableCell><StatusBadge status={s.status} /></TableCell>
@@ -424,7 +462,10 @@ export function AdminSalonList({ token }: Props) {
                     <TableCell className="text-right tabular-nums">{s.staffUserCount}</TableCell>
                     <TableCell className="text-right tabular-nums">{s.customerCount}</TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
+                      <div className="flex justify-end gap-1 flex-wrap">
+                        <Button variant="ghost" size="sm" onClick={() => openBrandEditor(s)}>
+                          Brand
+                        </Button>
                         <Button variant="ghost" size="sm" disabled={impersonating === s.id} onClick={() => void handleImpersonate(s)}>
                           {impersonating === s.id ? '…' : 'Login as'}
                         </Button>
@@ -612,6 +653,39 @@ export function AdminSalonList({ token }: Props) {
             <SheetFooter className="px-0">
               <Button type="button" variant="outline" onClick={() => setAddUserSalon(null)}>Cancel</Button>
               <Button type="submit" disabled={savingUser}>{savingUser ? 'Adding…' : 'Add user'}</Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Bot branding (super admin only) */}
+      <Sheet open={!!brandSalon} onOpenChange={(open) => { if (!open) setBrandSalon(null); }}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Assistant branding</SheetTitle>
+            <SheetDescription>
+              {brandSalon ? `WhatsApp assistant name for ${brandSalon.name}` : ''}
+            </SheetDescription>
+          </SheetHeader>
+          <form onSubmit={(e) => void handleSaveBrand(e)} className="flex flex-col gap-4 px-4 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="brand-bot-name">Assistant name</Label>
+              <Input
+                id="brand-bot-name"
+                value={brandBotName}
+                onChange={(e) => setBrandBotName(e.target.value)}
+                placeholder={PLATFORM_BOT_NAME}
+                maxLength={40}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown in greetings (&quot;Hi! I&apos;m …&quot;). Salon owners cannot change this — they edit their
+                business name in Settings instead.
+              </p>
+            </div>
+            <SheetFooter className="px-0">
+              <Button type="button" variant="outline" onClick={() => setBrandSalon(null)}>Cancel</Button>
+              <Button type="submit" disabled={savingBrand}>{savingBrand ? 'Saving…' : 'Save'}</Button>
             </SheetFooter>
           </form>
         </SheetContent>

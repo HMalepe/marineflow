@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import type { WizardData } from '../page';
 
 interface Props {
@@ -80,7 +81,7 @@ export function StepGoLive({ data, onBack }: Props) {
         <p className="text-sm font-medium mb-2">Summary</p>
         <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
           <div>Business: <span className="text-foreground">{data.businessName || '—'}</span></div>
-          <div>Bot name: <span className="text-foreground">{data.botName || 'Ava'}</span></div>
+          <div>Assistant: <span className="text-foreground">{PLATFORM_BOT_NAME}</span></div>
           <div>Services: <span className="text-foreground">{data.services.length}</span></div>
           <div>Staff: <span className="text-foreground">{data.staff.length}</span></div>
           <div>FAQs: <span className="text-foreground">{data.faqs?.length ?? 0}</span></div>

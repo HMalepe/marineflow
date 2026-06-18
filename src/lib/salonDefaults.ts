@@ -28,3 +28,6 @@ export function normalizeTwilioWhatsAppFrom(input: string): string {
   const digits = trimmed.replace(/\D/g, '');
   return `whatsapp:+${digits}`;
 }
+
+/** Platform assistant branding — editable only via super admin. */
+export const DEFAULT_BOT_NAME = 'Marine';

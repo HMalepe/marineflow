@@ -1,8 +1,8 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import type { WizardData } from '../page';
 
 interface Props {
@@ -13,31 +13,26 @@ interface Props {
 }
 
 export function StepBot({ data, updateData, onNext, onBack }: Props) {
-  const botName = data.botName ?? 'Ava';
   const formality = data.toneFormality ?? 50;
   const warmth = data.toneWarmth ?? 70;
   const playfulness = data.tonePlayfulness ?? 40;
+  const businessName = data.businessName.trim() || 'your business';
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold">Bot Personality</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Give your booking assistant a name and personality that matches your brand.
+          Tune how {PLATFORM_BOT_NAME}, your MarineFlow booking assistant, sounds when talking to customers.
         </p>
       </div>
 
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="botName">Bot Name</Label>
-          <Input
-            id="botName"
-            placeholder="e.g. Ava, Max, Luna"
-            value={botName}
-            onChange={(e) => updateData({ botName: e.target.value })}
-          />
-          <p className="text-xs text-muted-foreground">
-            This name appears in greetings: &quot;Hi! I&apos;m {botName || '...'}, your booking assistant.&quot;
+        <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+          <p className="font-medium">Assistant name</p>
+          <p className="text-muted-foreground mt-1">
+            Customers meet <span className="font-medium text-foreground">{PLATFORM_BOT_NAME}</span> — MarineFlow&apos;s
+            branded assistant. Your business name ({businessName}) appears in welcome messages and menus.
           </p>
         </div>
 
@@ -68,7 +63,7 @@ export function StepBot({ data, updateData, onNext, onBack }: Props) {
         <div className="bg-muted/50 rounded-lg p-4 space-y-2">
           <p className="text-xs font-medium">Preview greeting:</p>
           <p className="text-sm italic text-muted-foreground">
-            &quot;{getPreviewGreeting(botName, formality, warmth)}&quot;
+            &quot;{getPreviewGreeting(businessName, formality, warmth)}&quot;
           </p>
         </div>
       </div>
@@ -108,13 +103,13 @@ function ToneSlider({
   );
 }
 
-function getPreviewGreeting(name: string, formality: number, warmth: number): string {
-  const n = name || 'Ava';
+function getPreviewGreeting(businessName: string, formality: number, warmth: number): string {
+  const salon = businessName || 'your business';
   if (formality > 70 && warmth < 40) {
-    return `Good day. I'm ${n}, your appointment coordinator. How may I assist you?`;
+    return `Good day. I'm ${PLATFORM_BOT_NAME}, your appointment coordinator at ${salon}. How may I assist you?`;
   }
   if (warmth > 70) {
-    return `Hey there! 👋 I'm ${n}, your friendly booking buddy! How can I help you today?`;
+    return `Hey there! 👋 I'm ${PLATFORM_BOT_NAME}, your friendly booking buddy at ${salon}! How can I help you today?`;
   }
-  return `Hi! I'm ${n}, your booking assistant at ${'{salon}'}. Reply with a number to get started!`;
+  return `Hi! I'm ${PLATFORM_BOT_NAME}, your booking assistant at ${salon}. Reply with a number to get started!`;
 }

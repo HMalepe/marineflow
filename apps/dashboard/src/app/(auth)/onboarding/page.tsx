@@ -33,7 +33,6 @@ export interface WizardData {
   payfastMerchantId?: string;
   payfastMerchantKey?: string;
   faqs?: FaqEntry[];
-  botName?: string;
   toneFormality?: number;
   toneWarmth?: number;
   tonePlayfulness?: number;

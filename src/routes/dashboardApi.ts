@@ -378,6 +378,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.patch<{
     Body: {
       tradingName?: string | null;
+      businessName?: string;
       openTime?: string;
       closeTime?: string;
       timezone?: string;
@@ -386,7 +387,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       logoUrl?: string | null;
       botActive?: boolean;
       status?: 'ACTIVE' | 'SUSPENDED';
-      botName?: string;
       botAskMarketingConsent?: boolean;
       botAllowStaffPick?: boolean;
       botLoyaltyEnabled?: boolean;
@@ -418,6 +418,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const db = getTenantDb();
         const {
           tradingName,
+          businessName,
           logoUrl,
           openTime,
           closeTime,
@@ -426,7 +427,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           afterHoursMessage,
           botActive,
           status,
-          botName,
           botAskMarketingConsent,
           botAllowStaffPick,
           botLoyaltyEnabled,
@@ -468,6 +468,25 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'invalid_trading_name' };
         }
 
+        if (businessName !== undefined) {
+          const trimmed = businessName.trim();
+          if (!trimmed || trimmed.length < 2 || trimmed.length > 120) {
+            reply.code(400);
+            return {
+              error: 'invalid_business_name',
+              message: 'Business name must be 2–120 characters.',
+            };
+          }
+        }
+
+        if (request.body.botName !== undefined) {
+          reply.code(403);
+          return {
+            error: 'bot_name_readonly',
+            message: 'Assistant name is managed by MarineFlow.',
+          };
+        }
+
         const timeRe = /^([01]\d|2[0-3]):[0-5]\d$/;
         if (openTime !== undefined && !timeRe.test(openTime)) {
           reply.code(400);
@@ -480,13 +499,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         if (timezone !== undefined && !timezone.trim()) {
           reply.code(400);
           return { error: 'invalid_timezone' };
-        }
-        if (botName !== undefined) {
-          const trimmed = botName.trim();
-          if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
-            reply.code(400);
-            return { error: 'invalid_bot_name' };
-          }
         }
         if (googleReviewUrl !== undefined && googleReviewUrl !== null) {
           const trimmedReviewUrl = googleReviewUrl.trim().replace(/[\r\n\t]/g, '');
@@ -621,6 +633,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(tradingName !== undefined && {
               tradingName: tradingName?.trim() || null,
             }),
+            ...(businessName !== undefined && { name: businessName.trim() }),
             ...(logoUrl !== undefined && { logoUrl: logoUrl || null }),
             ...(openTime !== undefined && { openTime }),
             ...(closeTime !== undefined && { closeTime }),
@@ -629,7 +642,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(afterHoursMessage !== undefined && {
               afterHoursMessage: afterHoursMessage?.trim() || null,
             }),
-            ...(botName !== undefined && { botName: botName.trim() }),
             ...(botAskMarketingConsent !== undefined && { botAskMarketingConsent }),
             ...(botAllowStaffPick !== undefined && { botAllowStaffPick }),
             ...(botLoyaltyEnabled !== undefined && { botLoyaltyEnabled }),

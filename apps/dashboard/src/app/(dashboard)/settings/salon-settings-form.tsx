@@ -11,12 +11,13 @@ import { Separator } from '@/components/ui/separator';
 import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
+import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import {
   saveDisplayName,
   saveMessages,
   saveBotActive,
   saveLocation,
-  saveBotName,
+  saveBusinessName,
   saveInactivityMessages,
   saveGoogleReviewSettings,
   saveCurrentSpecial,
@@ -157,6 +158,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const [previewMode, setPreviewMode] = useState<PreviewMode>('welcome');
 
   const [tradingName, setTradingName] = useState(initialSettings.tradingName ?? '');
+  const [businessName, setBusinessName] = useState(initialSettings.name ?? '');
   const [openTime, setOpenTime] = useState(initialSettings.openTime ?? '09:00');
   const [closeTime, setCloseTime] = useState(initialSettings.closeTime ?? '17:00');
   const [welcomeMessage, setWelcomeMessage] = useState(initialSettings.welcomeMessage ?? '');
@@ -171,8 +173,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const [templateApplyHint, setTemplateApplyHint] = useState<string | null>(null);
   const [savingInactivity, setSavingInactivity] = useState(false);
 
-  const [botNameVal, setBotNameVal] = useState(initialSettings.botName ?? 'Ava');
-  const [savingBotName, setSavingBotName] = useState(false);
+  const [savingBusinessName, setSavingBusinessName] = useState(false);
 
   const [addressLine, setAddressLine] = useState(initialSettings.addressLine ?? '');
   const [phoneDisplay, setPhoneDisplay] = useState(initialSettings.phoneDisplay ?? '');
@@ -207,12 +208,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     setSalon(s);
     setSaved(s);
     setTradingName(s.tradingName ?? '');
+    setBusinessName(s.name ?? '');
     setOpenTime(s.openTime ?? '09:00');
     setCloseTime(s.closeTime ?? '17:00');
     setWelcomeMessage(s.welcomeMessage ?? '');
     setAfterHoursMessage(s.afterHoursMessage ?? '');
     setBotActive(s.botActive);
-    setBotNameVal(s.botName ?? 'Ava');
     setInactivityMsg1(s.inactivityMessage1 ?? '');
     setInactivityDelay1(s.inactivityMessage1DelayMin ?? 10);
     setInactivityMsg2(s.inactivityMessage2 ?? '');
@@ -231,6 +232,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   }, []);
 
   const displayNameDirty = useMemo(() => tradingName !== (saved.tradingName ?? ''), [saved, tradingName]);
+  const businessNameDirty = useMemo(() => businessName.trim() !== (saved.name ?? ''), [saved, businessName]);
   const whatsappPhoneIdDirty = useMemo(
     () => whatsappPhoneId.trim() !== savedWhatsappPhoneId.trim(),
     [savedWhatsappPhoneId, whatsappPhoneId],
@@ -256,8 +258,6 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     inactivityDelay2 !== (saved.inactivityMessage2DelayMin ?? 30) ||
     closingMsg !== (saved.closingMessage ?? ''),
   [saved, inactivityMsg1, inactivityDelay1, inactivityMsg2, inactivityDelay2, closingMsg]);
-
-  const botNameDirty = useMemo(() => botNameVal !== (saved.botName ?? 'Ava'), [saved, botNameVal]);
 
   const locationDirty = useMemo(() => {
     return (
@@ -398,26 +398,27 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
     }
   }
 
-  async function handleSaveBotName(e: React.FormEvent) {
+  async function handleSaveBusinessName(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = botNameVal.trim();
-    if (!trimmed || trimmed.length < 2 || trimmed.length > 40) {
-      reportError('botName', 'Bot name must be 2–40 characters');
+    const trimmed = businessName.trim();
+    if (!trimmed || trimmed.length < 2 || trimmed.length > 120) {
+      reportError('businessName', 'Business name must be 2–120 characters');
       return;
     }
-    setSavingBotName(true);
+    setSavingBusinessName(true);
     try {
-      const result = await saveBotName(trimmed);
+      const result = await saveBusinessName(trimmed);
       if (result.salon) {
         applySalon(result.salon);
-        reportSuccess('botName', `Bot name updated to "${trimmed}"`);
+        reportSuccess('businessName', `Business name updated to "${trimmed}"`);
+        router.refresh();
       } else {
-        reportError('botName', result.error ?? 'Save failed');
+        reportError('businessName', result.error ?? 'Save failed');
       }
     } catch {
-      reportError('botName', 'Save failed — please try again');
+      reportError('businessName', 'Save failed — please try again');
     } finally {
-      setSavingBotName(false);
+      setSavingBusinessName(false);
     }
   }
 
@@ -581,42 +582,44 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
 
   return (
     <div className="space-y-8">
-      {/* Bot name */}
+      {/* WhatsApp business name */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold">WhatsApp bot name</h3>
+          <h3 className="text-base font-semibold">WhatsApp business name</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            The name your bot introduces itself as to customers (e.g. &quot;Hi! I&apos;m <strong>{botNameVal || salon.botName}</strong>, your booking assistant&quot;).
+            The name customers see in WhatsApp messages and greetings (e.g. &quot;Welcome to{' '}
+            <strong>{businessName || salon.name}</strong>!&quot;). Your booking assistant is always{' '}
+            <strong>{salon.botName || PLATFORM_BOT_NAME}</strong> — that name is part of MarineFlow branding.
           </p>
         </div>
-        <form onSubmit={(e) => void handleSaveBotName(e)} className="space-y-4 max-w-md">
+        <form onSubmit={(e) => void handleSaveBusinessName(e)} className="space-y-4 max-w-md">
           <div className="space-y-2">
-            <Label htmlFor="botName">Bot name</Label>
+            <Label htmlFor="businessName">Business name</Label>
             <Input
-              id="botName"
-              value={botNameVal}
-              onChange={(e) => setBotNameVal(e.target.value)}
-              placeholder="e.g. Ava"
-              maxLength={40}
+              id="businessName"
+              value={businessName}
+              onChange={(e) => setBusinessName(e.target.value)}
+              placeholder="e.g. Solupair Hair Studio"
+              maxLength={120}
               required
             />
           </div>
-          <Button type="submit" size="sm" disabled={!botNameDirty || savingBotName}>
-            {savingBotName ? 'Saving…' : 'Save bot name'}
+          <Button type="submit" size="sm" disabled={!businessNameDirty || savingBusinessName}>
+            {savingBusinessName ? 'Saving…' : 'Save business name'}
           </Button>
-          <SectionSaveFeedback feedback={getSection('botName')} />
+          <SectionSaveFeedback feedback={getSection('businessName')} />
         </form>
       </section>
 
       <Separator />
 
-      {/* Dashboard business name */}
+      {/* Dashboard display name */}
       <section className="space-y-4">
         <div>
-          <h3 className="text-base font-semibold">Business display name</h3>
+          <h3 className="text-base font-semibold">Dashboard display name</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            Shown in your dashboard sidebar (e.g. Solupair). Does not change what customers see on WhatsApp — the bot
-            still uses <span className="font-medium text-foreground">{salon.name}</span>.
+            Optional label shown in your dashboard sidebar only. Does not change WhatsApp messages — use the business
+            name above for customer-facing copy.
           </p>
         </div>
         <form onSubmit={(e) => void handleSaveDisplayName(e)} className="space-y-4 max-w-md">
@@ -827,7 +830,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <WhatsAppPreview
               message={previewText}
               salonName={salon.name}
-              botName={salon.botName}
+              botName={salon.botName || PLATFORM_BOT_NAME}
             />
             <p className="text-xs text-muted-foreground">
               {previewMode === 'welcome'

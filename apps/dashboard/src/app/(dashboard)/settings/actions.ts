@@ -306,17 +306,17 @@ export async function saveBotBehaviour(flags: {
   }
 }
 
-export async function saveBotName(botName: string): Promise<{ salon?: SalonSettings; error?: string }> {
+export async function saveBusinessName(businessName: string): Promise<{ salon?: SalonSettings; error?: string }> {
   const token = await getToken();
   if (!token) return { error: 'Not authenticated' };
   try {
     const data = await apiFetch<{ salon: SalonSettings }>('/settings', {
       method: 'PATCH',
-      body: JSON.stringify({ botName }),
+      body: JSON.stringify({ businessName }),
     }, token);
     return { salon: data.salon };
   } catch (e) {
-    return { error: e instanceof Error ? e.message : 'Save failed' };
+    return { error: e instanceof ApiError ? e.message : 'Save failed' };
   }
 }
 
