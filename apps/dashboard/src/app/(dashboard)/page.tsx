@@ -13,6 +13,7 @@ import { RevenueRow, type AdminRevenueData } from '@/components/RevenueRow';
 import { BotHealthPanel, type BotHealthData } from '@/components/BotHealthPanel';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard';
+import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
@@ -100,15 +101,17 @@ async function SuperAdminView({ token }: { token: string | null }) {
   let botHealth: BotHealthData | null = null;
   let tenantHealth: { atRiskCount: number; churningCount: number } | null = null;
   let leaderboard: AdminLeaderboardData | null = null;
+  let systemHealth: SystemHealthData | null = null;
 
   try {
-    [stats, alerts, revenue, botHealth, tenantHealth, leaderboard] = await Promise.all([
+    [stats, alerts, revenue, botHealth, tenantHealth, leaderboard, systemHealth] = await Promise.all([
       adminFetch<PlatformStats>('/admin/stats', token),
       adminFetch<AlertsData>('/admin/alerts', token),
       adminFetch<AdminRevenueData>('/admin/revenue', token),
       adminFetch<BotHealthData>('/admin/bot-health', token),
       adminFetch<{ atRiskCount: number; churningCount: number }>('/admin/tenants/health', token),
       adminFetch<AdminLeaderboardData>('/admin/leaderboard', token),
+      adminFetch<SystemHealthData>('/admin/system-health', token),
     ]);
   } catch {
     // swallow — handled below
@@ -120,6 +123,8 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
   return (
     <div className="space-y-6">
+      {systemHealth && <SystemHealthBar data={systemHealth} />}
+
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Overview</h1>

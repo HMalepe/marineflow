@@ -31,6 +31,7 @@ import {
 } from '../services/adminAnalytics.js';
 import { getAdminRevenue } from '../api/admin/revenue.js';
 import { getAdminLeaderboard } from '../api/admin/leaderboard.js';
+import { getAdminSystemHealth } from '../api/admin/system-health.js';
 import { getAdminBotHealth } from '../api/admin/bot-health.js';
 import { getAdminTenantHealth } from '../api/admin/tenants/health.js';
 import { getTenantOnboarding } from '../api/admin/tenants/onboarding.js';
@@ -628,6 +629,10 @@ export async function adminApiRoutes(app: FastifyInstance) {
 
   app.get('/leaderboard', { preHandler: requireSuperAdmin }, async () => {
     return getAdminLeaderboard();
+  });
+
+  app.get('/system-health', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminSystemHealth();
   });
 
   // ─── Bot Health (SUPER_ADMIN only) ─────────────────────────────────

@@ -26,6 +26,17 @@ export async function redisPing(): Promise<boolean> {
   }
 }
 
+/** Ping Redis and return round-trip latency in milliseconds. */
+export async function healthCheck(): Promise<{ ok: boolean; latencyMs: number }> {
+  const start = performance.now();
+  try {
+    const pong = await redis.ping();
+    return { ok: pong === 'PONG', latencyMs: Math.round(performance.now() - start) };
+  } catch {
+    return { ok: false, latencyMs: Math.round(performance.now() - start) };
+  }
+}
+
 const BOT_SESSION_TTL_SEC = 30 * 60;
 
 /** Track an active WhatsApp bot conversation session (refreshed on each inbound). */
