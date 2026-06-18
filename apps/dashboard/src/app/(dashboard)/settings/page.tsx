@@ -6,6 +6,7 @@ import { SettingsForm } from './settings-form';
 import { SalonSettingsForm, type SalonSettings } from './salon-settings-form';
 import { ChangePasswordForm } from './change-password-form';
 import { LogoUpload } from './logo-upload';
+import { ContactMarineFlow } from './contact-marineflow';
 
 interface MeResponse {
   user: {
@@ -114,6 +115,18 @@ export default async function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {canEditSalon && (
+        <Card id="settings-contact-marineflow" className="dashboard-section-anchor">
+          <CardHeader>
+            <CardTitle>Contact MarineFlow</CardTitle>
+            <CardDescription>Send a message to platform support — billing, setup, or bot help</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ContactMarineFlow />
+          </CardContent>
+        </Card>
+      )}
 
       {canEditSalon && (
         <Card id="settings-integrations" className="dashboard-section-anchor">

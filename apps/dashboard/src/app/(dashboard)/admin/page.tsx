@@ -1,6 +1,7 @@
 import { getToken } from '@/lib/auth';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { AdminSalonList } from './admin-salon-list';
+import { AdminPlatformInbox } from './admin-platform-inbox';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -69,7 +70,7 @@ export default async function AdminPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <KpiCard label="Total Salons" value={stats.totalSalons} />
+        <KpiCard label="Total Businesses" value={stats.totalSalons} />
         <KpiCard label="Active" value={stats.activeSalons} />
         <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
         <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
@@ -119,7 +120,10 @@ export default async function AdminPage() {
         </section>
       )}
 
-      {/* Salon List */}
+      {/* Platform inbox — owner messages + bot errors */}
+      <AdminPlatformInbox token={token ?? ''} />
+
+      {/* Business list by category */}
       <AdminSalonList token={token ?? ''} />
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { impersonateSalon } from './actions';
 import { formatSaPhone, isValidSaPhoneLocal, stripPhoneDigits, formatSaPhoneDisplay } from '@/lib/phone';
 import { ApiError } from '@/lib/api';
@@ -167,6 +167,20 @@ export function AdminSalonList({ token }: Props) {
   const [loadingTwilioNumbers, setLoadingTwilioNumbers] = useState(false);
 
   const pages = Math.max(1, Math.ceil(total / 25));
+
+  const salonsByCategory = useMemo(() => {
+    const map = new Map<string, Salon[]>();
+    for (const s of salons) {
+      const key = s.industryTemplate || 'salon';
+      const list = map.get(key) ?? [];
+      list.push(s);
+      map.set(key, list);
+    }
+    return INDUSTRY_TEMPLATE_OPTIONS.filter((opt) => map.has(opt.value)).map((opt) => ({
+      ...opt,
+      items: map.get(opt.value) ?? [],
+    }));
+  }, [salons]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -388,8 +402,8 @@ export function AdminSalonList({ token }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Salon management</h2>
-          <p className="text-sm text-muted-foreground">{total} salon{total !== 1 ? 's' : ''} on platform</p>
+          <h2 className="text-lg font-semibold">Business management</h2>
+          <p className="text-sm text-muted-foreground">{total} business{total !== 1 ? 'es' : ''} on platform — grouped by category</p>
         </div>
         <div className="flex gap-2">
           <Input
@@ -398,7 +412,7 @@ export function AdminSalonList({ token }: Props) {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
-          <Button onClick={() => setCreateOpen(true)}>Create New Salon</Button>
+          <Button onClick={() => setCreateOpen(true)}>Create New Business</Button>
         </div>
       </div>
 
@@ -421,19 +435,29 @@ export function AdminSalonList({ token }: Props) {
               {loading && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                    Loading salons…
+                    Loading businesses…
                   </TableCell>
                 </TableRow>
               )}
               {!loading && salons.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                    No salons found.
+                    No businesses found.
                   </TableCell>
                 </TableRow>
               )}
               {!loading &&
-                salons.map((s) => (
+                salonsByCategory.map((group) => (
+                  <Fragment key={`cat-${group.value}`}>
+                    <TableRow className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={8} className="py-2">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {group.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground/70 ml-2">({group.items.length})</span>
+                      </TableCell>
+                    </TableRow>
+                    {group.items.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell>
                       <div>
@@ -475,6 +499,8 @@ export function AdminSalonList({ token }: Props) {
                       </div>
                     </TableCell>
                   </TableRow>
+                    ))}
+                  </Fragment>
                 ))}
             </TableBody>
           </Table>
@@ -518,8 +544,8 @@ export function AdminSalonList({ token }: Props) {
       <Sheet open={createOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); resetCreateForm(); } }}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Create New Salon</SheetTitle>
-            <SheetDescription>Set up a new salon with an owner account.</SheetDescription>
+            <SheetTitle>Create New Business</SheetTitle>
+            <SheetDescription>Set up a new business with an owner account.</SheetDescription>
           </SheetHeader>
           <form onSubmit={(e) => void handleCreateSalon(e)} className="flex flex-col gap-4 px-4 pb-4">
             <div className="space-y-2">
@@ -595,7 +621,7 @@ export function AdminSalonList({ token }: Props) {
             </div>
             <SheetFooter className="px-0">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={savingCreate}>{savingCreate ? 'Creating…' : 'Create salon'}</Button>
+              <Button type="submit" disabled={savingCreate}>{savingCreate ? 'Creating…' : 'Create business'}</Button>
             </SheetFooter>
           </form>
         </SheetContent>

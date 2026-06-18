@@ -12,6 +12,10 @@ import { MessageDirection, ConversationStep } from '@prisma/client';
 import { emitMessageReceived } from '../lib/eventBus.js';
 import { searchDashboard } from '../lib/dashboardSearch.js';
 import {
+  createOwnerPlatformMessage,
+  listOwnerPlatformMessages,
+} from '../services/platformInbox.js';
+import {
   getPlans,
   getSalonSubscription,
   createPayfastSubscription,
@@ -289,6 +293,43 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         const isAdmin = user.role === 'SUPER_ADMIN';
         const isOwner = user.role === 'OWNER' || isAdmin;
         return searchDashboard({ query, isAdmin, isOwner });
+      });
+    },
+  );
+
+  app.get('/platform-inbox/messages', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      if (user.role !== 'OWNER' && user.role !== 'MANAGER') {
+        reply.code(403);
+        return { error: 'forbidden' };
+      }
+      const messages = await listOwnerPlatformMessages(user.salonId);
+      return { messages };
+    });
+  });
+
+  app.post<{ Body: { subject?: string; body?: string } }>(
+    '/platform-inbox/message',
+    { preHandler: requireRole('OWNER', 'MANAGER'), config: { rateLimit: { max: 10, timeWindow: '1 hour' } } },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const subject = request.body?.subject?.trim() ?? '';
+        const body = request.body?.body?.trim() ?? '';
+        if (!subject || subject.length < 3 || subject.length > 200) {
+          reply.code(400);
+          return { error: 'invalid_subject', message: 'Subject must be 3–200 characters.' };
+        }
+        if (!body || body.length < 10 || body.length > 8000) {
+          reply.code(400);
+          return { error: 'invalid_body', message: 'Message must be 10–8000 characters.' };
+        }
+        const message = await createOwnerPlatformMessage({
+          salonId: user.salonId,
+          staffUserId: user.sub,
+          subject,
+          body,
+        });
+        return { message };
       });
     },
   );

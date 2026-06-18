@@ -209,12 +209,12 @@
   },
   {
     "id": "agency",
-    "label": "Salons",
+    "label": "Businesses",
     "href": "/agency",
     "group": "Admin",
-    "description": "Agency view of all salons on the platform",
-    "keywords": ["agency", "salons", "tenants", "clients"],
-    "aliases": ["all salons"],
+    "description": "Agency view of all businesses on the platform",
+    "keywords": ["agency", "businesses", "tenants", "clients"],
+    "aliases": ["all businesses", "salons"],
     "adminOnly": true
   },
   {

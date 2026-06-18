@@ -66,23 +66,23 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
       <div>
         <h1 className="text-2xl font-bold">Agency Portal</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Manage your salons and monitor performance.
+          Manage your businesses and monitor performance.
         </p>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total Salons" value={metrics.totalSalons} />
+        <KpiCard label="Total Businesses" value={metrics.totalSalons} />
         <KpiCard label="Active" value={metrics.activeSalons} />
         <KpiCard label="Customers" value={metrics.totalCustomers.toLocaleString()} />
         <KpiCard label={APPOINTMENTS_LABEL} value={metrics.totalAppointments.toLocaleString()} />
       </div>
 
-      {/* Create Salon */}
+      {/* Create business */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Your Salons ({salons.length})</h2>
+        <h2 className="text-lg font-semibold">Your Businesses ({salons.length})</h2>
         <Button onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? 'Cancel' : '+ New Salon'}
+          {showCreate ? 'Cancel' : '+ New Business'}
         </Button>
       </div>
 
@@ -90,7 +90,7 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
         <form onSubmit={handleCreate} className="border rounded-lg p-4 space-y-3 bg-card">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <Label className="text-xs">Salon Name</Label>
+              <Label className="text-xs">Business name</Label>
               <Input name="name" placeholder="e.g. Glow Beauty Studio" required />
             </div>
             <div className="space-y-1">
@@ -107,17 +107,17 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
             </div>
           </div>
           <Button type="submit" disabled={creating}>
-            {creating ? 'Creating...' : 'Create Salon'}
+            {creating ? 'Creating...' : 'Create business'}
           </Button>
         </form>
       )}
 
-      {/* Salon Table */}
+      {/* Business table */}
       <div className="border rounded-lg overflow-x-auto">
         <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-muted/50">
             <tr>
-              <th className="text-left p-3 font-medium">Salon</th>
+              <th className="text-left p-3 font-medium">Business</th>
               <th className="text-left p-3 font-medium">Status</th>
               <th className="text-left p-3 font-medium">Tier</th>
               <th className="text-right p-3 font-medium">Staff</th>
@@ -130,7 +130,7 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
             {salons.length === 0 && (
               <tr>
                 <td colSpan={7} className="p-6 text-center text-muted-foreground">
-                  No salons yet. Create your first one above.
+                  No businesses yet. Create your first one above.
                 </td>
               </tr>
             )}

@@ -58,6 +58,7 @@ import {
   type LegacyMenuCategoryId,
 } from '../lib/hierarchicalMenu.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
+import { recordBotPlatformAlert } from './platformInbox.js';
 import {
   afterServiceSelected,
   handleReferralMenuItem,
@@ -574,6 +575,12 @@ async function deliverOutboundNow(msg: PendingOutbound): Promise<void> {
     });
   } catch (err) {
     logger.error({ err, to: msg.waId, salonId: msg.salonId }, 'reply_send_failed');
+    void recordBotPlatformAlert({
+      salonId: msg.salonId,
+      title: 'WhatsApp reply failed',
+      body: err instanceof Error ? err.message : String(err),
+      metadata: { waId: msg.waId, event: 'reply_send_failed' },
+    }).catch(() => {});
   }
 }
 
@@ -878,6 +885,12 @@ async function sendTenantWhatsApp(salonId: string, waId: string, body: string): 
     }
   } catch (err) {
     logger.error({ err, salonId, waId }, 'tenant_whatsapp_send_failed');
+    void recordBotPlatformAlert({
+      salonId,
+      title: 'WhatsApp send failed',
+      body: err instanceof Error ? err.message : String(err),
+      metadata: { waId, event: 'tenant_whatsapp_send_failed' },
+    }).catch(() => {});
   }
 }
 
@@ -1025,6 +1038,12 @@ export async function handleInboundWhatsApp(input: {
   } catch (err) {
     const errCode = err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'unknown';
     logger.error({ err, errCode, tenantId: tenant.id, waId }, 'bot_transaction_failed');
+    void recordBotPlatformAlert({
+      salonId: tenant.id,
+      title: 'Bot transaction failed',
+      body: err instanceof Error ? err.message : String(err),
+      metadata: { errCode, waId, event: 'bot_transaction_failed' },
+    }).catch(() => {});
     // Last resort — send an error notice so users know something went wrong (not a silent menu)
     try {
       const salon = await prisma.salon.findUnique({

@@ -12,6 +12,12 @@ import {
 import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 import { isIndustryTemplateId } from '../lib/industryTemplates.js';
+import {
+  getPlatformInboxUnreadCount,
+  listPlatformInboxAlerts,
+  listPlatformInboxByCategory,
+  updatePlatformAlertStatus,
+} from '../services/platformInbox.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -600,6 +606,56 @@ export async function adminApiRoutes(app: FastifyInstance) {
   app.get('/observability/alerts', async () => {
     return checkAlertThresholds();
   });
+
+  // ─── Platform inbox (owner messages + bot errors) ────────────────────
+  app.get('/platform-inbox/unread-count', async () => {
+    const count = await getPlatformInboxUnreadCount();
+    return { count };
+  });
+
+  app.get('/platform-inbox/summary', async () => {
+    return listPlatformInboxByCategory();
+  });
+
+  app.get('/platform-inbox', async (request) => {
+    const { status, salonId, limit, offset } = request.query as {
+      status?: string;
+      salonId?: string;
+      limit?: string;
+      offset?: string;
+    };
+    const parsedStatus =
+      status === 'UNREAD' || status === 'READ' || status === 'ARCHIVED' ? status : undefined;
+    return listPlatformInboxAlerts({
+      status: parsedStatus,
+      salonId,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  });
+
+  app.patch<{ Params: { id: string }; Body: { status?: string } }>(
+    '/platform-inbox/:id',
+    async (request, reply) => {
+      const { id } = request.params;
+      const status = request.body?.status;
+      if (status !== 'READ' && status !== 'ARCHIVED' && status !== 'UNREAD') {
+        return reply.code(400).send({ error: 'invalid_status' });
+      }
+      try {
+        const alert = await updatePlatformAlertStatus(id, status);
+        return {
+          alert: {
+            id: alert.id,
+            status: alert.status,
+            readAt: alert.readAt?.toISOString() ?? null,
+          },
+        };
+      } catch {
+        return reply.code(404).send({ error: 'not_found' });
+      }
+    },
+  );
 }
 
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {

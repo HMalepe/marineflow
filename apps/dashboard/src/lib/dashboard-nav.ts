@@ -67,7 +67,7 @@ export const SALON_NAV_GROUPS: NavGroup[] = [
 
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview' },
-  { href: '/agency', label: 'Salons' },
+  { href: '/agency', label: 'Businesses' },
   { href: '/admin', label: 'Admin' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/billing', label: 'Billing' },
@@ -118,7 +118,7 @@ export function mobileMoreNavGroups(isOwner: boolean): NavGroup[] {
 
 export const ADMIN_MOBILE_TAB_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview' },
-  { href: '/agency', label: 'Salons' },
+  { href: '/agency', label: 'Businesses' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/billing', label: 'Billing' },
 ];
@@ -162,5 +162,6 @@ export const SETTINGS_SECTION_LINKS: SettingsSectionLink[] = [
   { id: 'settings-hours', label: 'Business hours' },
   { id: 'settings-location', label: 'Location' },
   { id: 'settings-password', label: 'Password' },
+  { id: 'settings-contact-marineflow', label: 'Contact MarineFlow' },
   { id: 'settings-integrations', label: 'Integrations' },
 ];
