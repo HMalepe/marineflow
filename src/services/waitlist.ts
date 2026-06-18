@@ -3,6 +3,7 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { sendWithFallback } from './channelRouter.js';
 import { logger } from '../lib/logger.js';
 import { newWaitlistClaim } from '../lib/powerFeaturesMenu.js';
+import { getIndustryTemplate } from '../lib/industryTemplates.js';
 
 const WAITLIST_EXPIRY_HOURS = 24;
 
@@ -74,7 +75,12 @@ export async function notifyWaitlistOnCancel(params: {
   const staff = params.staffId
     ? await db.staff.findUnique({ where: { id: params.staffId }, select: { name: true } })
     : null;
-  const staffName = params.staffName ?? staff?.name ?? 'your stylist';
+  const salon = await db.salon.findUnique({
+    where: { id: params.salonId },
+    select: { industryTemplate: true },
+  });
+  const providerNoun = getIndustryTemplate(salon?.industryTemplate).providerNoun;
+  const staffName = params.staffName ?? staff?.name ?? `your ${providerNoun}`;
 
   let slotLabel = 'soon';
   if (params.slotStart && params.timezone) {

@@ -7,6 +7,7 @@ import {
   type MenuCategoryId,
   type SalonMenuInput,
 } from '../lib/hierarchicalMenu.js';
+import { getIndustryTemplate } from '../lib/industryTemplates.js';
 import { truncateListField } from '../lib/integrations/messaging/interactiveList.js';
 import type { InteractiveButtons, InteractiveList, InteractiveMessage } from '../lib/integrations/messaging/types.js';
 import type { QuickPickOption } from './botAssistant.js';
@@ -150,19 +151,20 @@ export function buildStaffPickerInteractive(
   salon: SalonMenuInput,
   header?: string,
 ): InteractiveMessage | null {
+  const template = getIndustryTemplate(salon.industryTemplate);
   const items = [
     ...staffList.map((s, i) => ({
       id: String(i + 1),
       title: s.name,
-      description: s.id === preferredId ? 'Your last stylist' : undefined,
+      description: s.id === preferredId ? `Your last ${template.providerNoun}` : undefined,
     })),
     { id: String(staffList.length + 1), title: 'Any available', description: undefined },
   ];
 
   return numberedList(
-    truncateListField(header ?? 'Choose stylist:', 1024),
-    'Choose stylist',
-    'Stylists',
+    truncateListField(header ?? `Choose ${template.providerNoun}:`, 1024),
+    `Choose ${template.providerNoun}`,
+    template.providerNounPlural,
     items.slice(0, MAX_LIST_ROWS),
     footerForSalon(salon),
   );

@@ -48,6 +48,7 @@ import {
   type MenuCategoryId,
   type LegacyMenuCategoryId,
 } from '../lib/hierarchicalMenu.js';
+import { getIndustryTemplate } from '../lib/industryTemplates.js';
 import {
   afterServiceSelected,
   handleReferralMenuItem,
@@ -1969,12 +1970,13 @@ async function repromptPickStaff(conv: Conversation & { customer: Customer; salo
     return;
   }
   await saveCtx(conv.id, { staffOrderIds: staffList.map((s) => s.id) });
+  const providerNoun = getIndustryTemplate(conv.salon.industryTemplate).providerNoun;
   const header = preferredId
-    ? `Last time you booked with ${sanitize(staffList[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
-    : 'Choose stylist:';
+    ? `Last time you booked with ${sanitize(staffList[0]!.name)}. Reply 1 to book with them again.\n\nChoose ${providerNoun}:`
+    : `Choose ${providerNoun}:`;
   await replyMaybeInteractive(
     conv,
-    [header, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK to go back.'].join('\n'),
+    [header, ...staffMenuLines(staffList, preferredId, providerNoun), '', 'Reply BACK to go back.'].join('\n'),
     buildStaffPickerInteractive(staffList, preferredId, conv.salon, header),
   );
 }
@@ -3238,13 +3240,14 @@ async function handleMenu(
     return;
   }
 
+  const bookingExample = getIndustryTemplate(conv.salon.industryTemplate).bookingExample;
   await reply(
     conv,
     [
       'I\'m not sure I caught that — I\'m best at helping with bookings, prices, and salon info. 😊',
       '',
       'Type *MENU* to see everything I can help with, or just ask me something like:',
-      '• "I want to book a haircut"',
+      `• "I want to ${bookingExample}"`,
       '• "What are your prices?"',
       '• "What time do you open?"',
     ].join('\n'),
@@ -3285,10 +3288,14 @@ async function getStaffListWithPreference(
   };
 }
 
-function staffMenuLines(staffList: Staff[], preferredId: string | null): string[] {
+function staffMenuLines(
+  staffList: Staff[],
+  preferredId: string | null,
+  providerNoun = 'stylist',
+): string[] {
   return [
     ...staffList.map(
-      (s, i) => `${i + 1}. ${sanitize(s.name)}${s.id === preferredId ? ' (your last stylist)' : ''}`,
+      (s, i) => `${i + 1}. ${sanitize(s.name)}${s.id === preferredId ? ` (your last ${providerNoun})` : ''}`,
     ),
     `${staffList.length + 1}. Any available`,
   ];
@@ -3526,12 +3533,13 @@ async function continueAfterServicePick(
     { selectedServiceId: service.id, staffOrderIds: staff.map((s) => s.id) },
     ConversationStep.PICK_STAFF,
   );
+  const providerNoun = getIndustryTemplate(conv.salon.industryTemplate).providerNoun;
   const header = preferredId
-    ? `Last time you booked with ${sanitize(staff[0]!.name)}. Reply 1 to book with them again.\n\nChoose stylist:`
-    : 'Choose stylist:';
+    ? `Last time you booked with ${sanitize(staff[0]!.name)}. Reply 1 to book with them again.\n\nChoose ${providerNoun}:`
+    : `Choose ${providerNoun}:`;
   await replyMaybeInteractive(
     conv,
-    [header, ...staffMenuLines(staff, preferredId), '', 'BACK'].join('\n'),
+    [header, ...staffMenuLines(staff, preferredId, providerNoun), '', 'BACK'].join('\n'),
     buildStaffPickerInteractive(staff, preferredId, conv.salon, header),
   );
 }
@@ -3568,9 +3576,10 @@ async function handlePickStaff(
   const renderedIds =
     Array.isArray(savedOrder) && savedOrder.length > 0 ? savedOrder : staffList.map((s) => s.id);
 
+  const providerNoun = getIndustryTemplate(conv.salon.industryTemplate).providerNoun;
   const rerenderMenu = async (prefix: string) => {
     await saveCtx(conv.id, { staffOrderIds: staffList.map((s) => s.id) });
-    const body = [prefix, ...staffMenuLines(staffList, preferredId), '', 'Reply BACK for menu.'].join('\n');
+    const body = [prefix, ...staffMenuLines(staffList, preferredId, providerNoun), '', 'Reply BACK for menu.'].join('\n');
     await replyMaybeInteractive(
       conv,
       body,
@@ -3590,9 +3599,9 @@ async function handlePickStaff(
   if (!isAny) {
     const chosen = staffList.find((s) => s.id === renderedIds[n - 1]);
     if (!chosen) {
-      // That stylist became unavailable between menu render and reply —
+      // That provider became unavailable between menu render and reply —
       // never silently book whoever shifted into their slot number.
-      await rerenderMenu('Sorry, that stylist just became unavailable. Here are the current options:');
+      await rerenderMenu(`Sorry, that ${providerNoun} just became unavailable. Here are the current options:`);
       return;
     }
     staffId = chosen.id;
@@ -3888,7 +3897,7 @@ async function handlePickSlot(
       await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
       const reason = tooLong
         ? `That service is too long to fit into any slot on this day. Try a different date, or reply BACK to choose another.`
-        : `No open slots on this day — it might be fully booked or our stylist isn't in. Reply BACK to pick a different date.`;
+        : `No open slots on this day — it might be fully booked or our ${getIndustryTemplate(conv.salon.industryTemplate).providerNoun} isn't in. Reply BACK to pick a different date.`;
       await reply(conv, reason);
       return;
     }
@@ -3938,7 +3947,7 @@ async function handlePickSlot(
     await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
     const reason = tooLong
       ? `That service is too long to fit into any slot on this day. Try a different date, or reply BACK to choose another.`
-      : `No open slots on this day — it might be fully booked or our stylist isn't in. Reply BACK to pick a different date.`;
+      : `No open slots on this day — it might be fully booked or our ${getIndustryTemplate(conv.salon.industryTemplate).providerNoun} isn't in. Reply BACK to pick a different date.`;
     await reply(conv, reason);
     return;
   }

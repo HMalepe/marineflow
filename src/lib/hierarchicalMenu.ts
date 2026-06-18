@@ -1,3 +1,5 @@
+import { getIndustryTemplate } from './industryTemplates.js';
+
 /** Customer-facing salon name — dashboard trading name, then legal/display name. */
 export type SalonMenuInput = {
   name: string;
@@ -6,6 +8,8 @@ export type SalonMenuInput = {
   metadata?: unknown;
   /** When false, Rewards is omitted from the main menu (Settings → Conversation flow). */
   botLoyaltyEnabled?: boolean;
+  /** Drives vocabulary (e.g. "Book a table" vs "Book an appointment") — defaults to 'salon'. */
+  industryTemplate?: string | null;
 };
 
 export function salonDisplayName(salon: Pick<SalonMenuInput, 'name' | 'tradingName'>): string {
@@ -41,12 +45,25 @@ export const MAIN_MENU_ITEMS: MainMenuItem[] = [
 
 export const MAIN_MENU_ROW_IDS = ['1', '2', '3', '4', '5', '6', '7'] as const;
 
-/** Main menu rows for this salon — omits Rewards when loyalty is disabled in Settings. */
-export function getMainMenuItems(salon: Pick<SalonMenuInput, 'botLoyaltyEnabled'>): MainMenuItem[] {
+/** Main menu rows for this salon — labels follow the industry template (e.g. "Book a
+ *  table" for restaurants), and Rewards is omitted when loyalty is disabled in Settings. */
+export function getMainMenuItems(
+  salon: Pick<SalonMenuInput, 'botLoyaltyEnabled' | 'industryTemplate'>,
+): MainMenuItem[] {
+  const template = getIndustryTemplate(salon.industryTemplate);
+  const items = MAIN_MENU_ITEMS.map((item) => {
+    if (item.kind === 'direct' && item.action === 'book') {
+      return { ...item, label: template.bookAction };
+    }
+    if (item.kind === 'category' && item.id === 'services') {
+      return { ...item, label: template.servicesLabel };
+    }
+    return item;
+  });
   if (salon.botLoyaltyEnabled === false) {
-    return MAIN_MENU_ITEMS.filter((item) => item.kind !== 'category' || item.id !== 'rewards');
+    return items.filter((item) => item.kind !== 'category' || item.id !== 'rewards');
   }
-  return MAIN_MENU_ITEMS;
+  return items;
 }
 
 const SUB_MENUS: Record<Exclude<MenuCategoryId, 'services'>, string[]> = {

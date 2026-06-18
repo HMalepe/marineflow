@@ -38,10 +38,17 @@ interface Salon {
   slug: string;
   status: string;
   tier: string;
+  industryTemplate: string;
   createdAt: string;
   staffUserCount: number;
   customerCount: number;
 }
+
+const INDUSTRY_TEMPLATE_OPTIONS = [
+  { value: 'salon', label: 'Hair & Beauty Salon' },
+  { value: 'barbershop', label: 'Barbershop' },
+  { value: 'restaurant', label: 'Restaurant' },
+];
 
 interface CreatedSalonCredentials {
   salonName: string;
@@ -311,6 +318,20 @@ export function AdminSalonList({ token }: Props) {
     }
   }
 
+  async function handleChangeIndustry(salon: Salon, industryTemplate: string) {
+    if (industryTemplate === salon.industryTemplate) return;
+    try {
+      await adminFetch(`/salons/${salon.id}`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({ industryTemplate }),
+      });
+      setSalons((prev) => prev.map((s) => (s.id === salon.id ? { ...s, industryTemplate } : s)));
+      showToast('Industry template updated', 'success');
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Update failed', 'error');
+    }
+  }
+
   async function handleImpersonate(salon: Salon) {
     setImpersonating(salon.id);
     try {
@@ -348,6 +369,7 @@ export function AdminSalonList({ token }: Props) {
                 <TableHead>Name</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Tier</TableHead>
+                <TableHead>Industry</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Staff</TableHead>
                 <TableHead className="text-right">Customers</TableHead>
@@ -357,14 +379,14 @@ export function AdminSalonList({ token }: Props) {
             <TableBody>
               {loading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                     Loading salons…
                   </TableCell>
                 </TableRow>
               )}
               {!loading && salons.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
                     No salons found.
                   </TableCell>
                 </TableRow>
@@ -380,6 +402,17 @@ export function AdminSalonList({ token }: Props) {
                     </TableCell>
                     <TableCell><StatusBadge status={s.status} /></TableCell>
                     <TableCell><TierBadge tier={s.tier} /></TableCell>
+                    <TableCell>
+                      <select
+                        value={s.industryTemplate}
+                        onChange={(e) => void handleChangeIndustry(s, e.target.value)}
+                        className="h-8 rounded-lg border border-input bg-transparent px-2 text-xs outline-none dark:bg-input/30"
+                      >
+                        {INDUSTRY_TEMPLATE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {new Date(s.createdAt).toLocaleDateString()}
                     </TableCell>
@@ -500,7 +533,19 @@ export function AdminSalonList({ token }: Props) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="industry">Industry</Label>
-              <Input id="industry" value={createForm.industryTemplate} onChange={(e) => setCreateForm((f) => ({ ...f, industryTemplate: e.target.value }))} />
+              <select
+                id="industry"
+                value={createForm.industryTemplate}
+                onChange={(e) => setCreateForm((f) => ({ ...f, industryTemplate: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {INDUSTRY_TEMPLATE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Controls bot menu wording (e.g. &quot;Book a table&quot; vs &quot;Book an appointment&quot;) — the flow stays the same.
+              </p>
             </div>
             <SheetFooter className="px-0">
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>

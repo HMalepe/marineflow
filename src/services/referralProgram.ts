@@ -4,6 +4,7 @@ import { generateReferralCode } from './referrals.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import { shouldSendReferralPrompt } from '../lib/powerFeaturesMenu.js';
 import { logger } from '../lib/logger.js';
+import { getIndustryTemplate } from '../lib/industryTemplates.js';
 
 const APP_BASE = process.env.APP_PUBLIC_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.marineflow.co.za';
 
@@ -142,10 +143,16 @@ export async function notifyReferrerReward(params: {
   });
   if (!referrer?.waId) return;
 
+  const salon = await db.salon.findUnique({
+    where: { id: params.salonId },
+    select: { industryTemplate: true },
+  });
+  const nextBookingNoun = getIndustryTemplate(salon?.industryTemplate).nextBookingNoun;
+
   const reward = (params.rewardCents / 100).toFixed(0);
   const body =
     `Great news ${referrer.firstName ?? 'there'}! 🎉\n\n` +
-    `${params.refereeName} just booked using your referral — you've earned R${reward} off your next haircut.\n\n` +
+    `${params.refereeName} just booked using your referral — you've earned R${reward} off your next ${nextBookingNoun}.\n\n` +
     `Reply 1 to book now and use your reward!`;
 
   await sendWithFallback({ salonId: params.salonId, to: referrer.waId, body });

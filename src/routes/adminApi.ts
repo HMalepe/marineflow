@@ -10,6 +10,7 @@ import {
 } from '../lib/salonDefaults.js';
 import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
+import { isIndustryTemplateId } from '../lib/industryTemplates.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -122,6 +123,9 @@ export async function adminApiRoutes(app: FastifyInstance) {
     if (ownerPassword.length > 0 && ownerPassword.length < 8) {
       return reply.code(400).send({ error: 'password_too_short' });
     }
+    if (body.industryTemplate !== undefined && !isIndustryTemplateId(body.industryTemplate.trim())) {
+      return reply.code(400).send({ error: 'invalid_industry_template' });
+    }
 
     const existing = await prisma.salon.findUnique({ where: { slug } });
     if (existing) return reply.code(409).send({ error: 'slug_taken' });
@@ -206,6 +210,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         status: result.salon.status,
         tier: result.salon.tier,
         timezone: result.salon.timezone,
+        industryTemplate: result.salon.industryTemplate,
         createdAt: result.salon.createdAt,
       },
       user: stripStaffUser(result.user),
@@ -241,6 +246,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           slug: true,
           status: true,
           tier: true,
+          industryTemplate: true,
           createdAt: true,
           trialEndsAt: true,
           _count: {
@@ -263,6 +269,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
       name: s.name,
       status: s.status,
       tier: s.tier,
+      industryTemplate: s.industryTemplate,
       createdAt: s.createdAt,
       trialEndsAt: s.trialEndsAt,
       staffUserCount: s._count.staffUsers,
@@ -360,6 +367,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
       tier?: string;
       timezone?: string;
       whatsappNumber?: string;
+      industryTemplate?: string;
     };
     const data: Record<string, unknown> = {};
 
@@ -382,6 +390,13 @@ export async function adminApiRoutes(app: FastifyInstance) {
       const tz = body.timezone.trim();
       if (!tz) return reply.code(400).send({ error: 'invalid_timezone' });
       data.timezone = tz;
+    }
+    if (body.industryTemplate !== undefined) {
+      const template = body.industryTemplate.trim();
+      if (!isIndustryTemplateId(template)) {
+        return reply.code(400).send({ error: 'invalid_industry_template' });
+      }
+      data.industryTemplate = template;
     }
     if (body.whatsappNumber !== undefined) {
       const raw = body.whatsappNumber.trim();
@@ -418,6 +433,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         status: salon.status,
         tier: salon.tier,
         timezone: salon.timezone,
+        industryTemplate: salon.industryTemplate,
         twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
         createdAt: salon.createdAt,
       },
