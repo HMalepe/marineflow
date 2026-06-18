@@ -23,6 +23,10 @@ const LOYALTY_PROGRAM_COLUMN_GUARDS = [
   'ALTER TABLE "LoyaltyProgram" ADD COLUMN IF NOT EXISTS "rewardDescription" TEXT DEFAULT \'\'',
 ] as const;
 
+const STAFF_SERVICE_COLUMN_GUARDS = [
+  'ALTER TABLE "StaffService" ADD COLUMN IF NOT EXISTS "priceCentsOverride" INTEGER',
+] as const;
+
 const CUSTOMER_COLUMN_GUARDS = [
   `DO $$ BEGIN
     CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
@@ -38,11 +42,13 @@ const SCHEMA_COLUMN_GUARDS = [
   ...APPOINTMENT_COLUMN_GUARDS,
   ...SERVICE_COLUMN_GUARDS,
   ...LOYALTY_PROGRAM_COLUMN_GUARDS,
+  ...STAFF_SERVICE_COLUMN_GUARDS,
   ...CUSTOMER_COLUMN_GUARDS,
 ] as const;
 
-const SERVICE_ADDON_TABLE_DDL = `
-CREATE TABLE IF NOT EXISTS "ServiceAddon" (
+/** One statement per entry — PgBouncer/Prisma cannot run multi-command prepared statements. */
+const SERVICE_ADDON_TABLE_DDL = [
+  `CREATE TABLE IF NOT EXISTS "ServiceAddon" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "serviceId" TEXT NOT NULL,
@@ -52,15 +58,15 @@ CREATE TABLE IF NOT EXISTS "ServiceAddon" (
     "active" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "ServiceAddon_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX IF NOT EXISTS "ServiceAddon_serviceId_addonServiceId_key"
-  ON "ServiceAddon"("serviceId", "addonServiceId");
-CREATE INDEX IF NOT EXISTS "ServiceAddon_salonId_idx" ON "ServiceAddon"("salonId");
-CREATE INDEX IF NOT EXISTS "ServiceAddon_serviceId_idx" ON "ServiceAddon"("serviceId");
-`;
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "ServiceAddon_serviceId_addonServiceId_key"
+    ON "ServiceAddon"("serviceId", "addonServiceId")`,
+  `CREATE INDEX IF NOT EXISTS "ServiceAddon_salonId_idx" ON "ServiceAddon"("salonId")`,
+  `CREATE INDEX IF NOT EXISTS "ServiceAddon_serviceId_idx" ON "ServiceAddon"("serviceId")`,
+] as const;
 
-const CONSENT_RECORD_TABLE_DDL = `
-CREATE TABLE IF NOT EXISTS "ConsentRecord" (
+const CONSENT_RECORD_TABLE_DDL = [
+  `CREATE TABLE IF NOT EXISTS "ConsentRecord" (
     "id" TEXT NOT NULL,
     "salonId" TEXT NOT NULL,
     "customerId" TEXT NOT NULL,
@@ -72,12 +78,12 @@ CREATE TABLE IF NOT EXISTS "ConsentRecord" (
     "ipAddress" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "ConsentRecord_pkey" PRIMARY KEY ("id")
-);
-CREATE INDEX IF NOT EXISTS "ConsentRecord_salonId_idx" ON "ConsentRecord"("salonId");
-CREATE INDEX IF NOT EXISTS "ConsentRecord_customerId_idx" ON "ConsentRecord"("customerId");
-CREATE INDEX IF NOT EXISTS "ConsentRecord_salonId_customerId_type_idx"
-  ON "ConsentRecord"("salonId", "customerId", "type");
-`;
+  )`,
+  `CREATE INDEX IF NOT EXISTS "ConsentRecord_salonId_idx" ON "ConsentRecord"("salonId")`,
+  `CREATE INDEX IF NOT EXISTS "ConsentRecord_customerId_idx" ON "ConsentRecord"("customerId")`,
+  `CREATE INDEX IF NOT EXISTS "ConsentRecord_salonId_customerId_type_idx"
+    ON "ConsentRecord"("salonId", "customerId", "type")`,
+] as const;
 
 const CONSENT_RECORD_FKEY_GUARDS = [
   `DO $$ BEGIN
@@ -139,11 +145,15 @@ export async function ensureSchemaColumns(): Promise<void> {
     for (const sql of SCHEMA_COLUMN_GUARDS) {
       await client.$executeRawUnsafe(sql);
     }
-    await client.$executeRawUnsafe(SERVICE_ADDON_TABLE_DDL);
+    for (const sql of SERVICE_ADDON_TABLE_DDL) {
+      await client.$executeRawUnsafe(sql);
+    }
     for (const sql of SERVICE_ADDON_FKEY_GUARDS) {
       await client.$executeRawUnsafe(sql);
     }
-    await client.$executeRawUnsafe(CONSENT_RECORD_TABLE_DDL);
+    for (const sql of CONSENT_RECORD_TABLE_DDL) {
+      await client.$executeRawUnsafe(sql);
+    }
     for (const sql of CONSENT_RECORD_FKEY_GUARDS) {
       await client.$executeRawUnsafe(sql);
     }
