@@ -116,6 +116,7 @@ import {
   resolveCampaignScheduleAfterPatch,
 } from '../services/campaigns.js';
 import { sendPopiaConsentBlast, countPopiaPendingCustomers } from '../api/campaigns/send-popia-blast.js';
+import { getBranchStats } from '../api/branches/stats.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
 
@@ -2540,6 +2541,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         include: { _count: { select: { staff: true, appointments: true } } },
       });
       return { branches };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/branches/:id/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getBranchStats(db, user.salonId, request.params.id);
+      if (!stats) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { stats };
     });
   });
 
