@@ -10,18 +10,18 @@ export async function findSalonByWhatsAppPhone(phoneE164: string) {
 
   const targetDigits = normalizeWaId(phoneE164);
   const salons = await prisma.salon.findMany({
-    where: { deletedAt: null, twilioWhatsAppFrom: { not: null } },
+    where: { deletedAt: null, twilioWhatsAppNumber: { not: null } },
     select: {
       id: true,
       name: true,
       slug: true,
-      twilioWhatsAppFrom: true,
+      twilioWhatsAppNumber: true,
     },
   });
 
   return (
     salons.find(
-      (s) => s.twilioWhatsAppFrom && normalizeWaId(s.twilioWhatsAppFrom) === targetDigits,
+      (s) => s.twilioWhatsAppNumber && normalizeWaId(s.twilioWhatsAppNumber) === targetDigits,
     ) ?? null
   );
 }

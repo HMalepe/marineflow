@@ -57,7 +57,7 @@ describe('sendWithFallback — interactive list delivery', () => {
   it('sends interactive list via Twilio Content API (never Meta Cloud interactive)', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: 'PHONE123',
-      twilioWhatsAppFrom: 'whatsapp:+14155238886',
+      twilioWhatsAppNumber: 'whatsapp:+14155238886',
     });
     twilioSendMock.mockResolvedValueOnce({ providerMessageId: 'SM.interactive' });
 
@@ -83,7 +83,7 @@ describe('sendWithFallback — interactive list delivery', () => {
   it('retries plain text on Twilio when interactive send throws', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: 'PHONE123',
-      twilioWhatsAppFrom: '+14155238886',
+      twilioWhatsAppNumber: '+14155238886',
     });
     twilioSendMock
       .mockRejectedValueOnce(new Error('Twilio Content API error'))
@@ -106,7 +106,7 @@ describe('sendWithFallback — interactive list delivery', () => {
   it('retries plain text on Twilio when interactive returns empty providerMessageId', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: null,
-      twilioWhatsAppFrom: '+14155238886',
+      twilioWhatsAppNumber: '+14155238886',
     });
     twilioSendMock
       .mockResolvedValueOnce({ providerMessageId: null })
@@ -127,7 +127,7 @@ describe('sendWithFallback — interactive list delivery', () => {
   it('uses Twilio when whatsappPhoneId is whitespace', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: '   ',
-      twilioWhatsAppFrom: '+14155238886',
+      twilioWhatsAppNumber: '+14155238886',
     });
     twilioSendMock.mockResolvedValue({ providerMessageId: 'SM123' });
 
@@ -145,7 +145,7 @@ describe('sendWithFallback — interactive list delivery', () => {
   it('passes interactive payload to Twilio on Twilio-only tenant', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: null,
-      twilioWhatsAppFrom: '+14155238886',
+      twilioWhatsAppNumber: '+14155238886',
     });
     twilioSendMock.mockResolvedValue({ providerMessageId: 'SM999' });
 

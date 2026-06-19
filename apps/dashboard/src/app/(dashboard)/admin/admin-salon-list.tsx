@@ -59,7 +59,7 @@ interface CreatedSalonCredentials {
 
 interface TwilioWhatsAppOption {
   phoneE164: string;
-  twilioWhatsAppFrom: string;
+  twilioWhatsAppNumber: string;
   status: string | null;
   assignedSalon: { id: string; name: string } | null;
 }
@@ -118,6 +118,9 @@ export function AdminSalonList({ token }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [addUserSalon, setAddUserSalon] = useState<Salon | null>(null);
   const [brandSalon, setBrandSalon] = useState<Salon | null>(null);
+  const [whatsappSalon, setWhatsappSalon] = useState<Salon | null>(null);
+  const [whatsappEditValue, setWhatsappEditValue] = useState('');
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false);
   const [brandBotName, setBrandBotName] = useState('');
   const [savingBrand, setSavingBrand] = useState(false);
   const [credentials, setCredentials] = useState<CreatedSalonCredentials | null>(null);
@@ -166,13 +169,13 @@ export function AdminSalonList({ token }: Props) {
   }, [toast]);
 
   useEffect(() => {
-    if (!createOpen) return;
+    if (!createOpen && !whatsappSalon) return;
     setLoadingTwilioNumbers(true);
     void adminFetch<{ numbers: TwilioWhatsAppOption[] }>('/twilio/whatsapp-numbers', token)
       .then((data) => setTwilioNumbers(data.numbers))
       .catch(() => showToast('Could not load Twilio WhatsApp numbers', 'error'))
       .finally(() => setLoadingTwilioNumbers(false));
-  }, [createOpen, token, showToast]);
+  }, [createOpen, whatsappSalon, token, showToast]);
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -258,7 +261,9 @@ export function AdminSalonList({ token }: Props) {
       await loadTenants();
     } catch (e) {
       if (e instanceof ApiError) {
-        if (e.message.includes('whatsapp_not_on_twilio')) {
+        if (e.message.includes('invalid_whatsapp_number_format')) {
+          showToast('Use format whatsapp:+27XXXXXXXXX (10–15 digits)', 'error');
+        } else if (e.message.includes('whatsapp_not_on_twilio')) {
           showToast('That number is not on your Twilio account', 'error');
         } else if (e.message.includes('whatsapp_already_assigned')) {
           showToast('That number is already assigned to another business', 'error');
@@ -426,6 +431,16 @@ export function AdminSalonList({ token }: Props) {
             <Button variant="ghost" size="sm" onClick={() => openBrandEditor(t)}>
               Brand
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setWhatsappSalon(t);
+                setWhatsappEditValue('');
+              }}
+            >
+              WhatsApp
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setAddUserSalon(t)}>
               Add User
             </Button>
@@ -490,27 +505,23 @@ export function AdminSalonList({ token }: Props) {
               <Input id="owner-email" type="email" value={createForm.ownerEmail} onChange={(e) => setCreateForm((f) => ({ ...f, ownerEmail: e.target.value }))} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="whatsapp">WhatsApp business number *</Label>
-              <select
+              <Label htmlFor="whatsapp">WhatsApp number *</Label>
+              <Input
                 id="whatsapp"
+                list="twilio-whatsapp-suggestions"
                 value={createForm.whatsappNumber}
                 onChange={(e) => setCreateForm((f) => ({ ...f, whatsappNumber: e.target.value }))}
+                placeholder="whatsapp:+XXXXXXXXXXX"
                 required
-                disabled={loadingTwilioNumbers}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">
-                  {loadingTwilioNumbers ? 'Loading Twilio numbers…' : 'Select a Twilio WhatsApp number…'}
-                </option>
+              />
+              <datalist id="twilio-whatsapp-suggestions">
                 {twilioNumbers.map((n) => (
-                  <option key={n.phoneE164} value={n.phoneE164} disabled={!!n.assignedSalon}>
-                    {n.phoneE164}
-                    {n.assignedSalon ? ` (assigned to ${n.assignedSalon.name})` : ''}
-                  </option>
+                  <option key={n.phoneE164} value={n.twilioWhatsAppNumber} />
                 ))}
-              </select>
+              </datalist>
               <p className="text-xs text-muted-foreground">
-                Only numbers registered on your Twilio account. The owner uses this to sign in and create their password.
+                Format: <code className="text-[11px]">whatsapp:+XXXXXXXXXXX</code> — one number per business.
+                Pick from Twilio senders below; a number already linked to another tenant cannot be reused.
               </p>
             </div>
             <div className="space-y-2">
@@ -593,6 +604,81 @@ export function AdminSalonList({ token }: Props) {
             <SheetFooter className="px-0">
               <Button type="button" variant="outline" onClick={() => setAddUserSalon(null)}>Cancel</Button>
               <Button type="submit" disabled={savingUser}>{savingUser ? 'Adding…' : 'Add user'}</Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* WhatsApp number (super admin) */}
+      <Sheet open={!!whatsappSalon} onOpenChange={(open) => { if (!open) setWhatsappSalon(null); }}>
+        <SheetContent className="sm:max-w-md overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>WhatsApp number</SheetTitle>
+            <SheetDescription>
+              {whatsappSalon ? `Inbound/outbound routing for ${whatsappSalon.name}` : ''}
+            </SheetDescription>
+          </SheetHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!whatsappSalon) return;
+              void (async () => {
+                setSavingWhatsapp(true);
+                try {
+                  await adminFetch(`/salons/${whatsappSalon.id}`, token, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ whatsappNumber: whatsappEditValue.trim() }),
+                  });
+                  showToast('WhatsApp number saved', 'success');
+                  setWhatsappSalon(null);
+                  await loadTenants();
+                } catch (err) {
+                  if (err instanceof ApiError) {
+                    if (err.message.includes('invalid_whatsapp_number_format')) {
+                      showToast('Use format whatsapp:+27XXXXXXXXX', 'error');
+                    } else if (err.message.includes('whatsapp_already_assigned')) {
+                      showToast('That number is already assigned to another business', 'error');
+                    } else {
+                      showToast(err.message, 'error');
+                    }
+                  } else {
+                    showToast('Save failed', 'error');
+                  }
+                } finally {
+                  setSavingWhatsapp(false);
+                }
+              })();
+            }}
+            className="flex flex-col gap-4 px-4 pb-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="edit-whatsapp">WhatsApp number</Label>
+              <Input
+                id="edit-whatsapp"
+                list="twilio-whatsapp-suggestions-edit"
+                value={whatsappEditValue}
+                onChange={(e) => setWhatsappEditValue(e.target.value)}
+                placeholder="whatsapp:+XXXXXXXXXXX"
+                required
+              />
+              <datalist id="twilio-whatsapp-suggestions-edit">
+                {twilioNumbers.map((n) => (
+                  <option key={n.phoneE164} value={n.twilioWhatsAppNumber}>
+                    {n.assignedSalon && n.assignedSalon.id !== whatsappSalon?.id
+                      ? `(assigned: ${n.assignedSalon.name})`
+                      : ''}
+                  </option>
+                ))}
+              </datalist>
+              <p className="text-xs text-muted-foreground">
+                Must match <code className="text-[11px]">whatsapp:+XXXXXXXXXXX</code>. Inbound Twilio webhooks route
+                by this number — each business has its own; customers messaging tenant A never hit tenant B&apos;s bot.
+                {loadingTwilioNumbers ? ' Loading Twilio senders…' : ''}
+              </p>
+            </div>
+            <SheetFooter className="px-0">
+              <Button type="button" variant="outline" onClick={() => setWhatsappSalon(null)}>Cancel</Button>
+              <Button type="submit" disabled={savingWhatsapp}>{savingWhatsapp ? 'Saving…' : 'Save'}</Button>
             </SheetFooter>
           </form>
         </SheetContent>

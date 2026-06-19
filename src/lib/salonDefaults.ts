@@ -29,5 +29,14 @@ export function normalizeTwilioWhatsAppFrom(input: string): string {
   return `whatsapp:+${digits}`;
 }
 
+/** Canonical Twilio WhatsApp address format for tenant routing. */
+export const TWILIO_WHATSAPP_NUMBER_REGEX = /^whatsapp:\+\d{10,15}$/;
+
+/** Normalize and validate a tenant WhatsApp number; returns null if invalid. */
+export function parseTwilioWhatsAppNumber(input: string): string | null {
+  const normalized = normalizeTwilioWhatsAppFrom(input);
+  return TWILIO_WHATSAPP_NUMBER_REGEX.test(normalized) ? normalized : null;
+}
+
 /** Platform assistant branding — editable only via super admin. */
 export const DEFAULT_BOT_NAME = 'Marine';

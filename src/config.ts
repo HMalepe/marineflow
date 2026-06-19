@@ -82,5 +82,5 @@ export function isTwilioAccountConfigured(): boolean {
 }
 
 export function isTwilioConfigured(): boolean {
-  return Boolean(isTwilioAccountConfigured() && env.TWILIO_WHATSAPP_FROM);
+  return isTwilioAccountConfigured();
 }

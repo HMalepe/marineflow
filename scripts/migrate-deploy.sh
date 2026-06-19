@@ -19,4 +19,10 @@ for migration in $RECOVERABLE_FAILED_MIGRATIONS; do
   fi
 done
 
-exec npx prisma migrate deploy
+npx prisma migrate deploy
+status=$?
+if [ "$status" -eq 0 ]; then
+  echo "[migrate-deploy] Running WhatsApp number backfill..."
+  npx tsx scripts/backfill-tenant-whatsapp-number.ts || echo "[migrate-deploy] backfill skipped or failed (non-fatal)"
+fi
+exit "$status"

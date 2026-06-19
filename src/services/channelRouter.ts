@@ -4,8 +4,9 @@ import { whatsappCloudMessaging } from '../lib/integrations/messaging/whatsapp-c
 import { smsMessaging } from '../lib/integrations/messaging/sms-impl.js';
 import { callBookingConfirmation } from '../lib/integrations/messaging/voice.js';
 import { logger } from '../lib/logger.js';
-import { env, isTwilioAccountConfigured } from '../config.js';
+import { isTwilioAccountConfigured } from '../config.js';
 import { normalizeTwilioWhatsAppFrom } from '../lib/salonDefaults.js';
+import { getTenantWhatsAppFrom } from '../lib/twilio.js';
 import { logMessageLog } from './messageLog.js';
 import type { InteractiveMessage, SentMessage } from '../lib/integrations/messaging/types.js';
 
@@ -30,8 +31,8 @@ function logCloudApiFallthrough(cloudPhoneId: string, err: unknown): void {
   }, 'whatsapp_cloud_fallthrough');
 }
 
-function resolveTwilioFrom(salonTwilioWhatsAppFrom: string | null): string | null {
-  const raw = salonTwilioWhatsAppFrom?.trim() || env.TWILIO_WHATSAPP_FROM?.trim();
+function resolveTwilioFrom(salonTwilioWhatsAppNumber: string | null | undefined): string | null {
+  const raw = salonTwilioWhatsAppNumber?.trim();
   if (!raw) return null;
   return normalizeTwilioWhatsAppFrom(raw);
 }
@@ -78,7 +79,7 @@ export async function sendWithFallback(params: {
 }): Promise<{ channel: Channel; result: SentMessage }> {
   const salon = await getTenantDb().salon.findUniqueOrThrow({
     where: { id: params.salonId },
-    select: { whatsappPhoneId: true, twilioWhatsAppFrom: true },
+    select: { whatsappPhoneId: true, twilioWhatsAppNumber: true },
   });
 
   const sendOpts = {
@@ -89,8 +90,16 @@ export async function sendWithFallback(params: {
   };
 
   const cloudPhoneId = salon.whatsappPhoneId?.trim();
-  const twilioFrom = resolveTwilioFrom(salon.twilioWhatsAppFrom);
+  const twilioFrom = resolveTwilioFrom(salon.twilioWhatsAppNumber);
   const twilioReady = isTwilioAccountConfigured() && twilioFrom != null;
+
+  if (!twilioFrom && !cloudPhoneId) {
+    try {
+      await getTenantWhatsAppFrom(params.salonId);
+    } catch (err) {
+      logger.error({ err, salonId: params.salonId }, 'tenant_missing_twilio_whatsapp_number');
+    }
+  }
 
   // Interactive lists/buttons — Twilio Content API only (no Meta Cloud interactive).
   if (params.interactive) {

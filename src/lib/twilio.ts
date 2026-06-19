@@ -1,11 +1,12 @@
 import twilio from 'twilio';
 import { env, isTwilioAccountConfigured } from '../config.js';
+import { prisma } from './prisma.js';
 import { normalizeTwilioWhatsAppFrom } from './salonDefaults.js';
 import { logger } from './logger.js';
 
 let client: ReturnType<typeof twilio> | null = null;
 
-/** Twilio REST client (account SID + auth token only). */
+/** Twilio REST client (platform account SID + auth token). */
 export function getTwilioAccountClient(): ReturnType<typeof twilio> | null {
   if (!isTwilioAccountConfigured()) return null;
   if (!client) {
@@ -17,6 +18,24 @@ export function getTwilioAccountClient(): ReturnType<typeof twilio> | null {
 /** @deprecated Prefer getTwilioAccountClient — same client, clearer name. */
 export function getTwilioClient(): ReturnType<typeof twilio> | null {
   return getTwilioAccountClient();
+}
+
+/**
+ * Resolve the outbound WhatsApp From address for a tenant.
+ * Throws if the tenant has no twilioWhatsAppNumber — never falls back to env.
+ */
+export async function getTenantWhatsAppFrom(tenantId: string): Promise<string> {
+  const salon = await prisma.salon.findFirst({
+    where: { id: tenantId, deletedAt: null },
+    select: { twilioWhatsAppNumber: true, name: true, slug: true },
+  });
+  const raw = salon?.twilioWhatsAppNumber?.trim();
+  if (!raw) {
+    throw new Error(
+      `Tenant ${tenantId}${salon ? ` (${salon.slug})` : ''} has no twilioWhatsAppNumber configured`,
+    );
+  }
+  return normalizeTwilioWhatsAppFrom(raw);
 }
 
 export async function sendWhatsAppReply(
@@ -36,11 +55,14 @@ export async function sendWhatsAppReplyWithStatusCallback(params: {
   statusCallback?: string;
 }): Promise<string | null> {
   const tw = getTwilioClient();
-  const from =
-    params.twilioFrom ??
-    (env.TWILIO_WHATSAPP_FROM ? normalizeTwilioWhatsAppFrom(env.TWILIO_WHATSAPP_FROM) : null);
+  const from = params.twilioFrom?.trim()
+    ? normalizeTwilioWhatsAppFrom(params.twilioFrom)
+    : null;
   if (!tw || !from) {
-    logger.error({ hasClient: !!tw, hasFrom: !!from }, 'twilio_send_aborted_no_config');
+    logger.error(
+      { hasClient: !!tw, hasFrom: !!from, hint: 'Pass twilioFrom from getTenantWhatsAppFrom(tenantId)' },
+      'twilio_send_aborted_no_config',
+    );
     return null;
   }
   const toDigits = params.toWaId.replace(/^whatsapp:/i, '').replace(/^\+/, '');

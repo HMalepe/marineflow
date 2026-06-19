@@ -6,8 +6,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   const slug = process.env.DEFAULT_SALON_SLUG ?? 'demo-salon';
-  const twilioFrom =
-    process.env.TWILIO_WHATSAPP_FROM ?? 'whatsapp:+27624760899';
+  const twilioFrom = process.env.TWILIO_WHATSAPP_FROM?.trim();
 
   const salon = await prisma.salon.upsert({
     where: { slug },
@@ -32,7 +31,7 @@ async function main() {
       parkingNotes: 'Lot behind building.',
       accessibility: 'Step-free entrance.',
       phoneDisplay: '+27 10 000 0000',
-      twilioWhatsAppFrom: twilioFrom,
+      ...(twilioFrom ? { twilioWhatsAppNumber: twilioFrom } : {}),
       metadata: {},
     },
     update: {
@@ -43,7 +42,7 @@ async function main() {
       locale: 'en-ZA',
       phoneDisplay: '+27 10 000 0000',
       addressLine: 'Johannesburg, South Africa',
-      twilioWhatsAppFrom: twilioFrom,
+      ...(twilioFrom ? { twilioWhatsAppNumber: twilioFrom } : {}),
     },
   });
 

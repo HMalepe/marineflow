@@ -3,8 +3,7 @@ import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
 import { prisma } from '../lib/prisma.js';
 import { env, isTwilioAccountConfigured } from '../config.js';
 import { logger } from '../lib/logger.js';
-import { sendWhatsAppReplyWithStatusCallback } from '../lib/twilio.js';
-import { normalizeTwilioWhatsAppFrom } from '../lib/salonDefaults.js';
+import { getTenantWhatsAppFrom, sendWhatsAppReplyWithStatusCallback } from '../lib/twilio.js';
 import { sendWithFallback } from './channelRouter.js';
 import type { CampaignMediaType } from './campaigns.js';
 
@@ -52,15 +51,14 @@ export async function sendCampaignOutbound(params: {
   mediaType?: CampaignMediaType;
 }): Promise<{ sent: boolean; usesStatusCallback: boolean }> {
   const db = getTenantDb();
-  const salon = await db.salon.findUniqueOrThrow({
-    where: { id: params.salonId },
-    select: { twilioWhatsAppFrom: true },
-  });
-
-  const twilioFrom =
-    normalizeTwilioWhatsAppFrom(salon.twilioWhatsAppFrom?.trim() || env.TWILIO_WHATSAPP_FROM?.trim() || '') ||
-    null;
   const statusCallback = twilioStatusCallbackUrl();
+
+  let twilioFrom: string | null = null;
+  try {
+    twilioFrom = await getTenantWhatsAppFrom(params.salonId);
+  } catch (err) {
+    logger.error({ err, salonId: params.salonId }, 'campaign_send_missing_tenant_whatsapp_number');
+  }
 
   let providerSid: string | null = null;
   let sent = false;

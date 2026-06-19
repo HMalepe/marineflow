@@ -238,8 +238,11 @@ model Salon {
   /// Meta WhatsApp Cloud API phone_number_id
   whatsappPhoneId String?     @unique
   whatsappWabaId  String?
-  /// Twilio sandbox/production From (e.g. whatsapp:+14155238886) for routing fallback
-  twilioWhatsAppFrom String?  @unique
+  /// Per-tenant Twilio WhatsApp sender — inbound To / outbound From (e.g. whatsapp:+27624760899)
+  twilioWhatsAppNumber String?  @unique
+  /// Optional per-tenant Twilio subaccount (future isolation)
+  twilioAccountSid     String?
+  twilioAuthToken      String?
   onboardingCompletedAt DateTime?
   metadata       Json         @default("{}")
   deletedAt      DateTime?
