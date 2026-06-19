@@ -108,7 +108,13 @@ export function buildMainMenuText(salon: SalonMenuInput): string {
       : {};
   const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
   const specialLine = special ? `\n🌟 *Special:* ${special}` : '';
-  return [welcome, ...lines, '', 'Reply BACK anytime for this menu.'].join('\n') + specialLine;
+  return [
+    welcome,
+    ...lines,
+    '',
+    '💬 Or just tell me what you need — e.g. "Monday 15:00 low fade" — and I\'ll book it for you.',
+    'Reply BACK anytime for this menu.',
+  ].join('\n') + specialLine;
 }
 
 export function buildSubMenuText(categoryId: MenuCategoryId | LegacyMenuCategoryId): string {
