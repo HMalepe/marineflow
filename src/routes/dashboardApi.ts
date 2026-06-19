@@ -15,6 +15,8 @@ import { getTenantOverviewKpis } from '../api/tenant/overview-kpis.js';
 import { getTenantSetupHealth } from '../api/tenant/setup-health.js';
 import { sendAppointmentPaymentLink } from '../api/appointments/send-payment-link.js';
 import { markAppointmentCashPaid } from '../api/appointments/mark-cash-paid.js';
+import { bulkUpdateServiceCategory } from '../api/services/bulk-update-category.js';
+import { getServiceBookingStats } from '../api/services/stats.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -2634,6 +2636,39 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/services/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getServiceBookingStats(db, user.salonId);
+      return { stats };
+    });
+  });
+
+  app.post<{ Body: { serviceIds: string[]; categoryId: string } }>(
+    '/services/bulk-update-category',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await bulkUpdateServiceCategory(db, {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          serviceIds: request.body.serviceIds ?? [],
+          categoryId: request.body.categoryId ?? '',
+        });
+        if (!result.ok) {
+          reply.code(result.error === 'category_not_found' ? 404 : 400);
+          return { error: result.error, message: result.message };
+        }
+        syncSalonRosterLater(user.salonId, 'services', {
+          categoryId: request.body.categoryId,
+          action: 'bulk_category',
+        });
+        return { ok: true, updated: result.updated };
+      });
+    },
+  );
+
   app.post<{
     Body: {
       name: string;
@@ -2701,6 +2736,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       bufferMin?: number;
       active?: boolean;
       removeFromCatalog?: boolean;
+      categoryId?: string | null;
     };
   }>(
     '/services/:id',
@@ -2716,7 +2752,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog } =
+        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, categoryId } =
           request.body;
 
         if (removeFromCatalog) {
@@ -2759,6 +2795,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(durationMin !== undefined && { durationMin: Math.round(durationMin) }),
             ...(bufferMin !== undefined && { bufferMin: Math.round(bufferMin) }),
             ...(active !== undefined && { active }),
+            ...(categoryId !== undefined && { categoryId: categoryId || null }),
           },
         });
 
