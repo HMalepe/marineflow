@@ -165,6 +165,7 @@ enum ConversationStep {
   PICK_DATE
   PICK_SLOT
   CONFIRM_BOOKING
+  CHOOSE_PAYMENT_METHOD
   MANAGE_BOOKING
   RESCHEDULE
   COMPLAINT
@@ -469,6 +470,9 @@ model Service {
   active          Boolean          @default(true)
   sortOrder       Int              @default(0)
   deletedAt       DateTime?
+  /// Custom post-appointment care instructions sent ~10min after completion.
+  /// Falls back to a keyword-based default template (barber/lashes/nails/etc.) when unset.
+  aftercareNote   String?          @db.Text
 
   staffLinks   StaffService[]
   appointments Appointment[]
@@ -636,6 +640,11 @@ model Appointment {
   addonServiceIds     String[]           @default([])
   csatSentAt          DateTime?
   csatScore           Int?               /// 1–5, null until customer replies
+  /// Number of people the booking is for (group bookings); 1 for a single customer.
+  partySize           Int                @default(1)
+  /// Customer-chosen settlement method for post-confirm payment (cash/EFT paid in person vs online).
+  paymentMethod       PaymentMethod?
+  aftercareSentAt     DateTime?
   createdAt           DateTime           @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 

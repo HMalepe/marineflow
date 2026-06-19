@@ -2797,6 +2797,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       durationMin: number;
       bufferMin?: number;
       active?: boolean;
+      aftercareNote?: string | null;
     };
   }>(
     '/services',
@@ -2804,7 +2805,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const { name, description, priceCents, durationMin, bufferMin, active } = request.body;
+        const { name, description, priceCents, durationMin, bufferMin, active, aftercareNote } = request.body;
         if (!name?.trim()) {
           reply.code(400);
           return { error: 'name_required' };
@@ -2827,6 +2828,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             durationMin: Math.round(durationMin),
             bufferMin: Math.round(bufferMin ?? 0),
             active: active ?? true,
+            aftercareNote: aftercareNote?.trim() || null,
           },
         });
 
@@ -2857,6 +2859,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       active?: boolean;
       removeFromCatalog?: boolean;
       categoryId?: string | null;
+      aftercareNote?: string | null;
     };
   }>(
     '/services/:id',
@@ -2872,7 +2875,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, categoryId } =
+        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, categoryId, aftercareNote } =
           request.body;
 
         if (removeFromCatalog) {
@@ -2916,6 +2919,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(bufferMin !== undefined && { bufferMin: Math.round(bufferMin) }),
             ...(active !== undefined && { active }),
             ...(categoryId !== undefined && { categoryId: categoryId || null }),
+            ...(aftercareNote !== undefined && { aftercareNote: aftercareNote?.trim() || null }),
           },
         });
 

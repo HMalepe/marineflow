@@ -5,6 +5,7 @@ export { executeScheduledCampaign, checkScheduledCampaigns } from './executeCamp
 export { conversationInactivity } from './conversationInactivity.js';
 export { bookingRatingPrompt } from './bookingRatingPrompt.js';
 export { appointmentRating, googleReviewRequest } from './appointmentRating.js';
+export { appointmentAftercare } from './appointmentAftercare.js';
 export { reactivationCampaign } from './reactivationCampaign.js';
 export { winbackCampaign } from './winbackCampaign.js';
 export { birthdayCampaign } from './birthdayCampaign.js';

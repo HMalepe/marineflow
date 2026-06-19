@@ -2,6 +2,7 @@ import {
   ConversationStep,
   MessageDirection,
   Prisma,
+  type AppointmentStatus,
   type Conversation,
   type Customer,
   type Salon,
@@ -167,6 +168,12 @@ export type BotContext = Record<string, unknown> & {
   localDateStr?: string;
   slotStartIso?: string;
   pendingAppointmentId?: string;
+  /** Amount due for the post-confirm payment step, shown while the customer picks a payment method. */
+  pendingPaymentAmountCents?: number;
+  /** Carried through CHOOSE_PAYMENT_METHOD so the first-booking POPIA hint still fires once. */
+  pendingPaymentIsFirstBooking?: boolean;
+  /** Group booking headcount set at CONFIRM_BOOKING; defaults to 1 (no group). */
+  partySize?: number;
   rescheduleAppointmentId?: string;
   csatAppointmentId?: string;
   anyStaff?: boolean;
@@ -683,19 +690,26 @@ function buildConfirmBookingBody(
   serviceName: string,
   staffName: string,
   dt: DateTime,
+  partySize?: number,
 ): string {
   const firstName = conv.customer.firstName?.trim();
   const opener = firstName ? `${pickCompliment()} *${sanitize(firstName)}*, here's the booking:` : `${pickCompliment()} Here's the booking:`;
   const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
     ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
     : 'Reply YES to confirm, or BACK to choose another time.';
+  const groupLine = partySize && partySize > 1 ? `👥 Party size: ${partySize}` : null;
+  const groupHint = 'Booking for a group? Reply the number of people instead of YES (e.g. 3).';
   return [
     opener,
     `${sanitize(serviceName)} with ${sanitize(staffName)}`,
     dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+    ...(groupLine ? [groupLine] : []),
     '',
     confirmFooter,
-  ].join('\n');
+    groupLine ? '' : groupHint,
+  ]
+    .filter((line) => line !== null && line !== undefined)
+    .join('\n');
 }
 
 function shouldPromptMarketingConsentBeforeMenu(
@@ -2364,6 +2378,9 @@ async function routeConversation(
       break;
     case ConversationStep.CONFIRM_BOOKING:
       await handleConfirm(conv, t);
+      break;
+    case ConversationStep.CHOOSE_PAYMENT_METHOD:
+      await handlePaymentMethodChoice(conv, t);
       break;
     case ConversationStep.PICK_BRANCH:
       await handlePickBranch(conv, t);
@@ -4157,16 +4174,6 @@ async function handleConfirm(
     return;
   }
 
-  // EC-03: accept natural affirmations, not just exact "yes"/"y"
-  if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(trimmed)) {
-    await replyMaybeInteractive(
-      conv,
-      'No problem — reply *YES* to confirm this booking, or *BACK* to pick a different time.',
-      buildConfirmBookingInteractive(conv.salon),
-    );
-    return;
-  }
-
   const c = ctx(conv);
   const serviceId = c.selectedServiceId as string | undefined;
   const staffId = c.selectedStaffId as string | undefined;
@@ -4174,6 +4181,29 @@ async function handleConfirm(
   if (!serviceId || !staffId || !slotIso) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
     await replyMenu(conv);
+    return;
+  }
+
+  // Group booking: a bare number 2–20 sets/updates the party size instead of
+  // confirming — re-show the confirmation with the updated headcount.
+  const partySizeAttempt = /^\d{1,2}$/.test(trimmed) ? parseInt(trimmed, 10) : NaN;
+  if (Number.isFinite(partySizeAttempt) && partySizeAttempt >= 2 && partySizeAttempt <= 20) {
+    await saveCtx(conv.id, { partySize: partySizeAttempt });
+    const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+    const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+    const dt = DateTime.fromISO(slotIso).setZone(conv.salon.timezone);
+    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt, partySizeAttempt);
+    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+    return;
+  }
+
+  // EC-03: accept natural affirmations, not just exact "yes"/"y"
+  if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(trimmed)) {
+    await replyMaybeInteractive(
+      conv,
+      'No problem — reply *YES* to confirm this booking, *BACK* to pick a different time, or the number of people for a group booking (e.g. *3*).',
+      buildConfirmBookingInteractive(conv.salon),
+    );
     return;
   }
 
@@ -4293,6 +4323,7 @@ async function handleConfirm(
       start,
       end,
       addonServiceIds: (c.selectedAddonIds as string[] | undefined) ?? [],
+      partySize: (c.partySize as number | undefined) ?? 1,
       status: redeem.redeemed ? 'CONFIRMED' : paymentPlan ? 'PENDING_PAYMENT' : 'CONFIRMED',
       loyaltyRedeemed: redeem.redeemed,
       rescheduledFromId: reschedulingId ?? undefined,
@@ -4431,10 +4462,11 @@ async function handleConfirm(
     }
   }
 
-  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
+  await saveCtx(conv.id, { pendingAppointmentId: appointment.id, partySize: undefined }, ConversationStep.IDLE);
 
   const bookingNotes = [redeem.note, reviewCredit.note].filter(Boolean).join('\n');
   const confirmFirstName = conv.customer.firstName?.trim();
+  const partySize = (c.partySize as number | undefined) ?? 1;
   await reply(
     conv,
     [
@@ -4447,6 +4479,7 @@ async function handleConfirm(
       `👤 with ${sanitize(staff.name)}`,
       `📅 ${DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('cccc, d MMMM yyyy')}`,
       `🕐 ${DateTime.fromJSDate(start).setZone(conv.salon.timezone).toFormat('HH:mm')} – ${DateTime.fromJSDate(end).setZone(conv.salon.timezone).toFormat('HH:mm')}`,
+      partySize > 1 ? `👥 Party size: ${partySize}` : '',
       '',
       `🔖 Ref: *${appointment.id.slice(0, 8).toUpperCase()}*`,
       '',
@@ -4459,14 +4492,121 @@ async function handleConfirm(
   );
 
   if (paymentPlan) {
+    await saveCtx(
+      conv.id,
+      {
+        pendingAppointmentId: appointment.id,
+        pendingPaymentAmountCents: paymentPlan.amountCents,
+        pendingPaymentIsFirstBooking: isFirstBooking,
+      },
+      ConversationStep.CHOOSE_PAYMENT_METHOD,
+    );
+    await reply(
+      conv,
+      [
+        `💳 *How would you like to pay?*`,
+        '',
+        `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`,
+        '',
+        `1 — Pay online now (card via PayFast)`,
+        `2 — Cash at the salon`,
+        `3 — EFT (bank transfer)`,
+      ].join('\n'),
+    );
+    return;
+  } else {
+    void onBookingConfirmed({
+      id: appointment.id,
+      salonId: conv.salonId,
+      start,
+      status: appointment.status,
+      salon: conv.salon,
+    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+
+    if (isFirstBooking) {
+      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+    }
+  }
+
+  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
+  await reply(
+    conv,
+    'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
+  );
+}
+
+async function finishBookingAfterPayment(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  appointment: { id: string; salonId: string; start: Date; status: AppointmentStatus },
+  isFirstBooking: boolean,
+) {
+  void onBookingConfirmed({
+    id: appointment.id,
+    salonId: appointment.salonId,
+    start: appointment.start,
+    status: appointment.status,
+    salon: conv.salon,
+  }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+
+  if (isFirstBooking) {
+    await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+  }
+
+  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
+  await reply(
+    conv,
+    'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
+  );
+}
+
+async function handlePaymentMethodChoice(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+) {
+  const trimmed = text.trim();
+  if (isMainMenuCommand(trimmed)) {
+    await goBackToMainMenu(conv);
+    return;
+  }
+
+  const c = ctx(conv);
+  const appointmentId = c.pendingAppointmentId as string | undefined;
+  const amountCents = c.pendingPaymentAmountCents as number | undefined;
+  const isFirstBooking = Boolean(c.pendingPaymentIsFirstBooking);
+  if (!appointmentId || !amountCents) {
+    await saveCtx(conv.id, {}, ConversationStep.IDLE);
+    await replyMenu(conv);
+    return;
+  }
+
+  const lower = trimmed.toLowerCase();
+  const isCard = /^1$/.test(trimmed) || /^(card|online|payfast)\b/i.test(lower);
+  const isCash = /^2$/.test(trimmed) || /^cash\b/i.test(lower);
+  const isEft = /^3$/.test(trimmed) || /^eft\b|bank\s*transfer/i.test(lower);
+
+  if (!isCard && !isCash && !isEft) {
+    await reply(
+      conv,
+      'Please reply *1* to pay online, *2* for cash at the salon, or *3* for EFT.',
+    );
+    return;
+  }
+
+  const tx = getTenantDb();
+  const appointment = await tx.appointment.findUniqueOrThrow({
+    where: { id: appointmentId },
+    include: { service: true },
+  });
+
+  if (isCard) {
     let awaitingOnlinePayment = false;
     try {
       const sessionUrl = await createPaymentCheckoutSession({
         salonId: conv.salonId,
         customerId: conv.customerId,
         appointmentId: appointment.id,
-        service,
-        amountCents: paymentPlan.amountCents,
+        service: appointment.service,
+        amountCents,
       });
       if (sessionUrl) {
         awaitingOnlinePayment = true;
@@ -4475,7 +4615,7 @@ async function handleConfirm(
           [
             `💳 *Complete payment*`,
             '',
-            `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`,
+            `Amount due: *${formatCentsZar(amountCents)}*`,
             '',
             `Pay securely via PayFast:`,
             sessionUrl,
@@ -4497,41 +4637,44 @@ async function handleConfirm(
       );
     }
 
-    if (isFirstBooking) {
-      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-    }
-
     if (awaitingOnlinePayment) {
       await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
+      if (isFirstBooking) {
+        await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
+      }
       return;
     }
-
-    void onBookingConfirmed({
-      id: appointment.id,
-      salonId: conv.salonId,
-      start,
-      status: appointment.status,
-      salon: conv.salon,
-    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
-  } else {
-    void onBookingConfirmed({
-      id: appointment.id,
-      salonId: conv.salonId,
-      start,
-      status: appointment.status,
-      salon: conv.salon,
-    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
-
-    if (isFirstBooking) {
-      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-    }
+    await finishBookingAfterPayment(conv, appointment, isFirstBooking);
+    return;
   }
 
-  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
+  // Cash / EFT — settled in person; record the intent so staff can collect/verify it.
+  const method = isCash ? 'CASH' : 'EFT';
+  await tx.payment.create({
+    data: {
+      salonId: conv.salonId,
+      appointmentId: appointment.id,
+      customerId: conv.customerId,
+      provider: 'MANUAL',
+      method,
+      status: 'PENDING',
+      amountCents,
+      currency: 'ZAR',
+    },
+  });
+  await tx.appointment.update({
+    where: { id: appointment.id },
+    data: { paymentMethod: method },
+  });
+
   await reply(
     conv,
-    'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
+    isCash
+      ? `👍 Got it — please settle *${formatCentsZar(amountCents)}* in cash when you arrive.`
+      : `👍 Got it — we'll be in touch with our bank details to settle *${formatCentsZar(amountCents)}* via EFT before your appointment.`,
   );
+
+  await finishBookingAfterPayment(conv, appointment, isFirstBooking);
 }
 
 async function handleBookingRating(

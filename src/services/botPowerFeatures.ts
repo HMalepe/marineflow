@@ -13,6 +13,8 @@ import { notifyWaitlistOnCancel } from './waitlist.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { validateSlotAvailable } from './slots.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { getFrequentCoBookedService } from './addonRecommendation.js';
+import { formatCentsZar } from '../lib/formatPrice.js';
 
 export function getSalonAutomations(salon: Pick<Salon, 'metadata'>) {
   return parseAutomationsFromMetadata(salon.metadata);
@@ -122,15 +124,30 @@ export async function tryHandleWaitlistReply(
 }
 
 export async function afterServiceSelected(
-  _conv: Conversation & { customer: Customer; salon: Salon },
-  _serviceId: string,
+  conv: Conversation & { customer: Customer; salon: Salon },
+  serviceId: string,
   helpers: {
     reply: (body: string) => Promise<void>;
     saveContext: (patch: Record<string, unknown>) => Promise<void>;
     continueToStaff: () => Promise<void>;
   },
 ): Promise<void> {
-  // Add-on upsell removed — go straight to staff/slot selection after service pick.
+  // Behaviour-derived add-on nudge (e.g. a hair customer who usually also books
+  // nails) — informational only, doesn't block or alter the booking flow.
+  try {
+    const recommended = await getFrequentCoBookedService({
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      serviceId,
+    });
+    if (recommended) {
+      await helpers.reply(
+        `💡 You usually also book *${recommended.name}* (${formatCentsZar(recommended.priceCents)}) along with this — let us know if you'd like to book that too, either now as a separate slot or in-store on the day.`,
+      );
+    }
+  } catch {
+    // best-effort nudge — never block the booking flow
+  }
   await helpers.continueToStaff();
 }
 

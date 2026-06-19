@@ -1,0 +1,5 @@
+ALTER TABLE "Service" ADD COLUMN IF NOT EXISTS "aftercareNote" TEXT;
+
+ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "partySize" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "paymentMethod" "PaymentMethod";
+ALTER TABLE "Appointment" ADD COLUMN IF NOT EXISTS "aftercareSentAt" TIMESTAMP(3);
