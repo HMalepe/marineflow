@@ -4,7 +4,7 @@ import { logger } from '../../lib/logger.js';
 import { redis } from '../../lib/redis.js';
 import { twilioMessaging } from '../../lib/integrations/messaging/twilio-impl.js';
 import { recordWebhookEvent } from '../../lib/webhooks.js';
-import { resolveTenantForInbound, resolveTenantFromTwilioAddress } from '../../lib/tenant.js';
+import { resolveTenantFromTwilioAddress } from '../../lib/tenant.js';
 import { handleInboundWhatsApp } from '../../services/bot.js';
 import { logMessageLog } from '../../services/messageLog.js';
 
@@ -55,6 +55,11 @@ export async function handleTwilioWhatsAppWebhook(
       { twilioTo: to, from: params['From'], messageSid: params['MessageSid'] ?? null },
       'twilio_webhook_unmatched_to_number — no tenant has this twilioWhatsAppNumber; check admin assignment',
     );
+    logMessageLog({ direction: 'INBOUND', status: 'FAILED' });
+    // 404 so ops/monitoring can alert; Twilio gets empty TwiML (no auto-reply to customer).
+    return reply.code(404).type('text/xml').send(
+      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+    );
   }
 
   if (messageSid) {
@@ -68,7 +73,7 @@ export async function handleTwilioWhatsAppWebhook(
     } catch {
       // Redis unavailable — skip deduplication
     }
-    const tenant = tenantForTo ?? (await resolveTenantForInbound({ twilioTo: to }));
+    const tenant = tenantForTo;
     const recorded = await recordWebhookEvent({
       provider: 'twilio',
       providerEventId: messageSid,
