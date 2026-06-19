@@ -32,7 +32,7 @@ async function main() {
       parkingNotes: 'Lot behind building.',
       accessibility: 'Step-free entrance.',
       phoneDisplay: '+27 10 000 0000',
-      twilioWhatsAppFrom: twilioFrom,
+      twilioWhatsAppNumber: twilioFrom,
       metadata: {},
     },
     update: {
@@ -43,7 +43,7 @@ async function main() {
       locale: 'en-ZA',
       phoneDisplay: '+27 10 000 0000',
       addressLine: 'Johannesburg, South Africa',
-      twilioWhatsAppFrom: twilioFrom,
+      twilioWhatsAppNumber: twilioFrom,
     },
   });
 

@@ -84,11 +84,10 @@ async function createContent(interactive: InteractiveMessage): Promise<string> {
 export async function sendTwilioInteractive(
   to: string,
   interactive: InteractiveMessage,
-  twilioFrom?: string,
+  twilioFrom: string,
 ): Promise<string | null> {
-  const from = twilioFrom
-    ?? (env.TWILIO_WHATSAPP_FROM ? normalizeTwilioWhatsAppFrom(env.TWILIO_WHATSAPP_FROM) : null);
-  if (!isTwilioAccountConfigured() || !from) {
+  const from = normalizeTwilioWhatsAppFrom(twilioFrom);
+  if (!isTwilioAccountConfigured()) {
     logger.error('twilio_interactive_send_aborted_no_config');
     return null;
   }

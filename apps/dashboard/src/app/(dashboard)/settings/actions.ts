@@ -38,7 +38,7 @@ export interface SalonSettings {
   googleReviewUrl: string | null;
   currentSpecial: string | null;
   whatsappPhoneId: string | null;
-  twilioWhatsAppFrom: string | null;
+  twilioWhatsAppNumber: string | null;
   automations?: {
     googleReview?: {
       incentiveEnabled?: boolean;

@@ -8,8 +8,9 @@ import {
   DEFAULT_BUSINESS_HOURS,
   DEFAULT_BOT_NAME,
   isValidSalonSlug,
+  parseTwilioWhatsAppNumber,
 } from '../lib/salonDefaults.js';
-import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
+import { listTwilioWhatsAppSenders } from '../lib/twilioSenders.js';
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 import { isIndustryTemplateId } from '../lib/industryTemplates.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
@@ -40,6 +41,22 @@ import { getAdminPlatformEvents } from '../api/admin/events.js';
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
 const VALID_STAFF_ROLES: StaffRole[] = ['OWNER', 'MANAGER', 'STYLIST', 'RECEPTIONIST', 'VIEWER'];
+
+async function assertWhatsAppNumberAvailable(
+  number: string,
+  excludeSalonId?: string,
+): Promise<{ ok: true } | { ok: false; salonName: string }> {
+  const taken = await prisma.salon.findFirst({
+    where: {
+      deletedAt: null,
+      twilioWhatsAppNumber: number,
+      ...(excludeSalonId ? { NOT: { id: excludeSalonId } } : {}),
+    },
+    select: { name: true },
+  });
+  if (taken) return { ok: false, salonName: taken.name };
+  return { ok: true };
+}
 
 function stripStaffUser(user: {
   id: string;
@@ -101,16 +118,16 @@ export async function adminApiRoutes(app: FastifyInstance) {
   app.get('/twilio/whatsapp-numbers', async () => {
     const senders = await listTwilioWhatsAppSenders();
     const assigned = await prisma.salon.findMany({
-      where: { deletedAt: null, twilioWhatsAppFrom: { not: null } },
-      select: { id: true, name: true, twilioWhatsAppFrom: true },
+      where: { deletedAt: null, twilioWhatsAppNumber: { not: null } },
+      select: { id: true, name: true, twilioWhatsAppNumber: true },
     });
 
     return {
       numbers: senders.map((s) => ({
         phoneE164: s.phoneE164,
-        twilioWhatsAppFrom: s.twilioWhatsAppFrom,
+        twilioWhatsAppNumber: s.twilioWhatsAppNumber,
         status: s.status ?? null,
-        assignedSalon: assigned.find((a) => a.twilioWhatsAppFrom === s.twilioWhatsAppFrom) ?? null,
+        assignedSalon: assigned.find((a) => a.twilioWhatsAppNumber === s.twilioWhatsAppNumber) ?? null,
       })),
     };
   });
@@ -165,19 +182,24 @@ export async function adminApiRoutes(app: FastifyInstance) {
       if (phoneTaken) return reply.code(409).send({ error: 'phone_taken' });
     }
 
-    const twilioSender = await findTwilioSenderByPhone(body.whatsappNumber.trim());
-    if (!twilioSender) {
-      return reply.code(400).send({ error: 'whatsapp_not_on_twilio' });
+    const parsed = parseTwilioWhatsAppNumber(body.whatsappNumber.trim());
+    if (!parsed) {
+      return reply.code(400).send({
+        error: 'invalid_whatsapp_number_format',
+        message: 'Must be whatsapp:+XXXXXXXXXXX (10–15 digits after +)',
+      });
     }
 
-    const alreadyAssigned = await prisma.salon.findFirst({
-      where: { deletedAt: null, twilioWhatsAppFrom: twilioSender.twilioWhatsAppFrom },
-    });
-    if (alreadyAssigned) {
-      return reply.code(409).send({ error: 'whatsapp_already_assigned', salonName: alreadyAssigned.name });
+    const available = await assertWhatsAppNumberAvailable(parsed);
+    if (!available.ok) {
+      return reply.code(409).send({
+        error: 'whatsapp_already_assigned',
+        salonName: available.salonName,
+        message: `This number is already assigned to ${available.salonName}`,
+      });
     }
 
-    const twilioWhatsAppFrom = twilioSender.twilioWhatsAppFrom;
+    const twilioWhatsAppNumber = parsed;
 
     const passwordHash = await bcrypt.hash(
       ownerPassword.length >= 8 ? ownerPassword : randomBytes(32).toString('hex'),
@@ -197,7 +219,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           industryTemplate: body.industryTemplate?.trim() || 'salon',
           businessType: businessTypeFromIndustryTemplate(body.industryTemplate?.trim() || 'salon'),
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          ...(twilioWhatsAppFrom && { twilioWhatsAppFrom }),
+          ...(twilioWhatsAppNumber && { twilioWhatsAppNumber }),
         },
       });
 
@@ -551,28 +573,41 @@ export async function adminApiRoutes(app: FastifyInstance) {
       if (!raw) {
         return reply.code(400).send({ error: 'whatsapp_number_required' });
       }
-      const twilioSender = await findTwilioSenderByPhone(raw);
-      if (!twilioSender) {
-        return reply.code(400).send({ error: 'whatsapp_not_on_twilio' });
+      const parsed = parseTwilioWhatsAppNumber(raw);
+      if (!parsed) {
+        return reply.code(400).send({
+          error: 'invalid_whatsapp_number_format',
+          message: 'Must be whatsapp:+XXXXXXXXXXX (10–15 digits after +)',
+        });
       }
-      const alreadyAssigned = await prisma.salon.findFirst({
-        where: {
-          deletedAt: null,
-          twilioWhatsAppFrom: twilioSender.twilioWhatsAppFrom,
-          NOT: { id },
-        },
-      });
-      if (alreadyAssigned) {
-        return reply.code(409).send({ error: 'whatsapp_already_assigned', salonName: alreadyAssigned.name });
+      const available = await assertWhatsAppNumberAvailable(parsed, id);
+      if (!available.ok) {
+        return reply.code(409).send({
+          error: 'whatsapp_already_assigned',
+          salonName: available.salonName,
+          message: `This number is already assigned to ${available.salonName}`,
+        });
       }
-      data.twilioWhatsAppFrom = twilioSender.twilioWhatsAppFrom;
+      data.twilioWhatsAppNumber = parsed;
     }
 
     if (Object.keys(data).length === 0) {
       return reply.code(400).send({ error: 'nothing_to_update' });
     }
 
-    const salon = await prisma.salon.update({ where: { id }, data });
+    let salon;
+    try {
+      salon = await prisma.salon.update({ where: { id }, data });
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code;
+      if (code === 'P2002') {
+        return reply.code(409).send({
+          error: 'whatsapp_already_assigned',
+          message: 'This WhatsApp number is already assigned to another business',
+        });
+      }
+      throw err;
+    }
     return {
       salon: {
         id: salon.id,
@@ -584,7 +619,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         timezone: salon.timezone,
         industryTemplate: salon.industryTemplate,
         businessType: salon.businessType,
-        twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
+        twilioWhatsAppNumber: salon.twilioWhatsAppNumber,
         createdAt: salon.createdAt,
       },
     };

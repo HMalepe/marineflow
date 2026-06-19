@@ -44,16 +44,52 @@ function fmtMoney(cents: number): string {
   return formatCentsZar(cents);
 }
 
+/**
+ * Match a service from free text (menu tap title, typed name, or sentence).
+ * Prefers exact matches, then longest unambiguous substring match — never defaults
+ * to the first catalog item.
+ */
+export function matchServiceInText(
+  services: Array<{ id: string; name: string }>,
+  text: string,
+): string | null {
+  const hay = text.toLowerCase().trim();
+  if (!hay || services.length === 0) return null;
+
+  type Scored = { id: string; score: number };
+  const scored: Scored[] = [];
+  for (const s of services) {
+    const name = s.name.toLowerCase();
+    if (hay === name) {
+      scored.push({ id: s.id, score: name.length + 1000 });
+    } else if (hay.includes(name)) {
+      scored.push({ id: s.id, score: name.length });
+    } else if (name.includes(hay) && hay.length >= 3) {
+      scored.push({ id: s.id, score: hay.length });
+    }
+  }
+  if (scored.length === 0) return null;
+  scored.sort((a, b) => b.score - a.score);
+  const best = scored[0]!;
+  const runnerUp = scored[1];
+  if (runnerUp && runnerUp.score === best.score) return null;
+  return best.id;
+}
+
 function resolveServiceId(
   services: Array<{ id: string; name: string }>,
   serviceId: string | null,
   guess: string | null,
   inbound: string,
 ): string | null {
+  const fromInbound = matchServiceInText(services, inbound);
+  if (fromInbound) return fromInbound;
+  if (guess) {
+    const fromGuess = matchServiceInText(services, guess);
+    if (fromGuess) return fromGuess;
+  }
   if (serviceId && services.some((s) => s.id === serviceId)) return serviceId;
-  const hay = `${guess ?? ''} ${inbound}`.toLowerCase();
-  const match = services.find((s) => hay.includes(s.name.toLowerCase()));
-  return match?.id ?? services[0]?.id ?? null;
+  return null;
 }
 
 export async function buildQuickPickOptions(input: {
@@ -463,6 +499,11 @@ export async function tryAiAssist(
           ].join('\n'),
           step: ConversationStep.PICK_SLOT,
           contextPatch: {
+            selectedServiceId: serviceId,
+            selectedStaffId: undefined,
+            localDateStr: undefined,
+            slotStartIso: undefined,
+            flatSlotOptions: undefined,
             quickPickOptions,
           },
         };

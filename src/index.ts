@@ -127,6 +127,37 @@ try {
 }
 
 try {
+  console.log('[STARTUP] Running WhatsApp number backfill (if needed)...');
+  const { execSync } = await import('node:child_process');
+  execSync('npx tsx scripts/backfill-tenant-whatsapp-number.ts', {
+    encoding: 'utf-8',
+    cwd: join(__dirname, '..'),
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+} catch (backfillErr) {
+  const be = backfillErr as { stderr?: string; stdout?: string; message?: string };
+  console.log('[STARTUP] WhatsApp backfill:', be.stdout?.trim() || be.stderr?.trim() || be.message || 'skipped');
+}
+
+try {
+  const { warnTenantsMissingWhatsAppNumber } = await import('./lib/tenantWhatsAppStartupCheck.js');
+  await warnTenantsMissingWhatsAppNumber();
+} catch (e) {
+  console.error('[STARTUP] Tenant WhatsApp routing check failed:', e);
+}
+
+try {
+  const { isAnthropicConfigured } = await import('./lib/integrations/ai/claude.js');
+  if (!isAnthropicConfigured()) {
+    console.warn(
+      '[STARTUP] ANTHROPIC_API_KEY is not set — natural-language date parsing and AI assist will not work. Add it on Railway for smarter booking.',
+    );
+  }
+} catch {
+  // ignore
+}
+
+try {
   console.log('[STARTUP] Syncing super admin password from env (if set)...');
   await syncSuperAdminPasswordFromEnv();
 } catch (e) {

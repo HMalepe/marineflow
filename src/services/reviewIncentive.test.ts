@@ -150,7 +150,7 @@ describe('reviewIncentive — messaging', () => {
 
   it('builds WhatsApp deep link with REVIEWED token', () => {
     const link = buildWhatsAppClaimDeepLink({
-      twilioWhatsAppFrom: 'whatsapp:+27821234567',
+      twilioWhatsAppNumber: 'whatsapp:+27821234567',
       token: 'RVW-ABCD1234',
     });
     expect(link).toContain('wa.me/27821234567');
@@ -160,7 +160,7 @@ describe('reviewIncentive — messaging', () => {
 
   it('returns null deep link when salon has no WhatsApp number', () => {
     expect(
-      buildWhatsAppClaimDeepLink({ twilioWhatsAppFrom: null, token: 'RVW-ABCD1234' }),
+      buildWhatsAppClaimDeepLink({ twilioWhatsAppNumber: null, token: 'RVW-ABCD1234' }),
     ).toBeNull();
   });
 

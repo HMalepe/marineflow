@@ -77,7 +77,7 @@ export async function getAdminTenantHealth(): Promise<AdminTenantHealthSummary> 
         tier: true,
         businessType: true,
         whatsappPhoneId: true,
-        twilioWhatsAppFrom: true,
+        twilioWhatsAppNumber: true,
         subscription: {
           select: { status: true, payfastSubscriptionId: true, plan: { select: { name: true } } },
         },
@@ -129,7 +129,7 @@ export async function getAdminTenantHealth(): Promise<AdminTenantHealthSummary> 
 
     const onboarding = computeOnboardingBatch({
       whatsappPhoneId: s.whatsappPhoneId,
-      twilioWhatsAppFrom: s.twilioWhatsAppFrom,
+      twilioWhatsAppNumber: s.twilioWhatsAppNumber,
       subscription: s.subscription,
       appointmentCount: s._count.appointments,
       staffUserCount: s._count.staffUsers,

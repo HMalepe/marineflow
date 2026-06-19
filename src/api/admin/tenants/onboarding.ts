@@ -16,7 +16,7 @@ export type OnboardingStatusResponse = OnboardingStatus & {
 
 type SalonOnboardingInput = {
   whatsappPhoneId: string | null;
-  twilioWhatsAppFrom: string | null;
+  twilioWhatsAppNumber: string | null;
   subscription: {
     status: string;
     payfastSubscriptionId: string | null;
@@ -29,7 +29,7 @@ type SalonOnboardingInput = {
 export function computeOnboardingStatus(input: SalonOnboardingInput): OnboardingStatus {
   return {
     whatsappConfigured: Boolean(
-      input.twilioWhatsAppFrom?.trim() || input.whatsappPhoneId?.trim(),
+      input.twilioWhatsAppNumber?.trim() || input.whatsappPhoneId?.trim(),
     ),
     /** Active PayFast subscription — field name kept for API compatibility. */
     stripeConnected:
@@ -61,7 +61,7 @@ async function loadSalonOnboardingInput(salonId: string): Promise<SalonOnboardin
     where: { id: salonId, deletedAt: null },
     select: {
       whatsappPhoneId: true,
-      twilioWhatsAppFrom: true,
+      twilioWhatsAppNumber: true,
       subscription: { select: { status: true, payfastSubscriptionId: true } },
       _count: { select: { appointments: true, staffUsers: true, staff: true } },
     },
@@ -70,7 +70,7 @@ async function loadSalonOnboardingInput(salonId: string): Promise<SalonOnboardin
 
   return {
     whatsappPhoneId: salon.whatsappPhoneId,
-    twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
+    twilioWhatsAppNumber: salon.twilioWhatsAppNumber,
     subscription: salon.subscription,
     appointmentCount: salon._count.appointments,
     staffUserCount: salon._count.staffUsers,
@@ -97,7 +97,7 @@ export async function alertStaleIncompleteOnboarding(): Promise<number> {
       slug: true,
       createdAt: true,
       whatsappPhoneId: true,
-      twilioWhatsAppFrom: true,
+      twilioWhatsAppNumber: true,
       subscription: { select: { status: true, payfastSubscriptionId: true } },
       _count: { select: { appointments: true, staffUsers: true, staff: true } },
     },
@@ -108,7 +108,7 @@ export async function alertStaleIncompleteOnboarding(): Promise<number> {
     const status = enrichOnboardingStatus(
       computeOnboardingStatus({
         whatsappPhoneId: salon.whatsappPhoneId,
-        twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
+        twilioWhatsAppNumber: salon.twilioWhatsAppNumber,
         subscription: salon.subscription,
         appointmentCount: salon._count.appointments,
         staffUserCount: salon._count.staffUsers,
@@ -151,7 +151,7 @@ export async function alertStaleIncompleteOnboarding(): Promise<number> {
 export function computeOnboardingBatch(
   salon: {
     whatsappPhoneId: string | null;
-    twilioWhatsAppFrom: string | null;
+    twilioWhatsAppNumber: string | null;
     subscription: { status: string; payfastSubscriptionId: string | null } | null;
     appointmentCount: number;
     staffUserCount: number;
@@ -161,7 +161,7 @@ export function computeOnboardingBatch(
   return enrichOnboardingStatus(
     computeOnboardingStatus({
       whatsappPhoneId: salon.whatsappPhoneId,
-      twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
+      twilioWhatsAppNumber: salon.twilioWhatsAppNumber,
       subscription: salon.subscription,
       appointmentCount: salon.appointmentCount,
       staffUserCount: salon.staffUserCount,

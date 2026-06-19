@@ -82,10 +82,10 @@ function generateClaimToken(): string {
 }
 
 export function buildWhatsAppClaimDeepLink(params: {
-  twilioWhatsAppFrom: string | null | undefined;
+  twilioWhatsAppNumber: string | null | undefined;
   token: string;
 }): string | null {
-  const raw = params.twilioWhatsAppFrom?.replace(/^whatsapp:/i, '').trim();
+  const raw = params.twilioWhatsAppNumber?.replace(/^whatsapp:/i, '').trim();
   if (!raw) return null;
   const digits = raw.replace(/\D/g, '');
   if (!digits) return null;
@@ -329,7 +329,7 @@ export async function getPublicReviewClaimInfo(token: string) {
         select: {
           name: true,
           tradingName: true,
-          twilioWhatsAppFrom: true,
+          twilioWhatsAppNumber: true,
           deletedAt: true,
           status: true,
         },
@@ -369,7 +369,7 @@ export async function getPublicReviewClaimInfo(token: string) {
     rewardLabel,
     token: claim.token,
     whatsAppDeepLink: buildWhatsAppClaimDeepLink({
-      twilioWhatsAppFrom: claim.salon.twilioWhatsAppFrom,
+      twilioWhatsAppNumber: claim.salon.twilioWhatsAppNumber,
       token: claim.token,
     }),
   };

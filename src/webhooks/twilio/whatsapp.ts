@@ -4,7 +4,7 @@ import { logger } from '../../lib/logger.js';
 import { redis } from '../../lib/redis.js';
 import { twilioMessaging } from '../../lib/integrations/messaging/twilio-impl.js';
 import { recordWebhookEvent } from '../../lib/webhooks.js';
-import { resolveTenantForInbound } from '../../lib/tenant.js';
+import { resolveTenantForInbound, resolveTenantFromTwilioAddress } from '../../lib/tenant.js';
 import { handleInboundWhatsApp } from '../../services/bot.js';
 import { logMessageLog } from '../../services/messageLog.js';
 
@@ -49,6 +49,14 @@ export async function handleTwilioWhatsAppWebhook(
   const to = params['To'] ?? '';
   const body = params['Body'] ?? '';
 
+  const tenantForTo = to ? await resolveTenantFromTwilioAddress(to) : null;
+  if (to && !tenantForTo) {
+    logger.error(
+      { twilioTo: to, from: params['From'], messageSid: params['MessageSid'] ?? null },
+      'twilio_webhook_unmatched_to_number — no tenant has this twilioWhatsAppNumber; check admin assignment',
+    );
+  }
+
   if (messageSid) {
     try {
       const dedupeKey = `msg:${messageSid}`;
@@ -60,7 +68,7 @@ export async function handleTwilioWhatsAppWebhook(
     } catch {
       // Redis unavailable — skip deduplication
     }
-    const tenant = await resolveTenantForInbound({ twilioTo: to });
+    const tenant = tenantForTo ?? (await resolveTenantForInbound({ twilioTo: to }));
     const recorded = await recordWebhookEvent({
       provider: 'twilio',
       providerEventId: messageSid,

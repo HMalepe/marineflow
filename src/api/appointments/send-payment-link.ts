@@ -1,7 +1,6 @@
 import type { PrismaTx } from '../../lib/db/tenantSession.js';
 import { env } from '../../config.js';
-import { normalizeTwilioWhatsAppFrom } from '../../lib/salonDefaults.js';
-import { formatZaWhatsAppPhone, sendPaymentLinkMessage } from '../../lib/twilio.js';
+import { getTenantWhatsAppFrom, formatZaWhatsAppPhone, sendPaymentLinkMessage } from '../../lib/twilio.js';
 import { createPaymentCheckoutSession } from '../../services/payments.js';
 
 function checkoutUrl(paymentId: string): string {
@@ -27,7 +26,7 @@ export async function sendAppointmentPaymentLink(
     include: {
       service: true,
       customer: { select: { waId: true, displayName: true, firstName: true } },
-      salon: { select: { name: true, tradingName: true, twilioWhatsAppFrom: true } },
+      salon: { select: { name: true, tradingName: true, twilioWhatsAppNumber: true } },
       payments: {
         where: { status: 'PENDING' },
         orderBy: { createdAt: 'desc' },
@@ -73,9 +72,16 @@ export async function sendAppointmentPaymentLink(
     }
   }
 
-  const twilioFrom = appt.salon.twilioWhatsAppFrom
-    ? normalizeTwilioWhatsAppFrom(appt.salon.twilioWhatsAppFrom)
-    : undefined;
+  let twilioFrom: string;
+  try {
+    twilioFrom = await getTenantWhatsAppFrom(input.salonId);
+  } catch {
+    return {
+      ok: false,
+      error: 'no_whatsapp_number',
+      message: 'This business has no WhatsApp number configured — assign one in admin',
+    };
+  }
 
   const sid = await sendPaymentLinkMessage(waId, link, {
     twilioFrom,

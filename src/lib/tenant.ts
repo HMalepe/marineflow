@@ -2,6 +2,7 @@ import type { Salon } from '@prisma/client';
 import { prisma } from './prisma.js';
 import { env } from '../config.js';
 import { normalizeWaId } from './phone.js';
+import { logger } from './logger.js';
 
 export type ResolvedTenant = Pick<
   Salon,
@@ -12,7 +13,7 @@ export type ResolvedTenant = Pick<
   | 'timezone'
   | 'botName'
   | 'whatsappPhoneId'
-  | 'twilioWhatsAppFrom'
+  | 'twilioWhatsAppNumber'
 >;
 
 const tenantSelect = {
@@ -23,7 +24,7 @@ const tenantSelect = {
   timezone: true,
   botName: true,
   whatsappPhoneId: true,
-  twilioWhatsAppFrom: true,
+  twilioWhatsAppNumber: true,
 } as const;
 
 /** Platform registry lookup — Salon has no RLS. */
@@ -52,27 +53,24 @@ export async function resolveTenantFromMetaPhoneId(
   });
 }
 
-/** Twilio: route by To / From business number (whatsapp:+...) */
+/** Twilio: route inbound webhook by To (business number the customer messaged). */
 export async function resolveTenantFromTwilioAddress(
   address: string | undefined,
 ): Promise<ResolvedTenant | null> {
   if (!address) return null;
-  const normalized = address.startsWith('whatsapp:') ? address : `whatsapp:${normalizeWaId(address)}`;
+  const normalized = address.startsWith('whatsapp:')
+    ? address
+    : `whatsapp:${normalizeWaId(address)}`;
   return prisma.salon.findFirst({
-    where: { twilioWhatsAppFrom: normalized, deletedAt: null },
+    where: { twilioWhatsAppNumber: normalized, deletedAt: null },
     select: tenantSelect,
   });
 }
 
 /**
  * Resolve tenant for an inbound WhatsApp message.
- * Order: explicit Meta phone id → Twilio To → default slug fallback.
- *
- * Important: if an identifier (metaPhoneNumberId or twilioTo) is supplied but
- * matches no salon, we return null rather than falling back to the default
- * salon. Falling back would route a cross-tenant message to the demo/fallback
- * salon and cause duplicate bot replies when both Twilio and Meta webhooks
- * fire for the same phone number.
+ * Order: explicit Meta phone id → Twilio To.
+ * No DEFAULT_SALON_SLUG fallback — unmatched identifiers return null.
  */
 export async function resolveTenantForInbound(input: {
   metaPhoneNumberId?: string;
@@ -83,28 +81,32 @@ export async function resolveTenantForInbound(input: {
     if (byMeta) return byMeta;
 
     // Env-level fallback: if META_PHONE_NUMBER_ID matches the inbound phone ID,
-    // route to the default salon. Allows single-tenant deployments that haven't
-    // yet stored whatsappPhoneId in the DB to keep working.
+    // route to the salon with that whatsappPhoneId (or slug match for legacy single-tenant).
     if (env.META_PHONE_NUMBER_ID && input.metaPhoneNumberId === env.META_PHONE_NUMBER_ID) {
-      const fallback = await findSalonBySlug(env.DEFAULT_SALON_SLUG);
-      if (fallback) return fallback;
+      const byEnvMeta = await resolveTenantFromMetaPhoneId(env.META_PHONE_NUMBER_ID);
+      if (byEnvMeta) return byEnvMeta;
+      logger.warn(
+        { metaPhoneNumberId: input.metaPhoneNumberId },
+        'meta_phone_id_env_match_but_no_tenant_in_db',
+      );
     }
 
-    // metaPhoneNumberId provided but matched no salon — do not fall through
-    // to Twilio or the default, to prevent cross-tenant routing.
-    // Skip Twilio lookup if twilioTo is the same Meta phone ID (not an E.164 address).
     const isSameAsMetaId = input.twilioTo === input.metaPhoneNumberId;
     if (!input.twilioTo || isSameAsMetaId) return null;
   }
+
   if (input.twilioTo) {
     const byTwilio = await resolveTenantFromTwilioAddress(input.twilioTo);
     if (byTwilio) return byTwilio;
-    // twilioTo provided but matched no salon — return null so we don't
-    // accidentally send the demo-salon menu to a real customer.
+    logger.error(
+      { twilioTo: input.twilioTo },
+      'twilio_inbound_no_tenant_for_to_number',
+    );
     return null;
   }
-  // No identifier at all (only possible in dev/test) — fall back to default.
-  return findSalonBySlug(env.DEFAULT_SALON_SLUG);
+
+  logger.warn('inbound_whatsapp_no_routing_identifier');
+  return null;
 }
 
 export function assertTenantActive(tenant: ResolvedTenant): void {

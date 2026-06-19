@@ -13,6 +13,9 @@ import type {
 export const twilioMessaging: MessagingProvider = {
   async sendText(options: SendOptions): Promise<SentMessage> {
     if (options.interactive) {
+      if (!options.twilioFrom) {
+        throw new Error('twilioFrom_required_for_interactive');
+      }
       const sid = await sendTwilioInteractive(options.to, options.interactive, options.twilioFrom);
       return { providerMessageId: sid, timestamp: new Date() };
     }
@@ -40,7 +43,8 @@ export const twilioMessaging: MessagingProvider = {
     const params = payload as Record<string, string>;
     const from = params['From'] ?? '';
     const to = params['To'] ?? '';
-    const body = params['Body'] ?? '';
+    // List/button taps may arrive in Body or ButtonPayload depending on channel.
+    const body = (params['Body'] ?? '').trim() || (params['ButtonPayload'] ?? '').trim();
     const sid = params['MessageSid'] ?? '';
     if (!from || !sid) return [];
     return [{

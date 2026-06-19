@@ -1,4 +1,3 @@
-import { env } from '../config.js';
 import { cached } from './cache.js';
 import { logger } from './logger.js';
 import { normalizeWaId } from './phone.js';
@@ -8,7 +7,7 @@ import { getTwilioAccountClient } from './twilio.js';
 export interface TwilioWhatsAppSender {
   sid: string;
   phoneE164: string;
-  twilioWhatsAppFrom: string;
+  twilioWhatsAppNumber: string;
   status?: string;
 }
 
@@ -19,32 +18,16 @@ function senderFromDigits(digits: string, sid: string, status?: string): TwilioW
   return {
     sid,
     phoneE164: `+${digits}`,
-    twilioWhatsAppFrom: normalizeTwilioWhatsAppFrom(`+${digits}`),
+    twilioWhatsAppNumber: normalizeTwilioWhatsAppFrom(`+${digits}`),
     status,
   };
-}
-
-function envFallbackSenders(): TwilioWhatsAppSender[] {
-  if (!env.TWILIO_WHATSAPP_FROM) return [];
-  const digits = normalizeWaId(env.TWILIO_WHATSAPP_FROM);
-  if (!digits) return [];
-  return [senderFromDigits(digits, 'env')];
-}
-
-function mergeEnvFallback(senders: TwilioWhatsAppSender[]): TwilioWhatsAppSender[] {
-  const envSenders = envFallbackSenders();
-  if (envSenders.length === 0) return senders;
-  const seen = new Set(senders.map((s) => normalizeWaId(s.phoneE164)));
-  for (const s of envSenders) {
-    if (!seen.has(normalizeWaId(s.phoneE164))) senders.push(s);
-  }
-  return senders;
 }
 
 async function fetchTwilioWhatsAppSenders(): Promise<TwilioWhatsAppSender[]> {
   const client = getTwilioAccountClient();
   if (!client) {
-    return envFallbackSenders();
+    logger.warn('twilio_whatsapp_senders_no_account_configured');
+    return [];
   }
 
   try {
@@ -60,10 +43,10 @@ async function fetchTwilioWhatsAppSenders(): Promise<TwilioWhatsAppSender[]> {
       senders.push(senderFromDigits(digits, row.sid, row.status));
     }
 
-    return mergeEnvFallback(senders);
+    return senders;
   } catch (err) {
     logger.error({ err }, 'twilio_whatsapp_senders_fetch_failed');
-    return envFallbackSenders();
+    return [];
   }
 }
 

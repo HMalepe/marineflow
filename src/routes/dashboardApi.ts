@@ -388,7 +388,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           metadata: true,
           slug: true,
           whatsappPhoneId: true,
-          twilioWhatsAppFrom: true,
+          twilioWhatsAppNumber: true,
           onboardingCompletedAt: true,
         },
       });
