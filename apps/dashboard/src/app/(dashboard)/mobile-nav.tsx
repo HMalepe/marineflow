@@ -135,11 +135,11 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
   return (
     <>
       {/* Mobile top header */}
-      <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-card border-b">
+      <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85 border-b shadow-[0_1px_0_rgb(0_0_0/0.04),0_6px_16px_-12px_rgb(0_0_0/0.12)]">
         <div className={`shrink-0 size-8 rounded-lg overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={businessName} className="size-full object-contain p-0.5" />
+            <img src={logoUrl} alt={businessName} loading="eager" decoding="async" className="size-full object-contain p-0.5" />
           ) : (
             <span className="text-xs font-bold text-muted-foreground select-none">
               {businessName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')}
@@ -171,7 +171,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
       </header>
 
       {/* Bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t flex items-stretch safe-area-pb">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85 border-t shadow-[0_-1px_0_rgb(0_0_0/0.04),0_-8px_20px_-12px_rgb(0_0_0/0.14)] flex items-stretch safe-area-pb">
         {tabs.map((tab) => {
           const active = isActive(tab.href);
           const showBadge = tab.href === '/conversations' && handoffCount > 0;

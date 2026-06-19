@@ -52,7 +52,7 @@ function NavPill({
       className={cn(
         'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap',
         active
-          ? 'bg-primary text-primary-foreground shadow-sm'
+          ? 'bg-gradient-to-b from-primary to-primary/85 text-primary-foreground shadow-[0_2px_8px_-2px_color-mix(in_oklch,var(--primary)_55%,transparent)]'
           : 'bg-muted/80 text-muted-foreground hover:bg-accent hover:text-accent-foreground',
       )}
     >
@@ -105,7 +105,7 @@ export function DashboardStickyHeader({ isAdmin, isOwner, handoffCount = 0 }: Pr
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85"
+      className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 shadow-[0_1px_0_rgb(0_0_0/0.04),0_8px_20px_-16px_rgb(0_0_0/0.12)]"
     >
       {/* Main dashboard destinations — desktop */}
       <div className="hidden md:block px-4 sm:px-6 lg:px-8 py-2.5 border-b border-border/50">

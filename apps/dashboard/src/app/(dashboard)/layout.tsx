@@ -67,7 +67,7 @@ export default async function DashboardLayout({
       />
 
       {/* Sidebar (desktop only) — pinned to viewport while main content scrolls */}
-      <aside className="w-64 shrink-0 border-r bg-card hidden md:flex md:flex-col md:sticky md:top-0 md:h-dvh md:overflow-hidden">
+      <aside className="w-64 shrink-0 border-r bg-card hidden md:flex md:flex-col md:sticky md:top-0 md:h-dvh md:overflow-hidden shadow-[2px_0_16px_-8px_rgb(0_0_0/0.08)] dark:shadow-none">
 
         {/* Business identity */}
         <div className="shrink-0 px-4 py-4 border-b flex items-center gap-3">
@@ -75,7 +75,7 @@ export default async function DashboardLayout({
           <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={logoUrl} alt={businessName} className="size-full object-contain p-1" />
+              <img src={logoUrl} alt={businessName} loading="eager" decoding="async" className="size-full object-contain p-1" />
             ) : (
               <span className="text-sm font-bold text-muted-foreground select-none">
                 {businessName.split(/\s+/).slice(0, 2).map((w: string) => w[0]?.toUpperCase() ?? '').join('')}
