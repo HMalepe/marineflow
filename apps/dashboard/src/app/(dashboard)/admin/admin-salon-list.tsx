@@ -169,13 +169,13 @@ export function AdminSalonList({ token }: Props) {
   }, [toast]);
 
   useEffect(() => {
-    if (!createOpen) return;
+    if (!createOpen && !whatsappSalon) return;
     setLoadingTwilioNumbers(true);
     void adminFetch<{ numbers: TwilioWhatsAppOption[] }>('/twilio/whatsapp-numbers', token)
       .then((data) => setTwilioNumbers(data.numbers))
       .catch(() => showToast('Could not load Twilio WhatsApp numbers', 'error'))
       .finally(() => setLoadingTwilioNumbers(false));
-  }, [createOpen, token, showToast]);
+  }, [createOpen, whatsappSalon, token, showToast]);
 
   const loadTenants = useCallback(async () => {
     setLoading(true);
@@ -511,7 +511,7 @@ export function AdminSalonList({ token }: Props) {
                 list="twilio-whatsapp-suggestions"
                 value={createForm.whatsappNumber}
                 onChange={(e) => setCreateForm((f) => ({ ...f, whatsappNumber: e.target.value }))}
-                placeholder="whatsapp:+27624760899"
+                placeholder="whatsapp:+XXXXXXXXXXX"
                 required
               />
               <datalist id="twilio-whatsapp-suggestions">
@@ -520,8 +520,8 @@ export function AdminSalonList({ token }: Props) {
                 ))}
               </datalist>
               <p className="text-xs text-muted-foreground">
-                Format: <code className="text-[11px]">whatsapp:+XXXXXXXXXXX</code> — must match a Twilio sender.
-                Pick from suggestions or type the full address.
+                Format: <code className="text-[11px]">whatsapp:+XXXXXXXXXXX</code> — one number per business.
+                Pick from Twilio senders below; a number already linked to another tenant cannot be reused.
               </p>
             </div>
             <div className="space-y-2">
@@ -655,14 +655,25 @@ export function AdminSalonList({ token }: Props) {
               <Label htmlFor="edit-whatsapp">WhatsApp number</Label>
               <Input
                 id="edit-whatsapp"
+                list="twilio-whatsapp-suggestions-edit"
                 value={whatsappEditValue}
                 onChange={(e) => setWhatsappEditValue(e.target.value)}
-                placeholder="whatsapp:+27624760899"
+                placeholder="whatsapp:+XXXXXXXXXXX"
                 required
               />
+              <datalist id="twilio-whatsapp-suggestions-edit">
+                {twilioNumbers.map((n) => (
+                  <option key={n.phoneE164} value={n.twilioWhatsAppNumber}>
+                    {n.assignedSalon && n.assignedSalon.id !== whatsappSalon?.id
+                      ? `(assigned: ${n.assignedSalon.name})`
+                      : ''}
+                  </option>
+                ))}
+              </datalist>
               <p className="text-xs text-muted-foreground">
-                Must match <code className="text-[11px]">whatsapp:+XXXXXXXXXXX</code> (10–15 digits). Inbound Twilio
-                webhooks route by this number.
+                Must match <code className="text-[11px]">whatsapp:+XXXXXXXXXXX</code>. Inbound Twilio webhooks route
+                by this number — each business has its own; customers messaging tenant A never hit tenant B&apos;s bot.
+                {loadingTwilioNumbers ? ' Loading Twilio senders…' : ''}
               </p>
             </div>
             <SheetFooter className="px-0">

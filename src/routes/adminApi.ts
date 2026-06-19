@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { randomBytes } from 'node:crypto';
 import type { StaffRole, TenantStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { normalizeLoginPhone } from '../lib/phone.js';
+import { normalizeLoginPhone, normalizeWaId } from '../lib/phone.js';
 import {
   DEFAULT_BUSINESS_HOURS,
   DEFAULT_BOT_NAME,
@@ -46,15 +46,33 @@ async function assertWhatsAppNumberAvailable(
   number: string,
   excludeSalonId?: string,
 ): Promise<{ ok: true } | { ok: false; salonName: string }> {
+  const parsed = parseTwilioWhatsAppNumber(number);
+  if (!parsed) return { ok: true };
+
   const taken = await prisma.salon.findFirst({
     where: {
       deletedAt: null,
-      twilioWhatsAppNumber: number,
+      twilioWhatsAppNumber: parsed,
       ...(excludeSalonId ? { NOT: { id: excludeSalonId } } : {}),
     },
     select: { name: true },
   });
   if (taken) return { ok: false, salonName: taken.name };
+
+  const digits = parsed.replace(/^whatsapp:/i, '').replace(/\D/g, '');
+  const others = await prisma.salon.findMany({
+    where: {
+      deletedAt: null,
+      twilioWhatsAppNumber: { not: null },
+      ...(excludeSalonId ? { NOT: { id: excludeSalonId } } : {}),
+    },
+    select: { name: true, twilioWhatsAppNumber: true },
+  });
+  const digitCollision = others.find(
+    (s) => s.twilioWhatsAppNumber && s.twilioWhatsAppNumber.replace(/\D/g, '') === digits,
+  );
+  if (digitCollision) return { ok: false, salonName: digitCollision.name };
+
   return { ok: true };
 }
 
@@ -127,7 +145,12 @@ export async function adminApiRoutes(app: FastifyInstance) {
         phoneE164: s.phoneE164,
         twilioWhatsAppNumber: s.twilioWhatsAppNumber,
         status: s.status ?? null,
-        assignedSalon: assigned.find((a) => a.twilioWhatsAppNumber === s.twilioWhatsAppNumber) ?? null,
+        assignedSalon:
+          assigned.find(
+            (a) =>
+              a.twilioWhatsAppNumber &&
+              normalizeWaId(a.twilioWhatsAppNumber) === normalizeWaId(s.twilioWhatsAppNumber),
+          ) ?? null,
       })),
     };
   });

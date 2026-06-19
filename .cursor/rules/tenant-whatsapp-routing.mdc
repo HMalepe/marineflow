@@ -1,0 +1,21 @@
+# Multi-tenant WhatsApp routing
+
+MarineFlow is multi-tenant. **Super Admin assignment is the only source of truth** for which WhatsApp number each business uses.
+
+## Rules
+
+1. **No hardcoded tenant phone numbers** in app code — only `Salon.twilioWhatsAppNumber` from the DB (set via Super Admin).
+2. **One number per tenant** — `@unique` on `twilioWhatsAppNumber`; admin API rejects duplicates (including same E.164 in different formats).
+3. **Inbound** — Twilio webhook routes by `To` → `resolveTenantFromTwilioAddress` → tenant id through bot, bookings, MessageLog. Unmatched `To` → 404, no fallback tenant.
+4. **Outbound** — `getTenantWhatsAppFrom(tenantId)` / `sendWithFallback({ salonId })` — never `TWILIO_WHATSAPP_FROM` at runtime.
+5. **Isolation** — Conversations keyed by `salonId + waId`; same customer on two business numbers = two separate threads.
+6. **`TWILIO_WHATSAPP_FROM`** — migration backfill / local seed only; not used for sends or routing in production.
+
+## Paired surfaces
+
+| Super Admin | Runtime |
+|-------------|---------|
+| `admin-salon-list.tsx` WhatsApp field | `twilioWhatsAppNumber` on Salon |
+| `adminApi.ts` `/twilio/whatsapp-numbers` | `listTwilioWhatsAppSenders` + assignment map |
+
+When adding WhatsApp features, always pass `salonId` and resolve the sender from that tenant's row.

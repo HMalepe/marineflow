@@ -3,6 +3,9 @@ import { prisma } from './prisma.js';
 import { env } from '../config.js';
 import { normalizeWaId } from './phone.js';
 import { logger } from './logger.js';
+import {
+  parseTwilioWhatsAppNumber,
+} from './salonDefaults.js';
 
 export type ResolvedTenant = Pick<
   Salon,
@@ -57,14 +60,36 @@ export async function resolveTenantFromMetaPhoneId(
 export async function resolveTenantFromTwilioAddress(
   address: string | undefined,
 ): Promise<ResolvedTenant | null> {
-  if (!address) return null;
-  const normalized = address.startsWith('whatsapp:')
-    ? address
-    : `whatsapp:${normalizeWaId(address)}`;
-  return prisma.salon.findFirst({
-    where: { twilioWhatsAppNumber: normalized, deletedAt: null },
+  if (!address?.trim()) return null;
+
+  const canonical = parseTwilioWhatsAppNumber(address);
+  if (canonical) {
+    const byExact = await prisma.salon.findFirst({
+      where: { twilioWhatsAppNumber: canonical, deletedAt: null },
+      select: tenantSelect,
+    });
+    if (byExact) return byExact;
+  }
+
+  // Match by E.164 digits so format drift (whatsapp: prefix, spacing) cannot cross-route tenants.
+  const inboundDigits = normalizeWaId(address);
+  if (!inboundDigits) return null;
+
+  const withNumbers = await prisma.salon.findMany({
+    where: { deletedAt: null, twilioWhatsAppNumber: { not: null } },
     select: tenantSelect,
   });
+  const matches = withNumbers.filter(
+    (s) => s.twilioWhatsAppNumber && normalizeWaId(s.twilioWhatsAppNumber) === inboundDigits,
+  );
+  if (matches.length === 1) return matches[0]!;
+  if (matches.length > 1) {
+    logger.error(
+      { inboundDigits, salonIds: matches.map((m) => m.id) },
+      'twilio_routing_ambiguous_digits — same number on multiple tenants; fix in Super Admin',
+    );
+  }
+  return null;
 }
 
 /**
