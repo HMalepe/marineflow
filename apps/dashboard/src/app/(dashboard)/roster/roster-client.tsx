@@ -18,6 +18,11 @@ import { ChevronLeft, ChevronRight, Copy, Check, X, ClipboardPaste, Plus } from 
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { StaffAvatar } from '@/components/staff-avatar';
 import { StaffAvatarUpload } from '@/components/staff-avatar-upload';
+import { StaffCard } from '@/components/StaffCard';
+import {
+  StaffUtilisationRow,
+  type StaffUtilisationData,
+} from '@/components/StaffUtilisationRow';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +50,7 @@ interface StaffMember {
   workingHours: WorkingHour[];
   timeOff: TimeOffBlock[];
   serviceNames?: string[];
+  linkedServiceIds?: string[];
 }
 
 interface Shift { startTime: string; endTime: string }
@@ -135,6 +141,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
   const toastTimerRef           = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [addStaffOpen, setAddStaffOpen] = useState(openAddStaff);
   const [editStaff, setEditStaff] = useState<StaffMember | null>(null);
+  const [utilisation, setUtilisation] = useState<StaffUtilisationData[]>([]);
 
   const monthEnd = useMemo(() => addDays(getMonthStart(addMonths(month, 1)), -1), [month]);
   const weeks    = useMemo(() => buildCalendarWeeks(month), [month]);
@@ -171,13 +178,29 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
     }
   }, [token, branchId]);
 
+  const fetchUtilisation = useCallback(async () => {
+    try {
+      const branchQuery = branchId ? `?branchId=${encodeURIComponent(branchId)}` : '';
+      const data = await apiFetch<{ staff: StaffUtilisationData[] }>(
+        `/staff/utilisation${branchQuery}`,
+        {},
+        token,
+      );
+      setUtilisation(data.staff ?? []);
+    } catch {
+      setUtilisation([]);
+    }
+  }, [token, branchId]);
+
   useEffect(() => { fetchRoster(month, monthEnd); }, [fetchRoster, month, monthEnd]);
+  useEffect(() => { void fetchUtilisation(); }, [fetchUtilisation]);
 
   const onLiveUpdate = useCallback(
     () => {
       void fetchRoster(month, monthEnd, true);
+      void fetchUtilisation();
     },
-    [fetchRoster, month, monthEnd],
+    [fetchRoster, fetchUtilisation, month, monthEnd],
   );
   const { connected: liveConnected } = useSalonLiveUpdates(token, onLiveUpdate);
 
@@ -296,33 +319,23 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
       {!loading && staff.length > 0 && (
         <div className="flex flex-wrap gap-3">
           {staff.map((s) => (
-            <button
+            <StaffCard
               key={s.id}
-              type="button"
-              onClick={() => setEditStaff(s)}
-              className="flex items-start gap-2 rounded-xl border bg-card px-3 py-2 min-w-0 text-left hover:border-primary/40 hover:bg-accent/5 transition-colors"
-              title="Edit profile photo"
-            >
-              <StaffAvatar
-                name={s.name}
-                displayName={s.displayName}
-                avatarUrl={s.avatarUrl}
-                size="sm"
-                className="mt-0.5"
-              />
-              <div className="min-w-0">
-                <p className="text-xs font-semibold leading-tight truncate">{s.displayName ?? s.name}</p>
-                {s.serviceNames && s.serviceNames.length > 0 ? (
-                  <p className="text-[10px] text-muted-foreground leading-tight mt-0.5 line-clamp-2">
-                    {s.serviceNames.join(' · ')}
-                  </p>
-                ) : (
-                  <p className="text-[10px] text-amber-600 dark:text-amber-400 leading-tight mt-0.5">No services linked</p>
-                )}
-              </div>
-            </button>
+              staff={s}
+              token={token}
+              onEdit={() => setEditStaff(s)}
+              onServicesLinked={() => {
+                void fetchRoster(month, monthEnd, true);
+                void fetchUtilisation();
+              }}
+            />
           ))}
         </div>
+      )}
+
+      {/* Today utilisation */}
+      {!loading && staff.length > 0 && (
+        <StaffUtilisationRow staff={staff} utilisation={utilisation} />
       )}
 
       {/* Calendar */}

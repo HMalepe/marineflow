@@ -17,6 +17,8 @@ import { sendAppointmentPaymentLink } from '../api/appointments/send-payment-lin
 import { markAppointmentCashPaid } from '../api/appointments/mark-cash-paid.js';
 import { bulkUpdateServiceCategory } from '../api/services/bulk-update-category.js';
 import { getServiceBookingStats } from '../api/services/stats.js';
+import { linkStaffServices } from '../api/staff/link-services.js';
+import { getStaffUtilisationToday } from '../api/staff/utilisation.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -1779,6 +1781,42 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/staff/utilisation', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const q = request.query as { branchId?: string };
+      return getStaffUtilisationToday(db, {
+        salonId: user.salonId,
+        branchId: q.branchId,
+      });
+    });
+  });
+
+  app.post<{ Params: { id: string }; Body: { serviceIds: string[] } }>(
+    '/staff/:id/link-services',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await linkStaffServices(db, {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          staffId: request.params.id,
+          serviceIds: request.body.serviceIds ?? [],
+        });
+        if (!result.ok) {
+          reply.code(result.error === 'not_found' ? 404 : 400);
+          return { error: result.error, message: result.message };
+        }
+        syncSalonRosterLater(user.salonId, 'staff', {
+          staffId: request.params.id,
+          action: 'link_services',
+        });
+        return { ok: true, serviceIds: result.serviceIds };
+      });
+    },
+  );
+
   app.post<{
     Body: {
       name: string;
@@ -2079,6 +2117,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             reason: t.reason ?? null,
           })),
           serviceNames: s.services.map((ss) => ss.service.name),
+          linkedServiceIds: s.services.map((ss) => ss.service.id),
         })),
       };
     });
@@ -4200,33 +4239,22 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         if (!Array.isArray(serviceIds)) { reply.code(400); return { error: 'serviceIds_required' }; }
 
-        // Verify all serviceIds belong to this salon
-        const services = await db.service.findMany({
-          where: { id: { in: serviceIds }, salonId: user.salonId },
-          select: { id: true },
+        const result = await linkStaffServices(db, {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          staffId,
+          serviceIds,
         });
-        const validIds = new Set(services.map((s) => s.id));
-        const filtered = serviceIds.filter((id) => validIds.has(id));
-
-        // Replace service links, preserving existing price overrides
-        const existing = await db.staffService.findMany({ where: { staffId }, select: { serviceId: true, priceCentsOverride: true } });
-        const existingMap = new Map(existing.map((e) => [e.serviceId, e.priceCentsOverride]));
-
-        await db.staffService.deleteMany({ where: { staffId } });
-        if (filtered.length > 0) {
-          await db.staffService.createMany({
-            data: filtered.map((serviceId) => ({
-              staffId,
-              serviceId,
-              priceCentsOverride: existingMap.get(serviceId) ?? null,
-            })),
-          });
+        if (!result.ok) {
+          reply.code(400);
+          return { error: result.error, message: result.message };
         }
 
         const updated = await db.staffService.findMany({
           where: { staffId },
           include: { service: { select: { id: true, name: true, priceCents: true } } },
         });
+        syncSalonRosterLater(user.salonId, 'staff', { staffId, action: 'link_services' });
         return { services: updated };
       });
     },
