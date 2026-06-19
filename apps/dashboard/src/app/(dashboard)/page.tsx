@@ -16,6 +16,7 @@ import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard
 import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
 import { SetupHealthScore, type SetupHealthData } from '@/components/SetupHealthScore';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
+import { BusinessCoachCard } from '@/components/BusinessCoachCard';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
 
@@ -296,6 +297,8 @@ async function AppointmentView({ token }: { token: string | null }) {
           <MiniBarChart data={overviewKpis.revenueLast7Days} />
         </>
       )}
+
+      {token && <BusinessCoachCard token={token} />}
 
       {/* Onboarding banner */}
       {!onboardingDone && (

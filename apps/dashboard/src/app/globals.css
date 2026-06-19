@@ -133,3 +133,16 @@
 .dashboard-section-anchor {
   scroll-margin-top: calc(var(--dashboard-sticky-offset, 3.5rem) + 0.75rem);
 }
+
+@keyframes pulse-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: pulse-marquee 40s linear infinite;
+}

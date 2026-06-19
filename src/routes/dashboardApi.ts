@@ -119,6 +119,9 @@ import { sendPopiaConsentBlast, countPopiaPendingCustomers } from '../api/campai
 import { getBranchStats } from '../api/branches/stats.js';
 import { getCustomerStats, getCustomerStatsBatch } from '../api/customers/stats.js';
 import { getCustomerSegmentCounts } from '../api/customers/segments.js';
+import { getCustomerJourney } from '../api/customers/journey.js';
+import { getBusinessCoachInsights } from '../api/tenant/business-coach.js';
+import { getPulseSnapshot } from '../api/tenant/pulse.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
 
@@ -849,6 +852,22 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       return getTenantSetupHealth(db, user.salonId);
+    });
+  });
+
+  app.get<{ Querystring: { refresh?: string } }>('/tenant/business-coach', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const forceRefresh = request.query.refresh === '1' || request.query.refresh === 'true';
+      return getBusinessCoachInsights(db, user.salonId, { forceRefresh });
+    });
+  });
+
+  app.get<{ Querystring: { branchId?: string } }>('/tenant/pulse', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const branchId = request.query.branchId?.trim() || undefined;
+      return getPulseSnapshot(db, user.salonId, { branchId });
     });
   });
 
@@ -2301,6 +2320,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         threshold: Number(q.threshold) || 0.3,
       });
       return { results };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/customers/:id/journey', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const events = await getCustomerJourney(db, user.salonId, request.params.id);
+      if (!events) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { events };
     });
   });
 

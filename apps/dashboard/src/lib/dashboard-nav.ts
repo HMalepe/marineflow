@@ -33,6 +33,7 @@ export const SALON_NAV_GROUPS: NavGroup[] = [
     title: 'Daily operations',
     items: [
       { href: '/appointments', label: APPOINTMENTS_LABEL },
+      { href: '/pulse', label: 'Live Pulse' },
       { href: '/conversations', label: CONVERSATIONS_LABEL },
       { href: '/customers', label: 'Customers' },
       { href: '/tickets', label: TICKETS_LABEL },
@@ -77,6 +78,9 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
   if (href === '/appointments') {
     return pathname.startsWith('/appointments') || (pathname.includes('/branch/') && pathname.includes('/appointments'));
+  }
+  if (href === '/pulse') {
+    return pathname.startsWith('/pulse');
   }
   if (href === '/roster') {
     return pathname.startsWith('/roster') || pathname.startsWith('/staff') || (pathname.includes('/branch/') && pathname.includes('/roster'));
