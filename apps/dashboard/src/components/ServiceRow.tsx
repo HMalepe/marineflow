@@ -13,6 +13,7 @@ export interface ServiceRowData {
   active: boolean;
   sortOrder: number;
   category?: { id: string; name: string } | null;
+  aftercareNote?: string | null;
 }
 
 function formatPrice(cents: number): string {

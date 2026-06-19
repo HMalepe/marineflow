@@ -58,6 +58,7 @@ interface ServiceForm {
   durationMin: string;
   bufferMin: string;
   categoryId: string;
+  aftercareNote: string;
 }
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -73,6 +74,7 @@ const emptyForm: ServiceForm = {
   durationMin: '60',
   bufferMin: '0',
   categoryId: '',
+  aftercareNote: '',
 };
 
 function formatPrice(cents: number): string {
@@ -87,6 +89,7 @@ function serviceToForm(s: Service): ServiceForm {
     durationMin: String(s.durationMin),
     bufferMin: String(s.bufferMin),
     categoryId: s.category?.id ?? '',
+    aftercareNote: s.aftercareNote ?? '',
   };
 }
 
@@ -479,6 +482,7 @@ export function ServicesClient({ token }: Props) {
         durationMin,
         bufferMin,
         categoryId: form.categoryId || null,
+        aftercareNote: form.aftercareNote.trim() || null,
       };
 
       if (editingId) {
@@ -990,6 +994,17 @@ export function ServicesClient({ token }: Props) {
                     value={form.description}
                     onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, description: e.target.value }))}
                     placeholder="What the customer can expect"
+                    rows={3}
+                    className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="aftercareNote">Aftercare message</Label>
+                  <textarea
+                    id="aftercareNote"
+                    value={form.aftercareNote}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, aftercareNote: e.target.value }))}
+                    placeholder="Sent via WhatsApp ~10 min after the appointment. Leave blank to use our default tip for this type of service."
                     rows={3}
                     className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
                   />

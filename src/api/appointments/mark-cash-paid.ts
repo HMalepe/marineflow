@@ -2,15 +2,15 @@ import type { PrismaTx } from '../../lib/db/tenantSession.js';
 import { scheduleAppointmentReminders } from '../../services/appointmentReminders.js';
 import { notifyAppointmentChangedLater } from '../../services/rosterSync.js';
 
-export type MarkCashPaidResult =
-  | { ok: true; status: 'CONFIRMED_PAID'; paymentStatus: 'CASH_PAID' }
+export type MarkManuallyPaidResult =
+  | { ok: true; status: 'CONFIRMED_PAID'; paymentStatus: 'CASH_PAID' | 'EFT_PAID' }
   | { ok: false; error: string; message?: string };
 
-/** Mark appointment paid in cash — no PayFast/Stripe. */
-export async function markAppointmentCashPaid(
+/** Mark appointment paid in cash or via EFT — no PayFast/Stripe involved. */
+export async function markAppointmentManuallyPaid(
   db: PrismaTx,
-  input: { salonId: string; appointmentId: string; actorUserId: string },
-): Promise<MarkCashPaidResult> {
+  input: { salonId: string; appointmentId: string; actorUserId: string; method: 'CASH' | 'EFT' },
+): Promise<MarkManuallyPaidResult> {
   const appt = await db.appointment.findFirst({
     where: { id: input.appointmentId, salonId: input.salonId },
     include: {
@@ -34,16 +34,17 @@ export async function markAppointmentCashPaid(
     return {
       ok: false,
       error: 'invalid_status',
-      message: 'Only unpaid bookings can be marked as cash paid',
+      message: 'Only unpaid bookings can be marked as paid',
     };
   }
 
   const now = new Date();
   const amountCents = appt.service.priceCents;
+  const paymentStatus = input.method === 'CASH' ? 'CASH_PAID' : 'EFT_PAID';
 
   await db.payment.updateMany({
     where: { appointmentId: appt.id, status: 'PENDING' },
-    data: { status: 'FAILED', failureReason: 'superseded_by_cash_payment' },
+    data: { status: 'FAILED', failureReason: `superseded_by_${input.method.toLowerCase()}_payment` },
   });
 
   await db.payment.create({
@@ -52,28 +53,28 @@ export async function markAppointmentCashPaid(
       appointmentId: appt.id,
       customerId: appt.customerId,
       provider: 'MANUAL',
-      method: 'CASH',
+      method: input.method,
       status: 'SUCCEEDED',
       amountCents,
       currency: 'ZAR',
       paidAt: now,
-      metadata: { paymentStatus: 'CASH_PAID', source: 'dashboard' },
+      metadata: { paymentStatus, source: 'dashboard' },
     },
   });
 
   await db.appointment.update({
     where: { id: appt.id },
-    data: { status: 'CONFIRMED_PAID', confirmedAt: now },
+    data: { status: 'CONFIRMED_PAID', confirmedAt: now, paymentMethod: input.method },
   });
 
   await db.auditLog.create({
     data: {
       salonId: input.salonId,
       actorUserId: input.actorUserId,
-      action: 'appointment_cash_paid',
+      action: `appointment_${input.method.toLowerCase()}_paid`,
       entity: 'Appointment',
       entityId: appt.id,
-      payload: { paymentStatus: 'CASH_PAID', amountCents },
+      payload: { paymentStatus, amountCents },
     },
   });
 
@@ -85,10 +86,10 @@ export async function markAppointmentCashPaid(
   if (updated) {
     notifyAppointmentChangedLater(updated.salonId, updated.id, {
       status: updated.status,
-      source: 'dashboard_cash',
+      source: input.method === 'CASH' ? 'dashboard_cash' : 'dashboard_eft',
     });
     void scheduleAppointmentReminders(updated).catch(() => undefined);
   }
 
-  return { ok: true, status: 'CONFIRMED_PAID', paymentStatus: 'CASH_PAID' };
+  return { ok: true, status: 'CONFIRMED_PAID', paymentStatus };
 }

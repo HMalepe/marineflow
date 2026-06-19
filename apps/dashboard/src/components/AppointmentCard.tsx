@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Banknote, Link2, Loader2 } from 'lucide-react';
+import { Banknote, Landmark, Link2, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -128,6 +128,7 @@ type Props = {
 export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated }: Props) {
   const [sendingLink, setSendingLink] = useState(false);
   const [markingCash, setMarkingCash] = useState(false);
+  const [markingEft, setMarkingEft] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [linkSentAt, setLinkSentAt] = useState<string | null>(appt.paymentLinkSentAt ?? null);
@@ -179,12 +180,13 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
     }
   }
 
-  async function markCashPaid() {
-    setMarkingCash(true);
+  async function markManuallyPaid(method: 'cash' | 'eft') {
+    const setMarking = method === 'cash' ? setMarkingCash : setMarkingEft;
+    setMarking(true);
     setError(null);
     try {
       const res = await apiFetch<{ ok: boolean; message?: string }>(
-        `/appointments/${appt.id}/mark-cash-paid`,
+        `/appointments/${appt.id}/mark-${method}-paid`,
         { method: 'POST' },
         token,
       );
@@ -193,13 +195,13 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
         return;
       }
       setLocalStatus('CONFIRMED_PAID');
-      setToast('Marked as paid (cash)');
+      setToast(`Marked as paid (${method})`);
       onUpdated?.({ id: appt.id, status: 'CONFIRMED_PAID' });
       window.setTimeout(() => setToast(null), 4000);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not mark as paid');
     } finally {
-      setMarkingCash(false);
+      setMarking(false);
     }
   }
 
@@ -291,7 +293,7 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
             size="sm"
             variant="outline"
             className="h-8 text-xs"
-            disabled={sendingLink || markingCash}
+            disabled={sendingLink || markingCash || markingEft}
             onClick={() => void sendPaymentLink()}
           >
             {sendingLink ? (
@@ -306,8 +308,8 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
             size="sm"
             variant="secondary"
             className="h-8 text-xs"
-            disabled={sendingLink || markingCash}
-            onClick={() => void markCashPaid()}
+            disabled={sendingLink || markingCash || markingEft}
+            onClick={() => void markManuallyPaid('cash')}
           >
             {markingCash ? (
               <Loader2 className="size-3.5 mr-1.5 animate-spin" />
@@ -315,6 +317,21 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
               <Banknote className="size-3.5 mr-1.5" />
             )}
             Mark as paid (cash)
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-8 text-xs"
+            disabled={sendingLink || markingCash || markingEft}
+            onClick={() => void markManuallyPaid('eft')}
+          >
+            {markingEft ? (
+              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <Landmark className="size-3.5 mr-1.5" />
+            )}
+            Mark as paid (EFT)
           </Button>
         </div>
       )}

@@ -14,7 +14,7 @@ import { searchDashboard } from '../lib/dashboardSearch.js';
 import { getTenantOverviewKpis } from '../api/tenant/overview-kpis.js';
 import { getTenantSetupHealth } from '../api/tenant/setup-health.js';
 import { sendAppointmentPaymentLink } from '../api/appointments/send-payment-link.js';
-import { markAppointmentCashPaid } from '../api/appointments/mark-cash-paid.js';
+import { markAppointmentManuallyPaid } from '../api/appointments/mark-cash-paid.js';
 import { bulkUpdateServiceCategory } from '../api/services/bulk-update-category.js';
 import { getServiceBookingStats } from '../api/services/stats.js';
 import { linkStaffServices } from '../api/staff/link-services.js';
@@ -977,10 +977,32 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const result = await markAppointmentCashPaid(db, {
+        const result = await markAppointmentManuallyPaid(db, {
           salonId: user.salonId,
           appointmentId: request.params.id,
           actorUserId: user.sub,
+          method: 'CASH',
+        });
+        if (!result.ok) {
+          const status = result.error === 'not_found' ? 404 : 400;
+          reply.code(status);
+        }
+        return result;
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/mark-eft-paid',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await markAppointmentManuallyPaid(db, {
+          salonId: user.salonId,
+          appointmentId: request.params.id,
+          actorUserId: user.sub,
+          method: 'EFT',
         });
         if (!result.ok) {
           const status = result.error === 'not_found' ? 404 : 400;
