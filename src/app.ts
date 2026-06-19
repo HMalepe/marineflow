@@ -14,6 +14,7 @@ import { logger } from './lib/logger.js';
 import { redisPing } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
 import { handleTwilioWhatsAppWebhook } from './webhooks/twilio/whatsapp.js';
+import { handleTwilioStatusWebhook } from './webhooks/twilio/status.js';
 import { whatsappCloudMessaging, verifyWebhookRawBuffer } from './lib/integrations/messaging/whatsapp-cloud-impl.js';
 import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
@@ -128,6 +129,7 @@ export async function buildApp() {
   });
 
   app.post('/webhooks/twilio/whatsapp', handleTwilioWhatsAppWebhook);
+  app.post('/webhooks/twilio/status', handleTwilioStatusWebhook);
 
   // Meta webhook routes need raw body access for correct HMAC-SHA256 verification.
   // Fastify parses JSON before handlers run; re-serialising a parsed object can produce

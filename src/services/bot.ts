@@ -14,6 +14,7 @@ import {
   resolveTenantForInbound,
   type ResolvedTenant,
 } from '../lib/tenant.js';
+import { recordCampaignReply } from './campaignMetrics.js';
 import { sendWithFallback } from './channelRouter.js';
 import { buildMainMenuInteractive } from './mainMenuInteractive.js';
 import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
@@ -1185,6 +1186,8 @@ async function processInboundWhatsApp(
       data: { lastInteractionAt: new Date() },
     });
   }
+
+  void recordCampaignReply(salon.id, customer.id).catch(() => {});
 
   let conv: ConvWithRelations;
   const existingConv = await getTenantDb().conversation.findUnique({

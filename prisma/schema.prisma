@@ -1071,7 +1071,49 @@ model Campaign {
   createdAt     DateTime       @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
+  send          CampaignSend?
+  recipients    CampaignRecipient[]
+
   @@index([salonId, status])
+}
+
+model CampaignSend {
+  id              String   @id @default(cuid())
+  campaignId      String   @unique
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  salonId         String
+  sentAt          DateTime
+  sentCount       Int      @default(0)
+  deliveredCount  Int      @default(0)
+  readCount       Int      @default(0)
+  repliedCount    Int      @default(0)
+  bookedCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  recipients      CampaignRecipient[]
+
+  @@index([salonId, sentAt])
+}
+
+model CampaignRecipient {
+  id             String       @id @default(cuid())
+  campaignSendId String
+  campaignSend   CampaignSend @relation(fields: [campaignSendId], references: [id], onDelete: Cascade)
+  campaignId     String
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  salonId        String
+  customerId     String
+  providerSid    String?      @unique
+  delivered      Boolean      @default(false)
+  read           Boolean      @default(false)
+  replied        Boolean      @default(false)
+  booked         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@unique([campaignId, customerId])
+  @@index([campaignSendId])
+  @@index([salonId, customerId])
 }
 
 // ─── Waitlist ─────────────────────────────────────────────────────────

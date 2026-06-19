@@ -115,6 +115,7 @@ import {
   campaignRequiresAudience,
   resolveCampaignScheduleAfterPatch,
 } from '../services/campaigns.js';
+import { sendPopiaConsentBlast, countPopiaPendingCustomers } from '../api/campaigns/send-popia-blast.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
 
@@ -4877,13 +4878,35 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   app.get('/campaigns/meta', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
-      const [tags, optedInCount] = await Promise.all([
+      const [tags, optedInCount, popiaPendingCount] = await Promise.all([
         listCustomerTags(user.salonId),
         countOptedInCustomers(user.salonId),
+        countPopiaPendingCustomers(user.salonId),
       ]);
-      return { tags, optedInCount };
+      return { tags, optedInCount, popiaPendingCount };
     });
   });
+
+  app.post(
+    '/campaigns/send-popia-blast',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const result = await sendPopiaConsentBlast(user.salonId);
+        await getTenantDb().auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'popia_consent_blast',
+            entity: 'Customer',
+            entityId: user.salonId,
+            payload: result as object,
+          },
+        });
+        return result;
+      });
+    },
+  );
 
   app.post<{ Body: { audienceFilter?: AudienceFilter } }>(
     '/campaigns/audience-preview',

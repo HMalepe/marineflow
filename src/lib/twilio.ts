@@ -25,23 +25,40 @@ export async function sendWhatsAppReply(
   mediaUrl?: string,
   twilioFrom?: string,
 ): Promise<string | null> {
+  return sendWhatsAppReplyWithStatusCallback({ toWaId, body, mediaUrl, twilioFrom });
+}
+
+export async function sendWhatsAppReplyWithStatusCallback(params: {
+  toWaId: string;
+  body: string;
+  mediaUrl?: string;
+  twilioFrom?: string;
+  statusCallback?: string;
+}): Promise<string | null> {
   const tw = getTwilioClient();
-  const from = twilioFrom
-    ?? (env.TWILIO_WHATSAPP_FROM ? normalizeTwilioWhatsAppFrom(env.TWILIO_WHATSAPP_FROM) : null);
+  const from =
+    params.twilioFrom ??
+    (env.TWILIO_WHATSAPP_FROM ? normalizeTwilioWhatsAppFrom(env.TWILIO_WHATSAPP_FROM) : null);
   if (!tw || !from) {
     logger.error({ hasClient: !!tw, hasFrom: !!from }, 'twilio_send_aborted_no_config');
     return null;
   }
-  const toDigits = toWaId.replace(/^whatsapp:/i, '').replace(/^\+/, '');
+  const toDigits = params.toWaId.replace(/^whatsapp:/i, '').replace(/^\+/, '');
   const to = `whatsapp:+${toDigits}`;
   try {
     const msg = await tw.messages.create({
       from,
       to,
-      body,
-      ...(mediaUrl ? { mediaUrl: [mediaUrl] } : {}),
+      body: params.body,
+      ...(params.mediaUrl ? { mediaUrl: [params.mediaUrl] } : {}),
+      ...(params.statusCallback
+        ? { statusCallback: params.statusCallback, statusCallbackMethod: 'POST' as const }
+        : {}),
     });
-    logger.info({ sid: msg.sid, to, from, hasMedia: !!mediaUrl }, 'twilio_message_sent');
+    logger.info(
+      { sid: msg.sid, to, from, hasMedia: !!params.mediaUrl, hasCallback: !!params.statusCallback },
+      'twilio_message_sent',
+    );
     return msg.sid;
   } catch (err: unknown) {
     logger.error({ err, to, from }, 'twilio_send_failed');

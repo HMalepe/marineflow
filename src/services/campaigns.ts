@@ -2,9 +2,15 @@ import type { Campaign, CampaignStatus } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { inngest, inngestIsDev } from '../lib/inngest/client.js';
 import { env } from '../config.js';
-import { sendWithFallback } from './channelRouter.js';
 import { logger } from '../lib/logger.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
+import {
+  createCampaignSend,
+  refreshCampaignBookedCount,
+  sendCampaignOutbound,
+  serializeCampaignSendStats,
+  type CampaignSendStats,
+} from './campaignMetrics.js';
 
 /** User-facing validation errors from campaign create/update/send. */
 export class CampaignBusinessError extends Error {
@@ -42,6 +48,7 @@ export interface CampaignApiShape {
   totalRecipients: number;
   delivered: number;
   failed: number;
+  performance: CampaignSendStats | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -64,7 +71,9 @@ function resolveLastVisitBefore(filter: AudienceFilter): Date | undefined {
   return undefined;
 }
 
-export function serializeCampaign(c: Campaign): CampaignApiShape {
+export function serializeCampaign(
+  c: Campaign & { send?: { sentAt: Date; sentCount: number; deliveredCount: number; readCount: number; repliedCount: number; bookedCount: number } | null },
+): CampaignApiShape {
   const mediaType =
     c.mediaType === 'image' || c.mediaType === 'video' ? c.mediaType : null;
   return {
@@ -80,6 +89,7 @@ export function serializeCampaign(c: Campaign): CampaignApiShape {
     totalRecipients: c.totalRecipients,
     delivered: c.delivered,
     failed: c.failed,
+    performance: serializeCampaignSendStats(c.send),
     createdAt: c.createdAt.toISOString(),
     updatedAt: c.updatedAt.toISOString(),
   };
@@ -347,10 +357,18 @@ export async function executeCampaign(campaignId: string) {
 
   const filter = campaign.audienceFilter as AudienceFilter;
   const audience = await buildAudience(campaign.salonId, filter);
+  const sentAt = new Date();
 
   await db.campaign.update({
     where: { id: campaignId },
-    data: { status: 'SENDING', totalRecipients: audience.length, sentAt: new Date() },
+    data: { status: 'SENDING', totalRecipients: audience.length, sentAt },
+  });
+
+  const campaignSendId = await createCampaignSend(db, {
+    campaignId,
+    salonId: campaign.salonId,
+    sentAt,
+    sentCount: audience.length,
   });
 
   let delivered = 0;
@@ -370,15 +388,18 @@ export async function executeCampaign(campaignId: string) {
 
       const mediaType = parseCampaignMediaType(campaign.mediaType) ?? undefined;
 
-      const { result } = await sendWithFallback({
+      const { sent } = await sendCampaignOutbound({
         salonId: campaign.salonId,
+        campaignId,
+        campaignSendId,
+        customerId: customer.id,
         to: customer.waId,
         body,
         mediaUrl: campaign.mediaUrl ?? undefined,
         mediaType,
       });
 
-      if (result.providerMessageId) {
+      if (sent) {
         delivered++;
       } else {
         failed++;
@@ -389,6 +410,8 @@ export async function executeCampaign(campaignId: string) {
 
     await new Promise((r) => setTimeout(r, 20));
   }
+
+  await refreshCampaignBookedCount(campaignSendId);
 
   await db.campaign.update({
     where: { id: campaignId },
@@ -407,10 +430,14 @@ export async function listCampaigns() {
   return db.campaign.findMany({
     orderBy: { createdAt: 'desc' },
     take: 100,
+    include: { send: true },
   });
 }
 
 export async function getCampaign(campaignId: string) {
   const db = getTenantDb();
-  return db.campaign.findFirst({ where: { id: campaignId } });
+  return db.campaign.findFirst({
+    where: { id: campaignId },
+    include: { send: true },
+  });
 }
