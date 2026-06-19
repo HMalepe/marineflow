@@ -79,7 +79,7 @@ export interface NormalisedInboundMessage {
 export interface MessagingProvider {
   sendText(options: SendOptions): Promise<SentMessage>;
   sendTemplate(options: SendOptions): Promise<SentMessage>;
-  verifyWebhook(payload: unknown, signature: string | undefined): boolean;
+  verifyWebhook(payload: unknown, signature: string | undefined, candidateUrls?: string[]): boolean;
   parseInbound(payload: unknown): NormalisedInboundMessage | null;
   parseInboundBatch(payload: unknown): NormalisedInboundMessage[];
 }

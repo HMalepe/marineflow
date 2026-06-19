@@ -137,13 +137,19 @@ export async function buildApp() {
 
     logger.info({ from: params['From'], to: params['To'], hasSig: !!signature }, 'twilio_webhook_received');
 
-    const sigValid = twilioMessaging.verifyWebhook(params, signature);
+    // TWILIO_WEBHOOK_BASE_URL is a manually-configured env var that can drift from the
+    // actual public URL Twilio posts to (custom domain changes, Railway URL changes, etc).
+    // Fall back to the request's own protocol/host (trustProxy honours X-Forwarded-*) so a
+    // stale env var doesn't hard-reject every inbound message.
+    const requestDerivedUrl = `${request.protocol}://${request.hostname}${request.url}`;
+    const sigValid = twilioMessaging.verifyWebhook(params, signature, [requestDerivedUrl]);
     if (!sigValid) {
       const allowUnsignedDev =
         env.NODE_ENV !== 'production' && !env.TWILIO_AUTH_TOKEN?.trim();
       if (!allowUnsignedDev) {
         logger.warn({
           expectedUrl: `${env.TWILIO_WEBHOOK_BASE_URL}/webhooks/twilio/whatsapp`,
+          requestDerivedUrl,
           hasSig: !!signature,
         }, 'twilio_signature_invalid');
         return reply.code(403).send('Forbidden');
