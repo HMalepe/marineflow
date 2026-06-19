@@ -1,43 +1,47 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronRight,
   GitMerge,
   Loader2,
+  Megaphone,
   Search,
   Users,
-  X,
   XCircle,
 } from 'lucide-react';
+import {
+  CustomerCard,
+  CustomerDuplicateRow,
+  type CustomerListItem,
+  type CustomerStatsView,
+} from '@/components/CustomerCard';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { DashboardToast } from '@/components/dashboard-toast';
 
-interface Customer {
-  id: string;
-  firstName: string | null;
-  lastName: string | null;
-  displayName: string | null;
-  email: string | null;
-  waId: string | null;
-  marketingConsentStatus: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+interface Customer extends CustomerListItem {
   noShowRisk: string;
-  bookingCount: number;
   noShowCount: number;
-  tags: string[];
-  createdAt: string;
 }
 
 interface CustomerGroup {
   primary: Customer;
   duplicates: Customer[];
+}
+
+type SegmentFilter = 'all' | 'new' | 'at_risk' | 'champions' | 'vip';
+
+interface SegmentCounts {
+  all: number;
+  new: number;
+  at_risk: number;
+  champions: number;
+  vip: number;
 }
 
 interface Props {
@@ -54,6 +58,17 @@ const AVATAR_COLORS = [
   'bg-teal-500',
   'bg-indigo-500',
 ];
+
+const SEGMENT_PILLS: { key: SegmentFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'new', label: 'New' },
+  { key: 'at_risk', label: 'At Risk' },
+  { key: 'champions', label: 'Champions' },
+  { key: 'vip', label: 'VIP' },
+];
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 
 function avatarColor(seed: string): string {
   let h = 5381;
@@ -76,7 +91,9 @@ function initials(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return '?';
   const parts = trimmed.split(/\s+/);
-  if (parts.length >= 2) return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase() || '?';
+  if (parts.length >= 2) {
+    return ((parts[0]?.[0] ?? '') + (parts[parts.length - 1]?.[0] ?? '')).toUpperCase() || '?';
+  }
   return trimmed.slice(0, 2).toUpperCase();
 }
 
@@ -122,21 +139,56 @@ function groupByPhone(customers: Customer[]): CustomerGroup[] {
   return groups;
 }
 
-function consentDot(status: Customer['marketingConsentStatus']) {
-  if (status === 'ACCEPTED') return <span className="size-2 rounded-full bg-green-500 shrink-0" title="Marketing accepted" />;
-  if (status === 'DECLINED') return <span className="size-2 rounded-full bg-slate-400 shrink-0" title="Marketing declined" />;
-  return <span className="size-2 rounded-full bg-amber-400 shrink-0" title="Awaiting POPIA consent" />;
+function matchesSegment(
+  customer: Customer,
+  stats: CustomerStatsView | undefined,
+  segment: SegmentFilter,
+): boolean {
+  if (segment === 'all') return true;
+
+  const createdMs = new Date(customer.createdAt).getTime();
+  const now = Date.now();
+
+  if (segment === 'new') return createdMs >= now - THIRTY_DAYS_MS;
+
+  if (segment === 'vip') {
+    return customer.tags.some((t) => t.toLowerCase() === 'vip');
+  }
+
+  if (segment === 'champions') {
+    return stats?.ltvBadge === 'champion';
+  }
+
+  if (segment === 'at_risk') {
+    if (stats?.ltvBadge === 'at_risk') return true;
+    if ((stats?.visitCount ?? 0) === 0 && createdMs < now - SIXTY_DAYS_MS) return true;
+    if (stats?.lastVisitAt && new Date(stats.lastVisitAt).getTime() < now - SIXTY_DAYS_MS) {
+      return true;
+    }
+    return false;
+  }
+
+  return true;
 }
 
-type ConsentFilter = 'all' | 'opted-out';
-
 export function CustomersClient({ token }: Props) {
+  const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerStats, setCustomerStats] = useState<Record<string, CustomerStatsView>>({});
+  const [segmentCounts, setSegmentCounts] = useState<SegmentCounts | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [consentFilter, setConsentFilter] = useState<ConsentFilter>('all');
+  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>('all');
   const [mergingId, setMergingId] = useState<string | null>(null);
-  const [mergeConfirm, setMergeConfirm] = useState<{ primaryId: string; dupId: string; primaryName: string; dupName: string; dupBookings: number } | null>(null);
+  const [campaignCreating, setCampaignCreating] = useState(false);
+  const [mergeConfirm, setMergeConfirm] = useState<{
+    primaryId: string;
+    dupId: string;
+    primaryName: string;
+    dupName: string;
+    dupBookings: number;
+  } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const searchRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,6 +196,39 @@ export function CustomersClient({ token }: Props) {
     setToast({ message, type });
     setTimeout(() => setToast(null), 5000);
   };
+
+  const loadSegments = useCallback(async () => {
+    try {
+      const res = await apiFetch<{ segments: SegmentCounts }>('/customers/segments', {}, token);
+      setSegmentCounts(res.segments);
+    } catch {
+      setSegmentCounts(null);
+    }
+  }, [token]);
+
+  const loadStats = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) {
+        setCustomerStats({});
+        setStatsLoading(false);
+        return;
+      }
+      setStatsLoading(true);
+      try {
+        const res = await apiFetch<{ stats: Record<string, CustomerStatsView> }>(
+          '/customers/stats-batch',
+          { method: 'POST', body: JSON.stringify({ ids }) },
+          token,
+        );
+        setCustomerStats(res.stats ?? {});
+      } catch {
+        setCustomerStats({});
+      } finally {
+        setStatsLoading(false);
+      }
+    },
+    [token],
+  );
 
   const load = useCallback(
     async (q = '') => {
@@ -155,10 +240,14 @@ export function CustomersClient({ token }: Props) {
             {},
             token,
           );
-          setCustomers(res.results ?? []);
+          const list = res.results ?? [];
+          setCustomers(list);
+          void loadStats(list.map((c) => c.id));
         } else {
           const res = await apiFetch<{ customers: Customer[] }>('/customers?limit=200', {}, token);
-          setCustomers(res.customers ?? []);
+          const list = res.customers ?? [];
+          setCustomers(list);
+          void loadStats(list.map((c) => c.id));
         }
       } catch (e) {
         showToast(e instanceof ApiError ? e.message : 'Could not load customers', 'error');
@@ -166,12 +255,13 @@ export function CustomersClient({ token }: Props) {
         setLoading(false);
       }
     },
-    [token],
+    [token, loadStats],
   );
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadSegments();
+  }, [load, loadSegments]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -179,7 +269,13 @@ export function CustomersClient({ token }: Props) {
     searchRef.current = setTimeout(() => void load(value), 300);
   };
 
-  const confirmMerge = (primaryId: string, dupId: string, primaryName: string, dupName: string, dupBookings: number) => {
+  const confirmMerge = (
+    primaryId: string,
+    dupId: string,
+    primaryName: string,
+    dupName: string,
+    dupBookings: number,
+  ) => {
     setMergeConfirm({ primaryId, dupId, primaryName, dupName, dupBookings });
   };
 
@@ -189,12 +285,17 @@ export function CustomersClient({ token }: Props) {
     setMergeConfirm(null);
     setMergingId(dupId);
     try {
-      await apiFetch(`/customers/${primaryId}/merge`, {
-        method: 'POST',
-        body: JSON.stringify({ secondaryId: dupId }),
-      }, token);
+      await apiFetch(
+        `/customers/${primaryId}/merge`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ secondaryId: dupId }),
+        },
+        token,
+      );
       showToast('Records merged successfully', 'success');
       await load(search);
+      await loadSegments();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Merge failed', 'error');
     } finally {
@@ -202,19 +303,48 @@ export function CustomersClient({ token }: Props) {
     }
   };
 
+  const createReengagementCampaign = async () => {
+    setCampaignCreating(true);
+    try {
+      await apiFetch(
+        '/campaigns',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            name: 'Re-engagement — at-risk customers',
+            message:
+              'Hi! We miss you — it has been a while since your last visit. Reply BOOK to schedule your next appointment.',
+            audienceFilter: { type: 'inactive', inactiveDays: 60 },
+          }),
+        },
+        token,
+      );
+      showToast('Campaign draft saved — finish and send from Newsletters', 'success');
+      router.push('/campaigns');
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'Could not create campaign draft', 'error');
+    } finally {
+      setCampaignCreating(false);
+    }
+  };
+
   const allGroups = useMemo(() => groupByPhone(customers), [customers]);
+
   const groups = useMemo(
-    () => consentFilter === 'opted-out'
-      ? allGroups.filter((g) => g.primary.marketingConsentStatus === 'DECLINED')
-      : allGroups,
-    [allGroups, consentFilter],
+    () =>
+      allGroups.filter((g) =>
+        matchesSegment(g.primary, customerStats[g.primary.id], segmentFilter),
+      ),
+    [allGroups, customerStats, segmentFilter],
   );
-  const duplicateCount = useMemo(() => groups.filter((g) => g.duplicates.length > 0).length, [groups]);
-  const optedOutCount = useMemo(() => allGroups.filter((g) => g.primary.marketingConsentStatus === 'DECLINED').length, [allGroups]);
+
+  const duplicateCount = useMemo(
+    () => groups.filter((g) => g.duplicates.length > 0).length,
+    [groups],
+  );
 
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Customers</h1>
@@ -224,15 +354,6 @@ export function CustomersClient({ token }: Props) {
               <span className="ml-2 text-amber-600 font-medium">
                 · {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} found
               </span>
-            )}
-            {!loading && optedOutCount > 0 && (
-              <button
-                type="button"
-                onClick={() => setConsentFilter(consentFilter === 'opted-out' ? 'all' : 'opted-out')}
-                className={`ml-2 font-medium hover:underline ${consentFilter === 'opted-out' ? 'text-slate-700 dark:text-slate-300 underline' : 'text-slate-500'}`}
-              >
-                · {optedOutCount} opted out
-              </button>
             )}
           </p>
         </div>
@@ -266,7 +387,52 @@ export function CustomersClient({ token }: Props) {
         </div>
       </div>
 
-      {/* Duplicate consolidation banner */}
+      <div className="flex flex-wrap items-center gap-2">
+        {SEGMENT_PILLS.map(({ key, label }) => (
+          <Button
+            key={key}
+            variant={segmentFilter === key ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSegmentFilter(key)}
+            className="gap-1.5 h-8"
+          >
+            {label}
+            {segmentCounts != null && (
+              <span
+                className={cn(
+                  'tabular-nums text-[10px] rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center',
+                  segmentFilter === key ? 'bg-primary-foreground/20' : 'bg-muted',
+                )}
+              >
+                {segmentCounts[key]}
+              </span>
+            )}
+          </Button>
+        ))}
+      </div>
+
+      {segmentFilter === 'at_risk' && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
+          <p className="text-sm text-muted-foreground flex-1 min-w-[200px]">
+            Reach customers who haven&apos;t visited in 60+ days with a re-engagement newsletter.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-orange-500/40 shrink-0"
+            disabled={campaignCreating}
+            onClick={() => void createReengagementCampaign()}
+          >
+            {campaignCreating ? (
+              <Loader2 className="size-4 animate-spin mr-1.5" />
+            ) : (
+              <Megaphone className="size-4 mr-1.5" />
+            )}
+            Send re-engagement campaign
+          </Button>
+        </div>
+      )}
+
       {!loading && duplicateCount > 0 && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex gap-3 items-start">
           <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
@@ -281,7 +447,6 @@ export function CustomersClient({ token }: Props) {
         </div>
       )}
 
-      {/* Customer list */}
       {loading && customers.length === 0 ? (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -293,9 +458,15 @@ export function CustomersClient({ token }: Props) {
           <div className="flex size-14 items-center justify-center rounded-2xl bg-muted mb-4">
             <Users className="size-7 text-muted-foreground" />
           </div>
-          <p className="font-medium">{search ? 'No customers found' : 'No customers yet'}</p>
+          <p className="font-medium">
+            {search || segmentFilter !== 'all' ? 'No customers found' : 'No customers yet'}
+          </p>
           <p className="text-sm text-muted-foreground mt-1">
-            {search ? 'Try a different name, email, or phone number.' : 'Customers appear here once they message your WhatsApp number.'}
+            {search
+              ? 'Try a different name, email, or phone number.'
+              : segmentFilter !== 'all'
+                ? 'Try another segment filter.'
+                : 'Customers appear here once they message your WhatsApp number.'}
           </p>
         </div>
       ) : (
@@ -306,121 +477,47 @@ export function CustomersClient({ token }: Props) {
             const hasDupes = duplicates.length > 0;
 
             return (
-              <div
+              <CustomerCard
                 key={primary.id}
-                className={cn(
-                  'rounded-xl border bg-card transition-shadow',
-                  hasDupes && 'ring-2 ring-amber-400/40 border-amber-400/30',
-                )}
-              >
-                {/* Primary row */}
-                <Link
-                  href={`/customers/${primary.id}`}
-                  className="flex items-center gap-4 p-4 hover:bg-muted/40 transition-colors rounded-xl group"
-                >
-                  {/* Avatar */}
-                  <div
-                    className={cn(
-                      'flex size-11 shrink-0 items-center justify-center rounded-full text-white text-sm font-bold ring-2 ring-white/20',
-                      color,
-                      hasDupes && 'ring-amber-400',
-                    )}
-                  >
-                    {initials(name)}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm truncate">{name}</span>
-                      {hasDupes && (
-                        <Badge variant="outline" className="text-[10px] border-amber-400/50 text-amber-700 dark:text-amber-300 gap-1 shrink-0">
-                          <AlertTriangle className="size-2.5" />
-                          {duplicates.length + 1} records
-                        </Badge>
-                      )}
-                      {primary.tags?.slice(0, 2).map((t) => (
-                        <Badge key={t} variant="outline" className="text-[10px] font-normal shrink-0">
-                          {t}
-                        </Badge>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                      {consentDot(primary.marketingConsentStatus)}
-                      {primary.waId && (
-                        <span className="font-mono text-xs text-muted-foreground">
-                          {formatPhone(primary.waId)}
-                        </span>
-                      )}
-                      {primary.email && (
-                        <span className="text-xs text-muted-foreground truncate">{primary.email}</span>
-                      )}
-                      {primary.bookingCount > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          {primary.bookingCount} booking{primary.bookingCount === 1 ? '' : 's'}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        Since {new Date(primary.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' })}
-                      </span>
-                    </div>
-                  </div>
-
-                  <ChevronRight className="size-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </Link>
-
-                {/* Duplicate sub-rows */}
-                {duplicates.map((dup) => {
-                  const dupName = displayName(dup);
-                  const isMerging = mergingId === dup.id;
-                  return (
-                    <div
-                      key={dup.id}
-                      className="flex items-center gap-4 px-4 pb-3 pt-0 border-t border-amber-400/20"
-                    >
-                      <div className="size-11 shrink-0 flex items-center justify-center">
-                        <div className="size-7 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                          <GitMerge className="size-3.5 text-amber-600 dark:text-amber-400" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-muted-foreground">{dupName}</p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          {dup.waId && (
-                            <span className="font-mono text-[11px] text-muted-foreground/70">{formatPhone(dup.waId)}</span>
-                          )}
-                          <span className="text-[11px] text-muted-foreground/70">
-                            · {dup.bookingCount} booking{dup.bookingCount === 1 ? '' : 's'}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground/70">
-                            · since {new Date(dup.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' })}
-                          </span>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0 border-amber-400/50 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20 gap-1.5 text-xs h-7"
-                        onClick={() => confirmMerge(primary.id, dup.id, displayName(primary), displayName(dup), dup.bookingCount)}
-                        disabled={isMerging}
-                      >
-                        {isMerging ? (
-                          <Loader2 className="size-3 animate-spin" />
-                        ) : (
-                          <GitMerge className="size-3" />
-                        )}
-                        {isMerging ? 'Merging…' : 'Merge into above'}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
+                customer={primary}
+                stats={customerStats[primary.id] ?? null}
+                statsLoading={statsLoading}
+                displayName={name}
+                avatarColor={color}
+                avatarInitials={initials(name)}
+                formatPhone={formatPhone}
+                hasDuplicates={hasDupes}
+                duplicateCount={duplicates.length + 1}
+                duplicateRow={
+                  hasDupes
+                    ? duplicates.map((dup) => (
+                        <CustomerDuplicateRow
+                          key={dup.id}
+                          dupName={displayName(dup)}
+                          waId={dup.waId}
+                          bookingCount={dup.bookingCount}
+                          createdAt={dup.createdAt}
+                          formatPhone={formatPhone}
+                          merging={mergingId === dup.id}
+                          onMerge={() =>
+                            confirmMerge(
+                              primary.id,
+                              dup.id,
+                              displayName(primary),
+                              displayName(dup),
+                              dup.bookingCount,
+                            )
+                          }
+                        />
+                      ))
+                    : undefined
+                }
+              />
             );
           })}
         </div>
       )}
 
-      {/* Merge confirmation dialog */}
       {mergeConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-background rounded-2xl border shadow-2xl max-w-sm w-full p-6 space-y-4">
@@ -442,7 +539,8 @@ export function CustomersClient({ token }: Props) {
                 <XCircle className="size-4 text-destructive shrink-0" />
                 <span className="text-muted-foreground">
                   Remove: {mergeConfirm.dupName}
-                  {mergeConfirm.dupBookings > 0 && ` (${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} will transfer)`}
+                  {mergeConfirm.dupBookings > 0 &&
+                    ` (${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} will transfer)`}
                 </span>
               </div>
             </div>
@@ -450,7 +548,10 @@ export function CustomersClient({ token }: Props) {
               <Button variant="outline" className="flex-1" onClick={() => setMergeConfirm(null)}>
                 Cancel
               </Button>
-              <Button className="flex-1 bg-amber-600 hover:bg-amber-700 text-white" onClick={() => void handleMerge()}>
+              <Button
+                className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+                onClick={() => void handleMerge()}
+              >
                 <GitMerge className="size-4 mr-1.5" />
                 Merge
               </Button>

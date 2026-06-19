@@ -117,6 +117,8 @@ import {
 } from '../services/campaigns.js';
 import { sendPopiaConsentBlast, countPopiaPendingCustomers } from '../api/campaigns/send-popia-blast.js';
 import { getBranchStats } from '../api/branches/stats.js';
+import { getCustomerStats, getCustomerStatsBatch } from '../api/customers/stats.js';
+import { getCustomerSegmentCounts } from '../api/customers/segments.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
 
@@ -2226,6 +2228,27 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/customers/segments', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const segments = await getCustomerSegmentCounts(db, user.salonId);
+      return { segments };
+    });
+  });
+
+  app.post<{ Body: { ids?: string[] } }>(
+    '/customers/stats-batch',
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const ids = (request.body?.ids ?? []).slice(0, 200);
+        if (ids.length === 0) return { stats: {} };
+        const stats = await getCustomerStatsBatch(db, user.salonId, ids);
+        return { stats };
+      });
+    },
+  );
+
   app.get('/customers', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
@@ -2278,6 +2301,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         threshold: Number(q.threshold) || 0.3,
       });
       return { results };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/customers/:id/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getCustomerStats(db, user.salonId, request.params.id);
+      if (!stats) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { stats };
     });
   });
 
