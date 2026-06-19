@@ -1,0 +1,37 @@
+---
+description: Dashboard and WhatsApp bot must stay in sync — every change on one side must work on the other
+alwaysApply: true
+---
+
+# Dashboard ↔ WhatsApp parity
+
+MarineFlow has two customer-facing surfaces that must always tell the same story. **Never change one without verifying the other.**
+
+## Principle
+
+What salon owners configure in the dashboard must match what customers experience on WhatsApp — and vice versa. No cosmetic-only settings, no dead toggles, no mismatched labels.
+
+## Paired surfaces (update together)
+
+| Dashboard | WhatsApp runtime |
+|-----------|------------------|
+| `apps/dashboard/.../settings/salon-settings-form.tsx` | `src/services/bot.ts` |
+| `apps/dashboard/.../settings/conversation-flow-section.tsx` | `src/lib/botFlowSettings.ts` + `bot.ts` |
+| `apps/dashboard/.../automations/` (Power Features) | `src/lib/automationSettings.ts`, Inngest functions, `bot.ts` gates |
+| `apps/dashboard/.../faqs/` | Bot FAQ step + `handleMenu` Support path |
+| `apps/dashboard/.../services/` | `PICK_SERVICE`, add-ons, menu Services categories |
+| `src/lib/hierarchicalMenu.ts` (menu labels/order) | Dashboard copy that references menu numbers or flow steps |
+
+## Before merging any change, check
+
+1. **Settings wired?** If a dashboard toggle/order/label is editable, `bot.ts` (or shared lib) must read it. If not wired yet, do not ship the UI — or hide/disable with honest copy.
+2. **Labels match?** Nav labels, settings section titles, and bot menu text use the same names (e.g. Appointments not Bookings in one place only).
+3. **Gates consistent?** Profile, POPIA/marketing consent, loyalty, deposits, staff pick — same rules on every entry path (main menu 1, Services submenu, manage/reschedule).
+4. **Feature visibility?** If disabled in dashboard (loyalty, win-back, etc.), hide or replace the matching bot menu item — not a dead-end message.
+5. **Automation duplicates?** Same feature must not be toggled in both Settings and Power Features with conflicting state; pick one source of truth.
+6. **Copy honest?** Dashboard descriptions must match when/how the bot actually runs (e.g. consent timing, step order).
+
+## Implementation pattern
+
+- Prefer **shared libs** (`botFlowSettings.ts`, `automationSettings.ts`, `hierarchicalMenu.ts`) consumed by both dashboard API and `bot.ts`.
+- After dashboard or bot changes, trace: save path → DB/metadata field → bot read path → user-facing message.
