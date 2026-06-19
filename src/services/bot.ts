@@ -178,6 +178,8 @@ export type BotContext = Record<string, unknown> & {
   csatAppointmentId?: string;
   anyStaff?: boolean;
   manageList?: string[];
+  /** Past appointment ids shown alongside manageList during a 'view' bookings listing — lets REDO/CHOOSE AGAIN reference them by number. */
+  managePastList?: string[];
   managingAppointmentId?: string;
   /** Consecutive unhandled-error count — triggers staff escalation at 2 */
   errorCount?: number;
@@ -272,6 +274,7 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
   serviceFilterIds: undefined,
   quickPickOptions: undefined,
   manageList: undefined,
+  managePastList: undefined,
   addonPhase: undefined,
   ...PENDING_PROFILE_CLEAR,
 };
@@ -2843,12 +2846,15 @@ async function menuActionViewBookings(
     past.forEach((a, i) => {
       lines.push(`${i + 1}. ${sanitize(a.service.name)}\n   ${fmtDt(a.start, salon.timezone)} with ${sanitize(a.staff.name)}`);
     });
+    lines.push('', 'Want one of these again? Reply *REDO 1* or *CHOOSE AGAIN 1* (use the past-bookings number).');
   }
 
   if (upcoming.length === 0 && past.length === 0) {
     await replyWithMenu(conv, 'No bookings found yet.');
     return;
   }
+
+  const managePastList = hint === 'view' ? past.map((a) => a.id) : undefined;
 
   if (upcoming.length > 0) {
     const actionHint =
@@ -2860,7 +2866,13 @@ async function menuActionViewBookings(
     lines.push('', actionHint);
     await saveCtx(
       conv.id,
-      { manageList: upcoming.map((a) => a.id), manageBookingHint: hint, menuCategory: undefined, pendingManageIdx: undefined },
+      {
+        manageList: upcoming.map((a) => a.id),
+        managePastList,
+        manageBookingHint: hint,
+        menuCategory: undefined,
+        pendingManageIdx: undefined,
+      },
       ConversationStep.MANAGE_BOOKING,
     );
     const header = lines.join('\n');
@@ -2877,6 +2889,13 @@ async function menuActionViewBookings(
       ),
     );
     return;
+  } else if (managePastList && managePastList.length > 0) {
+    lines.push('', 'Reply BACK for menu.');
+    await saveCtx(
+      conv.id,
+      { ...PENDING_PROFILE_CLEAR, manageList: undefined, managePastList, manageBookingHint: hint },
+      ConversationStep.MANAGE_BOOKING,
+    );
   } else {
     lines.push('', 'Reply BACK for menu.');
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
@@ -4938,11 +4957,55 @@ async function handleManageBooking(
     return;
   }
 
+  const redoMatch = /^(?:redo|choose\s*again|book\s*again|repeat)\s*(\d+)?/i.exec(text.trim());
+  if (redoMatch) {
+    const pastIds = (c.managePastList as string[] | undefined) ?? [];
+    const idx = redoMatch[1] ? parseInt(redoMatch[1], 10) : 1;
+    if (!Number.isFinite(idx) || idx < 1 || idx > pastIds.length) {
+      await reply(conv, 'Invalid booking number. Please try again, or reply *BACK* to go back.');
+      return;
+    }
+    const id = pastIds[idx - 1]!;
+    const appt = await getTenantDb().appointment.findFirst({
+      where: { id, customerId: conv.customerId },
+      include: { service: true, staff: true },
+    });
+    if (!appt) {
+      await reply(conv, 'Booking not found.');
+      return;
+    }
+    if (!appt.service.active || appt.service.deletedAt || !appt.staff.active || appt.staff.deletedAt) {
+      await reply(conv, 'That service or stylist is no longer available — please book from scratch instead.');
+      return;
+    }
+
+    await saveCtx(
+      conv.id,
+      {
+        selectedServiceId: appt.serviceId,
+        selectedStaffId: appt.staffId,
+        managingAppointmentId: undefined,
+      },
+      ConversationStep.PICK_DATE,
+    );
+
+    const dates = await suggestBookingDates(conv.salonId);
+    const dateLines = formatDateMenuLines(dates.slice(0, 10));
+    const prefix = `🔁 Booking *${sanitize(appt.service.name)}* with ${sanitize(appt.staff.name)} again.\n\nPick a date:`;
+    await replyMaybeInteractive(
+      conv,
+      [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
+      buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+    );
+    return;
+  }
+
   await reply(conv, [
     "I didn't get that. Here's what you can do:",
     '',
     '• *CANCEL 1* — cancel booking number 1',
     '• *RESCHEDULE 1* — reschedule booking number 1',
+    '• *REDO 1* — book a past visit again',
     '• *BACK* — return to main menu',
   ].join('\n'));
 }
