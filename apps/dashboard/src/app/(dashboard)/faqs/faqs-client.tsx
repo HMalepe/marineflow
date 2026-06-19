@@ -41,6 +41,7 @@ import { cn } from '@/lib/utils';
 import { BOT_FAQS_LABEL } from '@/lib/dashboard-nav';
 import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
+import { FAQCard, faqCardClassName, type FaqCardData } from '@/components/FAQCard';
 
 type FaqStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
@@ -65,32 +66,12 @@ interface Props {
 }
 
 const emptyForm: FaqForm = { question: '', answer: '' };
-const PREVIEW_LEN = 140;
 const WHATSAPP_ANSWER_LIMIT = 3900;
 
-function truncate(text: string, max = PREVIEW_LEN): string {
+function truncate(text: string, max = 140): string {
   const t = text.replace(/\s+/g, ' ').trim();
   if (t.length <= max) return t;
   return `${t.slice(0, max)}…`;
-}
-
-function statusBadge(status: FaqStatus) {
-  switch (status) {
-    case 'APPROVED':
-      return (
-        <Badge className="bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30">
-          Approved
-        </Badge>
-      );
-    case 'REJECTED':
-      return <Badge variant="destructive">Rejected</Badge>;
-    default:
-      return (
-        <Badge className="bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border-yellow-600/30">
-          Pending
-        </Badge>
-      );
-  }
 }
 
 function StatCard({
@@ -137,6 +118,9 @@ function Toast({
 function SortableFaqCard({
   faq,
   index,
+  askCount,
+  isMostAsked,
+  isNeverTriggered,
   onEdit,
   onDelete,
   onApprove,
@@ -146,6 +130,9 @@ function SortableFaqCard({
 }: {
   faq: Faq;
   index: number;
+  askCount: number;
+  isMostAsked: boolean;
+  isNeverTriggered: boolean;
   onEdit: (faq: Faq) => void;
   onDelete: (faq: Faq) => void;
   onApprove: (faq: Faq) => void;
@@ -179,12 +166,8 @@ function SortableFaqCard({
         }
       }}
       className={cn(
-        'group rounded-xl border bg-card text-card-foreground shadow-sm transition-shadow',
-        'hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-        isDragging && 'shadow-lg ring-2 ring-ring/30 z-10 opacity-90',
-        faq.status === 'REJECTED' && 'opacity-70',
-        faq.status === 'PENDING' && 'border-yellow-600/20',
-        faq.status === 'APPROVED' && 'border-green-600/15',
+        faqCardClassName(faq.status, isDragging),
+        'cursor-pointer',
       )}
     >
       <div className="p-4 flex gap-3">
@@ -201,66 +184,22 @@ function SortableFaqCard({
             <GripVertical className="size-5" />
           </button>
         ) : (
-          <span className="mt-1 w-5 shrink-0 text-center text-xs font-mono text-muted-foreground">
-            {index + 1}
-          </span>
+          <span className="mt-1 w-5 shrink-0" aria-hidden />
         )}
 
         <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="flex items-start gap-2 min-w-0 pr-2">
-              {reorderEnabled && (
-                <span className="text-xs font-mono text-muted-foreground shrink-0 mt-0.5">#{index + 1}</span>
-              )}
-              <h3 className="font-medium text-sm leading-snug">{faq.question}</h3>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {statusBadge(faq.status)}
-              {faq.status === 'APPROVED' && (
-                <Badge variant="outline" className="text-xs">
-                  Live on WhatsApp
-                </Badge>
-              )}
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground line-clamp-2">{truncate(faq.answer)}</p>
-          {faq.status === 'APPROVED' && faq.approvedAt && (
-            <p className="text-[11px] text-muted-foreground/60">
-              Approved {new Date(faq.approvedAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' })}
-              {faq.approvedBy ? ` · ${faq.approvedBy}` : ''}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => onEdit(faq)}>
-              Edit
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              className="text-destructive hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity"
-              onClick={() => onDelete(faq)}
-            >
-              Delete
-            </Button>
-            {faq.status !== 'APPROVED' && (
-              <Button type="button" size="sm" disabled={busy} onClick={() => onApprove(faq)}>
-                Approve
-              </Button>
-            )}
-            {faq.status !== 'REJECTED' && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={busy}
-                onClick={() => onReject(faq)}
-              >
-                Reject
-              </Button>
-            )}
-          </div>
+          <FAQCard
+            faq={faq as FaqCardData}
+            index={index}
+            askCount={askCount}
+            isMostAsked={isMostAsked}
+            isNeverTriggered={isNeverTriggered}
+            busy={busy}
+            onEdit={() => onEdit(faq)}
+            onDelete={() => onDelete(faq)}
+            onApprove={() => onApprove(faq)}
+            onReject={() => onReject(faq)}
+          />
         </div>
       </div>
     </div>
@@ -292,6 +231,7 @@ export function FaqsClient({ token }: Props) {
   const [smartResults, setSmartResults] = useState<SmartResult[] | null>(null);
   const [smartScanning, setSmartScanning] = useState(false);
   const [smartApplying, setSmartApplying] = useState(false);
+  const [faqStats, setFaqStats] = useState<Record<string, { askCount: number }>>({});
 
   const reorderEnabled = statusFilter === 'all' && !search.trim();
 
@@ -330,9 +270,24 @@ export function FaqsClient({ token }: Props) {
     [token, showToast],
   );
 
+  const loadFaqStats = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ stats: Record<string, { askCount: number }> }>(
+        '/faqs/stats',
+        {},
+        token,
+      );
+      setFaqStats(data.stats ?? {});
+    } catch {
+      setFaqStats({});
+    }
+  }, [token]);
+
   useEffect(() => {
     void loadFaqs();
-  }, [loadFaqs]);
+    void loadFaqStats();
+  }, [loadFaqs, loadFaqStats]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -354,6 +309,16 @@ export function FaqsClient({ token }: Props) {
     const rejected = faqs.filter((f) => f.status === 'REJECTED').length;
     return { total: faqs.length, approved, pending, rejected };
   }, [faqs]);
+
+  const topAskedIds = useMemo(() => {
+    const ranked = faqs
+      .filter((f) => f.status === 'APPROVED')
+      .map((f) => ({ id: f.id, askCount: faqStats[f.id]?.askCount ?? 0 }))
+      .filter((r) => r.askCount > 0)
+      .sort((a, b) => b.askCount - a.askCount)
+      .slice(0, 3);
+    return new Set(ranked.map((r) => r.id));
+  }, [faqs, faqStats]);
 
   const existingFaqQuestions = useMemo(() => faqs.map((f) => f.question), [faqs]);
 
@@ -448,6 +413,7 @@ export function FaqsClient({ token }: Props) {
       }
 
       await loadFaqs(true);
+      await loadFaqStats();
     } catch (e) {
       reportError(e instanceof ApiError ? e.message : 'Save failed');
     } finally {
@@ -486,6 +452,7 @@ export function FaqsClient({ token }: Props) {
       showToast(`${data.summary.approve} FAQ${data.summary.approve !== 1 ? 's' : ''} approved`, 'success');
       setSmartResults(null);
       await loadFaqs(true);
+      await loadFaqStats();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Apply failed', 'error');
     } finally {
@@ -510,6 +477,7 @@ export function FaqsClient({ token }: Props) {
         'success',
       );
       await loadFaqs(true);
+      await loadFaqStats();
     } catch (e) {
       setFaqs((prev) => prev.map((f) => (f.id === faq.id ? faq : f)));
       showToast(e instanceof ApiError ? e.message : 'Status update failed', 'error');
@@ -526,6 +494,7 @@ export function FaqsClient({ token }: Props) {
       showToast('FAQ deleted', 'success');
       setDeleteTarget(null);
       await loadFaqs(true);
+      await loadFaqStats();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Delete failed', 'error');
     } finally {
@@ -607,6 +576,23 @@ export function FaqsClient({ token }: Props) {
         <StatCard label="Rejected" value={stats.rejected} />
       </div>
 
+      {stats.pending > 3 && (
+        <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-yellow-900 dark:text-yellow-100">
+            Your bot is answering {stats.approved}/{stats.total} questions. Approve the rest to reduce
+            missed conversations and support tickets.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-yellow-600/40 shrink-0"
+            onClick={() => setStatusFilter('pending')}
+          >
+            Review all pending
+          </Button>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -667,6 +653,9 @@ export function FaqsClient({ token }: Props) {
                       key={faq.id}
                       faq={faq}
                       index={index}
+                      askCount={faqStats[faq.id]?.askCount ?? 0}
+                      isMostAsked={topAskedIds.has(faq.id)}
+                      isNeverTriggered={faq.status === 'APPROVED' && (faqStats[faq.id]?.askCount ?? 0) === 0}
                       busyId={busyId}
                       reorderEnabled={reorderEnabled}
                       onEdit={openEdit}

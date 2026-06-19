@@ -31,6 +31,7 @@ import { BOT_DEBUG, debugMsg } from '../lib/botDebug.js';
 import { logger } from '../lib/logger.js';
 import { redis, touchBotSession } from '../lib/redis.js';
 import { logMessageLog } from './messageLog.js';
+import { handleFaq as runFaqHandler } from '../bot/faqHandler.js';
 import { DateTime } from 'luxon';
 import { getAvailableSlots, getNextAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
 import { parseNaturalDateTime } from './naturalDateTime.js';
@@ -5149,46 +5150,11 @@ async function handleFaq(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  if (isBackToMainMenuCommand(text)) {
-    await goBackToMainMenu(conv);
-    return;
-  }
-
-  const n = parseInt(text, 10);
-  const faqs = await getTenantDb().faqItem.findMany({
-    where: { salonId: conv.salonId, status: 'APPROVED' },
-    orderBy: { sortOrder: 'asc' },
-    take: 10,
+  await runFaqHandler(conv, text, {
+    goBackToMainMenu,
+    reply,
+    replyMaybeInteractive,
   });
-
-  if (Number.isFinite(n) && n >= 1 && n <= faqs.length) {
-    const f = faqs[n - 1]!;
-    // EC-14: WhatsApp messages cap at ~4096 chars; truncate long answers
-    const answer = f.answer.length > 3900 ? f.answer.slice(0, 3900) + '…' : f.answer;
-    const faqBody = `${f.question}\n\n${answer}\n\nReply with another number, ask a question, or BACK.`;
-    await replyMaybeInteractive(conv, faqBody, buildFaqListInteractive(faqs, conv.salon));
-    return;
-  }
-
-  // Semantic search + Claude synthesis for free-text questions
-  try {
-    const { semanticSearch } = await import('../lib/integrations/ai/index.js');
-    const { synthesizeFaqAnswer } = await import('./botAssistant.js');
-    const results = await semanticSearch(conv.salonId, text, { limit: 3, threshold: 0.65 });
-    if (results.length > 0) {
-      const chunks = results.map((r) => r.content);
-      const synthesized = await synthesizeFaqAnswer(conv.salon, text, chunks);
-      const answer = synthesized ?? results[0]!.content;
-      const truncated = answer.length > 3900 ? answer.slice(0, 3900) + '…' : answer;
-      await reply(conv, `${truncated}\n\nReply with a FAQ number, ask another question, or BACK.`);
-      return;
-    }
-  } catch {
-    // AI unavailable — fall through to default message
-  }
-
-  const faqRepromptBody = "I couldn't find an answer. Pick a FAQ number, ask differently, or reply BACK.";
-  await replyMaybeInteractive(conv, faqRepromptBody, buildFaqListInteractive(faqs, conv.salon));
 }
 
 async function handleLoyalty(

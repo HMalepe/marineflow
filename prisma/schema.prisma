@@ -421,6 +421,7 @@ model MessageLog {
   id        String            @id @default(cuid())
   salonId   String?
   salon     Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  faqId     String?
   direction MessageDirection
   status    MessageLogStatus
   createdAt DateTime          @default(now())
@@ -428,6 +429,7 @@ model MessageLog {
   @@index([salonId, createdAt])
   @@index([direction, createdAt])
   @@index([status, createdAt])
+  @@index([faqId, createdAt])
 }
 
 model ServiceCategory {

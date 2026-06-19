@@ -4,6 +4,7 @@ import { logger } from '../lib/logger.js';
 
 export type MessageLogInput = {
   salonId?: string | null;
+  faqId?: string | null;
   direction: MessageDirection;
   status: MessageLogStatus;
 };
@@ -14,6 +15,7 @@ export function logMessageLog(input: MessageLogInput): void {
     .create({
       data: {
         salonId: input.salonId ?? null,
+        faqId: input.faqId ?? null,
         direction: input.direction,
         status: input.status,
       },

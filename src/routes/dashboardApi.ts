@@ -19,6 +19,7 @@ import { bulkUpdateServiceCategory } from '../api/services/bulk-update-category.
 import { getServiceBookingStats } from '../api/services/stats.js';
 import { linkStaffServices } from '../api/staff/link-services.js';
 import { getStaffUtilisationToday } from '../api/staff/utilisation.js';
+import { getFaqAskStatsLast30d } from '../api/tenant/faq-stats.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -3021,6 +3022,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   // ─── FAQ Smart Approve (must be before /faqs/:id to avoid param capture) ─
+  app.get('/faqs/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getFaqAskStatsLast30d(db, user.salonId);
+      return { stats };
+    });
+  });
+
   app.post(
     '/faqs/smart-approve',
     { preHandler: requireRole('OWNER', 'MANAGER') },
