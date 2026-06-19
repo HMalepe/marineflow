@@ -8,6 +8,7 @@ import {
   SALON_OVERVIEW_ITEM,
   visibleSalonNavGroups,
 } from '@/lib/dashboard-nav';
+import { useHandoffCount } from '@/components/Sidebar';
 import { cn } from '@/lib/utils';
 import type React from 'react';
 
@@ -61,6 +62,7 @@ function NavItemLink({
 }
 
 export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) {
+  const liveHandoffCount = useHandoffCount(handoffCount);
   if (isAdmin) {
     return (
       <div className="space-y-4">
@@ -87,7 +89,7 @@ export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) 
             <NavItemLink
               key={item.href}
               href={item.href}
-              badge={item.href === '/conversations' ? handoffCount : undefined}
+              badge={item.href === '/conversations' ? liveHandoffCount : undefined}
             >
               {item.label}
             </NavItemLink>

@@ -49,6 +49,7 @@ import {
   type CampaignTemplate,
 } from './campaign-template-picker';
 import { EmojiBar } from './emoji-bar';
+import { CampaignHistoryCard } from '@/components/CampaignHistoryCard';
 
 type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'COMPLETED' | 'CANCELLED';
 type StatusFilter = 'all' | 'draft' | 'scheduled' | 'sent';
@@ -60,6 +61,15 @@ interface AudienceFilter {
   type: AudienceType;
   tags?: string[];
   inactiveDays?: number;
+}
+
+interface CampaignPerformance {
+  sentAt: string;
+  sentCount: number;
+  deliveredCount: number;
+  readCount: number;
+  repliedCount: number;
+  bookedCount: number;
 }
 
 interface Campaign {
@@ -75,6 +85,7 @@ interface Campaign {
   totalRecipients: number;
   delivered: number;
   failed: number;
+  performance: CampaignPerformance | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -435,6 +446,8 @@ export function CampaignsClient({ token }: Props) {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [optedInCount, setOptedInCount] = useState(0);
+  const [popiaPendingCount, setPopiaPendingCount] = useState(0);
+  const [popiaBlastLoading, setPopiaBlastLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -472,11 +485,12 @@ export function CampaignsClient({ token }: Props) {
     try {
       const [listRes, metaRes] = await Promise.all([
         apiFetch<{ campaigns: Campaign[] }>('/campaigns', {}, token),
-        apiFetch<{ tags: string[]; optedInCount: number }>('/campaigns/meta', {}, token),
+        apiFetch<{ tags: string[]; optedInCount: number; popiaPendingCount: number }>('/campaigns/meta', {}, token),
       ]);
       setCampaigns(listRes.campaigns);
       setTags(metaRes.tags);
       setOptedInCount(metaRes.optedInCount);
+      setPopiaPendingCount(metaRes.popiaPendingCount ?? 0);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'Could not load campaigns', 'error');
     } finally {
@@ -816,6 +830,29 @@ export function CampaignsClient({ token }: Props) {
 
   const isEditable = (c: Campaign) => c.status === 'DRAFT' || c.status === 'SCHEDULED';
 
+  const sendPopiaBlast = async () => {
+    if (!token || popiaBlastLoading) return;
+    setPopiaBlastLoading(true);
+    try {
+      const result = await apiFetch<{ sent: number; failed: number; total: number }>(
+        '/campaigns/send-popia-blast',
+        { method: 'POST' },
+        token,
+      );
+      showToast(
+        result.sent > 0
+          ? `Consent request sent to ${result.sent} customer${result.sent === 1 ? '' : 's'}`
+          : 'No pending customers to message',
+        result.sent > 0 ? 'success' : 'error',
+      );
+      await loadAll(true);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Could not send consent requests', 'error');
+    } finally {
+      setPopiaBlastLoading(false);
+    }
+  };
+
   const filterLabels: { key: StatusFilter; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'draft', label: 'Drafts' },
@@ -873,26 +910,46 @@ export function CampaignsClient({ token }: Props) {
         </div>
       </div>
 
-      {/* Zero audience banner */}
-      {!loading && optedInCount === 0 && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="flex flex-col sm:flex-row sm:items-center gap-4 py-4">
-            <div className="flex gap-3 flex-1">
-              <Users className="size-5 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">No marketing audience yet</p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+      {/* Grow audience CTA */}
+      {!loading && optedInCount < 10 && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="py-4 space-y-4">
+            <div>
+              <p className="font-medium text-sm">
+                Only {optedInCount} customer{optedInCount === 1 ? '' : 's'} can receive campaigns — here&apos;s how
+                to grow your list:
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                <li className="flex flex-wrap items-center gap-2">
+                  <span className="text-foreground">•</span>
+                  <Link href="/settings" className="text-[#128c7e] font-medium hover:underline">
+                    Enable POPIA consent prompt in bot settings
+                  </Link>
+                </li>
+                <li className="flex flex-wrap items-center gap-2">
+                  <span className="text-foreground">•</span>
+                  <span>Send a consent request to recent customers</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 border-[#128c7e]/40"
+                    disabled={popiaBlastLoading || popiaPendingCount === 0}
+                    onClick={() => void sendPopiaBlast()}
+                  >
+                    {popiaBlastLoading ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                      `Send to ${popiaPendingCount} pending`
+                    )}
+                  </Button>
+                </li>
+              </ul>
+              {optedInCount === 0 && (
+                <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
                   Customers must reply *ACCEPT* on WhatsApp before newsletters can reach them.
-                  Pending customers are prompted automatically on their next message.
                 </p>
-              </div>
+              )}
             </div>
-            <Link
-              href="/customers"
-              className="inline-flex h-8 shrink-0 items-center justify-center rounded-lg border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-            >
-              View customers
-            </Link>
           </CardContent>
         </Card>
       )}
@@ -1013,6 +1070,11 @@ export function CampaignsClient({ token }: Props) {
               const busy = actionId === c.id;
               const rate = deliveryRate(c);
               const isPendingThis = pendingAction?.campaign.id === c.id;
+              const isHistoryItem = c.status === 'COMPLETED' || c.status === 'CANCELLED';
+
+              if (isHistoryItem) {
+                return <CampaignHistoryCard key={c.id} campaign={c} />;
+              }
 
               return (
                 <Card

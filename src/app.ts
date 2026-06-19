@@ -11,13 +11,13 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { env } from './config.js';
 import { logger } from './lib/logger.js';
-import { redisPing, redis } from './lib/redis.js';
+import { redisPing } from './lib/redis.js';
 import { prisma } from './lib/prisma.js';
-import { twilioMessaging } from './lib/integrations/messaging/twilio-impl.js';
+import { handleTwilioWhatsAppWebhook } from './webhooks/twilio/whatsapp.js';
+import { handleTwilioStatusWebhook } from './webhooks/twilio/status.js';
 import { whatsappCloudMessaging, verifyWebhookRawBuffer } from './lib/integrations/messaging/whatsapp-cloud-impl.js';
 import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
-import { resolveTenantForInbound } from './lib/tenant.js';
 import { handlePayfastAppointmentWebhook } from './services/payments.js';
 import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
 import { payfastAdapter } from './lib/integrations/payments/payfast.js';
@@ -128,81 +128,8 @@ export async function buildApp() {
     });
   });
 
-  app.post('/webhooks/twilio/whatsapp', async (request, reply) => {
-    const params = request.body as Record<string, string>;
-    const signature =
-      typeof request.headers['x-twilio-signature'] === 'string'
-        ? request.headers['x-twilio-signature']
-        : undefined;
-
-    logger.info({ from: params['From'], to: params['To'], hasSig: !!signature }, 'twilio_webhook_received');
-
-    // TWILIO_WEBHOOK_BASE_URL is a manually-configured env var that can drift from the
-    // actual public URL Twilio posts to (custom domain changes, Railway URL changes, etc).
-    // Fall back to the request's own protocol/host (trustProxy honours X-Forwarded-*) so a
-    // stale env var doesn't hard-reject every inbound message.
-    const requestDerivedUrl = `${request.protocol}://${request.hostname}${request.url}`;
-    const sigValid = twilioMessaging.verifyWebhook(params, signature, [requestDerivedUrl]);
-    if (!sigValid) {
-      const allowUnsignedDev =
-        env.NODE_ENV !== 'production' && !env.TWILIO_AUTH_TOKEN?.trim();
-      if (!allowUnsignedDev) {
-        logger.warn({
-          expectedUrl: `${env.TWILIO_WEBHOOK_BASE_URL}/webhooks/twilio/whatsapp`,
-          requestDerivedUrl,
-          hasSig: !!signature,
-        }, 'twilio_signature_invalid');
-        return reply.code(403).send('Forbidden');
-      }
-      logger.warn({ hasSig: !!signature }, 'twilio_signature_skipped_dev');
-    }
-
-    const messageSid = params['MessageSid'] ?? '';
-    const from = params['From'] ?? '';
-    const to = params['To'] ?? '';
-    const body = params['Body'] ?? '';
-
-    if (messageSid) {
-      try {
-        const dedupeKey = `msg:${messageSid}`;
-        const first = await redis.set(dedupeKey, '1', 'EX', 86400, 'NX');
-        if (first !== 'OK') {
-          logger.info({ messageSid }, 'twilio_dedupe_blocked');
-          return reply.send('');
-        }
-      } catch {
-        // Redis unavailable — skip deduplication
-      }
-      const tenant = await resolveTenantForInbound({ twilioTo: to });
-      const recorded = await recordWebhookEvent({
-        provider: 'twilio',
-        providerEventId: messageSid,
-        payload: params,
-        verified: sigValid,
-        salonId: tenant?.id,
-      });
-      if (recorded === 'duplicate') {
-        logger.info({ messageSid }, 'twilio_webhook_duplicate');
-        return reply.send('');
-      }
-    }
-
-    try {
-      await handleInboundWhatsApp({
-        from,
-        body,
-        messageSid,
-        twilioTo: to,
-      });
-      logger.info({ from, bodyLen: body.length }, 'twilio_bot_handled_ok');
-    } catch (botErr: unknown) {
-      logger.error({ err: botErr }, 'twilio_bot_error');
-    }
-
-    return reply.type('text/xml').send(
-      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-    );
-  });
+  app.post('/webhooks/twilio/whatsapp', handleTwilioWhatsAppWebhook);
+  app.post('/webhooks/twilio/status', handleTwilioStatusWebhook);
 
   // Meta webhook routes need raw body access for correct HMAC-SHA256 verification.
   // Fastify parses JSON before handlers run; re-serialising a parsed object can produce

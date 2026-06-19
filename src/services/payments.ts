@@ -5,6 +5,7 @@ import { env } from '../config.js';
 import { payfastAdapter } from '../lib/integrations/payments/payfast.js';
 import { isPayfastConfigured } from '../lib/integrations/payments/index.js';
 import { sendWithFallback } from './channelRouter.js';
+import { emitPlatformEvent } from './platformEvents.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
@@ -104,11 +105,30 @@ export async function createPaymentCheckoutSession(input: {
 }
 export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
   const verified = payfastAdapter.verifyWebhook(body, {});
-  if (!verified.valid || verified.status !== 'success') return;
+  if (!verified.valid) return;
 
   const reference = verified.reference;
   if (!reference?.startsWith('appt_')) return;
   const appointmentId = reference.replace('appt_', '');
+
+  if (verified.status !== 'success') {
+    const payment = await prisma.payment.findFirst({
+      where: { appointmentId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (payment) {
+      await prisma.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'FAILED', failureReason: verified.status ?? 'failed' },
+      });
+      emitPlatformEvent({
+        type: 'PAYMENT_FAILED',
+        salonId: payment.salonId,
+        metadata: { appointmentId, reference, status: verified.status },
+      });
+    }
+    return;
+  }
 
   const ratingSchedule = await prisma.$transaction(async (tx) => {
     const appt = await tx.appointment.findUnique({
@@ -180,6 +200,18 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
 
   if (ratingSchedule) {
     await scheduleBookingRatingPrompt(ratingSchedule);
+  }
+
+  const paidAppt = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { salonId: true, id: true },
+  });
+  if (paidAppt) {
+    emitPlatformEvent({
+      type: 'PAYMENT_SUCCEEDED',
+      salonId: paidAppt.salonId,
+      metadata: { appointmentId: paidAppt.id, reference },
+    });
   }
 
   const confirmed = await prisma.appointment.findUnique({

@@ -12,6 +12,14 @@ import { MessageDirection, ConversationStep } from '@prisma/client';
 import { emitMessageReceived } from '../lib/eventBus.js';
 import { searchDashboard } from '../lib/dashboardSearch.js';
 import { getTenantOverviewKpis } from '../api/tenant/overview-kpis.js';
+import { getTenantSetupHealth } from '../api/tenant/setup-health.js';
+import { sendAppointmentPaymentLink } from '../api/appointments/send-payment-link.js';
+import { markAppointmentCashPaid } from '../api/appointments/mark-cash-paid.js';
+import { bulkUpdateServiceCategory } from '../api/services/bulk-update-category.js';
+import { getServiceBookingStats } from '../api/services/stats.js';
+import { linkStaffServices } from '../api/staff/link-services.js';
+import { getStaffUtilisationToday } from '../api/staff/utilisation.js';
+import { getFaqAskStatsLast30d } from '../api/tenant/faq-stats.js';
 import {
   createOwnerPlatformMessage,
   listOwnerPlatformMessages,
@@ -22,6 +30,7 @@ import {
   createPayfastSubscription,
   cancelSubscription,
   checkQuota,
+  recordCheckoutAbandoned,
 } from '../services/subscription.js';
 import { billingReturnUrl, resolveDashboardOrigin } from '../lib/billingUrls.js';
 import { revokeStaffTokens } from '../lib/staffTokenAuth.js';
@@ -106,6 +115,13 @@ import {
   campaignRequiresAudience,
   resolveCampaignScheduleAfterPatch,
 } from '../services/campaigns.js';
+import { sendPopiaConsentBlast, countPopiaPendingCustomers } from '../api/campaigns/send-popia-blast.js';
+import { getBranchStats } from '../api/branches/stats.js';
+import { getCustomerStats, getCustomerStatsBatch } from '../api/customers/stats.js';
+import { getCustomerSegmentCounts } from '../api/customers/segments.js';
+import { getCustomerJourney } from '../api/customers/journey.js';
+import { getBusinessCoachInsights } from '../api/tenant/business-coach.js';
+import { getPulseSnapshot } from '../api/tenant/pulse.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
 
@@ -832,6 +848,29 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/tenant/setup-health', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      return getTenantSetupHealth(db, user.salonId);
+    });
+  });
+
+  app.get<{ Querystring: { refresh?: string } }>('/tenant/business-coach', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const forceRefresh = request.query.refresh === '1' || request.query.refresh === 'true';
+      return getBusinessCoachInsights(db, user.salonId, { forceRefresh });
+    });
+  });
+
+  app.get<{ Querystring: { branchId?: string } }>('/tenant/pulse', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const branchId = request.query.branchId?.trim() || undefined;
+      return getPulseSnapshot(db, user.salonId, { branchId });
+    });
+  });
+
   app.get('/appointments/today', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
@@ -910,6 +949,47 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { appointments: rows };
     });
   });
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/send-payment-link',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await sendAppointmentPaymentLink(db, {
+          salonId: user.salonId,
+          appointmentId: request.params.id,
+          actorUserId: user.sub,
+        });
+        if (!result.ok) {
+          const status =
+            result.error === 'not_found' ? 404 : result.error === 'send_failed' ? 502 : 400;
+          reply.code(status);
+        }
+        return result;
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/mark-cash-paid',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await markAppointmentCashPaid(db, {
+          salonId: user.salonId,
+          appointmentId: request.params.id,
+          actorUserId: user.sub,
+        });
+        if (!result.ok) {
+          const status = result.error === 'not_found' ? 404 : 400;
+          reply.code(status);
+        }
+        return result;
+      });
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     '/appointments/:id/complete',
@@ -1437,8 +1517,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
         // Atomic update — guards against concurrent resolve requests both sending WhatsApp
         const updated = await db.ticket.updateMany({
-          where: { id: ticket.id, status: { not: 'RESOLVED' } },
-          data: { status: 'RESOLVED' },
+          where: { id: ticket.id, status: { in: ['OPEN', 'WAITING_CUSTOMER'] } },
+          data: { status: 'RESOLVED', updatedAt: new Date() },
         });
         if (updated.count === 0) {
           return { ok: true }; // already resolved (race or double-click)
@@ -1724,6 +1804,42 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       };
     });
   });
+
+  app.get('/staff/utilisation', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const q = request.query as { branchId?: string };
+      return getStaffUtilisationToday(db, {
+        salonId: user.salonId,
+        branchId: q.branchId,
+      });
+    });
+  });
+
+  app.post<{ Params: { id: string }; Body: { serviceIds: string[] } }>(
+    '/staff/:id/link-services',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await linkStaffServices(db, {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          staffId: request.params.id,
+          serviceIds: request.body.serviceIds ?? [],
+        });
+        if (!result.ok) {
+          reply.code(result.error === 'not_found' ? 404 : 400);
+          return { error: result.error, message: result.message };
+        }
+        syncSalonRosterLater(user.salonId, 'staff', {
+          staffId: request.params.id,
+          action: 'link_services',
+        });
+        return { ok: true, serviceIds: result.serviceIds };
+      });
+    },
+  );
 
   app.post<{
     Body: {
@@ -2025,6 +2141,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             reason: t.reason ?? null,
           })),
           serviceNames: s.services.map((ss) => ss.service.name),
+          linkedServiceIds: s.services.map((ss) => ss.service.id),
         })),
       };
     });
@@ -2130,6 +2247,27 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/customers/segments', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const segments = await getCustomerSegmentCounts(db, user.salonId);
+      return { segments };
+    });
+  });
+
+  app.post<{ Body: { ids?: string[] } }>(
+    '/customers/stats-batch',
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const ids = (request.body?.ids ?? []).slice(0, 200);
+        if (ids.length === 0) return { stats: {} };
+        const stats = await getCustomerStatsBatch(db, user.salonId, ids);
+        return { stats };
+      });
+    },
+  );
+
   app.get('/customers', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
@@ -2182,6 +2320,30 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         threshold: Number(q.threshold) || 0.3,
       });
       return { results };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/customers/:id/journey', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const events = await getCustomerJourney(db, user.salonId, request.params.id);
+      if (!events) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { events };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/customers/:id/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getCustomerStats(db, user.salonId, request.params.id);
+      if (!stats) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { stats };
     });
   });
 
@@ -2448,6 +2610,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get<{ Params: { id: string } }>('/branches/:id/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getBranchStats(db, user.salonId, request.params.id);
+      if (!stats) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      return { stats };
+    });
+  });
+
   app.get<{ Params: { id: string } }>('/branches/:id', async (request, reply) => {
     return withUserTenant(request, reply, async () => {
       const db = getTenantDb();
@@ -2582,6 +2756,39 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     });
   });
 
+  app.get('/services/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getServiceBookingStats(db, user.salonId);
+      return { stats };
+    });
+  });
+
+  app.post<{ Body: { serviceIds: string[]; categoryId: string } }>(
+    '/services/bulk-update-category',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const result = await bulkUpdateServiceCategory(db, {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          serviceIds: request.body.serviceIds ?? [],
+          categoryId: request.body.categoryId ?? '',
+        });
+        if (!result.ok) {
+          reply.code(result.error === 'category_not_found' ? 404 : 400);
+          return { error: result.error, message: result.message };
+        }
+        syncSalonRosterLater(user.salonId, 'services', {
+          categoryId: request.body.categoryId,
+          action: 'bulk_category',
+        });
+        return { ok: true, updated: result.updated };
+      });
+    },
+  );
+
   app.post<{
     Body: {
       name: string;
@@ -2649,6 +2856,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       bufferMin?: number;
       active?: boolean;
       removeFromCatalog?: boolean;
+      categoryId?: string | null;
     };
   }>(
     '/services/:id',
@@ -2664,7 +2872,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog } =
+        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, categoryId } =
           request.body;
 
         if (removeFromCatalog) {
@@ -2707,6 +2915,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(durationMin !== undefined && { durationMin: Math.round(durationMin) }),
             ...(bufferMin !== undefined && { bufferMin: Math.round(bufferMin) }),
             ...(active !== undefined && { active }),
+            ...(categoryId !== undefined && { categoryId: categoryId || null }),
           },
         });
 
@@ -2893,6 +3102,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   // ─── FAQ Smart Approve (must be before /faqs/:id to avoid param capture) ─
+  app.get('/faqs/stats', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const stats = await getFaqAskStatsLast30d(db, user.salonId);
+      return { stats };
+    });
+  });
+
   app.post(
     '/faqs/smart-approve',
     { preHandler: requireRole('OWNER', 'MANAGER') },
@@ -3701,6 +3918,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.post(
+    '/subscription/checkout-abandoned',
+    { preHandler: requireRole('OWNER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        await recordCheckoutAbandoned(user.salonId);
+        return { ok: true };
+      });
+    },
+  );
+
+  app.post(
     '/subscription/cancel',
     { preHandler: requireRole('OWNER') },
     async (request, reply) => {
@@ -4100,33 +4328,22 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         if (!Array.isArray(serviceIds)) { reply.code(400); return { error: 'serviceIds_required' }; }
 
-        // Verify all serviceIds belong to this salon
-        const services = await db.service.findMany({
-          where: { id: { in: serviceIds }, salonId: user.salonId },
-          select: { id: true },
+        const result = await linkStaffServices(db, {
+          salonId: user.salonId,
+          actorUserId: user.sub,
+          staffId,
+          serviceIds,
         });
-        const validIds = new Set(services.map((s) => s.id));
-        const filtered = serviceIds.filter((id) => validIds.has(id));
-
-        // Replace service links, preserving existing price overrides
-        const existing = await db.staffService.findMany({ where: { staffId }, select: { serviceId: true, priceCentsOverride: true } });
-        const existingMap = new Map(existing.map((e) => [e.serviceId, e.priceCentsOverride]));
-
-        await db.staffService.deleteMany({ where: { staffId } });
-        if (filtered.length > 0) {
-          await db.staffService.createMany({
-            data: filtered.map((serviceId) => ({
-              staffId,
-              serviceId,
-              priceCentsOverride: existingMap.get(serviceId) ?? null,
-            })),
-          });
+        if (!result.ok) {
+          reply.code(400);
+          return { error: result.error, message: result.message };
         }
 
         const updated = await db.staffService.findMany({
           where: { staffId },
           include: { service: { select: { id: true, name: true, priceCents: true } } },
         });
+        syncSalonRosterLater(user.salonId, 'staff', { staffId, action: 'link_services' });
         return { services: updated };
       });
     },
@@ -4388,12 +4605,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // These routes let staff reply to customers directly, take over a conversation
   // from the bot, or release it back to the bot.
 
-  /** Return the count of conversations currently in HANDOFF step for the current salon. */
+  /** Return conversations in "Needs you" state (HANDOFF, not yet resolved). */
   app.get('/conversations/handoff-count', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const count = await db.conversation.count({
-        where: { salonId: user.salonId, step: 'HANDOFF' },
+        where: { salonId: user.salonId, step: 'HANDOFF', resolvedAt: null },
       });
       return { count };
     });
@@ -4430,7 +4647,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           id: c.id,
           step: c.step,
           lastMessageAt: c.lastMessageAt,
-          isHandoff: c.step === 'HANDOFF' || c.step === 'CLOSED',
+          lastCustomerMessageAt: c.lastCustomerMessageAt,
+          resolvedAt: c.resolvedAt,
+          isHandoff: c.step === 'HANDOFF' && c.resolvedAt == null,
           customer: c.customer,
           lastMessage: c.messages[0] ?? null,
         })),
@@ -4573,6 +4792,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           where: { id: conv.id },
           data: {
             step: ConversationStep.HANDOFF,
+            resolvedAt: null,
             context: { ...existingCtx, handoffByStaff: true } as object,
           },
         });
@@ -4617,6 +4837,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         where: { id: conv.id },
         data: {
           step: ConversationStep.MENU,
+          resolvedAt: new Date(),
           context: cleanCtx as object,
         },
       });
@@ -4707,6 +4928,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           where: { id: conv.id },
           data: {
             step: ConversationStep.HANDOFF_RATING,
+            resolvedAt: new Date(),
             context: nextCtx as object,
           },
         });
@@ -4735,13 +4957,35 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   app.get('/campaigns/meta', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
-      const [tags, optedInCount] = await Promise.all([
+      const [tags, optedInCount, popiaPendingCount] = await Promise.all([
         listCustomerTags(user.salonId),
         countOptedInCustomers(user.salonId),
+        countPopiaPendingCustomers(user.salonId),
       ]);
-      return { tags, optedInCount };
+      return { tags, optedInCount, popiaPendingCount };
     });
   });
+
+  app.post(
+    '/campaigns/send-popia-blast',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const result = await sendPopiaConsentBlast(user.salonId);
+        await getTenantDb().auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'popia_consent_blast',
+            entity: 'Customer',
+            entityId: user.salonId,
+            payload: result as object,
+          },
+        });
+        return result;
+      });
+    },
+  );
 
   app.post<{ Body: { audienceFilter?: AudienceFilter } }>(
     '/campaigns/audience-preview',

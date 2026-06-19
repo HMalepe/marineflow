@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/sheet';
 import { apiFetch, ApiError } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { CustomerJourneyTimeline } from '@/components/CustomerJourneyTimeline';
 import { cn } from '@/lib/utils';
 
 interface AppointmentSummary {
@@ -70,7 +71,7 @@ interface CustomerDetail {
   messages: MessageSummary[];
 }
 
-type Tab = 'overview' | 'appointments' | 'messages';
+type Tab = 'overview' | 'journey' | 'appointments' | 'messages';
 
 const AVATAR_GRADIENTS = [
   'from-violet-500 to-purple-600',
@@ -346,6 +347,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
+    { key: 'journey', label: 'Journey' },
     { key: 'appointments', label: APPOINTMENTS_LABEL, count: customer.appointments.length },
     { key: 'messages', label: 'Messages', count: customer.messages.length },
   ];
@@ -659,6 +661,16 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Tab: Journey */}
+      {tab === 'journey' && (
+        <div className="rounded-xl border bg-card p-4 sm:p-6">
+          <p className="text-xs text-muted-foreground mb-4">
+            Every WhatsApp touchpoint, booking, payment, and campaign — in one chronological thread.
+          </p>
+          <CustomerJourneyTimeline token={token} customerId={customer.id} />
         </div>
       )}
 

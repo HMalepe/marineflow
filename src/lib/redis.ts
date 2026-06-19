@@ -25,3 +25,41 @@ export async function redisPing(): Promise<boolean> {
     return false;
   }
 }
+
+/** Ping Redis and return round-trip latency in milliseconds. */
+export async function healthCheck(): Promise<{ ok: boolean; latencyMs: number }> {
+  const start = performance.now();
+  try {
+    const pong = await redis.ping();
+    return { ok: pong === 'PONG', latencyMs: Math.round(performance.now() - start) };
+  } catch {
+    return { ok: false, latencyMs: Math.round(performance.now() - start) };
+  }
+}
+
+const BOT_SESSION_TTL_SEC = 30 * 60;
+
+/** Track an active WhatsApp bot conversation session (refreshed on each inbound). */
+export async function touchBotSession(salonId: string, waId: string): Promise<void> {
+  try {
+    await redis.set(`session:${salonId}:${waId}`, '1', 'EX', BOT_SESSION_TTL_SEC);
+  } catch {
+    // non-blocking
+  }
+}
+
+/** Count Redis keys matching `session:*` — active bot sessions platform-wide. */
+export async function getActiveSessionCount(): Promise<number> {
+  try {
+    let cursor = '0';
+    let count = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'session:*', 'COUNT', 200);
+      cursor = nextCursor;
+      count += keys.length;
+    } while (cursor !== '0');
+    return count;
+  } catch {
+    return 0;
+  }
+}

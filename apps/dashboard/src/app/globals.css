@@ -199,3 +199,16 @@ body::before {
     radial-gradient(ellipse 70% 45% at 15% -10%, color-mix(in oklch, var(--primary) 10%, transparent) 0%, transparent 60%),
     radial-gradient(ellipse 55% 35% at 100% 0%, color-mix(in oklch, var(--chart-2) 8%, transparent) 0%, transparent 60%);
 }
+
+@keyframes pulse-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: pulse-marquee 40s linear infinite;
+}

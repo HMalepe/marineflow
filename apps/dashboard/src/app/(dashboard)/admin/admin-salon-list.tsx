@@ -1,11 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import {
+  TenantHealthTable,
+  type TenantHealthRow,
+  type TenantHealthStatus,
+} from '@/components/TenantHealthTable';
 import { formatSaPhone, isValidSaPhoneLocal, stripPhoneDigits, formatSaPhoneDisplay } from '@/lib/phone';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,14 +24,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { DashboardToast } from '@/components/dashboard-toast';
 import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
@@ -34,18 +31,14 @@ import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import { resolveApiUrl } from '@/lib/api-config';
 const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL ?? 'https://dashboard.marineflow.co.za';
 
-interface Salon {
-  id: string;
-  name: string;
-  slug: string;
-  botName?: string;
-  status: string;
-  tier: string;
-  industryTemplate: string;
-  createdAt: string;
-  staffUserCount: number;
-  customerCount: number;
-}
+interface Salon extends TenantHealthRow {}
+
+const HEALTH_FILTERS: { value: TenantHealthStatus | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'HEALTHY', label: 'Healthy' },
+  { value: 'AT_RISK', label: 'At risk' },
+  { value: 'CHURNING', label: 'Churning' },
+];
 
 const INDUSTRY_TEMPLATE_OPTIONS = [
   { value: 'salon', label: 'Hair & Beauty Salon' },
@@ -87,28 +80,6 @@ function slugify(name: string): string {
     .replace(/^-|-$/g, '');
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cls: Record<string, string> = {
-    TRIAL: 'bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border-yellow-600/30',
-    ACTIVE: 'bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30',
-    SUSPENDED: 'bg-destructive/10 text-destructive border-destructive/30',
-    CHURNED: 'bg-muted text-muted-foreground border-border',
-    PAST_DUE: 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border-orange-600/30',
-    LEAD: 'bg-blue-500/15 text-blue-800 dark:text-blue-300 border-blue-600/30',
-  };
-  return (
-    <Badge className={cn('border', cls[status] ?? 'bg-muted')}>{status}</Badge>
-  );
-}
-
-function TierBadge({ tier }: { tier: string }) {
-  return (
-    <Badge variant="outline" className="capitalize">
-      {tier}
-    </Badge>
-  );
-}
-
 async function adminFetch<T>(
   path: string,
   token: string,
@@ -130,9 +101,16 @@ async function adminFetch<T>(
 }
 
 export function AdminSalonList({ token }: Props) {
-  const [salons, setSalons] = useState<Salon[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const searchParams = useSearchParams();
+  const healthParam = searchParams.get('health')?.toUpperCase();
+  const healthFilter: TenantHealthStatus | null =
+    healthParam === 'AT_RISK' || healthParam === 'CHURNING' || healthParam === 'HEALTHY'
+      ? healthParam
+      : null;
+  const incompleteOnly = searchParams.get('onboarding') === 'incomplete';
+
+  const [tenants, setTenants] = useState<TenantHealthRow[]>([]);
+  const [atRiskCount, setAtRiskCount] = useState(0);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -166,21 +144,16 @@ export function AdminSalonList({ token }: Props) {
   const [twilioNumbers, setTwilioNumbers] = useState<TwilioWhatsAppOption[]>([]);
   const [loadingTwilioNumbers, setLoadingTwilioNumbers] = useState(false);
 
-  const pages = Math.max(1, Math.ceil(total / 25));
-
-  const salonsByCategory = useMemo(() => {
-    const map = new Map<string, Salon[]>();
-    for (const s of salons) {
-      const key = s.industryTemplate || 'salon';
-      const list = map.get(key) ?? [];
-      list.push(s);
-      map.set(key, list);
+  const filteredTenants = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rows = tenants;
+    if (q) {
+      rows = rows.filter(
+        (t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q),
+      );
     }
-    return INDUSTRY_TEMPLATE_OPTIONS.filter((opt) => map.has(opt.value)).map((opt) => ({
-      ...opt,
-      items: map.get(opt.value) ?? [],
-    }));
-  }, [salons]);
+    return rows;
+  }, [tenants, search]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -201,27 +174,25 @@ export function AdminSalonList({ token }: Props) {
       .finally(() => setLoadingTwilioNumbers(false));
   }, [createOpen, token, showToast]);
 
-  const loadSalons = useCallback(async () => {
+  const loadTenants = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page) });
-      if (search.trim()) params.set('search', search.trim());
-      const data = await adminFetch<{ salons: Salon[]; total: number }>(
-        `/salons?${params}`,
-        token,
-      );
-      setSalons(data.salons);
-      setTotal(data.total);
+      const data = await adminFetch<{
+        tenants: TenantHealthRow[];
+        atRiskCount: number;
+      }>('/tenants/health', token);
+      setTenants(data.tenants);
+      setAtRiskCount(data.atRiskCount);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Failed to load businesses', 'error');
+      showToast(e instanceof ApiError ? e.message : 'Failed to load tenant health', 'error');
     } finally {
       setLoading(false);
     }
-  }, [token, page, search, showToast]);
+  }, [token, showToast]);
 
   useEffect(() => {
-    void loadSalons();
-  }, [loadSalons]);
+    void loadTenants();
+  }, [loadTenants]);
 
   const createSlugPreview = useMemo(() => {
     if (createForm.slugManual) return createForm.slug;
@@ -284,7 +255,7 @@ export function AdminSalonList({ token }: Props) {
       setCreateOpen(false);
       resetCreateForm();
       showToast('Business created', 'success');
-      await loadSalons();
+      await loadTenants();
     } catch (e) {
       if (e instanceof ApiError) {
         if (e.message.includes('whatsapp_not_on_twilio')) {
@@ -334,25 +305,11 @@ export function AdminSalonList({ token }: Props) {
       setAddUserSalon(null);
       resetAddUserForm();
       showToast('User added', 'success');
-      await loadSalons();
+      await loadTenants();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Add user failed', 'error');
     } finally {
       setSavingUser(false);
-    }
-  }
-
-  async function handleChangeIndustry(salon: Salon, industryTemplate: string) {
-    if (industryTemplate === salon.industryTemplate) return;
-    try {
-      await adminFetch(`/salons/${salon.id}`, token, {
-        method: 'PATCH',
-        body: JSON.stringify({ industryTemplate }),
-      });
-      setSalons((prev) => prev.map((s) => (s.id === salon.id ? { ...s, industryTemplate } : s)));
-      showToast('Industry template updated', 'success');
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Update failed', 'error');
     }
   }
 
@@ -371,15 +328,13 @@ export function AdminSalonList({ token }: Props) {
     }
     setSavingBrand(true);
     try {
-      const res = await adminFetch<{ salon: Salon }>(`/salons/${brandSalon.id}`, token, {
+      await adminFetch(`/salons/${brandSalon.id}`, token, {
         method: 'PATCH',
         body: JSON.stringify({ botName: trimmed }),
       });
-      setSalons((prev) =>
-        prev.map((s) => (s.id === brandSalon.id ? { ...s, botName: res.salon.botName ?? trimmed } : s)),
-      );
       setBrandSalon(null);
       showToast('Assistant name updated', 'success');
+      await loadTenants();
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Update failed', 'error');
     } finally {
@@ -392,132 +347,91 @@ export function AdminSalonList({ token }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Business management</h2>
-          <p className="text-sm text-muted-foreground">{total} business{total !== 1 ? 'es' : ''} on platform — grouped by category</p>
+          <h2 className="text-lg font-semibold">Tenant health</h2>
+          <p className="text-sm text-muted-foreground">
+            {tenants.length} business{tenants.length !== 1 ? 'es' : ''} on platform
+            {atRiskCount > 0 && (
+              <> · <span className="text-amber-700 dark:text-amber-400">{atRiskCount} at risk</span></>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           <Input
             className="w-48 sm:w-64"
             placeholder="Search name or slug…"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            onChange={(e) => setSearch(e.target.value)}
           />
           <Button onClick={() => setCreateOpen(true)}>Create New Business</Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Tier</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Staff</TableHead>
-                <TableHead className="text-right">Customers</TableHead>
-                <TableHead className="text-right w-[220px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                    Loading businesses…
-                  </TableCell>
-                </TableRow>
+      <div className="flex flex-wrap gap-2 items-center">
+        {HEALTH_FILTERS.map((f) => {
+          const params = new URLSearchParams();
+          if (f.value !== 'ALL') params.set('health', f.value);
+          if (incompleteOnly) params.set('onboarding', 'incomplete');
+          const qs = params.toString();
+          const href = qs ? `/admin?${qs}` : '/admin';
+          const active = f.value === 'ALL' ? !healthFilter : healthFilter === f.value;
+          return (
+            <Link
+              key={f.value}
+              href={href}
+              className={cn(
+                'inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                active
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40',
               )}
-              {!loading && salons.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-10 text-muted-foreground">
-                    No businesses found.
-                  </TableCell>
-                </TableRow>
-              )}
-              {!loading &&
-                salonsByCategory.map((group) => (
-                  <Fragment key={`cat-${group.value}`}>
-                    <TableRow className="bg-muted/40 hover:bg-muted/40">
-                      <TableCell colSpan={8} className="py-2">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          {group.label}
-                        </span>
-                        <span className="text-xs text-muted-foreground/70 ml-2">({group.items.length})</span>
-                      </TableCell>
-                    </TableRow>
-                    {group.items.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>
-                      <div>
-                        <Link
-                          href={`/admin/businesses/${s.id}`}
-                          className="font-medium hover:text-primary hover:underline underline-offset-2"
-                        >
-                          {s.name}
-                        </Link>
-                        <p className="text-xs text-muted-foreground">
-                          {s.slug} · assistant: {s.botName?.trim() || PLATFORM_BOT_NAME}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell><StatusBadge status={s.status} /></TableCell>
-                    <TableCell><TierBadge tier={s.tier} /></TableCell>
-                    <TableCell>
-                      <select
-                        value={s.industryTemplate}
-                        onChange={(e) => void handleChangeIndustry(s, e.target.value)}
-                        className="h-8 rounded-lg border border-input bg-transparent px-2 text-xs outline-none dark:bg-input/30"
-                      >
-                        {INDUSTRY_TEMPLATE_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {new Date(s.createdAt).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{s.staffUserCount}</TableCell>
-                    <TableCell className="text-right tabular-nums">{s.customerCount}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1 flex-wrap items-center">
-                        <OpenClientDashboardButton
-                          businessId={s.id}
-                          businessName={s.name}
-                          onError={(msg) => showToast(msg, 'error')}
-                        />
-                        <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/admin/businesses/${s.id}`} />}>
-                          Stats
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => openBrandEditor(s)}>
-                          Brand
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setAddUserSalon(s)}>
-                          Add User
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                    ))}
-                  </Fragment>
-                ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            >
+              {f.label}
+            </Link>
+          );
+        })}
+        <Link
+          href={
+            incompleteOnly
+              ? healthFilter
+                ? `/admin?health=${healthFilter}`
+                : '/admin'
+              : `/admin?onboarding=incomplete${healthFilter ? `&health=${healthFilter}` : ''}`
+          }
+          className={cn(
+            'inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+            incompleteOnly
+              ? 'border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-300'
+              : 'border-border text-muted-foreground hover:text-foreground hover:border-primary/40',
+          )}
+        >
+          Incomplete onboarding only
+        </Link>
+      </div>
 
-      {pages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            Previous
-          </Button>
-          <span className="text-sm text-muted-foreground">Page {page} of {pages}</span>
-          <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage(page + 1)}>
-            Next
-          </Button>
-        </div>
-      )}
+      <TenantHealthTable
+        tenants={filteredTenants}
+        loading={loading}
+        healthFilter={healthFilter}
+        incompleteOnly={incompleteOnly}
+        actions={(t) => (
+          <div className="flex justify-end gap-1 flex-wrap items-center">
+            <OpenClientDashboardButton
+              businessId={t.id}
+              businessName={t.name}
+              onError={(msg) => showToast(msg, 'error')}
+            />
+            <Button variant="outline" size="sm" nativeButton={false} render={<Link href={`/admin/businesses/${t.id}`} />}>
+              Stats
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => openBrandEditor(t)}>
+              Brand
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setAddUserSalon(t)}>
+              Add User
+            </Button>
+          </div>
+        )}
+      />
 
       {credentials && (
         <Card className="border-green-600/30 bg-green-600/5">

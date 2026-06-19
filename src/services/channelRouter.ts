@@ -6,6 +6,7 @@ import { callBookingConfirmation } from '../lib/integrations/messaging/voice.js'
 import { logger } from '../lib/logger.js';
 import { env, isTwilioAccountConfigured } from '../config.js';
 import { normalizeTwilioWhatsAppFrom } from '../lib/salonDefaults.js';
+import { logMessageLog } from './messageLog.js';
 import type { InteractiveMessage, SentMessage } from '../lib/integrations/messaging/types.js';
 
 export type Channel = 'whatsapp' | 'sms' | 'voice';
@@ -54,8 +55,15 @@ function twilioSendOpts(
   };
 }
 
+function logOutbound(salonId: string, delivered: boolean): void {
+  logMessageLog({
+    salonId,
+    direction: 'OUTBOUND',
+    status: delivered ? 'DELIVERED' : 'FAILED',
+  });
+}
+
 /**
- * Channel priority:
  * - Interactive (lists/buttons): Twilio Content API only — Meta interactive permissions not used.
  * - Plain text: WhatsApp Cloud API > Twilio WhatsApp > SMS.
  */
@@ -92,6 +100,7 @@ export async function sendWithFallback(params: {
           twilioSendOpts({ ...sendOpts, interactive: params.interactive }, twilioFrom),
         );
         if (result.providerMessageId) {
+          logOutbound(params.salonId, true);
           return { channel: 'whatsapp', result };
         }
         logger.warn({ salonId: params.salonId }, 'twilio_interactive_empty_id_retry_plain');
@@ -104,6 +113,7 @@ export async function sendWithFallback(params: {
           twilioSendOpts(sendOpts, twilioFrom),
         );
         if (result.providerMessageId) {
+          logOutbound(params.salonId, true);
           return { channel: 'whatsapp', result };
         }
       } catch (err) {
@@ -117,6 +127,7 @@ export async function sendWithFallback(params: {
         phoneNumberId: cloudPhoneId,
       });
       if (result.providerMessageId) {
+        logOutbound(params.salonId, true);
         return { channel: 'whatsapp', result };
       }
     } catch (err) {
@@ -127,6 +138,7 @@ export async function sendWithFallback(params: {
       try {
         const result = await twilioMessaging.sendText(twilioSendOpts(sendOpts, twilioFrom));
         if (result.providerMessageId) {
+          logOutbound(params.salonId, true);
           return { channel: 'whatsapp', result };
         }
       } catch (err) {
@@ -137,6 +149,7 @@ export async function sendWithFallback(params: {
     try {
       const result = await twilioMessaging.sendText(twilioSendOpts(sendOpts, twilioFrom));
       if (result.providerMessageId) {
+        logOutbound(params.salonId, true);
         return { channel: 'whatsapp', result };
       }
     } catch (err) {
@@ -152,6 +165,7 @@ export async function sendWithFallback(params: {
         body: params.body,
       });
       if (result?.providerMessageId) {
+        logOutbound(params.salonId, true);
         return { channel: 'sms', result };
       }
     } catch (err) {
@@ -160,6 +174,7 @@ export async function sendWithFallback(params: {
   }
 
   logger.error({ to: params.to, salonId: params.salonId }, 'all_channels_failed');
+  logOutbound(params.salonId, false);
   return { channel: 'sms', result: { providerMessageId: null } };
 }
 

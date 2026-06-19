@@ -18,6 +18,15 @@
     "aliases": ["booking", "apointment", "apointments"]
   },
   {
+    "id": "pulse",
+    "label": "Live Pulse",
+    "href": "/pulse",
+    "group": "Daily operations",
+    "description": "Real-time floor view — chairs, arrivals, payments, and active bot conversations",
+    "keywords": ["live", "operations", "floor", "stations", "chairs", "real-time", "pulse", "air traffic"],
+    "aliases": ["live pulse", "live view", "operations"]
+  },
+  {
     "id": "conversations",
     "label": "Conversations",
     "href": "/conversations",
@@ -48,7 +57,7 @@
     "id": "services",
     "label": "Services",
     "href": "/services",
-    "group": "Salon setup",
+    "group": "Business setup",
     "description": "Services, prices, durations, categories, and add-ons",
     "keywords": ["menu", "pricing", "treatments", "offerings", "addons", "add-ons"],
     "aliases": ["service", "price list", "catalog"]
@@ -57,7 +66,7 @@
     "id": "roster",
     "label": "Staff Roster",
     "href": "/roster",
-    "group": "Salon setup",
+    "group": "Business setup",
     "description": "Staff schedules, shifts, time off, and roster management",
     "keywords": ["staff", "roster", "schedule", "shifts", "stylists", "team", "working hours"],
     "aliases": ["rota", "scheduling", "employees", "workers"]
@@ -66,7 +75,7 @@
     "id": "add-staff",
     "label": "Add staff member",
     "href": "/roster?addStaff=1",
-    "group": "Salon setup",
+    "group": "Business setup",
     "description": "Create a new stylist or team member on the roster",
     "keywords": ["new staff", "hire", "add stylist", "create staff", "invite team"],
     "aliases": ["add employee", "new team member"]
@@ -75,7 +84,7 @@
     "id": "branches",
     "label": "Branches",
     "href": "/branches",
-    "group": "Salon setup",
+    "group": "Business setup",
     "description": "Multiple locations — branches, addresses, and per-branch settings",
     "keywords": ["locations", "stores", "sites", "multi-branch", "outlets"],
     "aliases": ["branch", "location", "shop"]
@@ -84,7 +93,7 @@
     "id": "faqs",
     "label": "Bot FAQs",
     "href": "/faqs",
-    "group": "Salon setup",
+    "group": "Business setup",
     "description": "Questions and answers your WhatsApp bot uses for customer support",
     "keywords": ["faq", "faqs", "questions", "answers", "bot knowledge", "help articles"],
     "aliases": ["frequently asked", "q and a", "bot faq"]

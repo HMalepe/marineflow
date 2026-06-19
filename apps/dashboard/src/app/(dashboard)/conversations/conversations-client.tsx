@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
 import { CommsPageHint } from '@/components/comms-page-hint';
+import {
+  ConversationListItem,
+  customerInitials,
+  customerLabel,
+  pickDefaultConversation,
+  sortConversationsByPriority,
+  type ConversationListItemData,
+} from '@/components/ConversationListItem';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,22 +26,6 @@ interface Customer {
   displayName: string | null;
   firstName: string | null;
   lastName: string | null;
-}
-
-interface MessagePreview {
-  id: string;
-  direction: 'INBOUND' | 'OUTBOUND';
-  body: string;
-  createdAt: string;
-}
-
-interface Conversation {
-  id: string;
-  step: string;
-  lastMessageAt: string | null;
-  isHandoff: boolean;
-  customer: Customer;
-  lastMessage: MessagePreview | null;
 }
 
 interface ThreadMessage {
@@ -60,37 +52,7 @@ const STEP_LABELS: Record<string, string> = {
   HANDOFF: 'Needs you',
   MENU: 'Main menu',
   IDLE: 'Idle',
-  GREETING: 'Greeting',
-  PICK_BRANCH: 'Pick branch',
-  PICK_SERVICE: 'Pick service',
-  PICK_STAFF: 'Pick staff',
-  PICK_DATE: 'Pick date',
-  PICK_SLOT: 'Pick slot',
-  CONFIRM_BOOKING: 'Confirming',
-  MANAGE_BOOKING: 'Manage booking',
-  RESCHEDULE: 'Reschedule',
-  COMPLAINT: 'Complaint',
-  FAQ: 'FAQ',
-  LOYALTY: 'Loyalty',
-  CSAT: 'Feedback',
-  CLOSED: 'Closed',
 };
-
-function customerLabel(c: Customer): string {
-  const name = c.displayName ?? [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
-  return name || c.waId || 'Unknown';
-}
-
-function customerInitials(c: Customer): string {
-  const label = customerLabel(c);
-  const parts = label.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0]![0]! + parts[1]![0]!).toUpperCase();
-  return label.slice(0, 2).toUpperCase();
-}
-
-function stepLabel(step: string): string {
-  return STEP_LABELS[step] ?? step.replace(/_/g, ' ').toLowerCase();
-}
 
 function formatTime(iso: string | null): string {
   if (!iso) return '—';
@@ -104,19 +66,8 @@ function formatTime(iso: string | null): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function sortConversations(convs: Conversation[]): Conversation[] {
-  return [...convs].sort((a, b) => {
-    const aHandoff = a.step === 'HANDOFF' ? 0 : 1;
-    const bHandoff = b.step === 'HANDOFF' ? 0 : 1;
-    if (aHandoff !== bHandoff) return aHandoff - bHandoff;
-    const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-    const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-    return bTime - aTime;
-  });
-}
-
 function StepBadge({ step }: { step: string }) {
-  const label = stepLabel(step);
+  const label = STEP_LABELS[step] ?? step.replace(/_/g, ' ').toLowerCase();
   if (step === 'HANDOFF') {
     return (
       <Badge variant="destructive" className="animate-pulse shrink-0">
@@ -153,7 +104,7 @@ function CustomerAvatar({ customer, size = 'md' }: { customer: Customer; size?: 
 }
 
 export function ConversationsClient({ token, staffName }: Props) {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversations, setConversations] = useState<ConversationListItemData[]>([]);
   const [filter, setFilter] = useState<InboxFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -169,13 +120,14 @@ export function ConversationsClient({ token, staffName }: Props) {
   const [alerts, setAlerts] = useState<EscalationAlert[]>([]);
   const [staffSentIds, setStaffSentIds] = useState<Set<string>>(new Set());
   const threadEndRef = useRef<HTMLDivElement>(null);
-  const conversationsRef = useRef<Conversation[]>([]);
+  const conversationsRef = useRef<ConversationListItemData[]>([]);
   const selectedIdRef = useRef<string | null>(null);
+  const didAutoSelectRef = useRef(false);
   conversationsRef.current = conversations;
   selectedIdRef.current = selectedId;
 
   const handoffCount = conversations.filter((c) => c.step === 'HANDOFF').length;
-  const visibleConversations = sortConversations(
+  const visibleConversations = sortConversationsByPriority(
     conversations.filter((c) => {
       if (filter === 'handoff' && c.step !== 'HANDOFF') return false;
       if (!search.trim()) return true;
@@ -195,12 +147,21 @@ export function ConversationsClient({ token, staffName }: Props) {
   const loadConversations = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await apiFetch<{ conversations: Conversation[] }>(
+      const data = await apiFetch<{ conversations: ConversationListItemData[] }>(
         '/conversations?limit=50',
         {},
         token,
       );
-      setConversations(sortConversations(data.conversations ?? []));
+      const sorted = sortConversationsByPriority(data.conversations ?? []);
+      setConversations(sorted);
+
+      if (!didAutoSelectRef.current && !selectedIdRef.current && sorted.length > 0) {
+        const pick = pickDefaultConversation(sorted);
+        if (pick) {
+          setSelectedId(pick.id);
+          didAutoSelectRef.current = true;
+        }
+      }
     } catch {
       setConversations([]);
     } finally {
@@ -430,7 +391,6 @@ export function ConversationsClient({ token, staffName }: Props) {
       )}
 
       <div className="flex flex-1 min-h-0 gap-4">
-        {/* Left — inbox */}
         <Card
           className={cn(
             'w-full md:w-96 shrink-0 flex flex-col min-h-0 py-0 gap-0',
@@ -446,7 +406,6 @@ export function ConversationsClient({ token, staffName }: Props) {
                 </Badge>
               )}
             </div>
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
@@ -456,7 +415,6 @@ export function ConversationsClient({ token, staffName }: Props) {
                 className="pl-8 h-8 text-xs"
               />
             </div>
-            {/* Filters */}
             <div className="flex gap-1">
               <button
                 type="button"
@@ -491,45 +449,17 @@ export function ConversationsClient({ token, staffName }: Props) {
                   : 'No WhatsApp conversations yet.'}
               </p>
             )}
-            {visibleConversations.map((conv) => {
-              const active = conv.id === selectedId;
-              const preview =
-                conv.lastMessage?.direction === 'OUTBOUND'
-                  ? `You: ${conv.lastMessage.body}`
-                  : conv.lastMessage?.body ?? 'No messages yet';
-              return (
-                <button
-                  key={conv.id}
-                  type="button"
-                  onClick={() => setSelectedId(conv.id)}
-                  className={cn(
-                    'w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors',
-                    active && 'bg-muted border-l-2 border-l-primary',
-                    conv.step === 'HANDOFF' && !active && 'bg-destructive/5',
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <CustomerAvatar customer={conv.customer} size="sm" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <span className="font-medium text-sm truncate">
-                          {customerLabel(conv.customer)}
-                        </span>
-                        <StepBadge step={conv.step} />
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{preview}</p>
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        {formatTime(conv.lastMessageAt)}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+            {visibleConversations.map((conv) => (
+              <ConversationListItem
+                key={conv.id}
+                conversation={conv}
+                active={conv.id === selectedId}
+                onSelect={setSelectedId}
+              />
+            ))}
           </div>
         </Card>
 
-        {/* Right — thread */}
         <Card
           className={cn(
             'flex-1 flex flex-col min-h-0 py-0 gap-0',

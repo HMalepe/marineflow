@@ -7,7 +7,16 @@ import { apiFetch } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { KPIStrip, type OverviewKpiData } from '@/components/KPIStrip';
 import { MiniBarChart } from '@/components/MiniBarChart';
+import { StatCard } from '@/components/StatCard';
+import { BusinessTypeBreakdown, type BusinessTypeCount } from '@/components/BusinessTypeBreakdown';
+import { RevenueRow, type AdminRevenueData } from '@/components/RevenueRow';
+import { BotHealthPanel, type BotHealthData } from '@/components/BotHealthPanel';
+import { ActivityFeed } from '@/components/ActivityFeed';
+import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard';
+import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
+import { SetupHealthScore, type SetupHealthData } from '@/components/SetupHealthScore';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
+import { BusinessCoachCard } from '@/components/BusinessCoachCard';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
 
@@ -36,11 +45,16 @@ interface Appointment {
 // ---------------------------------------------------------------------------
 
 interface PlatformStats {
-  totalSalons: number;
-  activeSalons: number;
+  totalBusinesses: number;
+  activeBusinesses: number;
   totalCustomers: number;
   totalAppointments: number;
   recentSignups: number;
+  byBusinessType?: BusinessTypeCount[];
+  /** @deprecated */
+  totalSalons?: number;
+  /** @deprecated */
+  activeSalons?: number;
 }
 
 interface Alert {
@@ -85,11 +99,21 @@ export default async function OverviewPage() {
 async function SuperAdminView({ token }: { token: string | null }) {
   let stats: PlatformStats | null = null;
   let alerts: AlertsData | null = null;
+  let revenue: AdminRevenueData | null = null;
+  let botHealth: BotHealthData | null = null;
+  let tenantHealth: { atRiskCount: number; churningCount: number } | null = null;
+  let leaderboard: AdminLeaderboardData | null = null;
+  let systemHealth: SystemHealthData | null = null;
 
   try {
-    [stats, alerts] = await Promise.all([
+    [stats, alerts, revenue, botHealth, tenantHealth, leaderboard, systemHealth] = await Promise.all([
       adminFetch<PlatformStats>('/admin/stats', token),
       adminFetch<AlertsData>('/admin/alerts', token),
+      adminFetch<AdminRevenueData>('/admin/revenue', token),
+      adminFetch<BotHealthData>('/admin/bot-health', token),
+      adminFetch<{ atRiskCount: number; churningCount: number }>('/admin/tenants/health', token),
+      adminFetch<AdminLeaderboardData>('/admin/leaderboard', token),
+      adminFetch<SystemHealthData>('/admin/system-health', token),
     ]);
   } catch {
     // swallow — handled below
@@ -101,6 +125,8 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
   return (
     <div className="space-y-6">
+      {systemHealth && <SystemHealthBar data={systemHealth} />}
+
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Overview</h1>
@@ -118,15 +144,53 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
       {/* KPI cards */}
       {stats ? (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <KpiCard label="Total Businesses" value={stats.totalSalons} />
-          <KpiCard label="Active" value={stats.activeSalons} />
-          <KpiCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
-          <KpiCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
-          <KpiCard label="New This Week" value={stats.recentSignups} />
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <StatCard
+              label="Total Businesses"
+              value={stats.totalBusinesses ?? stats.totalSalons ?? 0}
+              href="/admin"
+            />
+            <StatCard
+              label="Active Businesses"
+              value={stats.activeBusinesses ?? stats.activeSalons ?? 0}
+              href="/admin"
+            />
+            <StatCard label="Total Customers" value={stats.totalCustomers.toLocaleString()} />
+            <StatCard
+              label={`Total ${APPOINTMENTS_LABEL}`}
+              value={stats.totalAppointments.toLocaleString()}
+            />
+            <StatCard label="New This Week" value={stats.recentSignups} />
+          </div>
+          {stats.byBusinessType && stats.byBusinessType.length > 0 && (
+            <BusinessTypeBreakdown counts={stats.byBusinessType} />
+          )}
+        </>
       ) : (
         <p className="text-sm text-destructive">Failed to load platform stats.</p>
+      )}
+
+      {revenue && <RevenueRow data={revenue} />}
+
+      {leaderboard && <Leaderboard data={leaderboard} />}
+
+      {botHealth && <BotHealthPanel data={botHealth} />}
+
+      {token && <ActivityFeed token={token} />}
+
+      {tenantHealth && tenantHealth.atRiskCount > 0 && (
+        <Link
+          href="/admin?health=AT_RISK"
+          className="block rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 hover:border-amber-500/60 transition-colors"
+        >
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            {tenantHealth.atRiskCount} tenant{tenantHealth.atRiskCount !== 1 ? 's' : ''} at risk
+          </p>
+          <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+            No recent bookings or bot activity — review before they churn silently.
+          </p>
+        </Link>
       )}
 
       {/* Alerts */}
@@ -173,15 +237,6 @@ async function SuperAdminView({ token }: { token: string | null }) {
   );
 }
 
-function KpiCard({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="border rounded-lg p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-2xl font-bold mt-1">{value}</p>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Default (non-admin) appointment view — unchanged
 // ---------------------------------------------------------------------------
@@ -189,17 +244,20 @@ function KpiCard({ label, value }: { label: string; value: string | number }) {
 async function AppointmentView({ token }: { token: string | null }) {
   let appointments: Appointment[] = [];
   let overviewKpis: OverviewKpiData | null = null;
+  let setupHealth: SetupHealthData | null = null;
   let error: string | null = null;
   let onboardingDone = true;
 
   try {
-    const [apptData, settingsData, kpiData] = await Promise.all([
+    const [apptData, settingsData, kpiData, healthData] = await Promise.all([
       apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
       apiFetch<{ salon: { onboardingCompletedAt: string | null; whatsappPhoneId: string | null } }>('/settings', {}, token),
       apiFetch<OverviewKpiData>('/tenant/overview-kpis', {}, token).catch(() => null),
+      apiFetch<SetupHealthData>('/tenant/setup-health', {}, token).catch(() => null),
     ]);
     appointments = apptData.appointments;
     overviewKpis = kpiData;
+    setupHealth = healthData;
     onboardingDone = !!(settingsData.salon.onboardingCompletedAt || settingsData.salon.whatsappPhoneId);
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load';
@@ -210,6 +268,11 @@ async function AppointmentView({ token }: { token: string | null }) {
   return (
     <div className="space-y-6 lg:space-y-8">
       {token && <SalonLiveRouterRefresh token={token} />}
+
+      {setupHealth && setupHealth.checks.length > 0 && (
+        <SetupHealthScore data={setupHealth} />
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
@@ -234,6 +297,8 @@ async function AppointmentView({ token }: { token: string | null }) {
           <MiniBarChart data={overviewKpis.revenueLast7Days} />
         </>
       )}
+
+      {token && <BusinessCoachCard token={token} />}
 
       {/* Onboarding banner */}
       {!onboardingDone && (

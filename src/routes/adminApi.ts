@@ -13,6 +13,8 @@ import { findTwilioSenderByPhone, listTwilioWhatsAppSenders } from '../lib/twili
 import { getPlatformMetrics, getConversationFunnel, checkAlertThresholds } from '../services/observability.js';
 import { isIndustryTemplateId } from '../lib/industryTemplates.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
+import { businessTypeFromIndustryTemplate } from '../lib/labels.js';
+import { emitPlatformEvent } from '../services/platformEvents.js';
 import {
   getPlatformInboxUnreadCount,
   listPlatformInboxAlerts,
@@ -27,6 +29,13 @@ import {
   getAdminStaffRevenue,
   listAnalyticsBusinesses,
 } from '../services/adminAnalytics.js';
+import { getAdminRevenue } from '../api/admin/revenue.js';
+import { getAdminLeaderboard } from '../api/admin/leaderboard.js';
+import { getAdminSystemHealth } from '../api/admin/system-health.js';
+import { getAdminBotHealth } from '../api/admin/bot-health.js';
+import { getAdminTenantHealth } from '../api/admin/tenants/health.js';
+import { getTenantOnboarding } from '../api/admin/tenants/onboarding.js';
+import { getAdminPlatformEvents } from '../api/admin/events.js';
 
 const BCRYPT_ROUNDS = 12;
 const VALID_STATUSES: TenantStatus[] = ['LEAD', 'TRIAL', 'ACTIVE', 'PAST_DUE', 'SUSPENDED', 'CHURNED'];
@@ -186,6 +195,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           timezone: body.timezone?.trim() || 'Africa/Johannesburg',
           defaultCurrency: body.currency?.trim().toLowerCase() || 'zar',
           industryTemplate: body.industryTemplate?.trim() || 'salon',
+          businessType: businessTypeFromIndustryTemplate(body.industryTemplate?.trim() || 'salon'),
           trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
           ...(twilioWhatsAppFrom && { twilioWhatsAppFrom }),
         },
@@ -217,6 +227,12 @@ export async function adminApiRoutes(app: FastifyInstance) {
       });
 
       return { salon, user };
+    });
+
+    emitPlatformEvent({
+      type: 'TENANT_CREATED',
+      salonId: result.salon.id,
+      metadata: { name: result.salon.name, slug: result.salon.slug, source: 'admin' },
     });
 
     return {
@@ -265,6 +281,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
           tier: true,
           botName: true,
           industryTemplate: true,
+          businessType: true,
           createdAt: true,
           trialEndsAt: true,
           _count: {
@@ -289,6 +306,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
       status: s.status,
       tier: s.tier,
       industryTemplate: s.industryTemplate,
+      businessType: s.businessType,
       createdAt: s.createdAt,
       trialEndsAt: s.trialEndsAt,
       staffUserCount: s._count.staffUsers,
@@ -335,6 +353,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         tier: true,
         botName: true,
         industryTemplate: true,
+        businessType: true,
         timezone: true,
         createdAt: true,
         trialEndsAt: true,
@@ -525,6 +544,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         return reply.code(400).send({ error: 'invalid_industry_template' });
       }
       data.industryTemplate = template;
+      data.businessType = businessTypeFromIndustryTemplate(template);
     }
     if (body.whatsappNumber !== undefined) {
       const raw = body.whatsappNumber.trim();
@@ -563,6 +583,7 @@ export async function adminApiRoutes(app: FastifyInstance) {
         tier: salon.tier,
         timezone: salon.timezone,
         industryTemplate: salon.industryTemplate,
+        businessType: salon.businessType,
         twilioWhatsAppFrom: salon.twilioWhatsAppFrom,
         createdAt: salon.createdAt,
       },
@@ -601,20 +622,85 @@ export async function adminApiRoutes(app: FastifyInstance) {
     return { token, salon: { id: salon.id, name: salon.name }, impersonating: owner.email };
   });
 
+  // ─── Platform Revenue (SUPER_ADMIN only) ───────────────────────────
+  app.get('/revenue', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminRevenue();
+  });
+
+  app.get('/leaderboard', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminLeaderboard();
+  });
+
+  app.get('/system-health', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminSystemHealth();
+  });
+
+  // ─── Bot Health (SUPER_ADMIN only) ─────────────────────────────────
+  app.get('/bot-health', { preHandler: requireSuperAdmin }, async () => {
+    return getAdminBotHealth();
+  });
+
+  // ─── Tenant health (churn signals) ─────────────────────────────────
+  app.get('/tenants/health', async () => {
+    return getAdminTenantHealth();
+  });
+
+  app.get('/tenants/:id/onboarding', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const onboarding = await getTenantOnboarding(id);
+    if (!onboarding) return reply.code(404).send({ error: 'not_found' });
+    return onboarding;
+  });
+
+  // ─── Platform activity feed (SUPER_ADMIN only) ───────────────────────
+  app.get('/events', { preHandler: requireSuperAdmin }, async (request) => {
+    const q = request.query as { limit?: string };
+    const limit = parseInt(q.limit ?? '50', 10) || 50;
+    return getAdminPlatformEvents(limit);
+  });
+
   // ─── Platform Usage Summary ────────────────────────────────────────
   app.get('/stats', async () => {
-    const [totalSalons, activeSalons, totalCustomers, totalAppointments, recentSignups] =
-      await Promise.all([
-        prisma.salon.count(),
-        prisma.salon.count({ where: { status: 'ACTIVE' } }),
-        prisma.customer.count(),
-        prisma.appointment.count(),
-        prisma.salon.count({
-          where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-        }),
-      ]);
+    const [
+      totalBusinesses,
+      activeBusinesses,
+      totalCustomers,
+      totalAppointments,
+      recentSignups,
+      byBusinessType,
+    ] = await Promise.all([
+      prisma.salon.count({ where: { deletedAt: null } }),
+      prisma.salon.count({ where: { status: 'ACTIVE', deletedAt: null } }),
+      prisma.customer.count(),
+      prisma.appointment.count(),
+      prisma.salon.count({
+        where: {
+          deletedAt: null,
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      }),
+      prisma.salon.groupBy({
+        by: ['businessType'],
+        where: { deletedAt: null },
+        _count: { id: true },
+      }),
+    ]);
 
-    return { totalSalons, activeSalons, totalCustomers, totalAppointments, recentSignups };
+    return {
+      totalBusinesses,
+      activeBusinesses,
+      /** @deprecated use totalBusinesses */
+      totalSalons: totalBusinesses,
+      /** @deprecated use activeBusinesses */
+      activeSalons: activeBusinesses,
+      totalCustomers,
+      totalAppointments,
+      recentSignups,
+      byBusinessType: byBusinessType.map((row) => ({
+        type: row.businessType,
+        count: row._count.id,
+      })),
+    };
   });
 
   // ─── Usage Alerts ──────────────────────────────────────────────────
@@ -684,9 +770,15 @@ export async function adminApiRoutes(app: FastifyInstance) {
       trialEndsAt: sub.trialEndsAt,
       cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
       createdAt: sub.salon.createdAt,
+      lastBillingIssueKind: sub.lastBillingIssueKind,
+      lastBillingIssueAt: sub.lastBillingIssueAt,
+      lastBillingIssueDetail: sub.lastBillingIssueDetail,
+      lastPaymentAt: sub.lastPaymentAt,
     }));
 
-    return { mrr, arr, byStatus, subscriptions };
+    const paymentIssues = subscriptions.filter((s) => s.lastBillingIssueKind != null);
+
+    return { mrr, arr, byStatus, subscriptions, paymentIssuesCount: paymentIssues.length, paymentIssues };
   });
 
   // ─── Platform analytics (all businesses or one) ───────────────────────
@@ -827,6 +919,19 @@ export async function adminApiRoutes(app: FastifyInstance) {
       }
     },
   );
+}
+
+async function requireSuperAdmin(request: FastifyRequest, reply: FastifyReply) {
+  try {
+    await request.jwtVerify();
+    const payload = request.user as { isSuperAdmin?: boolean; role?: string };
+    if (payload.isSuperAdmin || payload.role === 'SUPER_ADMIN') {
+      return;
+    }
+    return reply.code(403).send({ error: 'super_admin_required' });
+  } catch {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
 }
 
 async function requireAdmin(request: FastifyRequest, reply: FastifyReply) {

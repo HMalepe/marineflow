@@ -11,6 +11,8 @@ import {
   Users,
 } from 'lucide-react';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
+import { BusinessTypeBadge } from '@/components/BusinessTypeBreakdown';
+import type { BusinessType } from '@/lib/labels';
 import { ApiError } from '@/lib/api';
 import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import { Badge } from '@/components/ui/badge';
@@ -29,6 +31,7 @@ interface BusinessSummary {
     botName: string;
     industryTemplate: string;
     industryLabel: string;
+    businessType: BusinessType;
     timezone: string;
     createdAt: string;
     trialEndsAt: string | null;
@@ -174,6 +177,7 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
           <div className="space-y-2 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">{business.name}</h1>
+              <BusinessTypeBadge type={business.businessType} />
               <StatusBadge status={business.status} />
               <Badge variant="outline" className="capitalize">{business.tier}</Badge>
             </div>

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table';
 import { getApiBaseUrl } from '@/lib/api-config';
 import type { BillingPlan } from '@/lib/billing';
+import { adminBillingIssueLabel } from '@/lib/billing';
 
 const API_URL = getApiBaseUrl();
 
@@ -27,6 +28,11 @@ interface Subscription {
   trialEndsAt?: string | null;
   cancelAtPeriodEnd: boolean;
   plan: BillingPlan;
+  billingIssue?: {
+    kind: 'PAYMENT_DECLINED' | 'CHECKOUT_ABANDONED';
+    at: string;
+    detail: string | null;
+  } | null;
 }
 
 interface AdminSubscription {
@@ -42,6 +48,10 @@ interface AdminSubscription {
   trialEndsAt: string | null;
   cancelAtPeriodEnd: boolean;
   createdAt: string;
+  lastBillingIssueKind: 'PAYMENT_DECLINED' | 'CHECKOUT_ABANDONED' | null;
+  lastBillingIssueAt: string | null;
+  lastBillingIssueDetail: string | null;
+  lastPaymentAt: string | null;
 }
 
 interface AdminBillingData {
@@ -55,6 +65,8 @@ interface AdminBillingData {
     PAUSED: number;
   };
   subscriptions: AdminSubscription[];
+  paymentIssuesCount: number;
+  paymentIssues: AdminSubscription[];
 }
 
 function formatZAR(cents: number): string {
@@ -118,11 +130,12 @@ async function AdminBillingPage({ token }: { token: string }) {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KpiCard label="MRR" value={formatZAR(data.mrr)} />
         <KpiCard label="ARR" value={formatZAR(data.arr)} />
         <KpiCard label="Active Subscriptions" value={data.byStatus.ACTIVE} />
         <KpiCard label="Past Due" value={data.byStatus.PAST_DUE} />
+        <KpiCard label="Payment Issues" value={data.paymentIssuesCount} />
       </div>
 
       <section>
@@ -137,6 +150,64 @@ async function AdminBillingPage({ token }: { token: string }) {
         </div>
       </section>
 
+      {data.paymentIssues.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold mb-1">PayFast payment issues</h2>
+          <p className="text-xs text-muted-foreground mb-3">
+            Declined monthly debits vs salons that opened PayFast and left without paying.
+          </p>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Business</TableHead>
+                    <TableHead>Issue</TableHead>
+                    <TableHead>Subscription</TableHead>
+                    <TableHead>Detail</TableHead>
+                    <TableHead>When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.paymentIssues.map((sub) => (
+                    <TableRow key={`issue-${sub.salonId}`}>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium">{sub.salonName}</p>
+                          <p className="text-xs text-muted-foreground">{sub.salonSlug}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          className={`border ${
+                            sub.lastBillingIssueKind === 'PAYMENT_DECLINED'
+                              ? 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border-orange-600/30'
+                              : 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-600/30'
+                          }`}
+                        >
+                          {adminBillingIssueLabel(sub.lastBillingIssueKind)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <SubStatusBadge status={sub.status} />
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground max-w-xs">
+                        {sub.lastBillingIssueDetail ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                        {sub.lastBillingIssueAt
+                          ? new Date(sub.lastBillingIssueAt).toLocaleString('en-ZA')
+                          : '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
       <section>
         <h2 className="text-sm font-semibold mb-3">All Subscriptions</h2>
         <Card>
@@ -144,9 +215,10 @@ async function AdminBillingPage({ token }: { token: string }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Salon</TableHead>
+                  <TableHead>Business</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Last PayFast issue</TableHead>
                   <TableHead className="text-right">Price/mo</TableHead>
                   <TableHead>Period End / Trial Ends</TableHead>
                   <TableHead>Created</TableHead>
@@ -155,7 +227,7 @@ async function AdminBillingPage({ token }: { token: string }) {
               <TableBody>
                 {data.subscriptions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
                       No subscriptions found.
                     </TableCell>
                   </TableRow>
@@ -181,6 +253,28 @@ async function AdminBillingPage({ token }: { token: string }) {
                           <span className="text-xs text-muted-foreground">Cancels at period end</span>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {sub.lastBillingIssueKind ? (
+                        <div className="space-y-0.5">
+                          <span
+                            className={
+                              sub.lastBillingIssueKind === 'PAYMENT_DECLINED'
+                                ? 'text-orange-700 dark:text-orange-300 font-medium'
+                                : 'text-amber-700 dark:text-amber-300 font-medium'
+                            }
+                          >
+                            {adminBillingIssueLabel(sub.lastBillingIssueKind)}
+                          </span>
+                          {sub.lastBillingIssueAt && (
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(sub.lastBillingIssueAt).toLocaleDateString('en-ZA')}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatZAR(sub.priceMonthly)}

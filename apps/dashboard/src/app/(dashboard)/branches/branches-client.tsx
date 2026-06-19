@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -16,9 +15,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { BranchCard, type BranchStats } from '@/components/BranchCard';
 import { apiFetch, ApiError } from '@/lib/api';
-import { branchPath } from '@/lib/branch-path';
-import { APPOINTMENTS_LABEL, BRANCHES_LABEL } from '@/lib/dashboard-nav';
+import { BRANCHES_LABEL } from '@/lib/dashboard-nav';
 
 export interface BranchRow {
   id: string;
@@ -39,6 +38,8 @@ interface Props {
 
 export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Props) {
   const [branches, setBranches] = useState(initialBranches);
+  const [branchStats, setBranchStats] = useState<Record<string, BranchStats>>({});
+  const [statsLoading, setStatsLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
   const [editBranch, setEditBranch] = useState<BranchRow | null>(null);
   const [name, setName] = useState('');
@@ -51,6 +52,56 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
     const data = await apiFetch<{ branches: BranchRow[] }>('/branches', {}, token);
     setBranches(data.branches);
   }, [token]);
+
+  const loadStats = useCallback(async () => {
+    if (!token || branches.length === 0) {
+      setBranchStats({});
+      setStatsLoading(false);
+      return;
+    }
+    setStatsLoading(true);
+    try {
+      const results = await Promise.all(
+        branches.map(async (branch) => {
+          try {
+            const res = await apiFetch<{ stats: BranchStats }>(
+              `/branches/${branch.id}/stats`,
+              {},
+              token,
+            );
+            return [branch.id, res.stats] as const;
+          } catch {
+            return [branch.id, null] as const;
+          }
+        }),
+      );
+      const next: Record<string, BranchStats> = {};
+      for (const [id, stats] of results) {
+        if (stats) next[id] = stats;
+      }
+      setBranchStats(next);
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [token, branches]);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
+
+  const totalBookingsThisMonth = useMemo(() => {
+    return Object.values(branchStats).reduce((sum, s) => sum + s.bookingsThisMonth, 0);
+  }, [branchStats]);
+
+  const bookingShareByBranch = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const branch of branches) {
+      const bookings = branchStats[branch.id]?.bookingsThisMonth ?? 0;
+      map[branch.id] =
+        totalBookingsThisMonth > 0 ? Math.round((bookings / totalBookingsThisMonth) * 100) : 0;
+    }
+    return map;
+  }, [branches, branchStats, totalBookingsThisMonth]);
 
   function openEdit(branch: BranchRow) {
     setEditBranch(branch);
@@ -154,7 +205,7 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
               No extra branches yet — single-location salons don&apos;t need one.
             </p>
             <p className="text-xs text-muted-foreground">
-              Add a second location here when customers should choose where to book on WhatsApp.
+              Add a second location when customers should choose where to book on WhatsApp.
             </p>
           </CardContent>
         </Card>
@@ -162,49 +213,15 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {branches.map((branch) => (
-          <Card key={branch.id} className="group relative overflow-hidden">
-            <Link href={branchPath(branch.id)} className="block">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-2 pr-8">
-                  <CardTitle className="text-base group-hover:text-primary transition-colors">
-                    {branch.name}
-                  </CardTitle>
-                  {branch.isDefault && <Badge variant="secondary">Primary</Badge>}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {branch.address && (
-                  <p className="text-sm text-muted-foreground">{branch.address}</p>
-                )}
-                {branch.phone && (
-                  <p className="text-sm text-muted-foreground">{branch.phone}</p>
-                )}
-                {branch._count && (
-                  <div className="flex gap-4 pt-2 text-xs text-muted-foreground">
-                    <span>{branch._count.staff} staff</span>
-                    <span>{branch._count.appointments} {APPOINTMENTS_LABEL.toLowerCase()}</span>
-                  </div>
-                )}
-                <p className="text-xs text-primary font-medium pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  Open branch dashboard →
-                </p>
-              </CardContent>
-            </Link>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  openEdit(branch);
-                }}
-                className="absolute top-3 right-3 flex size-8 items-center justify-center rounded-lg border bg-background/90 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-                aria-label={`Edit ${branch.name}`}
-              >
-                <Pencil className="size-3.5" />
-              </button>
-            )}
-          </Card>
+          <BranchCard
+            key={branch.id}
+            branch={branch}
+            stats={branchStats[branch.id] ?? null}
+            statsLoading={statsLoading}
+            bookingSharePct={bookingShareByBranch[branch.id] ?? 0}
+            canEdit={canEdit}
+            onEdit={() => openEdit(branch)}
+          />
         ))}
       </div>
 

@@ -11,6 +11,13 @@ datasource db {
 }
 
 /// Maps to Nexus spec `tenant_status`
+enum BusinessType {
+  SALON
+  RESTAURANT
+  CAR_WASH
+  OTHER
+}
+
 enum TenantStatus {
   LEAD
   TRIAL
@@ -96,10 +103,23 @@ enum MessageStatus {
   FAILED
 }
 
+/// Bot delivery telemetry — separate from conversation Message rows.
+enum MessageLogStatus {
+  DELIVERED
+  FAILED
+  UNHANDLED
+}
+
 enum TicketStatus {
   OPEN
   WAITING_CUSTOMER
   RESOLVED
+  AUTO_RESOLVED
+}
+
+enum TicketType {
+  GENERAL
+  AFTER_HOURS_MESSAGE
 }
 
 enum PlatformAlertKind {
@@ -111,6 +131,16 @@ enum PlatformAlertStatus {
   UNREAD
   READ
   ARCHIVED
+}
+
+enum PlatformEventType {
+  TENANT_CREATED
+  APPOINTMENT_BOOKED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  BOT_ERROR
+  BOT_UNHANDLED
+  ONBOARDING_INCOMPLETE
 }
 
 enum MarketingConsentStatus {
@@ -160,6 +190,7 @@ model Salon {
   legalName      String?
   slug           String       @unique
   industryTemplate String     @default("salon")
+  businessType     BusinessType @default(SALON)
   status         TenantStatus @default(TRIAL)
   statusChangedAt DateTime    @default(now())
   trialEndsAt    DateTime?
@@ -252,6 +283,8 @@ model Salon {
   auditLogs      AuditLog[]
   reviewIncentiveClaims ReviewIncentiveClaim[]
   platformAlerts PlatformAlert[]
+  messageLogs      MessageLog[]
+  platformEvents   PlatformEvent[]
 }
 
 model Branch {
@@ -349,9 +382,11 @@ model Conversation {
   customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   step            ConversationStep  @default(GREETING)
   context         Json              @default("{}")
-  lastMessageAt   DateTime?
-  endedAt         DateTime?
-  handoffReason   String?
+  lastMessageAt           DateTime?
+  lastCustomerMessageAt   DateTime?
+  resolvedAt              DateTime?
+  endedAt                 DateTime?
+  handoffReason           String?
   messageCount    Int               @default(0)
   updatedAt   DateTime @default(now()) @updatedAt
   createdAt       DateTime          @default(now())
@@ -380,6 +415,21 @@ model Message {
 
   @@index([conversationId])
   @@index([customerId, createdAt])
+}
+
+model MessageLog {
+  id        String            @id @default(cuid())
+  salonId   String?
+  salon     Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  faqId     String?
+  direction MessageDirection
+  status    MessageLogStatus
+  createdAt DateTime          @default(now())
+
+  @@index([salonId, createdAt])
+  @@index([direction, createdAt])
+  @@index([status, createdAt])
+  @@index([faqId, createdAt])
 }
 
 model ServiceCategory {
@@ -569,6 +619,7 @@ model Appointment {
   rescheduledTo       Appointment?       @relation("RescheduleChain")
   noShowMarkedAt      DateTime?
   confirmedAt         DateTime?
+  paymentLinkSentAt   DateTime?
   reminderSentAt      DateTime?          /// @deprecated use reminder24hSentAt
   reminder24hSentAt   DateTime?
   reminder2hSentAt    DateTime?
@@ -712,7 +763,9 @@ model Ticket {
   salon       Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
   customerId  String
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type        TicketType   @default(GENERAL)
   status      TicketStatus @default(OPEN)
+  inboundCount Int         @default(0)
   subject     String?
   assigneeStaffUserId String?
   createdAt   DateTime     @default(now())
@@ -721,6 +774,7 @@ model Ticket {
   messages    TicketMessage[]
 
   @@index([salonId])
+  @@index([salonId, type, status])
 }
 
 model TicketMessage {
@@ -868,6 +922,19 @@ model PlatformAlert {
   @@index([status, createdAt(sort: Desc)])
 }
 
+/// Platform-wide activity log for super-admin situational awareness.
+model PlatformEvent {
+  id        String            @id @default(cuid())
+  type      PlatformEventType
+  salonId   String?
+  salon     Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  metadata  Json              @default("{}")
+  createdAt DateTime          @default(now())
+
+  @@index([createdAt(sort: Desc)])
+  @@index([salonId, createdAt(sort: Desc)])
+}
+
 // ─── Push Notifications ───────────────────────────────────────────────
 
 model PushToken {
@@ -1004,7 +1071,49 @@ model Campaign {
   createdAt     DateTime       @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
+  send          CampaignSend?
+  recipients    CampaignRecipient[]
+
   @@index([salonId, status])
+}
+
+model CampaignSend {
+  id              String   @id @default(cuid())
+  campaignId      String   @unique
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  salonId         String
+  sentAt          DateTime
+  sentCount       Int      @default(0)
+  deliveredCount  Int      @default(0)
+  readCount       Int      @default(0)
+  repliedCount    Int      @default(0)
+  bookedCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  recipients      CampaignRecipient[]
+
+  @@index([salonId, sentAt])
+}
+
+model CampaignRecipient {
+  id             String       @id @default(cuid())
+  campaignSendId String
+  campaignSend   CampaignSend @relation(fields: [campaignSendId], references: [id], onDelete: Cascade)
+  campaignId     String
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  salonId        String
+  customerId     String
+  providerSid    String?      @unique
+  delivered      Boolean      @default(false)
+  read           Boolean      @default(false)
+  replied        Boolean      @default(false)
+  booked         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  @@unique([campaignId, customerId])
+  @@index([campaignSendId])
+  @@index([salonId, customerId])
 }
 
 // ─── Waitlist ─────────────────────────────────────────────────────────
@@ -1144,6 +1253,11 @@ enum SubscriptionStatus {
   TRIAL
 }
 
+enum SubscriptionBillingIssueKind {
+  PAYMENT_DECLINED
+  CHECKOUT_ABANDONED
+}
+
 model SubscriptionPlan {
   id             String   @id @default(cuid())
   name           String   /// e.g. "Starter", "Pro", "Enterprise"
@@ -1179,11 +1293,17 @@ model SalonSubscription {
   cancelAtPeriodEnd     Boolean            @default(false)
   cancelledAt           DateTime?
   trialEndsAt           DateTime?
+  lastPaymentAt         DateTime?
+  lastPaymentAmountCents Int?
+  lastBillingIssueKind  SubscriptionBillingIssueKind?
+  lastBillingIssueAt    DateTime?
+  lastBillingIssueDetail String?
   createdAt             DateTime           @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([salonId])
   @@index([status])
+  @@index([lastBillingIssueKind])
 }
 
 // ─── POPIA/GDPR Consent ───────────────────────────────────────────────

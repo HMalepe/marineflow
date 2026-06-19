@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
-import { ChevronDown, ChevronUp, ChevronRight, FolderOpen, Folder, Pencil, Plus } from 'lucide-react';
+import { ChevronRight, FolderOpen, Folder, Pencil, Plus } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,17 +23,20 @@ import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
+import { ServiceRow, type ServiceRowData } from '@/components/ServiceRow';
 
-interface Service {
-  id: string;
-  name: string;
-  description: string | null;
-  priceCents: number;
-  durationMin: number;
-  bufferMin: number;
-  active: boolean;
-  sortOrder: number;
-  category?: { id: string; name: string } | null;
+interface Service extends ServiceRowData {}
+
+function sortServicesByBookings(
+  list: Service[],
+  stats: Record<string, { bookings30d: number }>,
+): Service[] {
+  return [...list].sort((a, b) => {
+    const bookingDiff =
+      (stats[b.id]?.bookings30d ?? 0) - (stats[a.id]?.bookings30d ?? 0);
+    if (bookingDiff !== 0) return bookingDiff;
+    return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+  });
 }
 
 interface StaffBrief {
@@ -75,13 +77,6 @@ const emptyForm: ServiceForm = {
 
 function formatPrice(cents: number): string {
   return `R ${(cents / 100).toFixed(2)}`;
-}
-
-function formatDuration(service: Service): string {
-  if (service.bufferMin > 0) {
-    return `${service.durationMin} + ${service.bufferMin} min buffer`;
-  }
-  return `${service.durationMin} min`;
 }
 
 function serviceToForm(s: Service): ServiceForm {
@@ -143,6 +138,12 @@ export function ServicesClient({ token }: Props) {
   const [catEditName, setCatEditName] = useState('');
   const [showAddCatInput, setShowAddCatInput] = useState(false);
 
+  const [serviceStats, setServiceStats] = useState<Record<string, { bookings30d: number }>>({});
+  const [showIntelColumns, setShowIntelColumns] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
+
   // Track which accordion groups are open (default: all open)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
@@ -182,6 +183,20 @@ export function ServicesClient({ token }: Props) {
     }
   }, [token]);
 
+  const loadStats = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await apiFetch<{ stats: Record<string, { bookings30d: number }> }>(
+        '/services/stats',
+        {},
+        token,
+      );
+      setServiceStats(data.stats ?? {});
+    } catch {
+      // non-critical
+    }
+  }, [token]);
+
   const loadAllStaff = useCallback(async () => {
     if (!token) return;
     try {
@@ -208,7 +223,8 @@ export function ServicesClient({ token }: Props) {
     void loadServices();
     void loadCategories();
     void loadAllStaff();
-  }, [loadServices, loadCategories, loadAllStaff]);
+    void loadStats();
+  }, [loadServices, loadCategories, loadAllStaff, loadStats]);
 
   // Warn before navigating away with unsaved form data
   const formIsDirty = sheetOpen && (
@@ -233,9 +249,10 @@ export function ServicesClient({ token }: Props) {
       if (type === 'service.catalog_changed') {
         void loadServices(true);
         void loadCategories();
+        void loadStats();
       }
     },
-    [loadServices, loadCategories],
+    [loadServices, loadCategories, loadStats],
   );
   const { connected: liveConnected } = useSalonLiveUpdates(token, onLiveUpdate);
 
@@ -324,6 +341,54 @@ export function ServicesClient({ token }: Props) {
 
   const activeCount = services.filter((s: Service) => s.active).length;
   const inactiveCount = services.length - activeCount;
+
+  const uncategorisedActiveCount = useMemo(
+    () => services.filter((s) => s.active && !s.category?.id).length,
+    [services],
+  );
+
+  const showUncategorisedBanner = useMemo(() => {
+    if (uncategorisedActiveCount === 0 || categories.length === 0) return false;
+    return categories.some((cat) => {
+      const activeInCat = services.filter((s) => s.active && s.category?.id === cat.id).length;
+      return activeInCat === 0;
+    });
+  }, [categories, services, uncategorisedActiveCount]);
+
+  function toggleServiceSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkAssignCategory() {
+    if (selectedIds.size === 0 || !bulkCategoryId) return;
+    setBulkSaving(true);
+    try {
+      const result = await apiFetch<{ ok: boolean; updated: number }>(
+        '/services/bulk-update-category',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            serviceIds: [...selectedIds],
+            categoryId: bulkCategoryId,
+          }),
+        },
+        token,
+      );
+      showToast(`Assigned ${result.updated} service${result.updated === 1 ? '' : 's'} to category`, 'success');
+      setSelectedIds(new Set());
+      setBulkCategoryId('');
+      await loadServices(true);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'Bulk update failed', 'error');
+    } finally {
+      setBulkSaving(false);
+    }
+  }
 
   const slotPreviewMin =
     (parseInt(form.durationMin, 10) || 0) + (parseInt(form.bufferMin, 10) || 0);
@@ -592,6 +657,13 @@ export function ServicesClient({ token }: Props) {
         <StatCard label="Inactive" value={inactiveCount} />
       </div>
 
+      {showUncategorisedBanner && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+          ⚠ {uncategorisedActiveCount} service{uncategorisedActiveCount === 1 ? '' : 's'} are uncategorised
+          — your bot may present them poorly to customers. Assign categories to improve booking flow.
+        </div>
+      )}
+
       {/* Service catalog */}
       <Card>
         <CardHeader className="pb-3">
@@ -616,6 +688,50 @@ export function ServicesClient({ token }: Props) {
             onChange={(e: { target: { value: string } }) => setSearch(e.target.value)}
             className="max-w-sm mt-2"
           />
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant={showIntelColumns ? 'default' : 'outline'}
+              onClick={() => setShowIntelColumns((v) => !v)}
+            >
+              {showIntelColumns ? 'Hide booking stats' : 'Show booking stats'}
+            </Button>
+            {selectedIds.size > 0 && (
+              <div className="flex flex-wrap items-center gap-2 ml-auto">
+                <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+                <select
+                  value={bulkCategoryId}
+                  onChange={(e) => setBulkCategoryId(e.target.value)}
+                  className="h-8 rounded-lg border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring dark:bg-input/30"
+                >
+                  <option value="">Assign to category…</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  size="sm"
+                  disabled={bulkSaving || !bulkCategoryId}
+                  onClick={() => void handleBulkAssignCategory()}
+                >
+                  {bulkSaving ? 'Saving…' : 'Apply'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSelectedIds(new Set());
+                    setBulkCategoryId('');
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-3 pb-4">
           {loading && (
@@ -740,102 +856,43 @@ export function ServicesClient({ token }: Props) {
                 {/* Service rows */}
                 {open && (
                   <div className="divide-y divide-border">
+                    {showIntelColumns && group.services.length > 0 && (
+                      <div className="hidden md:flex items-center gap-3 px-3 py-1.5 bg-muted/20 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span className="w-4 shrink-0" aria-hidden />
+                        <span className="w-6 shrink-0" aria-hidden />
+                        <span className="flex-1">Service</span>
+                        <span className="w-16 text-right hidden md:block">Bookings (30d)</span>
+                        <span className="w-20 text-right hidden lg:block">Rev/hr</span>
+                        <span className="w-16 text-right hidden sm:block">Price</span>
+                        <span className="w-[52px] shrink-0" aria-hidden />
+                        <span className="w-12 shrink-0" aria-hidden />
+                        <span className="w-12 shrink-0" aria-hidden />
+                      </div>
+                    )}
                     {group.services.length === 0 && (
                       <p className="text-xs text-muted-foreground px-4 py-3 italic">
                         No services in this category.
                       </p>
                     )}
-                    {group.services
-                      .slice()
-                      .sort((a: Service, b: Service) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
-                      .map((service: Service) => (
-                        <div
-                          key={service.id}
-                          className={cn(
-                            'flex items-center gap-3 px-3 py-2.5 group/row hover:bg-muted/30 transition-colors',
-                            !service.active && 'opacity-60',
-                          )}
-                        >
-                          {/* Reorder buttons */}
-                          <div className="flex flex-col gap-0.5 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
-                            <button
-                              type="button"
-                              title="Move up"
-                              onClick={() => void handleReorder(service.id, 'up')}
-                              className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              <ChevronUp className="size-3" />
-                            </button>
-                            <button
-                              type="button"
-                              title="Move down"
-                              onClick={() => void handleReorder(service.id, 'down')}
-                              className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                            >
-                              <ChevronDown className="size-3" />
-                            </button>
-                          </div>
-
-                          {/* Name + badge */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium text-sm">{service.name}</span>
-                              {!service.active && (
-                                <Badge variant="secondary" className="text-[10px]">Hidden</Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {formatDuration(service)}
-                            </p>
-                          </div>
-
-                          {/* Price */}
-                          <span className="text-sm font-mono text-muted-foreground shrink-0 hidden sm:block">
-                            {formatPrice(service.priceCents)}
-                          </span>
-
-                          {/* Active toggle */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={togglingId === service.id}
-                            onClick={(e: React.MouseEvent<HTMLButtonElement>) => toggleActive(service, e)}
-                            className={cn(
-                              'shrink-0 h-7 text-xs',
-                              service.active
-                                ? 'border-green-600/30 text-green-700 dark:text-green-400'
-                                : 'text-muted-foreground',
-                            )}
-                          >
-                            {togglingId === service.id
-                              ? '…'
-                              : service.active
-                                ? 'Active'
-                                : 'Inactive'}
-                          </Button>
-
-                          {/* Edit button */}
-                          <button
-                            type="button"
-                            onClick={() => openEdit(service)}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-1 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100"
-                            title="Edit service"
-                          >
-                            <Pencil className="size-3" />
-                            Edit
-                          </button>
-
-                          {/* Delete button */}
-                          <button
-                            type="button"
-                            onClick={() => { closeSheet(); setDeleteTarget(service); }}
-                            className="text-xs text-muted-foreground hover:text-destructive px-1.5 py-1 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100"
-                            title="Delete service"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      ))}
+                    {sortServicesByBookings(group.services, serviceStats).map((service: Service) => (
+                      <ServiceRow
+                        key={service.id}
+                        service={service}
+                        bookings30d={serviceStats[service.id]?.bookings30d ?? 0}
+                        showIntelColumns={showIntelColumns}
+                        selected={selectedIds.has(service.id)}
+                        onToggleSelect={toggleServiceSelected}
+                        onMoveUp={() => void handleReorder(service.id, 'up')}
+                        onMoveDown={() => void handleReorder(service.id, 'down')}
+                        togglingId={togglingId}
+                        onToggleActive={toggleActive}
+                        onEdit={openEdit}
+                        onDelete={(s) => {
+                          closeSheet();
+                          setDeleteTarget(s);
+                        }}
+                      />
+                    ))}
                   </div>
                 )}
               </div>

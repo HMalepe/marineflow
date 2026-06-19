@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
@@ -27,6 +27,8 @@ import { Separator } from '@/components/ui/separator';
 import {
   type BillingCycle,
   type BillingPlan,
+  type BillingIssue,
+  billingIssueMeta,
   checkoutErrorMessage,
   computeBillingQuote,
   formatZAR,
@@ -44,6 +46,7 @@ interface Subscription {
   trialEndsAt?: string | null;
   cancelAtPeriodEnd: boolean;
   plan: BillingPlan;
+  billingIssue?: BillingIssue | null;
 }
 
 interface Props {
@@ -121,6 +124,17 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
   const [error, setError] = useState<string | null>(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [banner, setBanner] = useState(checkoutStatus ?? null);
+  const abandonedLogged = useRef(false);
+
+  useEffect(() => {
+    if (checkoutStatus !== 'cancelled' || abandonedLogged.current) return;
+    abandonedLogged.current = true;
+    void fetch('/api/billing/checkout-abandoned', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    }).catch(() => undefined);
+  }, [checkoutStatus, token]);
 
   const dismissBanner = useCallback(() => {
     setBanner(null);
@@ -142,6 +156,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
   const quote = computeBillingQuote(selectedPlan, cycle);
   const active = isSubscriptionActive(subscription);
   const statusMeta = subscription ? subscriptionStatusMeta(subscription.status) : null;
+  const billingIssue = billingIssueMeta(subscription?.billingIssue);
   const canSubscribe = !active;
 
   async function handleSubscribe() {
@@ -250,6 +265,14 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
         </div>
       )}
 
+      {billingIssue && (
+        <StatusBanner
+          variant={billingIssue.variant}
+          title={billingIssue.title}
+          message={billingIssue.message}
+        />
+      )}
+
       {banner === 'success' && (
         <StatusBanner
           variant="success"
@@ -316,6 +339,13 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
               )}
             </div>
 
+            {subscription.status === 'PAST_DUE' && (
+              <p className="text-sm text-orange-800 dark:text-orange-200 bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2">
+                Your monthly PayFast debit failed. Update your card or retry payment below — your bot may
+                be limited until payment succeeds.
+              </p>
+            )}
+
             {subscription.cancelAtPeriodEnd && (
               <p className="text-sm text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                 Cancellation scheduled — you keep full access until the end of your billing period.
@@ -375,6 +405,15 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
 
       {canSubscribe && (
         <div id="subscribe-section" className="grid lg:grid-cols-5 gap-6 items-start">
+          {subscription?.status === 'PAST_DUE' && (
+            <div className="lg:col-span-5">
+              <StatusBanner
+                variant="error"
+                title="Retry your PayFast subscription"
+                message="Open PayFast again to pay your overdue monthly subscription and restore full access."
+              />
+            </div>
+          )}
           <div className="lg:col-span-3 space-y-4">
             <div className="inline-flex rounded-lg border bg-muted/50 p-1 w-full sm:w-auto">
               <button
