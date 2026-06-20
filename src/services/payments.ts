@@ -10,6 +10,7 @@ import { scheduleAppointmentReminders } from './appointmentReminders.js';
 import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
+import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import { MessageDirection } from '@prisma/client';
 import type { Service } from '@prisma/client';
 import { DateTime } from 'luxon';
@@ -182,6 +183,12 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     const firstName = appt.customer.firstName?.trim();
     const ref = appt.id.slice(0, 8).toUpperCase();
 
+    const automations = parseAutomationsFromMetadata(appt.salon.metadata);
+    const customPolicy = automations.messaging.cancellationPolicyText.trim();
+    const policyLine = customPolicy
+      ? customPolicy
+      : `Plans change — we get it. To reschedule or cancel, just reply *MENU* and tap *My Bookings*. A heads-up at least ${automations.cancellation.cancelHoursBefore} hours ahead lets us offer your slot to someone else. 🙏`;
+
     let confirmMsg = [
       firstName ? `🎉 *You're all set, ${sanitizeForMessage(firstName)}!*` : `🎉 *You're all set!*`,
       '',
@@ -194,7 +201,7 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       '',
       `🔖 Ref: *${ref}*`,
       '',
-      `Plans change — we get it. To reschedule or cancel, just reply *MENU* and tap *My Bookings*. A heads-up at least 24 hours ahead lets us offer your slot to someone else. 🙏`,
+      policyLine,
       '',
       `We can't wait to see you at ${sanitizeForMessage(salonName)}! ✨`,
     ].join('\n');
