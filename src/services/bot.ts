@@ -1380,9 +1380,11 @@ async function processInboundWhatsApp(
     return;
   }
 
-  // Tapped "Continue" on the inactivity reminder — just dismiss it, no state change.
+  // Tapped "Continue" on the inactivity reminder — re-show the pending prompt
+  // (e.g. the time slot list) instead of a silent ack, so the customer doesn't
+  // have to remember what they were picking.
   if (isContinueCommand(text)) {
-    await reply(conv, "Great — pick up right where you left off 👍");
+    await repromptCurrentStep(conv);
     return;
   }
 
@@ -2152,6 +2154,54 @@ async function repromptPickSlot(conv: Conversation & { customer: Customer; salon
     [header, ...lines, extra, '', 'Reply BACK to choose a different date.'].join('\n'),
     buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon, header),
   );
+}
+
+async function repromptConfirmBooking(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const serviceId = c.selectedServiceId as string | undefined;
+  const staffId = c.selectedStaffId as string | undefined;
+  const slotStartIso = c.slotStartIso as string | undefined;
+  if (!serviceId || !staffId || !slotStartIso) {
+    await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+    await replyMenu(conv);
+    return;
+  }
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+  const dt = DateTime.fromISO(slotStartIso).setZone(conv.salon.timezone);
+  const partySize = c.partySize as number | undefined;
+  const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt, partySize);
+  await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+}
+
+/** Tapped "Continue" on the inactivity reminder — re-show whatever the bot was
+ *  waiting on so the customer doesn't have to guess what they were picking. */
+async function repromptCurrentStep(conv: Conversation & { customer: Customer; salon: Salon }): Promise<void> {
+  switch (conv.step) {
+    case ConversationStep.PICK_BRANCH:
+      await repromptPickBranch(conv);
+      return;
+    case ConversationStep.PICK_SERVICE_CATEGORY:
+      await repromptPickServiceCategory(conv);
+      return;
+    case ConversationStep.PICK_SERVICE:
+      await repromptPickService(conv);
+      return;
+    case ConversationStep.PICK_STAFF:
+      await repromptPickStaff(conv);
+      return;
+    case ConversationStep.PICK_DATE:
+      await repromptPickDate(conv);
+      return;
+    case ConversationStep.PICK_SLOT:
+      await repromptPickSlot(conv);
+      return;
+    case ConversationStep.CONFIRM_BOOKING:
+      await repromptConfirmBooking(conv);
+      return;
+    default:
+      await reply(conv, "Great — pick up right where you left off 👍");
+  }
 }
 
 /** Step back one level in the booking funnel and re-show the previous prompt. */
