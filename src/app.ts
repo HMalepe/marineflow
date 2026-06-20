@@ -136,9 +136,18 @@ export async function buildApp() {
         : isPayfastConfigured()
           ? 'configured'
           : 'unconfigured';
+    // Surface the origin PayFast/Twilio webhooks will be sent to, so the
+    // configured domain can be confirmed at a glance. A base URL is not secret.
+    let publicBaseUrl = env.PUBLIC_BASE_URL;
+    try {
+      publicBaseUrl = new URL(env.PUBLIC_BASE_URL).origin;
+    } catch {
+      /* keep raw value if unparseable */
+    }
     return reply.code(ok ? 200 : 503).send({
       status: ok ? 'ok' : 'degraded',
       checks: { database: db, redis: cache, inngest, payfast },
+      publicBaseUrl,
     });
   });
 
