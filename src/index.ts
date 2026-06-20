@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { buildApp } from './app.js';
 import { env } from './config.js';
 import { syncSuperAdminPasswordFromEnv } from './lib/syncSuperAdmin.js';
+import { selfRegisterInngest } from './lib/inngest/selfRegister.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -167,3 +168,7 @@ try {
 const app = await buildApp();
 
 await app.listen({ port: env.PORT, host: '0.0.0.0' });
+
+// Self-sync our function list with Inngest Cloud now that we're listening, so
+// new/changed functions never sit stale waiting for a manual resync.
+await selfRegisterInngest(env.PORT);

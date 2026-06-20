@@ -369,6 +369,11 @@ export async function buildApp() {
     handler: serve({
       client: inngest,
       functions: [sendOutboundMessage, sendOutboundMessageFailure, appointmentReminder, refreshMaterializedViews, executeScheduledCampaign, checkScheduledCampaigns, conversationInactivity, bookingRatingPrompt, winbackCampaign, birthdayCampaign, appointmentRating, googleReviewRequest, appointmentAftercare, reactivationCampaign],
+      // The boot-time self-resync (see selfRegisterInngest) hits this route on the
+      // loopback interface, so the host inferred from request headers would be
+      // 127.0.0.1 — a URL Inngest Cloud can't call back. Pin the public origin so
+      // registration always points at the real domain, however the PUT arrives.
+      ...(inngestIsDev ? {} : { serveHost: new URL(env.PUBLIC_BASE_URL).origin, servePath: '/api/inngest' }),
     }),
   });
 
