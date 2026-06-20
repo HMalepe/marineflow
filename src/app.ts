@@ -20,7 +20,7 @@ import { handleInboundWhatsApp } from './services/bot.js';
 import { recordWebhookEvent } from './lib/webhooks.js';
 import { handlePayfastAppointmentWebhook } from './services/payments.js';
 import { handlePayfastSubscriptionWebhook } from './services/subscription.js';
-import { payfastAdapter } from './lib/integrations/payments/payfast.js';
+import { payfastAdapter, isPayfastConfigured } from './lib/integrations/payments/payfast.js';
 import { handleFlowDataExchange } from './lib/whatsappFlows/dataExchange.js';
 import { decryptFlowRequest, encryptFlowResponse } from './lib/whatsappFlows/crypto.js';
 import { serve } from 'inngest/fastify';
@@ -127,9 +127,18 @@ export async function buildApp() {
         : inngestIsDev
           ? 'dev'
           : 'cloud';
+    // PayFast's ITN webhook is fired from PayFast's own servers to PUBLIC_BASE_URL —
+    // if that still points at localhost in production, payment confirmations
+    // (and the loyalty/rating/aftercare side effects gated on them) silently never fire.
+    const payfast =
+      env.NODE_ENV === 'production' && env.PUBLIC_BASE_URL.includes('localhost')
+        ? 'public_url_misconfigured'
+        : isPayfastConfigured()
+          ? 'configured'
+          : 'unconfigured';
     return reply.code(ok ? 200 : 503).send({
       status: ok ? 'ok' : 'degraded',
-      checks: { database: db, redis: cache, inngest },
+      checks: { database: db, redis: cache, inngest, payfast },
     });
   });
 
