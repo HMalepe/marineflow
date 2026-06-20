@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { requireAuth, requireRole } from './auth.js';
 import { validateStrongPassword } from '../lib/salonPhoneLookup.js';
 import { withUserTenant } from '../lib/db/withUserTenant.js';
-import { getTenantDb } from '../lib/db/tenantSession.js';
+import { getTenantDb, type PrismaTx } from '../lib/db/tenantSession.js';
 import { earnStampForCompletedVisit } from '../services/loyalty.js';
 import { refundPaymentStaff } from '../services/payments.js';
 import { fuzzySearchCustomers } from '../services/customerSearch.js';
@@ -46,7 +46,7 @@ import {
 import { exportCustomerData, eraseCustomerData } from '../services/compliance.js';
 import { generateWebhookSecret } from '../services/webhookDelivery.js';
 import { embedFaqItem } from '../services/knowledge.js';
-import type { FaqStatus } from '@prisma/client';
+import type { FaqStatus, Service } from '@prisma/client';
 import {
   setMarketingConsent,
   parseMarketingConsentStatus,
@@ -169,6 +169,60 @@ function mapCampaignBusinessError(err: unknown, reply: FastifyReply): { error: s
     return { error: 'campaign_error', message: err.message };
   }
   return null;
+}
+
+/**
+ * Side effects that must fire whenever an appointment transitions to COMPLETED,
+ * regardless of which route did it (single complete, bulk complete, …) — loyalty
+ * stamp, analytics, the aftercare/rating WhatsApp event, and the referral prompt.
+ */
+async function applyAppointmentCompletedEffects(
+  db: PrismaTx,
+  appt: {
+    id: string;
+    salonId: string;
+    customerId: string;
+    staffId: string;
+    service: Service;
+    customer: { waId: string };
+  },
+): Promise<void> {
+  await earnStampForCompletedVisit({
+    salonId: appt.salonId,
+    customerId: appt.customerId,
+    appointmentId: appt.id,
+    service: appt.service,
+  });
+
+  await db.analyticsEvent.create({
+    data: {
+      salonId: appt.salonId,
+      customerId: appt.customerId,
+      appointmentId: appt.id,
+      staffId: appt.staffId,
+      type: 'appointment_completed_dashboard',
+    },
+  });
+
+  // Fire post-appointment rating/aftercare event (best-effort — don't fail the complete action)
+  await inngest.send({
+    name: 'whatsapp/appointment.completed',
+    data: {
+      appointmentId: appt.id,
+      salonId: appt.salonId,
+      customerId: appt.customerId,
+      customerWaId: appt.customer.waId,
+    },
+  }).catch(() => {});
+
+  const completedCount = await db.appointment.count({
+    where: { salonId: appt.salonId, customerId: appt.customerId, status: 'COMPLETED' },
+  });
+  void maybeSendReferralPrompt({
+    salonId: appt.salonId,
+    customerId: appt.customerId,
+    completedVisits: completedCount,
+  }).catch(() => {});
 }
 
 export async function dashboardApiRoutes(app: FastifyInstance) {
@@ -1037,22 +1091,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           data: { status: 'COMPLETED' },
         });
 
-        await earnStampForCompletedVisit({
-          salonId: appt.salonId,
-          customerId: appt.customerId,
-          appointmentId: appt.id,
-          service: appt.service,
-        });
-
-        await db.analyticsEvent.create({
-          data: {
-            salonId: appt.salonId,
-            customerId: appt.customerId,
-            appointmentId: appt.id,
-            staffId: appt.staffId,
-            type: 'appointment_completed_dashboard',
-          },
-        });
+        await applyAppointmentCompletedEffects(db, appt);
 
         await db.auditLog.create({
           data: {
@@ -1063,26 +1102,6 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: appt.id,
           },
         });
-
-        // Fire post-appointment rating event (best-effort — don't fail the complete action)
-        await inngest.send({
-          name: 'whatsapp/appointment.completed',
-          data: {
-            appointmentId: appt.id,
-            salonId: appt.salonId,
-            customerId: appt.customerId,
-            customerWaId: appt.customer.waId,
-          },
-        }).catch(() => {});
-
-        const completedCount = await db.appointment.count({
-          where: { salonId: appt.salonId, customerId: appt.customerId, status: 'COMPLETED' },
-        });
-        void maybeSendReferralPrompt({
-          salonId: appt.salonId,
-          customerId: appt.customerId,
-          completedVisits: completedCount,
-        }).catch(() => {});
 
         notifyAppointmentChangedLater(appt.salonId, appt.id, {
           status: 'COMPLETED',
@@ -4487,25 +4506,44 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         const db = getTenantDb();
         const now = new Date();
-        const result = await db.appointment.updateMany({
+        const eligible = await db.appointment.findMany({
           where: {
             id: { in: ids },
             salonId: user.salonId,
             status: { in: ['CONFIRMED', 'CONFIRMED_PAID'] },
             start: { lte: now },
           },
+          include: { service: true, customer: { select: { waId: true } } },
+        });
+        if (eligible.length === 0) {
+          return { completed: 0, skipped: ids.length };
+        }
+
+        await db.appointment.updateMany({
+          where: { id: { in: eligible.map((a) => a.id) } },
           data: { status: 'COMPLETED' },
         });
 
-        if (result.count > 0) {
-          notifyAppointmentChangedLater(user.salonId, ids.join(','), {
-            status: 'COMPLETED',
-            count: result.count,
-            source: 'dashboard_bulk',
+        for (const appt of eligible) {
+          await applyAppointmentCompletedEffects(db, appt);
+          await db.auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'appointment_complete',
+              entity: 'Appointment',
+              entityId: appt.id,
+            },
           });
         }
 
-        return { completed: result.count, skipped: ids.length - result.count };
+        notifyAppointmentChangedLater(user.salonId, ids.join(','), {
+          status: 'COMPLETED',
+          count: eligible.length,
+          source: 'dashboard_bulk',
+        });
+
+        return { completed: eligible.length, skipped: ids.length - eligible.length };
       });
     },
   );
