@@ -115,9 +115,21 @@ export async function buildApp() {
     const db = await prisma.$queryRaw`SELECT 1`.then(() => true).catch(() => false);
     const cache = await redisPing();
     const ok = db && cache;
+    // Inngest status is informational only — a misconfiguration must not flip the
+    // health probe to 503 (that would make Railway kill the container). In production
+    // the signing key is required or /api/inngest (and thus all delayed jobs like the
+    // booking-rating prompt) will silently never run.
+    const inngest =
+      env.NODE_ENV === 'production'
+        ? env.INNGEST_SIGNING_KEY
+          ? 'cloud'
+          : 'unconfigured'
+        : inngestIsDev
+          ? 'dev'
+          : 'cloud';
     return reply.code(ok ? 200 : 503).send({
       status: ok ? 'ok' : 'degraded',
-      checks: { database: db, redis: cache },
+      checks: { database: db, redis: cache, inngest },
     });
   });
 
