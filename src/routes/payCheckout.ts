@@ -1,5 +1,25 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../lib/prisma.js';
+import { env } from '../config.js';
+import { confirmAppointmentPaid } from '../services/payments.js';
+
+function paymentStatusPage(title: string, body: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      body { font-family: system-ui, sans-serif; padding: 2rem; background: #0f1419; color: #e7e9ea; text-align: center; }
+      .card { max-width: 28rem; margin: 3rem auto; padding: 2rem; border-radius: 12px; background: #1a2332; }
+    </style>
+  </head>
+  <body>
+    <div class="card">${body}</div>
+  </body>
+</html>`;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -80,5 +100,41 @@ export async function payCheckoutRoutes(app: FastifyInstance): Promise<void> {
 </html>`;
 
     return reply.type('text/html').send(html);
+  });
+
+  // PayFast redirects the customer's browser here after a successful payment.
+  // The real confirmation normally comes from the server-to-server ITN webhook
+  // (see services/payments.ts handlePayfastAppointmentWebhook) — this page is
+  // just a landing screen. The one exception: in sandbox mode, PayFast's test
+  // ITN delivery is unreliable, so as a fallback we treat this redirect itself
+  // as proof of payment and run the same confirm logic. Never done in live
+  // mode, since this URL carries no signature and could otherwise be replayed.
+  app.get('/pay/success', async (request, reply) => {
+    const { ref } = request.query as { ref?: string };
+    const appointmentId = ref?.startsWith('appt_') ? ref.replace('appt_', '') : null;
+
+    if (appointmentId && env.PAYFAST_IS_TEST) {
+      try {
+        await confirmAppointmentPaid(appointmentId, null);
+      } catch {
+        /* webhook may have already confirmed it, or it'll retry — never block this page */
+      }
+    }
+
+    return reply.type('text/html').send(
+      paymentStatusPage(
+        'Payment received',
+        '<h1>✅ Payment received!</h1><p>Your booking is confirmed. You can close this page and head back to WhatsApp.</p>',
+      ),
+    );
+  });
+
+  app.get('/pay/cancel', async (_request, reply) => {
+    return reply.type('text/html').send(
+      paymentStatusPage(
+        'Payment cancelled',
+        '<h1>Payment cancelled</h1><p>No charge was made. Reply on WhatsApp to try again or choose a different payment method.</p>',
+      ),
+    );
   });
 }

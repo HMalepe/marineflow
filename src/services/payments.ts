@@ -110,33 +110,16 @@ export async function createPaymentCheckoutSession(input: {
     return null;
   }
 }
-export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
-  const verified = payfastAdapter.verifyWebhook(body, {});
-  if (!verified.valid) return;
-
-  const reference = verified.reference;
-  if (!reference?.startsWith('appt_')) return;
-  const appointmentId = reference.replace('appt_', '');
-
-  if (verified.status !== 'success') {
-    const payment = await prisma.payment.findFirst({
-      where: { appointmentId },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (payment) {
-      await prisma.payment.updateMany({
-        where: { id: payment.id, status: 'PENDING' },
-        data: { status: 'FAILED', failureReason: verified.status ?? 'failed' },
-      });
-      emitPlatformEvent({
-        type: 'PAYMENT_FAILED',
-        salonId: payment.salonId,
-        metadata: { appointmentId, reference, status: verified.status },
-      });
-    }
-    return;
-  }
-
+/**
+ * Marks the appointment paid, sends the WhatsApp confirmation, and schedules the
+ * rating prompt — shared by the verified ITN webhook and (in sandbox only) the
+ * /pay/success return-page fallback, since PayFast's sandbox ITN delivery to a
+ * test environment is unreliable while the browser redirect always fires.
+ */
+export async function confirmAppointmentPaid(
+  appointmentId: string,
+  transactionId: string | null,
+): Promise<boolean> {
   const ratingSchedule = await prisma.$transaction(async (tx) => {
     const appt = await tx.appointment.findUnique({
       where: { id: appointmentId },
@@ -152,7 +135,7 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       where: { appointmentId, status: 'PENDING' },
       data: {
         status: 'SUCCEEDED',
-        payfastPaymentId: verified.transactionId ?? null,
+        payfastPaymentId: transactionId,
       },
     });
 
@@ -244,7 +227,7 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     emitPlatformEvent({
       type: 'PAYMENT_SUCCEEDED',
       salonId: paidAppt.salonId,
-      metadata: { appointmentId: paidAppt.id, reference },
+      metadata: { appointmentId: paidAppt.id, reference: appointmentPaymentReference(appointmentId) },
     });
   }
 
@@ -265,6 +248,38 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       salon: confirmed.salon,
     }).catch(() => undefined);
   }
+
+  return Boolean(ratingSchedule || paidAppt);
+}
+
+export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
+  const verified = payfastAdapter.verifyWebhook(body, {});
+  if (!verified.valid) return;
+
+  const reference = verified.reference;
+  if (!reference?.startsWith('appt_')) return;
+  const appointmentId = reference.replace('appt_', '');
+
+  if (verified.status !== 'success') {
+    const payment = await prisma.payment.findFirst({
+      where: { appointmentId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (payment) {
+      await prisma.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'FAILED', failureReason: verified.status ?? 'failed' },
+      });
+      emitPlatformEvent({
+        type: 'PAYMENT_FAILED',
+        salonId: payment.salonId,
+        metadata: { appointmentId, reference, status: verified.status },
+      });
+    }
+    return;
+  }
+
+  await confirmAppointmentPaid(appointmentId, verified.transactionId ?? null);
 }
 
 export async function refundPayfastPayment(input: {
