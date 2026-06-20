@@ -373,7 +373,13 @@ export async function buildApp() {
       // loopback interface, so the host inferred from request headers would be
       // 127.0.0.1 — a URL Inngest Cloud can't call back. Pin the public origin so
       // registration always points at the real domain, however the PUT arrives.
-      ...(inngestIsDev ? {} : { serveHost: new URL(env.PUBLIC_BASE_URL).origin, servePath: '/api/inngest' }),
+      // NB: the option is `serveOrigin` (full origin, e.g. https://host), NOT
+      // `serveHost` — an unknown key is silently ignored and localhost leaks
+      // through. Only set it when PUBLIC_BASE_URL is a real (non-localhost) origin,
+      // since pinning localhost here would make Inngest reject every sync.
+      ...(!inngestIsDev && !env.PUBLIC_BASE_URL.includes('localhost')
+        ? { serveOrigin: new URL(env.PUBLIC_BASE_URL).origin, servePath: '/api/inngest' }
+        : {}),
     }),
   });
 
