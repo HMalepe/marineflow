@@ -12,8 +12,14 @@ import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.
 import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
 import { MessageDirection } from '@prisma/client';
 import type { Service } from '@prisma/client';
+import { DateTime } from 'luxon';
 
 const PAYFAST_NOTIFY_PATH = '/webhooks/payfast/appointment';
+
+/** Strip WhatsApp markdown control characters from user-supplied names. */
+function sanitizeForMessage(s: string): string {
+  return s.replace(/[*_~`[\]]/g, '');
+}
 
 function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
@@ -170,7 +176,28 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       popiaRightsNotified: Boolean(convCtx.popiaRightsNotified),
     });
 
-    let confirmMsg = `✅ *Payment received!*\n\nYour booking is paid and confirmed. See you at ${salonName}! 💈`;
+    const zone = appt.salon.timezone;
+    const startDt = DateTime.fromJSDate(appt.start).setZone(zone);
+    const endDt = DateTime.fromJSDate(appt.end).setZone(zone);
+    const firstName = appt.customer.firstName?.trim();
+    const ref = appt.id.slice(0, 8).toUpperCase();
+
+    let confirmMsg = [
+      firstName ? `🎉 *You're all set, ${sanitizeForMessage(firstName)}!*` : `🎉 *You're all set!*`,
+      '',
+      `Thank you — your payment came through and your spot is officially reserved. 💈`,
+      '',
+      `📋 *${sanitizeForMessage(appt.service.name)}*`,
+      `👤 with ${sanitizeForMessage(appt.staff.name)}`,
+      `📅 ${startDt.toFormat('cccc, d MMMM yyyy')}`,
+      `🕐 ${startDt.toFormat('HH:mm')} – ${endDt.toFormat('HH:mm')}`,
+      '',
+      `🔖 Ref: *${ref}*`,
+      '',
+      `Plans change — we get it. To reschedule or cancel, just reply *MENU* and tap *My Bookings*. A heads-up at least 24 hours ahead lets us offer your slot to someone else. 🙏`,
+      '',
+      `We can't wait to see you at ${sanitizeForMessage(salonName)}! ✨`,
+    ].join('\n');
     if (includePopiaHint) {
       confirmMsg += `\n\n${buildPopiaRightsHint()}`;
     }
