@@ -24,7 +24,9 @@ SELECT
   COUNT(DISTINCT i."customerId") AS unique_customers,
   COUNT(i.id) AS invoice_count
 FROM "Invoice" i
-WHERE i.status = 'PAID'
+WHERE EXISTS (
+  SELECT 1 FROM "Payment" p WHERE p."invoiceId" = i.id AND p.status = 'SUCCEEDED'
+)
 GROUP BY i."salonId", DATE_TRUNC('month', i."createdAt");
 
 CREATE UNIQUE INDEX IF NOT EXISTS mv_revenue_summary_salon_month

@@ -16,7 +16,8 @@ describe('dashboard-nav', () => {
   it('puts conversations in daily operations near the top', () => {
     const daily = SALON_NAV_GROUPS.find((g) => g.title === 'Daily operations');
     expect(daily?.items[0]?.href).toBe('/appointments');
-    expect(daily?.items[1]?.href).toBe('/conversations');
+    expect(daily?.items[1]?.href).toBe('/pulse');
+    expect(daily?.items[2]?.href).toBe('/conversations');
   });
 
   it('hides billing for non-owners but keeps settings for managers and stylists', () => {

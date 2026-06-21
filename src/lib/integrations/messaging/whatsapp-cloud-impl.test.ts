@@ -137,10 +137,10 @@ describe('buildCloudInteractivePayload', () => {
     expect(inner.header).toBeUndefined();
     expect(inner.footer).toEqual({ text: interactive.footer });
     expect(inner.action).toMatchObject({
-      button: 'Main menu',
+      button: 'View options',
       sections: [
         expect.objectContaining({
-          title: 'Choose section',
+          title: 'How can we help you?',
           rows: expect.arrayContaining([expect.objectContaining({ id: '1', title: 'Book an appointment' })]),
         }),
       ],
