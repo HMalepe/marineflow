@@ -27,22 +27,21 @@ export async function clearToken(): Promise<void> {
 }
 
 import { getServerApiBaseUrl } from './api-config';
+import { isJwtExpired, readJwtPayload } from './jwt-payload';
 
 export async function getUser(): Promise<{ sub: string; email: string; name: string; businessName: string; role: string; salonId: string; phone?: string } | null> {
   const token = await getToken();
   if (!token) return null;
 
   // Quick local expiry check to avoid a network call on clearly-expired tokens.
-  // We do NOT trust the payload for auth decisions — the /me call below verifies
-  // the signature server-side.
-  try {
-    const raw = JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString());
-    if (raw.exp && raw.exp * 1000 < Date.now()) {
-      await clearToken();
-      return null;
-    }
-  } catch {
-    await clearToken();
+  // Do not clear cookies here — layouts/pages may only read cookies; middleware
+  // or Server Actions / Route Handlers clear stale sessions.
+  if (isJwtExpired(token)) {
+    return null;
+  }
+
+  const raw = readJwtPayload(token);
+  if (!raw) {
     return null;
   }
 
@@ -54,7 +53,6 @@ export async function getUser(): Promise<{ sub: string; email: string; name: str
       cache: 'no-store',
     });
     if (!res.ok) {
-      await clearToken();
       return null;
     }
     const { user, salon } = await res.json() as {
@@ -68,12 +66,7 @@ export async function getUser(): Promise<{ sub: string; email: string; name: str
       businessName: salon.displayName,
       role: user.role,
       salonId: user.salonId,
-      // phone not in /me response — read from raw JWT payload only for display
-      phone: (() => {
-        try {
-          return JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()).phone as string | undefined;
-        } catch { return undefined; }
-      })(),
+      phone: typeof raw.phone === 'string' ? raw.phone : undefined,
     };
   } catch {
     return null;

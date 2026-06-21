@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { DashboardErrorDetails } from '@/components/dashboard-error-details';
 
 export default function DashboardError({
   error,
@@ -10,11 +11,9 @@ export default function DashboardError({
   reset: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 space-y-4">
+    <div className="flex flex-col items-center justify-center py-20 space-y-4 px-4">
       <h2 className="text-xl font-bold">Something went wrong</h2>
-      <p className="text-sm text-muted-foreground max-w-md text-center">
-        {error.message || 'An unexpected error occurred. Please try again.'}
-      </p>
+      <DashboardErrorDetails error={error} />
       <Button onClick={reset} variant="outline">
         Try again
       </Button>
