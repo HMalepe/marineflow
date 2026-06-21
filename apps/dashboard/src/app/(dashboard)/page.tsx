@@ -120,12 +120,14 @@ async function SuperAdminView({ token }: { token: string | null }) {
   }
 
   const hasAlerts =
-    alerts !== null &&
-    (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0);
+    alerts != null &&
+    ((alerts.pastDue?.length ?? 0) > 0 || (alerts.trialExpiring?.length ?? 0) > 0);
 
   return (
     <div className="space-y-6">
-      {systemHealth && <SystemHealthBar data={systemHealth} />}
+      {systemHealth?.postgres?.status && systemHealth.redis?.status && systemHealth.twilio?.status && (
+        <SystemHealthBar data={systemHealth} />
+      )}
 
       <div className="flex items-start justify-between">
         <div>
@@ -255,10 +257,12 @@ async function AppointmentView({ token }: { token: string | null }) {
       apiFetch<OverviewKpiData>('/tenant/overview-kpis', {}, token).catch(() => null),
       apiFetch<SetupHealthData>('/tenant/setup-health', {}, token).catch(() => null),
     ]);
-    appointments = apptData.appointments;
+    appointments = apptData.appointments ?? [];
     overviewKpis = kpiData;
     setupHealth = healthData;
-    onboardingDone = !!(settingsData.salon.onboardingCompletedAt || settingsData.salon.whatsappPhoneId);
+    onboardingDone = !!(
+      settingsData.salon?.onboardingCompletedAt || settingsData.salon?.whatsappPhoneId
+    );
   } catch (e) {
     error = e instanceof Error ? e.message : 'Failed to load';
   }
@@ -269,7 +273,7 @@ async function AppointmentView({ token }: { token: string | null }) {
     <div className="space-y-6 lg:space-y-8">
       {token && <SalonLiveRouterRefresh token={token} />}
 
-      {setupHealth && setupHealth.checks.length > 0 && (
+      {setupHealth && Array.isArray(setupHealth.checks) && setupHealth.checks.length > 0 && (
         <SetupHealthScore data={setupHealth} />
       )}
 
@@ -294,7 +298,9 @@ async function AppointmentView({ token }: { token: string | null }) {
       {overviewKpis && (
         <>
           <KPIStrip data={overviewKpis} />
-          <MiniBarChart data={overviewKpis.revenueLast7Days} />
+          {Array.isArray(overviewKpis.revenueLast7Days) && overviewKpis.revenueLast7Days.length > 0 && (
+            <MiniBarChart data={overviewKpis.revenueLast7Days} />
+          )}
         </>
       )}
 
@@ -378,7 +384,7 @@ async function AppointmentView({ token }: { token: string | null }) {
                       {appt.customer.displayName ?? appt.customer.waId}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {appt.service.name} · {appt.staff.name}
+                      {appt.service?.name ?? 'Service'} · {appt.staff?.name ?? 'Staff'}
                     </p>
                   </div>
                   <Badge variant={appt.status === 'CONFIRMED' || appt.status === 'CONFIRMED_PAID' ? 'default' : 'secondary'} className="shrink-0 text-[10px]">
