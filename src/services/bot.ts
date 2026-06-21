@@ -695,34 +695,74 @@ async function startMarketingConsentGate(
   );
 }
 
-/** Shared "Confirm booking?" body — leads with a first-name compliment so it
- *  doesn't read like a generic system message. Used by every path that lands
- *  the customer on CONFIRM_BOOKING (manual time, flat-slot pick, numbered slot pick). */
+/** Shared booking summary + confirm prompt. Body is also used as the Twilio
+ *  interactive card text (plain `body` is not shown when buttons are sent). */
 function buildConfirmBookingBody(
   conv: Conversation & { customer: Customer; salon: Salon },
   serviceName: string,
   staffName: string,
   dt: DateTime,
   partySize?: number,
+  options?: { priceCents?: number; endDt?: DateTime },
 ): string {
   const firstName = conv.customer.firstName?.trim();
-  const opener = firstName ? `${pickCompliment()} *${sanitize(firstName)}*, here's the booking:` : `${pickCompliment()} Here's the booking:`;
+  const opener = firstName
+    ? `${pickCompliment()} *${sanitize(firstName)}*, please check your booking:`
+    : `${pickCompliment()} Please check your booking:`;
+  const endLine = options?.endDt
+    ? `🕐 ${dt.toFormat('HH:mm')} – ${options.endDt.toFormat('HH:mm')}`
+    : `🕐 ${dt.toFormat('HH:mm')}`;
+  const priceLine = options?.priceCents != null ? `💰 ${fmtMoney(options.priceCents)}` : null;
   const confirmFooter = salonRequiresPostConfirmPayment(conv.salon)
-    ? 'Reply YES to confirm and complete payment, or BACK to choose another time.'
-    : 'Reply YES to confirm, or BACK to choose another time.';
+    ? "Tap *Yes, confirm* below to book — we'll send your PayFast payment link next."
+    : 'Tap *Yes, confirm* below to complete your booking.';
   const groupLine = partySize && partySize > 1 ? `👥 Party size: ${partySize}` : null;
-  const groupHint = 'Booking for a group? Reply the number of people instead of YES (e.g. 3).';
+  const groupHint = !groupLine ? '_Booking for a group? Reply the number of people instead of YES (e.g. 3)._' : null;
   return [
     opener,
-    `${sanitize(serviceName)} with ${sanitize(staffName)}`,
-    dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+    '',
+    `📋 *${sanitize(serviceName)}*`,
+    `👤 with ${sanitize(staffName)}`,
+    `📅 ${dt.toFormat('cccc, d MMMM yyyy')}`,
+    endLine,
+    ...(priceLine ? [priceLine] : []),
     ...(groupLine ? [groupLine] : []),
     '',
     confirmFooter,
-    groupLine ? '' : groupHint,
+    ...(groupHint ? ['', groupHint] : []),
   ]
-    .filter((line) => line !== null && line !== undefined)
+    .filter((line) => line !== '')
     .join('\n');
+}
+
+async function buildConfirmBookingBodyForService(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  service: { name: string; priceCents: number; durationMin: number; bufferMin: number },
+  staff: { name: string; breakMin: number },
+  slotStart: Date,
+  partySize?: number,
+): Promise<string> {
+  const dt = DateTime.fromJSDate(slotStart).setZone(conv.salon.timezone);
+  const end = await computeAppointmentEnd({
+    start: slotStart,
+    serviceDurationMin: service.durationMin,
+    serviceBufferMin: service.bufferMin,
+    staffBreakMin: staff.breakMin,
+    addonServiceIds: (ctx(conv).selectedAddonIds as string[] | undefined) ?? [],
+    salonId: conv.salonId,
+  });
+  const endDt = DateTime.fromJSDate(end).setZone(conv.salon.timezone);
+  return buildConfirmBookingBody(conv, service.name, staff.name, dt, partySize, {
+    priceCents: service.priceCents,
+    endDt,
+  });
+}
+
+async function sendConfirmBookingPrompt(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  confirmBody: string,
+): Promise<void> {
+  await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon, confirmBody));
 }
 
 function shouldPromptMarketingConsentBeforeMenu(
@@ -2258,9 +2298,8 @@ async function repromptConfirmBooking(conv: Conversation & { customer: Customer;
   }
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
   const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
-  const dt = DateTime.fromISO(slotIso).setZone(conv.salon.timezone);
-  const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
-  await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+  const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, new Date(slotIso));
+  await sendConfirmBookingPrompt(conv, confirmBody);
 }
 
 async function repromptQuickPickSlot(conv: Conversation & { customer: Customer; salon: Salon }) {
@@ -4121,8 +4160,12 @@ async function handlePickDate(
       data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
     }).catch(() => {});
     const dt = DateTime.fromJSDate(match.start).setZone(conv.salon.timezone);
-    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
-    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+    const endDt = DateTime.fromJSDate(match.end).setZone(conv.salon.timezone);
+    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt, undefined, {
+      priceCents: service.priceCents,
+      endDt,
+    });
+    await sendConfirmBookingPrompt(conv, confirmBody);
     return true;
   };
 
@@ -4140,9 +4183,8 @@ async function handlePickDate(
       void getTenantDb().analyticsEvent.create({
         data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
       }).catch(() => {});
-      const dt = DateTime.fromISO(picked.startIso).setZone(conv.salon.timezone);
-      const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
-      await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+      const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, new Date(picked.startIso));
+      await sendConfirmBookingPrompt(conv, confirmBody);
       return;
     }
     if (isDateMenuNumber(text, flatSlotOptions.length + 1) === flatSlotOptions.length + 1) {
@@ -4278,14 +4320,8 @@ async function handlePickSlot(
       ConversationStep.CONFIRM_BOOKING,
     );
     const dt = DateTime.fromISO(quickPick.slotStartIso).setZone(conv.salon.timezone);
-    const confirmBody = [
-      `Perfect — let's lock this in:`,
-      `${sanitize(service.name)} with ${sanitize(staff.name)}`,
-      dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-      '',
-      `Reply YES to confirm and continue to payment, or BACK to choose another time.`,
-    ].join('\n');
-    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+    const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, dt.toJSDate());
+    await sendConfirmBookingPrompt(conv, confirmBody);
     return;
   }
 
@@ -4348,9 +4384,8 @@ async function handlePickSlot(
         { slotStartIso: slot.start.toISOString(), quickPickOptions: undefined },
         ConversationStep.CONFIRM_BOOKING,
       );
-      const dt = DateTime.fromJSDate(slot.start).setZone(conv.salon.timezone);
-      const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
-      await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+      const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, slot.start);
+      await sendConfirmBookingPrompt(conv, confirmBody);
       return;
     }
     const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
@@ -4456,26 +4491,29 @@ async function handleConfirm(
     return;
   }
 
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+
   // Group booking: a bare number 2–20 sets/updates the party size instead of
   // confirming — re-show the confirmation with the updated headcount.
   const partySizeAttempt = /^\d{1,2}$/.test(trimmed) ? parseInt(trimmed, 10) : NaN;
   if (Number.isFinite(partySizeAttempt) && partySizeAttempt >= 2 && partySizeAttempt <= 20) {
     await saveCtx(conv.id, { partySize: partySizeAttempt });
-    const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
-    const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
-    const dt = DateTime.fromISO(slotIso).setZone(conv.salon.timezone);
-    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt, partySizeAttempt);
-    await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+    const confirmBody = await buildConfirmBookingBodyForService(
+      conv,
+      service,
+      staff,
+      new Date(slotIso),
+      partySizeAttempt,
+    );
+    await sendConfirmBookingPrompt(conv, confirmBody);
     return;
   }
 
   // EC-03: accept natural affirmations, not just exact "yes"/"y"
   if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(trimmed)) {
-    await replyMaybeInteractive(
-      conv,
-      'No problem — reply *YES* to confirm this booking, *BACK* to pick a different time, or the number of people for a group booking (e.g. *3*).',
-      buildConfirmBookingInteractive(conv.salon),
-    );
+    const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, new Date(slotIso));
+    await sendConfirmBookingPrompt(conv, confirmBody);
     return;
   }
 
@@ -4487,8 +4525,6 @@ async function handleConfirm(
     return;
   }
 
-  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
-  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
   const start = new Date(slotIso);
   const addonIds = (c.selectedAddonIds as string[] | undefined) ?? [];
   const end = await computeAppointmentEnd({
