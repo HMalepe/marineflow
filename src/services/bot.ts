@@ -1390,9 +1390,10 @@ async function processInboundWhatsApp(
     return;
   }
 
-  // Tapped "Continue" on the inactivity reminder — just dismiss it, no state change.
+  // Tapped "Continue" on the inactivity reminder — re-show the step they were on.
   if (isContinueCommand(text)) {
     await reply(conv, "Great — pick up right where you left off 👍");
+    await repromptCurrentStep(conv);
     return;
   }
 
@@ -2108,6 +2109,14 @@ async function repromptPickStaff(conv: Conversation & { customer: Customer; salo
 }
 
 async function repromptPickDate(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const flatSlotOptions = c.flatSlotOptions as { startIso: string; localDateStr: string }[] | undefined;
+  const awaitingDateList = c.awaitingDateList as boolean | undefined;
+  if (flatSlotOptions?.length && !awaitingDateList) {
+    await repromptFlatSlotPicker(conv);
+    return;
+  }
+
   const dates = await suggestBookingDates(conv.salonId, 14);
   if (dates.length === 0) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
@@ -2162,6 +2171,185 @@ async function repromptPickSlot(conv: Conversation & { customer: Customer; salon
     ['Pick a time slot:', ...lines, extra, '', APPOINTMENT_SLOT_HINT, '', 'Reply BACK to choose a different date.'].join('\n'),
     buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon, header),
   );
+}
+
+/** Re-show the combined next-available date+time picker (after staff pick or Continue). */
+async function repromptFlatSlotPicker(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const serviceId = c.selectedServiceId as string | undefined;
+  const staffId = c.selectedStaffId as string | undefined;
+  if (!serviceId || !staffId) {
+    await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: undefined });
+    syncConvContext(conv, { flatSlotOptions: undefined, awaitingDateList: undefined });
+    const dates = await suggestBookingDates(conv.salonId, 14);
+    if (dates.length === 0) {
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyWithMenu(conv, 'No services are available to book right now.');
+      return;
+    }
+    const lines = formatDateMenuLines(dates.slice(0, 10));
+    const prefix = 'Pick a date (next available days):';
+    await replyMaybeInteractive(
+      conv,
+      [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
+      buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, bookingInteractiveBody(prefix)),
+    );
+    return;
+  }
+
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+  const { slots: flatSlots, tooLong, hasMore } = await getNextAvailableSlots({
+    salonId: conv.salonId,
+    service,
+    staff,
+  });
+  if (tooLong || flatSlots.length === 0) {
+    await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: undefined });
+    syncConvContext(conv, { flatSlotOptions: undefined, awaitingDateList: undefined });
+    const dates = await suggestBookingDates(conv.salonId, 14);
+    if (dates.length === 0) {
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      const phone = conv.salon.phoneDisplay?.trim();
+      const msg = phone
+        ? `We don't have any open slots in the next 2 weeks. 😔\n\nPlease call us on *${phone}* and we'll find a time that works for you!`
+        : `We don't have any open slots in the next 2 weeks. Please contact us directly to arrange a booking.`;
+      await replyWithMenu(conv, msg);
+      return;
+    }
+    const lines = formatDateMenuLines(dates.slice(0, 10));
+    const prefix = 'Pick a date (next available days):';
+    await replyMaybeInteractive(
+      conv,
+      [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
+      buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, bookingInteractiveBody(prefix)),
+    );
+    return;
+  }
+
+  await saveCtx(conv.id, {
+    flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
+    awaitingDateList: undefined,
+  });
+  syncConvContext(conv, {
+    flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
+    awaitingDateList: undefined,
+  });
+  const prefix = '⚡ Next available — pick a date & time:';
+  const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
+  await replyMaybeInteractive(
+    conv,
+    [prefix, ...lines, '', APPOINTMENT_DATE_HINT, '', 'Reply BACK to go back.'].join('\n'),
+    buildCombinedSlotPickerInteractive(flatSlots, conv.salon.timezone, conv.salon, {
+      hasMore,
+      header: bookingInteractiveBody(prefix),
+    }),
+  );
+}
+
+async function repromptConfirmBooking(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const c = ctx(conv);
+  const serviceId = c.selectedServiceId as string | undefined;
+  const staffId = c.selectedStaffId as string | undefined;
+  const slotIso = c.slotStartIso as string | undefined;
+  if (!serviceId || !staffId || !slotIso) {
+    await repromptPickSlot(conv);
+    return;
+  }
+  const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+  const dt = DateTime.fromISO(slotIso).setZone(conv.salon.timezone);
+  const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt);
+  await replyMaybeInteractive(conv, confirmBody, buildConfirmBookingInteractive(conv.salon));
+}
+
+async function repromptQuickPickSlot(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const quickOptions = ctx(conv).quickPickOptions as QuickPickOption[] | undefined;
+  if (!quickOptions?.length) {
+    await repromptPickSlot(conv);
+    return;
+  }
+  await replyMaybeInteractive(
+    conv,
+    [
+      'Here are times I can hold for you — reply with A, B, or C:',
+      ...quickOptions.map((o) => o.label),
+      '',
+      'Or reply BACK for the main menu.',
+    ].join('\n'),
+    buildQuickPickInteractive(quickOptions, conv.salon),
+  );
+}
+
+/** Re-show the prompt for whatever step the customer was on (e.g. after tapping Continue). */
+async function repromptCurrentStep(conv: Conversation & { customer: Customer; salon: Salon }): Promise<void> {
+  switch (conv.step) {
+    case ConversationStep.PICK_BRANCH:
+      await repromptPickBranch(conv);
+      return;
+    case ConversationStep.PICK_SERVICE_CATEGORY:
+      await repromptPickServiceCategory(conv);
+      return;
+    case ConversationStep.PICK_SERVICE:
+      await repromptPickService(conv);
+      return;
+    case ConversationStep.PICK_STAFF:
+      await repromptPickStaff(conv);
+      return;
+    case ConversationStep.PICK_DATE:
+      await repromptPickDate(conv);
+      return;
+    case ConversationStep.PICK_SLOT:
+      if ((ctx(conv).quickPickOptions as QuickPickOption[] | undefined)?.length) {
+        await repromptQuickPickSlot(conv);
+      } else {
+        await repromptPickSlot(conv);
+      }
+      return;
+    case ConversationStep.CONFIRM_BOOKING:
+      await repromptConfirmBooking(conv);
+      return;
+    case ConversationStep.COLLECT_FIRST_NAME:
+      await reply(conv, 'What is your *first name*? (letters only)\n\nReply BACK for main menu.');
+      return;
+    case ConversationStep.COLLECT_EMAIL:
+      await reply(
+        conv,
+        [
+          'What is your *email address*?',
+          '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
+          '',
+          'Reply BACK to go back.',
+        ].join('\n'),
+      );
+      return;
+    case ConversationStep.COLLECT_DATE_OF_BIRTH:
+      await reply(
+        conv,
+        [
+          'What is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
+          '',
+          '_We use your DOB for age-based pricing and birthday rewards. 🎂_',
+          '',
+          'Reply *SKIP* to skip · *BACK* for menu.',
+        ].join('\n'),
+      );
+      return;
+    case ConversationStep.BOOKING_POPIA_CONSENT:
+      await replyMaybeInteractive(
+        conv,
+        buildBookingPopiaConsentMessage(),
+        buildBookingPopiaInteractive(conv.salon),
+      );
+      return;
+    case ConversationStep.MENU:
+    case ConversationStep.IDLE:
+    case ConversationStep.GREETING:
+      await replyMenu(conv);
+      return;
+    default:
+      await replyMenu(conv);
+  }
 }
 
 /** Step back one level in the booking funnel and re-show the previous prompt. */
@@ -3825,6 +4013,17 @@ async function handlePickStaff(
 
   await saveCtx(
     conv.id,
+    {
+      selectedStaffId: staffId,
+      anyStaff: isAny,
+      staffOrderIds: undefined,
+      flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
+      awaitingDateList: undefined,
+    },
+    ConversationStep.PICK_DATE,
+  );
+  syncConvContext(
+    conv,
     {
       selectedStaffId: staffId,
       anyStaff: isAny,

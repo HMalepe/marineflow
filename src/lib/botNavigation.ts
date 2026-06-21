@@ -16,7 +16,7 @@ export function isBackToMainMenuCommand(text: string): boolean {
   return isMainMenuCommand(text) || isBackCommand(text);
 }
 
-/** "Continue" tap from the inactivity reminder — a no-op that just dismisses the nudge. */
+/** "Continue" tap from the inactivity reminder — re-show the current step's menu. */
 export function isContinueCommand(text: string): boolean {
   return /^continue$/i.test(text.trim());
 }
