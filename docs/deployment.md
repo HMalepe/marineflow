@@ -80,6 +80,7 @@
 4. Environment variables:
    - `NEXT_PUBLIC_API_URL` = `https://marineflow.co.za` (or your Railway API URL)
    - Optional: `API_UPSTREAM_URL` — same as above; used by Next.js rewrites to proxy API calls through the dashboard domain (helps salon owners on restrictive corporate WiFi)
+   - Optional (troubleshooting only): `NEXT_PUBLIC_DASHBOARD_DEBUG` = `true` — shows full server/client error details on screen instead of the generic production message. **Turn off after fixing** — visible to anyone who can open the dashboard.
 5. On Railway API, set `CORS_ORIGINS` to include `https://dashboard.marineflow.co.za` (auto-included if unset) and `DASHBOARD_URL=https://dashboard.marineflow.co.za`
 
 ## 5. Inngest (Cloud)

@@ -19,6 +19,12 @@ import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { BusinessCoachCard } from '@/components/BusinessCoachCard';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
+import {
+  isDashboardDebugEnabled,
+  isNextInternalNavigationError,
+  serializeDashboardError,
+} from '@/lib/dashboard-debug';
+import { DashboardDebugErrorView } from '@/components/dashboard-debug-error-view';
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -83,6 +89,23 @@ async function adminFetch<T>(path: string, token: string | null): Promise<T | nu
 // ---------------------------------------------------------------------------
 
 export default async function OverviewPage() {
+  if (isDashboardDebugEnabled()) {
+    try {
+      return await OverviewPageInner();
+    } catch (error) {
+      if (isNextInternalNavigationError(error)) throw error;
+      return (
+        <DashboardDebugErrorView
+          context="(dashboard)/page.tsx — Overview"
+          error={serializeDashboardError(error)}
+        />
+      );
+    }
+  }
+  return OverviewPageInner();
+}
+
+async function OverviewPageInner() {
   const [user, token] = await Promise.all([getUser(), getToken()]);
 
   if (user?.role === 'SUPER_ADMIN') {

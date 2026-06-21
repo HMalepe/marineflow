@@ -2,6 +2,12 @@ import { getToken, getUser } from '@/lib/auth';
 import { getImpersonationActive } from '@/app/(dashboard)/admin/actions';
 import { apiFetch } from '@/lib/api';
 import { API_MISCONFIGURED_MESSAGE, isApiMisconfiguredForProduction } from '@/lib/api-config';
+import {
+  getDashboardDebugEnvSnapshot,
+  isDashboardDebugEnabled,
+  isNextInternalNavigationError,
+  serializeDashboardError,
+} from '@/lib/dashboard-debug';
 import { redirect } from 'next/navigation';
 import { LogoutButton, LogoutIconButton } from './logout-button';
 import { MobileNav } from './mobile-nav';
@@ -10,6 +16,8 @@ import { DashboardSearch } from '@/components/dashboard-search';
 import { DashboardStickyHeader } from '@/components/dashboard-sticky-header';
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { DashboardDebugBanner } from '@/components/dashboard-debug-banner';
+import { DashboardDebugErrorView } from '@/components/dashboard-debug-error-view';
 
 function formatRole(role: string): string {
   return role
@@ -23,12 +31,39 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  if (isDashboardDebugEnabled()) {
+    try {
+      return await DashboardLayoutInner({ children });
+    } catch (error) {
+      if (isNextInternalNavigationError(error)) throw error;
+      return (
+        <DashboardDebugErrorView
+          context="(dashboard)/layout.tsx"
+          error={serializeDashboardError(error)}
+        />
+      );
+    }
+  }
+  return DashboardLayoutInner({ children });
+}
+
+async function DashboardLayoutInner({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   if (isApiMisconfiguredForProduction()) {
+    const env = isDashboardDebugEnabled() ? getDashboardDebugEnvSnapshot() : null;
     return (
       <div className="min-h-dvh flex items-center justify-center p-8">
-        <div className="max-w-md text-center space-y-3">
+        <div className="max-w-lg text-center space-y-3">
           <h1 className="text-xl font-bold">Dashboard configuration error</h1>
           <p className="text-sm text-muted-foreground">{API_MISCONFIGURED_MESSAGE}</p>
+          {env && (
+            <pre className="text-left text-xs font-mono rounded border p-3 bg-muted/50 overflow-x-auto">
+              {JSON.stringify(env, null, 2)}
+            </pre>
+          )}
         </div>
       </div>
     );
@@ -67,6 +102,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-dvh flex flex-col">
+      {isDashboardDebugEnabled() && <DashboardDebugBanner />}
       {impersonating && <ImpersonationBanner businessName={businessName} />}
       <div className="min-h-dvh flex flex-col md:flex-row flex-1">
       {/* Mobile header + bottom nav */}
