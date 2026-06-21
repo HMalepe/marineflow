@@ -2275,7 +2275,7 @@ async function repromptFlatSlotPicker(conv: Conversation & { customer: Customer;
     flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
     awaitingDateList: undefined,
   });
-  const prefix = '⚡ Next available — pick a date & time:';
+  const prefix = '⚡ *Soonest available times* — tap one below:';
   const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
     conv,
@@ -4072,7 +4072,7 @@ async function handlePickStaff(
     },
     ConversationStep.PICK_DATE,
   );
-  const prefix = '⚡ Next available — pick a date & time:';
+  const prefix = '⚡ *Soonest available times* — tap one below:';
   const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
     conv,
