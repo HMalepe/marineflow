@@ -8,7 +8,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { formatSaPhone, formatSaPhoneDisplay, isValidSaPhoneLocal, stripPhoneDigits } from '@/lib/phone';
+import { formatSaPhone, formatSaPhoneDisplay, isValidSaPhoneLocal, parseSaLocalPhoneInput } from '@/lib/phone';
 import {
   normalizePhoneForPasswordManager,
   parseLoginRedirectParams,
@@ -32,8 +32,7 @@ function validateStrongPassword(password: string): string | null {
 function e164ToLocalDisplay(e164: string): string {
   const normalized = normalizePhoneForPasswordManager(e164);
   if (!normalized) return '';
-  const digits = normalized.replace(/\D/g, '').slice(2);
-  return formatSaPhoneDisplay(digits);
+  return formatSaPhoneDisplay(normalized);
 }
 
 export function LoginForm() {
@@ -97,6 +96,10 @@ export function LoginForm() {
     setPhoneDisplay(formatSaPhoneDisplay(value));
   }
 
+  function handlePhoneInput(e: React.FormEvent<HTMLInputElement>) {
+    handlePhoneChange(e.currentTarget.value);
+  }
+
   function phoneE164(): string {
     return formatSaPhone(phoneDisplay);
   }
@@ -106,7 +109,7 @@ export function LoginForm() {
     setLoading(true);
     setError(null);
 
-    const localDigits = stripPhoneDigits(phoneDisplay);
+    const localDigits = parseSaLocalPhoneInput(phoneDisplay);
     if (!isValidSaPhoneLocal(localDigits)) {
       setError('Enter a valid 9-digit WhatsApp business number (e.g. 82 123 4567)');
       setLoading(false);
@@ -316,15 +319,16 @@ export function LoginForm() {
                       id="phone"
                       name="phone"
                       type="tel"
-                      inputMode="numeric"
+                      inputMode="tel"
                       value={phoneDisplay}
                       onChange={(e) => handlePhoneChange(e.target.value)}
+                      onInput={handlePhoneInput}
                       placeholder="82 123 4567"
                       required
-                      autoComplete="tel-national"
+                      autoComplete="tel"
                       className="rounded-l-none"
                       aria-describedby="phone-hint"
-                      maxLength={11}
+                      maxLength={12}
                       autoFocus
                     />
                   </div>

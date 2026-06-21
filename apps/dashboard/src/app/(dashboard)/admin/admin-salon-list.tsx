@@ -285,7 +285,7 @@ export function AdminSalonList({ token }: Props) {
       showToast('Name, email, and password (8+ chars) are required', 'error');
       return;
     }
-    if (addUserForm.phone && !isValidSaPhoneLocal(stripPhoneDigits(addUserForm.phone))) {
+    if (addUserForm.phone && !isValidSaPhoneLocal(addUserForm.phone)) {
       showToast('Enter a valid phone number', 'error');
       return;
     }
