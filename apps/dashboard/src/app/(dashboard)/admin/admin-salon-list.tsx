@@ -8,7 +8,7 @@ import {
   type TenantHealthRow,
   type TenantHealthStatus,
 } from '@/components/TenantHealthTable';
-import { formatSaPhone, isValidSaPhoneLocal, stripPhoneDigits, formatSaPhoneDisplay } from '@/lib/phone';
+import { formatSaPhone, isValidSaPhoneLocal, formatSaPhoneDisplay } from '@/lib/phone';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
