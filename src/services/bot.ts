@@ -378,7 +378,17 @@ async function resolveServicesForPicker(
   return { services: all, clearedStaleFilter: true };
 }
 
-const APPOINTMENT_DATE_HINT = 'Or type a date like *Saturday 15:00* or DD/MM/YYYY (e.g. 15/06/2026)';
+const APPOINTMENT_DATE_HINT =
+  '💬 Or type your date & time — e.g. *Saturday 15:00*, *25/06 14:30*, or *next Friday at 2pm*.';
+const APPOINTMENT_SLOT_HINT =
+  '💬 Or type a time — e.g. *14:00* or *2pm* — or a full date & time for another day.';
+const APPOINTMENT_DATE_MISPARSE =
+  "Hmm, I couldn't quite place that. Try e.g. *Saturday 15:00*, *25/06 14:30*, or *next Friday at 2pm*, or pick a number below:";
+
+/** WhatsApp list body — title plus type-to-book hint (shown above the tap button). */
+function bookingInteractiveBody(title: string, hint = APPOINTMENT_DATE_HINT): string {
+  return `${title}\n\n${hint}`;
+}
 
 function isoDateFromParts(y: number, m: number, d: number): string | null {
   const date = new Date(y, m - 1, d);
@@ -2113,7 +2123,7 @@ async function repromptPickDate(conv: Conversation & { customer: Customer; salon
   await replyMaybeInteractive(
     conv,
     [prefix, ...lines, '', APPOINTMENT_DATE_HINT, 'Reply BACK to go back.'].join('\n'),
-    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, bookingInteractiveBody(prefix)),
   );
 }
 
@@ -2146,10 +2156,10 @@ async function repromptPickSlot(conv: Conversation & { customer: Customer; salon
     slots.length > MAX_SLOT_OPTIONS
       ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
       : '';
-  const header = 'Pick a time slot:';
+  const header = bookingInteractiveBody('Pick a time slot:', APPOINTMENT_SLOT_HINT);
   await replyMaybeInteractive(
     conv,
-    [header, ...lines, extra, '', 'Reply BACK to choose a different date.'].join('\n'),
+    ['Pick a time slot:', ...lines, extra, '', APPOINTMENT_SLOT_HINT, '', 'Reply BACK to choose a different date.'].join('\n'),
     buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon, header),
   );
 }
@@ -3828,8 +3838,11 @@ async function handlePickStaff(
   const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
     conv,
-    [prefix, ...lines, '', 'Want a date further out? Just type it — e.g. *30/08 15:00* or *Saturday 15:00*.', '', 'Reply BACK to go back.'].join('\n'),
-    buildCombinedSlotPickerInteractive(flatSlots, conv.salon.timezone, conv.salon, { hasMore, header: prefix }),
+    [prefix, ...lines, '', APPOINTMENT_DATE_HINT, '', 'Reply BACK to go back.'].join('\n'),
+    buildCombinedSlotPickerInteractive(flatSlots, conv.salon.timezone, conv.salon, {
+      hasMore,
+      header: bookingInteractiveBody(prefix),
+    }),
   );
 }
 
@@ -3873,7 +3886,12 @@ async function handlePickDate(
     await replyMaybeInteractive(
       conv,
       [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
-      buildDatePickerInteractive(suggestions.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+      buildDatePickerInteractive(
+        suggestions.slice(0, 10),
+        conv.salon.timezone,
+        conv.salon,
+        bookingInteractiveBody(prefix),
+      ),
     );
   };
 
@@ -3941,7 +3959,7 @@ async function handlePickDate(
         availableDates: suggestions,
       });
       if (!parsed) {
-        await showDateList(`Hmm, I couldn't quite place that date. Try something like *30/08 15:00* or *Saturday 15:00*, pick a number above, or choose a date below:`);
+        await showDateList(APPOINTMENT_DATE_MISPARSE);
         return;
       }
       if (await tryConfirmExactTime(parsed)) return;
@@ -3971,7 +3989,7 @@ async function handlePickDate(
 
   if (!localDateStr) {
     const prefix = text.trim()
-      ? `Hmm, I couldn't quite place that date. Try something like *30/08 15:00* or *Saturday 15:00*, pick a number below, or type a date in DD/MM/YYYY format:`
+      ? APPOINTMENT_DATE_MISPARSE
       : `📅 When would you like to come in? Pick a date:`;
     await showDateList(prefix);
     return;
@@ -4004,10 +4022,22 @@ async function handlePickDate(
     slots.length > MAX_SLOT_OPTIONS
       ? `\n_${slots.length - MAX_SLOT_OPTIONS} more times available — reply BACK to try another date._`
       : '';
-  const header = `🗓 *${sanitize(service.name)}* · ${localDt.toFormat('cccc, d MMMM')}\nPick a time:`;
+  const header = bookingInteractiveBody(
+    `🗓 *${sanitize(service.name)}* · ${localDt.toFormat('cccc, d MMMM')}\nPick a time:`,
+    APPOINTMENT_SLOT_HINT,
+  );
   await replyMaybeInteractive(
     conv,
-    [header, ...lines, extra, '', 'Reply *BACK* to choose a different date.'].join('\n'),
+    [
+      `🗓 *${sanitize(service.name)}* · ${localDt.toFormat('cccc, d MMMM')}`,
+      'Pick a time:',
+      ...lines,
+      extra,
+      '',
+      APPOINTMENT_SLOT_HINT,
+      '',
+      'Reply *BACK* to choose a different date.',
+    ].join('\n'),
     buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon, header),
   );
 }
@@ -4125,11 +4155,23 @@ async function handlePickSlot(
       return;
     }
     const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
-    const invalidBody = [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+    const invalidBody = [
+      `Invalid choice. Pick a slot number (1–${maxVisible}):`,
+      ...slotLines,
+      '',
+      APPOINTMENT_SLOT_HINT,
+      '',
+      'Reply BACK to choose a different date.',
+    ].join('\n');
     await replyMaybeInteractive(
       conv,
       invalidBody,
-      buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
+      buildSlotPickerInteractive(
+        slots,
+        conv.salon.timezone,
+        conv.salon,
+        bookingInteractiveBody('Pick a time:', APPOINTMENT_SLOT_HINT),
+      ),
     );
     return;
   }
@@ -4171,11 +4213,23 @@ async function handlePickSlot(
   }
   const maxVisible = visibleSlotCount(slots.length);
   const slotLines = formatSlotMenuLines(slots, conv.salon.timezone);
-  const invalidBody = [`Invalid choice. Pick a slot number (1–${maxVisible}):`, ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+  const invalidBody = [
+    `Invalid choice. Pick a slot number (1–${maxVisible}):`,
+    ...slotLines,
+    '',
+    APPOINTMENT_SLOT_HINT,
+    '',
+    'Reply BACK to choose a different date.',
+  ].join('\n');
   await replyMaybeInteractive(
     conv,
     invalidBody,
-    buildSlotPickerInteractive(slots, conv.salon.timezone, conv.salon),
+    buildSlotPickerInteractive(
+      slots,
+      conv.salon.timezone,
+      conv.salon,
+      bookingInteractiveBody('Pick a time:', APPOINTMENT_SLOT_HINT),
+    ),
   );
 }
 
@@ -4265,11 +4319,23 @@ async function handleConfirm(
       if (freshSlots.length > 0) {
         await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
         const slotLines = formatSlotMenuLines(freshSlots, conv.salon.timezone);
-        const slotBody = ['Sorry, that slot was just taken. Please pick another time:', ...slotLines, '', 'Reply BACK to choose a different date.'].join('\n');
+        const slotBody = [
+          'Sorry, that slot was just taken. Please pick another time:',
+          ...slotLines,
+          '',
+          APPOINTMENT_SLOT_HINT,
+          '',
+          'Reply BACK to choose a different date.',
+        ].join('\n');
         await replyMaybeInteractive(
           conv,
           slotBody,
-          buildSlotPickerInteractive(freshSlots, conv.salon.timezone, conv.salon),
+          buildSlotPickerInteractive(
+            freshSlots,
+            conv.salon.timezone,
+            conv.salon,
+            bookingInteractiveBody('Pick another time:', APPOINTMENT_SLOT_HINT),
+          ),
         );
         return;
       }
@@ -4952,7 +5018,7 @@ async function handleManageBooking(
     await replyMaybeInteractive(
       conv,
       [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
-      buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+      buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, bookingInteractiveBody(prefix)),
     );
     return;
   }
@@ -5538,7 +5604,7 @@ async function handleReschedule(
   await replyMaybeInteractive(
     conv,
     [prefix, ...dateLines, '', APPOINTMENT_DATE_HINT, 'Reply *BACK* to return to menu.'].join('\n'),
-    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, prefix),
+    buildDatePickerInteractive(dates.slice(0, 10), conv.salon.timezone, conv.salon, bookingInteractiveBody(prefix)),
   );
 }
 
