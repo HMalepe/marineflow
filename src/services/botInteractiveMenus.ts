@@ -314,9 +314,9 @@ export function buildBookingReviewFollowUpInteractive(
   )!;
 }
 
-export function buildConfirmBookingInteractive(salon: SalonMenuInput): InteractiveButtons {
+export function buildConfirmBookingInteractive(salon: SalonMenuInput, body: string): InteractiveButtons {
   return quickButtons(
-    'Reply YES to confirm this booking, or tap below.',
+    body,
     [
       { id: 'yes', title: 'Yes, confirm' },
       { id: 'back', title: 'Back' },
