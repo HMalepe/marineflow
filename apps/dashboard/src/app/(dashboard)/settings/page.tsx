@@ -51,7 +51,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
+      <div id="settings-intro" data-section-label="Summary" className="dashboard-section-anchor">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">
           {canEditSalon
@@ -60,7 +60,7 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <Card id="settings-profile" className="dashboard-section-anchor">
+      <Card id="settings-profile" data-section-label="Profile" className="dashboard-section-anchor">
         <CardHeader>
           <CardTitle>Profile</CardTitle>
           <CardDescription>Your account information</CardDescription>
@@ -75,7 +75,7 @@ export default async function SettingsPage() {
       </Card>
 
       {canEditSalon && salonSettings && (
-        <Card id="settings-logo" className="dashboard-section-anchor">
+        <Card id="settings-logo" data-section-label="Logo" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Logo</CardTitle>
             <CardDescription>Your salon&apos;s brand mark — shown in the sidebar</CardDescription>
@@ -87,7 +87,7 @@ export default async function SettingsPage() {
       )}
 
       {canEditSalon && (
-        <Card id="settings-salon" className="dashboard-section-anchor">
+        <Card id="settings-salon" data-section-label="Business & bot" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Business &amp; WhatsApp Bot</CardTitle>
             <CardDescription>Dashboard display name, hours, automated messages, and bot availability</CardDescription>
@@ -102,7 +102,7 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      <Card id="settings-password" className="dashboard-section-anchor">
+      <Card id="settings-password" data-section-label="Password" className="dashboard-section-anchor">
         <CardHeader>
           <CardTitle>Change Password</CardTitle>
           <CardDescription>Update your dashboard login password</CardDescription>
@@ -117,7 +117,7 @@ export default async function SettingsPage() {
       </Card>
 
       {canEditSalon && (
-        <Card id="settings-contact-marineflow" className="dashboard-section-anchor">
+        <Card id="settings-contact-marineflow" data-section-label="Contact MarineFlow" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Contact MarineFlow</CardTitle>
             <CardDescription>Send a message to platform support — billing, setup, or bot help</CardDescription>
@@ -129,7 +129,7 @@ export default async function SettingsPage() {
       )}
 
       {canEditSalon && (
-        <Card id="settings-integrations" className="dashboard-section-anchor">
+        <Card id="settings-integrations" data-section-label="Integrations" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Integrations</CardTitle>
             <CardDescription>Connect external services</CardDescription>

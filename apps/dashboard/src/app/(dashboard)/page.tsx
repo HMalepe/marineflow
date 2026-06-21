@@ -149,10 +149,16 @@ async function SuperAdminView({ token }: { token: string | null }) {
   return (
     <div className="space-y-6">
       {systemHealth?.postgres?.status && systemHealth.redis?.status && systemHealth.twilio?.status && (
-        <SystemHealthBar data={systemHealth} />
+        <div id="platform-health" data-section-label="System health" className="dashboard-section-anchor">
+          <SystemHealthBar data={systemHealth} />
+        </div>
       )}
 
-      <div className="flex items-start justify-between">
+      <div
+        id="platform-intro"
+        data-section-label="Summary"
+        className="dashboard-section-anchor flex items-start justify-between"
+      >
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Platform Overview</h1>
           <p className="text-muted-foreground text-sm mt-1">Platform-wide stats and alerts.</p>
@@ -165,11 +171,15 @@ async function SuperAdminView({ token }: { token: string | null }) {
         </Link>
       </div>
 
-      {token && <AdminQuickAccess token={token} title="Quick access — open any client dashboard" />}
+      {token && (
+        <div id="platform-quick-access" data-section-label="Quick access" className="dashboard-section-anchor">
+          <AdminQuickAccess token={token} title="Quick access — open any client dashboard" />
+        </div>
+      )}
 
       {/* KPI cards */}
       {stats ? (
-        <>
+        <div id="platform-stats" data-section-label="Platform stats" className="dashboard-section-anchor space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <StatCard
               label="Total Businesses"
@@ -191,20 +201,37 @@ async function SuperAdminView({ token }: { token: string | null }) {
           {stats.byBusinessType && stats.byBusinessType.length > 0 && (
             <BusinessTypeBreakdown counts={stats.byBusinessType} />
           )}
-        </>
+        </div>
       ) : (
         <p className="text-sm text-destructive">Failed to load platform stats.</p>
       )}
 
-      {revenue && <RevenueRow data={revenue} />}
+      {revenue && (
+        <div id="platform-revenue" data-section-label="Revenue" className="dashboard-section-anchor">
+          <RevenueRow data={revenue} />
+        </div>
+      )}
 
-      {leaderboard && <Leaderboard data={leaderboard} />}
+      {leaderboard && (
+        <div id="platform-leaderboard" data-section-label="Leaderboard" className="dashboard-section-anchor">
+          <Leaderboard data={leaderboard} />
+        </div>
+      )}
 
-      {botHealth && <BotHealthPanel data={botHealth} />}
+      {botHealth && (
+        <div id="platform-bot-health" data-section-label="Bot health" className="dashboard-section-anchor">
+          <BotHealthPanel data={botHealth} />
+        </div>
+      )}
 
-      {token && <ActivityFeed token={token} />}
+      {token && (
+        <div id="platform-activity" data-section-label="Activity feed" className="dashboard-section-anchor">
+          <ActivityFeed token={token} />
+        </div>
+      )}
 
       {tenantHealth && tenantHealth.atRiskCount > 0 && (
+        <div id="platform-at-risk" data-section-label="At-risk tenants" className="dashboard-section-anchor">
         <Link
           href="/admin?health=AT_RISK"
           className="block rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 hover:border-amber-500/60 transition-colors"
@@ -216,11 +243,16 @@ async function SuperAdminView({ token }: { token: string | null }) {
             No recent bookings or bot activity — review before they churn silently.
           </p>
         </Link>
+        </div>
       )}
 
       {/* Alerts */}
       {hasAlerts && alerts && (
-        <section className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
+        <section
+          id="platform-alerts"
+          data-section-label="Alerts"
+          className="dashboard-section-anchor border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3"
+        >
           <h2 className="text-sm font-bold text-amber-800">Alerts</h2>
 
           {alerts.pastDue.length > 0 && (
@@ -297,11 +329,17 @@ async function AppointmentView({ token }: { token: string | null }) {
       {token && <SalonLiveRouterRefresh token={token} />}
 
       {setupHealth && Array.isArray(setupHealth.checks) && setupHealth.checks.length > 0 && (
-        <SetupHealthScore data={setupHealth} />
+        <div id="overview-setup-health" data-section-label="Setup health" className="dashboard-section-anchor">
+          <SetupHealthScore data={setupHealth} />
+        </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+      <div
+        id="overview-intro"
+        data-section-label="Summary"
+        className="dashboard-section-anchor flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
+      >
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Overview</h1>
           <p className="text-muted-foreground text-sm mt-1">{today}</p>
@@ -319,19 +357,29 @@ async function AppointmentView({ token }: { token: string | null }) {
       </div>
 
       {overviewKpis && (
-        <>
+        <div id="overview-kpis" data-section-label="Key metrics" className="dashboard-section-anchor space-y-6 lg:space-y-8">
           <KPIStrip data={overviewKpis} />
           {Array.isArray(overviewKpis.revenueLast7Days) && overviewKpis.revenueLast7Days.length > 0 && (
-            <MiniBarChart data={overviewKpis.revenueLast7Days} />
+            <div id="overview-revenue" data-section-label="Revenue chart" className="dashboard-section-anchor">
+              <MiniBarChart data={overviewKpis.revenueLast7Days} />
+            </div>
           )}
-        </>
+        </div>
       )}
 
-      {token && <BusinessCoachCard token={token} />}
+      {token && (
+        <div id="overview-coach" data-section-label="AI coach" className="dashboard-section-anchor">
+          <BusinessCoachCard token={token} />
+        </div>
+      )}
 
       {/* Onboarding banner */}
       {!onboardingDone && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div
+          id="overview-onboarding"
+          data-section-label="Finish setup"
+          className="dashboard-section-anchor rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3"
+        >
           <div className="flex-1">
             <p className="font-semibold text-sm">Finish setting up your account</p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -348,7 +396,11 @@ async function AppointmentView({ token }: { token: string | null }) {
       )}
 
       {/* Quick links — desktop only bonus */}
-      <div className="hidden lg:grid grid-cols-3 gap-4">
+      <div
+        id="overview-shortcuts"
+        data-section-label="Quick links"
+        className="dashboard-section-anchor hidden lg:grid grid-cols-3 gap-4"
+      >
         {[
           { href: '/customers', icon: <Users className="w-5 h-5" />, label: 'Customers', desc: 'View & search customer records' },
           { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: 'Conversations', desc: 'WhatsApp inbox & handoffs' },
@@ -371,7 +423,7 @@ async function AppointmentView({ token }: { token: string | null }) {
       </div>
 
       {/* Today's schedule */}
-      <Card>
+      <Card id="overview-today" data-section-label="Today's schedule" className="dashboard-section-anchor">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">Today&apos;s Schedule</CardTitle>

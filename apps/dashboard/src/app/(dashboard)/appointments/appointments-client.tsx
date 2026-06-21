@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppointmentCard, type AppointmentData } from '@/components/AppointmentCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -169,6 +169,11 @@ export function AppointmentsClient({
   const filteredUpcoming = applyFilter(upcoming);
   const filteredPast = applyFilter(past);
 
+  const hasTodayAppointments = useMemo(() => {
+    const todayStr = new Date().toDateString();
+    return [...upcoming, ...past].some((a) => new Date(a.start).toDateString() === todayStr);
+  }, [upcoming, past]);
+
   return (
     <div className="space-y-6">
       {bulkToast && (
@@ -207,9 +212,8 @@ export function AppointmentsClient({
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        {!hidePageHeader && (
-        <div>
+      {!hidePageHeader && (
+        <div id="appointments-intro" data-section-label="Summary" className="dashboard-section-anchor">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
           <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2 flex-wrap">
             View and manage all bookings.
@@ -221,17 +225,23 @@ export function AppointmentsClient({
             )}
           </p>
         </div>
-        )}
-        {hidePageHeader && liveConnected && (
-          <p className="text-sm text-muted-foreground flex items-center gap-2">
-            Bookings at this location.
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-              Live sync
-            </span>
-          </p>
-        )}
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto ml-auto">
+      )}
+      {hidePageHeader && liveConnected && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2 dashboard-section-anchor" id="appointments-intro" data-section-label="Summary">
+          Bookings at this location.
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
+            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+            Live sync
+          </span>
+        </p>
+      )}
+
+      <div
+        className="flex items-center gap-2 flex-wrap w-full dashboard-section-anchor"
+        id="appointments-filters"
+        data-section-label="Search & filters"
+      >
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:ml-auto">
           {/* Search */}
           <div className="relative flex-1 sm:flex-none sm:w-56">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
@@ -290,9 +300,13 @@ export function AppointmentsClient({
         </div>
       </div>
 
-      <TodaySchedule appointments={[...upcoming, ...past]} />
+      {hasTodayAppointments && (
+        <div id="appointments-today" data-section-label="Today" className="dashboard-section-anchor">
+          <TodaySchedule appointments={[...upcoming, ...past]} />
+        </div>
+      )}
 
-      <Card>
+      <Card id="appointments-upcoming" data-section-label="Upcoming" className="dashboard-section-anchor">
         <CardHeader>
           <CardTitle>Upcoming ({filteredUpcoming.length})</CardTitle>
         </CardHeader>
@@ -345,7 +359,7 @@ export function AppointmentsClient({
       </Card>
 
       {filteredPast.length > 0 && (
-        <Card>
+        <Card id="appointments-past" data-section-label="Past" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Past ({filteredPast.length})</CardTitle>
           </CardHeader>
@@ -365,7 +379,7 @@ export function AppointmentsClient({
       )}
 
       {waitlist.length > 0 && (
-        <Card>
+        <Card id="appointments-waitlist" data-section-label="Waitlist" className="dashboard-section-anchor">
           <CardHeader>
             <CardTitle>Waitlist ({waitlist.length})</CardTitle>
           </CardHeader>

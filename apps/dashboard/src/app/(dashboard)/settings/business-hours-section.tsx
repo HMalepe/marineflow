@@ -109,7 +109,7 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
   }
 
   return (
-    <section id="settings-hours" className="dashboard-section-anchor space-y-4">
+    <section id="settings-hours" data-section-label="Business hours" className="dashboard-section-anchor space-y-4">
       <div>
         <h3 className="text-base font-semibold">Business hours</h3>
         <p className="text-sm text-muted-foreground mt-1">

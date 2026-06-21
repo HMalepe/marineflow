@@ -135,7 +135,32 @@ export function adminMobileMoreItems(): NavItem[] {
   return ADMIN_NAV_ITEMS.filter((item) => !ADMIN_MOBILE_TAB_HREFS.has(item.href));
 }
 
-/** Flat list for sticky header navigation. */
+/** Human-readable title for the sticky in-page nav (not duplicated in the sidebar). */
+export function pageTitleForPath(pathname: string, isAdmin: boolean): string {
+  if (pathname === '/') return isAdmin ? 'Platform overview' : 'Overview';
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'Businesses';
+  if (pathname.startsWith('/appointments') || (pathname.includes('/branch/') && pathname.includes('/appointments'))) {
+    return APPOINTMENTS_LABEL;
+  }
+  if (pathname.startsWith('/pulse')) return 'Live Pulse';
+  if (pathname.startsWith('/conversations')) return CONVERSATIONS_LABEL;
+  if (pathname.startsWith('/customers')) return 'Customers';
+  if (pathname.startsWith('/tickets')) return TICKETS_LABEL;
+  if (pathname.startsWith('/services')) return 'Services';
+  if (pathname.startsWith('/roster') || pathname.startsWith('/staff')) return 'Staff Roster';
+  if (pathname.startsWith('/branches') || pathname.startsWith('/branch/')) return BRANCHES_LABEL;
+  if (pathname.startsWith('/faqs')) return BOT_FAQS_LABEL;
+  if (pathname.startsWith('/campaigns')) return 'Newsletter';
+  if (pathname.startsWith('/automations')) return 'Power Features';
+  if (pathname.startsWith('/team-performance')) return 'Team Performance';
+  if (pathname.startsWith('/analytics')) return 'Analytics';
+  if (pathname.startsWith('/billing')) return 'Billing';
+  if (pathname.startsWith('/settings')) return 'Settings';
+  if (pathname.startsWith('/agency')) return 'Agency';
+  return 'Dashboard';
+}
+
+/** @deprecated Sticky header now uses in-page section nav — kept for tests or legacy callers. */
 export function flatDashboardNavItems(input: { isAdmin: boolean; isOwner: boolean }): NavItem[] {
   if (input.isAdmin) return ADMIN_NAV_ITEMS;
   return [
