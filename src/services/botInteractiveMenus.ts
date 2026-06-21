@@ -222,7 +222,7 @@ export function buildCombinedSlotPickerInteractive(
   }
 
   return numberedList(
-    truncateListField(options.header ?? '⚡ Next available — pick a date & time:', 1024),
+    truncateListField(options.header ?? '⚡ *Soonest available times* — tap one below:', 1024),
     'Pick a time',
     'Available',
     items,
