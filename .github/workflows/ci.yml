@@ -35,6 +35,8 @@ jobs:
 
       - name: Prisma Validate
         run: npx prisma validate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/marineflow_test
 
   build-dashboard:
     name: Build Dashboard
