@@ -24,11 +24,14 @@ type Props = {
 };
 
 export function MiniBarChart({ title = "Today's revenue — last 7 days", data, className }: Props) {
-  const max = Math.max(...data.map((d) => d.revenueCents), 1);
+  const points = Array.isArray(data) ? data : [];
+  if (points.length === 0) return null;
+
+  const max = Math.max(...points.map((d) => d.revenueCents), 1);
   const chartH = 88;
   const barGap = 6;
   const barW = 28;
-  const width = data.length * (barW + barGap) + barGap;
+  const width = points.length * (barW + barGap) + barGap;
 
   return (
     <div className={cn('rounded-xl border bg-card p-4 shadow-sm', className)}>
@@ -39,11 +42,11 @@ export function MiniBarChart({ title = "Today's revenue — last 7 days", data, 
         role="img"
         aria-label="Revenue bar chart for the last seven days"
       >
-        {data.map((point, i) => {
+        {points.map((point, i) => {
           const h = Math.max(4, (point.revenueCents / max) * chartH);
           const x = barGap + i * (barW + barGap);
           const y = chartH - h;
-          const isToday = i === data.length - 1;
+          const isToday = i === points.length - 1;
           return (
             <g key={point.date}>
               <rect

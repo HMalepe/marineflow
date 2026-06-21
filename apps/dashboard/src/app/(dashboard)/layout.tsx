@@ -1,6 +1,7 @@
 import { getToken, getUser } from '@/lib/auth';
 import { getImpersonationActive } from '@/app/(dashboard)/admin/actions';
 import { apiFetch } from '@/lib/api';
+import { API_MISCONFIGURED_MESSAGE, isApiMisconfiguredForProduction } from '@/lib/api-config';
 import { redirect } from 'next/navigation';
 import { LogoutButton, LogoutIconButton } from './logout-button';
 import { MobileNav } from './mobile-nav';
@@ -22,14 +23,25 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  if (isApiMisconfiguredForProduction()) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center p-8">
+        <div className="max-w-md text-center space-y-3">
+          <h1 className="text-xl font-bold">Dashboard configuration error</h1>
+          <p className="text-sm text-muted-foreground">{API_MISCONFIGURED_MESSAGE}</p>
+        </div>
+      </div>
+    );
+  }
+
   const user = await getUser();
   if (!user) redirect('/login');
 
   const impersonating = await getImpersonationActive();
 
   const token = await getToken();
-  const ownerName = user.name;
-  let businessName = user.businessName;
+  const ownerName = user.name?.trim() || user.email;
+  const businessName = user.businessName?.trim() || 'Your business';
   let logoUrl: string | null = null;
   try {
     if (token && (user.role === 'OWNER' || user.role === 'MANAGER')) {
