@@ -102,12 +102,12 @@ async function DashboardLayoutInner({
       />
 
       {/* Sidebar (desktop only) — pinned to viewport while main content scrolls */}
-      <aside className="w-64 shrink-0 border-r bg-card hidden md:flex md:flex-col md:sticky md:top-0 md:h-dvh md:overflow-hidden shadow-[2px_0_16px_-8px_rgb(0_0_0/0.08)] dark:shadow-none">
+      <aside className="dashboard-sidebar-shell w-64 shrink-0 hidden md:flex md:flex-col md:sticky md:top-0 md:h-dvh md:overflow-hidden">
 
         {/* Business identity */}
         <div className="shrink-0 px-4 py-4 border-b flex items-center gap-3">
           {/* Logo / initials avatar — white bg keeps dark logos visible */}
-          <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
+          <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border border-border/70 shadow-[var(--solupair-glass-highlight-subtle)] ${logoUrl ? 'bg-white' : 'bg-muted/80'}`}>
             {logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logoUrl} alt={businessName} loading="eager" decoding="async" className="size-full object-contain p-1" />
@@ -150,23 +150,15 @@ async function DashboardLayoutInner({
           <div className="flex items-center gap-2">
             {/* WhatsApp-green pulse dot */}
             <span className="relative flex h-2 w-2 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#25d366] opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#25d366]" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full solupair-brand-pulse opacity-50" />
+              <span className="relative inline-flex rounded-full h-2 w-2 solupair-brand-pulse" />
             </span>
             <div>
-              <p
-                className="text-[13px] font-bold leading-none tracking-tight"
-                style={{
-                  background: 'linear-gradient(90deg, #25d366 0%, #128c7e 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                MarineFlow
+              <p className="text-[13px] font-bold leading-none tracking-tight solupair-text-gradient">
+                Solupair
               </p>
               <p className="text-[10px] text-muted-foreground/80 leading-tight mt-0.5 tracking-wide">
-                WhatsApp Chatbot
+                MarineFlow · WhatsApp
               </p>
             </div>
           </div>
@@ -179,9 +171,9 @@ async function DashboardLayoutInner({
       </aside>
 
       {/* Main */}
-      <main className="flex-1 min-w-0 min-h-dvh flex flex-col bg-muted/30">
+      <main className="dashboard-main-shell flex-1 min-w-0 min-h-dvh flex flex-col">
         <DashboardStickyHeader isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
-        <div className="flex-1 p-4 pb-24 md:p-8 md:pb-8 min-w-0">
+        <div className="flex-1 p-4 pb-mobile-main md:p-8 min-w-0 overflow-x-clip">
           {children}
         </div>
       </main>

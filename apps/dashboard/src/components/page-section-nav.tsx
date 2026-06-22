@@ -35,10 +35,10 @@ function SectionPill({ id, label }: PageSectionLink) {
       type="button"
       onClick={() => scrollToPageSection(id)}
       className={cn(
-        'inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-medium whitespace-nowrap',
-        'bg-muted/80 text-muted-foreground border border-transparent',
-        'hover:bg-accent hover:text-accent-foreground transition-colors',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'inline-flex shrink-0 snap-start items-center rounded-full px-3.5 py-2 min-h-[2.25rem] text-xs font-medium whitespace-nowrap touch-manipulation',
+        'bg-muted/60 text-muted-foreground border border-border/50',
+        'hover:bg-accent/60 hover:text-foreground hover:border-primary/25 hover:shadow-[var(--solupair-glow)] transition-all duration-200',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]',
       )}
     >
       {label}
@@ -94,12 +94,7 @@ export function PageSectionNav({ isAdmin }: Props) {
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-1.5">
           On this page
         </p>
-        <div
-          className={cn(
-            'flex gap-1.5 overflow-x-auto overscroll-x-contain scrollbar-none pb-0.5',
-            '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
-          )}
-        >
+        <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain scrollbar-none pb-0.5 snap-x snap-mandatory">
           {sections.map((section) => (
             <SectionPill key={section.id} {...section} />
           ))}

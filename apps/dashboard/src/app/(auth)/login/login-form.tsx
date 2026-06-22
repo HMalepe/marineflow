@@ -216,10 +216,10 @@ export function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 px-4">
-      <Card className="w-full max-w-sm shadow-md">
+    <div className="min-h-screen flex items-center justify-center dashboard-main-shell px-4">
+      <Card className="w-full max-w-sm">
         <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl font-bold tracking-tight">MarineFlow</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight solupair-text-gradient">Solupair</CardTitle>
           <CardDescription>
             {tab === 'whatsapp' && phoneStep === 'setup'
               ? 'Create your dashboard password'
@@ -412,10 +412,10 @@ export function LoginForm() {
 
 function LoginPageSkeleton() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 px-4">
-      <Card className="w-full max-w-sm shadow-md">
+    <div className="min-h-screen flex items-center justify-center dashboard-main-shell px-4">
+      <Card className="w-full max-w-sm">
         <CardHeader className="text-center pb-2">
-          <CardTitle className="text-2xl font-bold tracking-tight">MarineFlow</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight solupair-text-gradient">Solupair</CardTitle>
           <CardDescription>Sign in to your salon dashboard</CardDescription>
         </CardHeader>
         <CardContent>

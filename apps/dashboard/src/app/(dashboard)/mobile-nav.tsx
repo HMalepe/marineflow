@@ -137,8 +137,8 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
   return (
     <>
       {/* Mobile top header */}
-      <header className="md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85 border-b shadow-[0_1px_0_rgb(0_0_0/0.04),0_6px_16px_-12px_rgb(0_0_0/0.12)]">
-        <div className={`shrink-0 size-8 rounded-lg overflow-hidden flex items-center justify-center border ${logoUrl ? 'bg-white' : 'bg-muted'}`}>
+      <header className="dashboard-sticky-shell md:hidden sticky top-0 z-40 flex items-center gap-3 px-4 py-3 safe-area-pt touch-manipulation">
+        <div className={`shrink-0 size-8 rounded-lg overflow-hidden flex items-center justify-center border border-border/70 shadow-[var(--solupair-glass-highlight-subtle)] ${logoUrl ? 'bg-white' : 'bg-muted/80'}`}>
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt={businessName} loading="eager" decoding="async" className="size-full object-contain p-0.5" />
@@ -155,25 +155,15 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
         {/* MarineFlow badge */}
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#25d366] opacity-60" />
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#25d366]" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full solupair-brand-pulse opacity-50" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 solupair-brand-pulse" />
           </span>
-          <span
-            className="text-[11px] font-bold"
-            style={{
-              background: 'linear-gradient(90deg,#25d366 0%,#128c7e 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}
-          >
-            MarineFlow
-          </span>
+          <span className="text-[11px] font-bold solupair-text-gradient">Solupair</span>
         </div>
       </header>
 
       {/* Bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85 border-t shadow-[0_-1px_0_rgb(0_0_0/0.04),0_-8px_20px_-12px_rgb(0_0_0/0.14)] flex items-stretch safe-area-pb">
+      <nav className="mobile-tab-bar md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-card/90 backdrop-blur-xl supports-[backdrop-filter]:bg-card/75 shadow-[0_-1px_0_oklch(0.78_0.14_192_/_0.08),0_-12px_32px_-16px_oklch(0.52_0.24_288_/_0.2)] flex items-stretch touch-manipulation">
         {tabs.map((tab) => {
           const active = isActive(tab.href);
           const showBadge = tab.href === '/conversations' && liveHandoffCount > 0;
@@ -182,12 +172,12 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
               key={tab.href}
               href={tab.href}
               className={cn(
-                'relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
-                active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                'relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[3.25rem] py-1.5 text-[10px] font-medium transition-colors touch-manipulation',
+                active ? 'text-primary' : 'text-muted-foreground active:text-foreground',
               )}
             >
               <div className="relative">
-                <tab.icon className={cn('size-5 transition-transform', active && 'scale-110')} />
+                <tab.icon className={cn('size-5', active && 'text-primary')} />
                 {showBadge && (
                   <span className="absolute -top-1 -right-1.5 min-w-[14px] h-[14px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center px-0.5 leading-none">
                     {liveHandoffCount > 9 ? '9+' : liveHandoffCount}
@@ -195,7 +185,9 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
                 )}
               </div>
               <span className={cn('transition-all', active && 'font-semibold')}>{tab.label}</span>
-              {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 bg-primary rounded-full" />}
+              {active && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full solupair-brand-pulse shadow-[var(--solupair-glow)]" />
+              )}
             </Link>
           );
         })}
@@ -205,13 +197,15 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
           type="button"
           onClick={() => setMoreOpen(true)}
           className={cn(
-            'relative flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
-            moreActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+            'relative flex-1 flex flex-col items-center justify-center gap-0.5 min-h-[3.25rem] py-1.5 text-[10px] font-medium transition-colors touch-manipulation',
+            moreActive ? 'text-primary' : 'text-muted-foreground active:text-foreground',
           )}
         >
           <MoreIcon className={cn('size-5', moreActive && 'stroke-primary')} />
           More
-          {moreActive && <span className="absolute bottom-0 h-0.5 w-8 bg-primary rounded-full" />}
+          {moreActive && (
+            <span className="absolute bottom-0 h-0.5 w-8 rounded-full solupair-brand-pulse shadow-[var(--solupair-glow)]" />
+          )}
         </button>
       </nav>
 
@@ -274,10 +268,10 @@ function MoreNavItem({
       href={href}
       onClick={onClick}
       className={cn(
-        'flex items-center gap-2.5 px-4 py-3 rounded-xl transition-colors text-sm font-medium',
+        'flex items-center gap-2.5 px-4 py-3.5 min-h-[2.75rem] rounded-xl transition-all duration-200 text-sm font-medium touch-manipulation',
         active
-          ? 'bg-primary/10 text-primary border border-primary/20 font-semibold'
-          : 'bg-muted/60 hover:bg-accent text-foreground',
+          ? 'nav-link-active'
+          : 'bg-muted/40 hover:bg-accent/50 hover:shadow-[inset_0_0_0_1px_oklch(0.52_0.24_288_/_0.08)] text-foreground',
       )}
     >
       {icon}

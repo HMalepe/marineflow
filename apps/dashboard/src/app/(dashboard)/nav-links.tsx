@@ -45,10 +45,10 @@ function NavItemLink({
     <Link
       href={href}
       className={cn(
-        'flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+        'flex items-center justify-between px-3 py-2.5 min-h-[2.75rem] rounded-lg text-sm font-medium transition-all duration-200 touch-manipulation',
         isActive
-          ? 'bg-primary/10 text-primary font-semibold'
-          : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+          ? 'nav-link-active'
+          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground hover:shadow-[inset_0_0_0_1px_oklch(0.52_0.24_288_/_0.08)]',
       )}
     >
       <span>{children}</span>

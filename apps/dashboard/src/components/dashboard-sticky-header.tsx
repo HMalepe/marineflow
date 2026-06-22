@@ -36,7 +36,7 @@ export function DashboardStickyHeader({ isAdmin }: Props) {
   return (
     <header
       ref={headerRef}
-      className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 shadow-[0_1px_0_rgb(0_0_0/0.04),0_8px_20px_-16px_rgb(0_0_0/0.12)]"
+      className="dashboard-sticky-shell sticky top-0 z-40 hidden md:block supports-[backdrop-filter]:bg-background/85"
     >
       <PageSectionNav isAdmin={isAdmin} />
     </header>

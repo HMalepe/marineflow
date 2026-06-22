@@ -20,8 +20,8 @@ export function StatCard({ label, value, href, className, badge }: Props) {
   );
 
   const classes = cn(
-    'relative rounded-lg border bg-card p-4 shadow-sm',
-    href && 'hover:border-primary/40 hover:shadow-md transition-all',
+    'stat-card-premium relative rounded-xl p-4',
+    href && 'hover:border-primary/40 block',
     className,
   );
 
