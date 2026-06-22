@@ -6,6 +6,7 @@ import {
   type Conversation,
   type Customer,
   type Salon,
+  type Service,
   type Staff,
 } from '@prisma/client';
 import { getTenantDb, tryDbSavepoint, withTenantContext } from '../lib/db/tenantSession.js';
@@ -144,8 +145,15 @@ import {
   buildServicesSubMenuInteractive,
   buildSlotPickerInteractive,
   buildStaffPickerInteractive,
+  buildPaymentCashOptionInteractive,
 } from './botInteractiveMenus.js';
 import type { InteractiveMessage } from '../lib/integrations/messaging/types.js';
+import {
+  buildCashPaymentNudgeBody,
+  buildPaymentCheckoutCta,
+  buildPaymentMethodFallbackText,
+  buildSecurePaymentPromptBody,
+} from '../lib/paymentPromptCopy.js';
 import {
   buildCategorizedPriceLines,
   loadSalonServiceCatalog,
@@ -179,6 +187,8 @@ export type BotContext = Record<string, unknown> & {
   pendingPaymentIsFirstBooking?: boolean;
   /** Customer chose cash — waiting for CASH confirm or switch to PayFast (1). */
   awaitingCashConfirm?: boolean;
+  /** PayFast checkout URL created at booking confirm — reused when customer replies 1. */
+  pendingPaymentCheckoutUrl?: string;
   /** Group booking headcount set at CONFIRM_BOOKING; defaults to 1 (no group). */
   partySize?: number;
   rescheduleAppointmentId?: string;
@@ -4838,7 +4848,7 @@ async function handleConfirm(
       },
       ConversationStep.CHOOSE_PAYMENT_METHOD,
     );
-    await reply(conv, buildPaymentMethodPrompt(paymentPlan.amountCents));
+    await promptPostConfirmPayment(conv, appointment.id, service, paymentPlan.amountCents);
     return;
   } else {
     void onBookingConfirmed({
@@ -4879,35 +4889,76 @@ async function finishBookingAfterPayment(
   await promptBookingRating(conv);
 }
 
+async function promptPostConfirmPayment(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  appointmentId: string,
+  service: Service,
+  amountCents: number,
+): Promise<void> {
+  const checkoutUrl = await createPaymentCheckoutSession({
+    salonId: conv.salonId,
+    customerId: conv.customerId,
+    appointmentId,
+    service,
+    amountCents,
+  });
+
+  await saveCtx(
+    conv.id,
+    { pendingPaymentCheckoutUrl: checkoutUrl ?? undefined },
+    ConversationStep.CHOOSE_PAYMENT_METHOD,
+  );
+
+  if (checkoutUrl) {
+    const body = buildSecurePaymentPromptBody(amountCents);
+    await replyMaybeInteractive(conv, body, buildPaymentCheckoutCta(body, checkoutUrl));
+    const cashInteractive = buildPaymentCashOptionInteractive(conv.salon);
+    await replyMaybeInteractive(conv, cashInteractive.body, cashInteractive);
+    return;
+  }
+
+  logger.warn({ appointmentId, salonId: conv.salonId }, 'payment_checkout_prompt_fallback');
+  await reply(conv, buildPaymentMethodFallbackText(amountCents));
+}
+
+async function deliverPaymentCheckoutLink(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  input: {
+    appointmentId: string;
+    service: Service;
+    amountCents: number;
+    resend?: boolean;
+  },
+): Promise<boolean> {
+  const c = ctx(conv);
+  let checkoutUrl = (c.pendingPaymentCheckoutUrl as string | undefined)?.trim() || null;
+
+  if (!checkoutUrl) {
+    checkoutUrl = await createPaymentCheckoutSession({
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: input.appointmentId,
+      service: input.service,
+      amountCents: input.amountCents,
+    });
+    if (checkoutUrl) {
+      await saveCtx(conv.id, { pendingPaymentCheckoutUrl: checkoutUrl }, ConversationStep.CHOOSE_PAYMENT_METHOD);
+    }
+  }
+
+  if (!checkoutUrl) return false;
+
+  const body = buildSecurePaymentPromptBody(input.amountCents, { resend: input.resend });
+  await replyMaybeInteractive(conv, body, buildPaymentCheckoutCta(body, checkoutUrl));
+  return true;
+}
+
 function buildPaymentMethodPrompt(amountCents: number): string {
-  return [
-    `💳 *How would you like to pay?*`,
-    '',
-    `Amount due: *${formatCentsZar(amountCents)}*`,
-    '',
-    `*1 — Pay online now* _(recommended)_`,
-    `Secure card payment via PayFast — 100% safe, instant confirmation.`,
-    '',
-    `*2 — Cash at the salon*`,
-    `Pay when you arrive.`,
-  ].join('\n');
+  return buildPaymentMethodFallbackText(amountCents);
 }
 
 function buildCashPaymentNudge(amountCents: number): string {
-  return [
-    `No problem — cash on arrival works for us. 💵`,
-    '',
-    `*Amount due: ${formatCentsZar(amountCents)}*`,
-    '',
-    `Before you lock that in, our *recommended* option is PayFast:`,
-    `✅ *100% safe* — trusted by millions across South Africa`,
-    `✅ Encrypted checkout (we never see your card details)`,
-    `✅ Instant confirmation — your slot is fully secured`,
-    `✅ No cash to remember on the day — takes ~30 seconds`,
-    '',
-    `Reply *1* to pay securely online now`,
-    `Reply *CASH* to confirm you'll pay cash when you arrive`,
-  ].join('\n');
+  return buildCashPaymentNudgeBody(amountCents);
 }
 
 function isCashConfirmation(text: string, afterNudge = false): boolean {
@@ -5035,28 +5086,14 @@ async function handlePaymentMethodChoice(
   if (isCard) {
     let awaitingOnlinePayment = false;
     try {
-      const sessionUrl = await createPaymentCheckoutSession({
-        salonId: conv.salonId,
-        customerId: conv.customerId,
+      const sent = await deliverPaymentCheckoutLink(conv, {
         appointmentId: appointment.id,
         service: appointment.service,
         amountCents,
+        resend: true,
       });
-      if (sessionUrl) {
+      if (sent) {
         awaitingOnlinePayment = true;
-        await reply(
-          conv,
-          [
-            `💳 *Complete payment*`,
-            '',
-            `Amount due: *${formatCentsZar(amountCents)}*`,
-            '',
-            `Pay securely via PayFast:`,
-            sessionUrl,
-            '',
-            `_We'll mark your booking as paid once payment goes through._`,
-          ].join('\n'),
-        );
       } else {
         await reply(
           conv,
@@ -5075,7 +5112,7 @@ async function handlePaymentMethodChoice(
       await saveCtx(conv.id, { pendingAppointmentId: appointment.id, awaitingCashConfirm: undefined }, ConversationStep.IDLE);
       return;
     }
-    await finishBookingAfterPayment(conv, appointment);
+    return;
   }
 }
 
