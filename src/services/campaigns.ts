@@ -1,5 +1,5 @@
 import type { Campaign, CampaignStatus } from '@prisma/client';
-import { getTenantDb } from '../lib/db/tenantSession.js';
+import { getTenantDb, type PrismaTx } from '../lib/db/tenantSession.js';
 import { inngest, inngestIsDev } from '../lib/inngest/client.js';
 import { env } from '../config.js';
 import { logger } from '../lib/logger.js';
@@ -8,6 +8,7 @@ import {
   createCampaignSend,
   refreshCampaignBookedCount,
   sendCampaignOutbound,
+  sendCampaignTemplateOutbound,
   serializeCampaignSendStats,
   type CampaignSendStats,
 } from './campaignMetrics.js';
@@ -41,6 +42,7 @@ export interface CampaignApiShape {
   message: string;
   mediaUrl: string | null;
   mediaType: CampaignMediaType | null;
+  whatsappTemplateId: string | null;
   status: CampaignStatus;
   audienceFilter: AudienceFilter;
   scheduledAt: string | null;
@@ -82,6 +84,7 @@ export function serializeCampaign(
     message: c.templateName,
     mediaUrl: c.mediaUrl ?? null,
     mediaType,
+    whatsappTemplateId: c.whatsappTemplateId ?? null,
     status: c.status,
     audienceFilter: normalizeAudienceFilter((c.audienceFilter ?? {}) as AudienceFilter),
     scheduledAt: c.scheduledAt?.toISOString() ?? null,
@@ -168,6 +171,14 @@ export async function assertScheduledCampaignCapacity(
 /**
  * Create a campaign in DRAFT or SCHEDULED status.
  */
+async function assertWhatsappTemplateUsable(db: PrismaTx, templateId: string): Promise<void> {
+  const template = await db.whatsappTemplate.findUnique({ where: { id: templateId } });
+  if (!template) throw new CampaignBusinessError('WhatsApp template not found.');
+  if (template.status !== 'APPROVED') {
+    throw new CampaignBusinessError('Only approved WhatsApp templates can be attached to a campaign.');
+  }
+}
+
 export async function createCampaign(params: {
   salonId: string;
   name: string;
@@ -175,6 +186,7 @@ export async function createCampaign(params: {
   templateLang?: string;
   mediaUrl?: string | null;
   mediaType?: CampaignMediaType | null;
+  whatsappTemplateId?: string | null;
   audienceFilter?: AudienceFilter;
   scheduledAt?: Date | null;
   createdBy?: string;
@@ -183,6 +195,9 @@ export async function createCampaign(params: {
   if (params.scheduledAt) {
     const capError = await assertScheduledCampaignCapacity(params.salonId);
     if (capError) throw new CampaignBusinessError(capError);
+  }
+  if (params.whatsappTemplateId) {
+    await assertWhatsappTemplateUsable(db, params.whatsappTemplateId);
   }
   const status: CampaignStatus = params.scheduledAt ? 'SCHEDULED' : 'DRAFT';
 
@@ -194,6 +209,7 @@ export async function createCampaign(params: {
       templateLang: params.templateLang ?? 'en',
       mediaUrl: params.mediaUrl ?? undefined,
       mediaType: params.mediaType ?? undefined,
+      whatsappTemplateId: params.whatsappTemplateId ?? undefined,
       audienceFilter: normalizeAudienceFilter(params.audienceFilter ?? { type: 'all' }) as object,
       status,
       scheduledAt: params.scheduledAt ?? undefined,
@@ -209,6 +225,7 @@ export async function updateCampaign(
     message?: string;
     mediaUrl?: string | null;
     mediaType?: CampaignMediaType | null;
+    whatsappTemplateId?: string | null;
     audienceFilter?: AudienceFilter;
     scheduledAt?: Date | null;
   },
@@ -219,11 +236,16 @@ export async function updateCampaign(
     throw new Error('campaign_not_editable');
   }
 
+  if (params.whatsappTemplateId) {
+    await assertWhatsappTemplateUsable(db, params.whatsappTemplateId);
+  }
+
   const data: Record<string, unknown> = {};
   if (params.name !== undefined) data.name = params.name;
   if (params.message !== undefined) data.templateName = params.message;
   if (params.mediaUrl !== undefined) data.mediaUrl = params.mediaUrl;
   if (params.mediaType !== undefined) data.mediaType = params.mediaType;
+  if (params.whatsappTemplateId !== undefined) data.whatsappTemplateId = params.whatsappTemplateId;
   if (params.audienceFilter !== undefined) {
     data.audienceFilter = normalizeAudienceFilter(params.audienceFilter) as object;
   }
@@ -355,6 +377,19 @@ export async function executeCampaign(campaignId: string) {
     throw new Error(`Campaign ${campaignId} is in ${campaign.status} state`);
   }
 
+  let templateContentSid: string | null = null;
+  if (campaign.whatsappTemplateId) {
+    const template = await db.whatsappTemplate.findUnique({ where: { id: campaign.whatsappTemplateId } });
+    if (template?.status === 'APPROVED' && template.contentSid) {
+      templateContentSid = template.contentSid;
+    } else {
+      logger.warn(
+        { campaignId, whatsappTemplateId: campaign.whatsappTemplateId },
+        'campaign_template_not_approved_falling_back_to_freeform',
+      );
+    }
+  }
+
   const filter = campaign.audienceFilter as AudienceFilter;
   const audience = await buildAudience(campaign.salonId, filter);
   const sentAt = new Date();
@@ -378,26 +413,39 @@ export async function executeCampaign(campaignId: string) {
     if (!customer.waId) continue;
 
     try {
-      const greeting = customer.firstName ?? customer.displayName ?? 'there';
-      const personal = campaign.templateName.trim();
-      const body = personal.includes(greeting)
-        ? personal
-        : personal
-          ? `Hi ${greeting}! ${personal}`
-          : `Hi ${greeting}!`;
+      let sent: boolean;
 
-      const mediaType = parseCampaignMediaType(campaign.mediaType) ?? undefined;
+      if (templateContentSid) {
+        ({ sent } = await sendCampaignTemplateOutbound({
+          salonId: campaign.salonId,
+          campaignId,
+          campaignSendId,
+          customerId: customer.id,
+          to: customer.waId,
+          contentSid: templateContentSid,
+        }));
+      } else {
+        const greeting = customer.firstName ?? customer.displayName ?? 'there';
+        const personal = campaign.templateName.trim();
+        const body = personal.includes(greeting)
+          ? personal
+          : personal
+            ? `Hi ${greeting}! ${personal}`
+            : `Hi ${greeting}!`;
 
-      const { sent } = await sendCampaignOutbound({
-        salonId: campaign.salonId,
-        campaignId,
-        campaignSendId,
-        customerId: customer.id,
-        to: customer.waId,
-        body,
-        mediaUrl: campaign.mediaUrl ?? undefined,
-        mediaType,
-      });
+        const mediaType = parseCampaignMediaType(campaign.mediaType) ?? undefined;
+
+        ({ sent } = await sendCampaignOutbound({
+          salonId: campaign.salonId,
+          campaignId,
+          campaignSendId,
+          customerId: customer.id,
+          to: customer.waId,
+          body,
+          mediaUrl: campaign.mediaUrl ?? undefined,
+          mediaType,
+        }));
+      }
 
       if (sent) {
         delivered++;

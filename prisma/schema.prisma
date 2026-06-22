@@ -184,188 +184,191 @@ enum ConversationStep {
 }
 
 model Salon {
-  id             String       @id @default(cuid())
+  id                         String       @id @default(cuid())
   /// Display / trading name (spec: trading_name)
-  name           String
-  tradingName    String?
-  legalName      String?
-  slug           String       @unique
-  industryTemplate String     @default("salon")
-  businessType     BusinessType @default(SALON)
-  status         TenantStatus @default(TRIAL)
-  statusChangedAt DateTime    @default(now())
-  trialEndsAt    DateTime?
-  tier           String       @default("starter")
-  agencyId       String?
-  agency         Agency?      @relation(fields: [agencyId], references: [id], onDelete: SetNull)
-  timezone       String       @default("Africa/Johannesburg")
-  defaultCurrency String      @default("usd")
-  locale         String       @default("en")
-  addressLine    String?
-  parkingNotes   String?
-  accessibility  String?
-  phoneDisplay   String?
-  contactEmail   String?
-  mapsUrl        String?      @db.Text
+  name                       String
+  tradingName                String?
+  legalName                  String?
+  slug                       String       @unique
+  industryTemplate           String       @default("salon")
+  businessType               BusinessType @default(SALON)
+  status                     TenantStatus @default(TRIAL)
+  statusChangedAt            DateTime     @default(now())
+  trialEndsAt                DateTime?
+  tier                       String       @default("starter")
+  agencyId                   String?
+  agency                     Agency?      @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  timezone                   String       @default("Africa/Johannesburg")
+  defaultCurrency            String       @default("usd")
+  locale                     String       @default("en")
+  addressLine                String?
+  parkingNotes               String?
+  accessibility              String?
+  phoneDisplay               String?
+  contactEmail               String?
+  mapsUrl                    String?      @db.Text
   /// Default daily open/close for bot after-hours messaging (HH:MM, salon timezone)
-  openTime       String?      @default("09:00")
-  closeTime      String?      @default("17:00")
-  welcomeMessage String?      @db.Text
-  afterHoursMessage String?   @db.Text
-  logoUrl        String?      @db.Text
-  botName        String       @default("Ava")
-  googleReviewUrl String?     @db.Text
-  botVoiceBrief  String?      @db.Text
+  openTime                   String?      @default("09:00")
+  closeTime                  String?      @default("17:00")
+  welcomeMessage             String?      @db.Text
+  afterHoursMessage          String?      @db.Text
+  logoUrl                    String?      @db.Text
+  botName                    String       @default("Ava")
+  googleReviewUrl            String?      @db.Text
+  botVoiceBrief              String?      @db.Text
   /// Bot behaviour toggles — owner-controlled from Settings
-  botAskMarketingConsent Boolean @default(true)
-  botAllowStaffPick      Boolean @default(true)
-  botLoyaltyEnabled      Boolean @default(true)
-  botRequirePaymentStep  Boolean @default(true) @map("botRequireDepositStep")
+  botAskMarketingConsent     Boolean      @default(true)
+  botAllowStaffPick          Boolean      @default(true)
+  botLoyaltyEnabled          Boolean      @default(true)
+  botRequirePaymentStep      Boolean      @default(true) @map("botRequireDepositStep")
   /// Automated outbound campaigns (Inngest daily crons)
-  botWinbackEnabled      Boolean @default(true)
-  botBirthdayEnabled     Boolean @default(true)
+  botWinbackEnabled          Boolean      @default(true)
+  botBirthdayEnabled         Boolean      @default(true)
   /// Inactivity follow-up: sent after N minutes of silence
-  inactivityMessage1         String?  @db.Text
-  inactivityMessage1DelayMin Int      @default(10)
-  inactivityMessage2         String?  @db.Text
-  inactivityMessage2DelayMin Int      @default(30)
+  inactivityMessage1         String?      @db.Text
+  inactivityMessage1DelayMin Int          @default(10)
+  inactivityMessage2         String?      @db.Text
+  inactivityMessage2DelayMin Int          @default(30)
   /// Closing message sent when conversation closes
-  closingMessage             String?  @db.Text
-  toneFormality  Int          @default(50)
-  toneWarmth     Int          @default(70)
-  tonePlayfulness Int         @default(40)
-  tonePace       Int          @default(30)
-  toneSalesEnergy Int         @default(30)
+  closingMessage             String?      @db.Text
+  toneFormality              Int          @default(50)
+  toneWarmth                 Int          @default(70)
+  tonePlayfulness            Int          @default(40)
+  tonePace                   Int          @default(30)
+  toneSalesEnergy            Int          @default(30)
   /// Meta WhatsApp Cloud API phone_number_id
-  whatsappPhoneId String?     @unique
-  whatsappWabaId  String?
+  whatsappPhoneId            String?      @unique
+  whatsappWabaId             String?
   /// Per-tenant Twilio WhatsApp sender — inbound To / outbound From (e.g. whatsapp:+27624760899)
-  twilioWhatsAppNumber String?  @unique
+  twilioWhatsAppNumber       String?      @unique
   /// Optional per-tenant Twilio subaccount (future isolation)
-  twilioAccountSid     String?
-  twilioAuthToken      String?
-  onboardingCompletedAt DateTime?
-  metadata       Json         @default("{}")
-  deletedAt      DateTime?
-  /** IANA — hours interpreted in this zone */
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @default(now()) @updatedAt
+  twilioAccountSid           String?
+  twilioAuthToken            String?
+  onboardingCompletedAt      DateTime?
+  metadata                   Json         @default("{}")
+  deletedAt                  DateTime?
+  /**
+   * IANA — hours interpreted in this zone
+   */
+  createdAt                  DateTime     @default(now())
+  updatedAt                  DateTime     @default(now()) @updatedAt
 
-  customers      Customer[]
-  webhookEvents  WebhookEvent[]
-  serviceCategories ServiceCategory[]
-  services       Service[]
-  staff          Staff[]
-  appointments   Appointment[]
-  businessHours  BusinessHour[]
-  workingHours   WorkingHour[]
+  customers              Customer[]
+  webhookEvents          WebhookEvent[]
+  serviceCategories      ServiceCategory[]
+  services               Service[]
+  staff                  Staff[]
+  appointments           Appointment[]
+  businessHours          BusinessHour[]
+  workingHours           WorkingHour[]
   availabilityExceptions AvailabilityException[]
-  conversations  Conversation[]
-  payments       Payment[]
-  invoices       Invoice[]
-  loyaltyProgram LoyaltyProgram?
-  tickets        Ticket[]
-  faqItems       FaqItem[]
-  faqEmbeddings  FaqEmbedding[]
-  knowledgeDocs  KnowledgeDocument[]
-  knowledgeChunks KnowledgeChunk[]
-  branches       Branch[]
-  subscription   SalonSubscription?
-  uploadedFiles  UploadedFile[]
-  consentRecords ConsentRecord[]
-  analyticsEvents AnalyticsEvent[]
-  pushTokens     PushToken[]
-  referralCodes  ReferralCode[]
-  loyaltyTiers   LoyaltyTier[]
-  campaigns      Campaign[]
-  waitlistEntries WaitlistEntry[]
-  serviceAddons  ServiceAddon[]
-  membershipPlans MembershipPlan[]
-  customerMemberships CustomerMembership[]
-  webhookSubscriptions WebhookSubscription[]
-  staffUsers     StaffUser[]
-  auditLogs      AuditLog[]
-  reviewIncentiveClaims ReviewIncentiveClaim[]
-  platformAlerts PlatformAlert[]
-  messageLogs      MessageLog[]
-  platformEvents   PlatformEvent[]
+  conversations          Conversation[]
+  payments               Payment[]
+  invoices               Invoice[]
+  loyaltyProgram         LoyaltyProgram?
+  tickets                Ticket[]
+  faqItems               FaqItem[]
+  faqEmbeddings          FaqEmbedding[]
+  knowledgeDocs          KnowledgeDocument[]
+  knowledgeChunks        KnowledgeChunk[]
+  branches               Branch[]
+  subscription           SalonSubscription?
+  uploadedFiles          UploadedFile[]
+  consentRecords         ConsentRecord[]
+  analyticsEvents        AnalyticsEvent[]
+  pushTokens             PushToken[]
+  referralCodes          ReferralCode[]
+  loyaltyTiers           LoyaltyTier[]
+  campaigns              Campaign[]
+  whatsappTemplates      WhatsappTemplate[]
+  waitlistEntries        WaitlistEntry[]
+  serviceAddons          ServiceAddon[]
+  membershipPlans        MembershipPlan[]
+  customerMemberships    CustomerMembership[]
+  webhookSubscriptions   WebhookSubscription[]
+  staffUsers             StaffUser[]
+  auditLogs              AuditLog[]
+  reviewIncentiveClaims  ReviewIncentiveClaim[]
+  platformAlerts         PlatformAlert[]
+  messageLogs            MessageLog[]
+  platformEvents         PlatformEvent[]
 }
 
 model Branch {
-  id          String   @id @default(cuid())
-  salonId     String
-  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name        String
-  slug        String?
-  address     String?
-  city        String?
-  province    String?
-  postalCode  String?
-  phone       String?
-  email       String?
-  timezone    String?
-  latitude    Float?
-  longitude   Float?
-  isActive    Boolean  @default(true)
-  isDefault   Boolean  @default(false)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  id         String   @id @default(cuid())
+  salonId    String
+  salon      Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name       String
+  slug       String?
+  address    String?
+  city       String?
+  province   String?
+  postalCode String?
+  phone      String?
+  email      String?
+  timezone   String?
+  latitude   Float?
+  longitude  Float?
+  isActive   Boolean  @default(true)
+  isDefault  Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 
-  staff         Staff[]
-  appointments  Appointment[]
-  workingHours  WorkingHour[]
+  staff        Staff[]
+  appointments Appointment[]
+  workingHours WorkingHour[]
 
   @@unique([salonId, slug])
   @@index([salonId])
 }
 
 model Customer {
-  id                  String    @id @default(cuid())
-  salonId             String
-  salon               Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  waId                String    /// E.164 without whatsapp: prefix
-  displayName         String?
-  firstName           String?
-  lastName            String?
-  email               String?
-  dateOfBirth         DateTime?
+  id                     String                 @id @default(cuid())
+  salonId                String
+  salon                  Salon                  @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  waId                   String /// E.164 without whatsapp: prefix
+  displayName            String?
+  firstName              String?
+  lastName               String?
+  email                  String?
+  dateOfBirth            DateTime?
   /// When the last automated win-back message was sent (30-day cooldown)
-  lastWinBackAt       DateTime?
-  locale              String    @default("en")
-  tags                String[]  @default([])
-  notes               String?   @db.Text
-  source              String    @default("whatsapp")  /// whatsapp | web | import | referral
-  marketingConsent        Boolean                 @default(false)
-  marketingConsentStatus  MarketingConsentStatus  @default(PENDING)
-  marketingConsentAt      DateTime?
-  popiaConsentAt          DateTime?
-  preferredStaffId    String?
-  preferredStaff      Staff?    @relation(fields: [preferredStaffId], references: [id], onDelete: SetNull)
-  passwordHash        String?
-  loyaltyStampsCached Int?
-  lastInteractionAt   DateTime?
+  lastWinBackAt          DateTime?
+  locale                 String                 @default("en")
+  tags                   String[]               @default([])
+  notes                  String?                @db.Text
+  source                 String                 @default("whatsapp") /// whatsapp | web | import | referral
+  marketingConsent       Boolean                @default(false)
+  marketingConsentStatus MarketingConsentStatus @default(PENDING)
+  marketingConsentAt     DateTime?
+  popiaConsentAt         DateTime?
+  preferredStaffId       String?
+  preferredStaff         Staff?                 @relation(fields: [preferredStaffId], references: [id], onDelete: SetNull)
+  passwordHash           String?
+  loyaltyStampsCached    Int?
+  lastInteractionAt      DateTime?
   /// No-show risk scoring for staff confirmation prompts
-  noShowCount         Int       @default(0)
-  bookingCount        Int       @default(0)
-  noShowRisk          String    @default("LOW") // LOW | MEDIUM | HIGH
+  noShowCount            Int                    @default(0)
+  bookingCount           Int                    @default(0)
+  noShowRisk             String                 @default("LOW") // LOW | MEDIUM | HIGH
   /// R50-off-style credit earned from leaving a Google review (applied on next booking)
-  reviewCreditCents   Int       @default(0)
-  deletedAt           DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  reviewCreditCents      Int                    @default(0)
+  deletedAt              DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @default(now()) @updatedAt
 
-  conversations   Conversation[]
-  messages        Message[]
-  appointments    Appointment[]
-  loyaltyLedgers  LoyaltyLedger[]
-  consentRecords  ConsentRecord[]
-  pushTokens      PushToken[]
-  referralCodes   ReferralCode[]
-  waitlistEntries WaitlistEntry[]
-  memberships     CustomerMembership[]
-  tickets         Ticket[]
-  payments        Payment[]
+  conversations         Conversation[]
+  messages              Message[]
+  appointments          Appointment[]
+  loyaltyLedgers        LoyaltyLedger[]
+  consentRecords        ConsentRecord[]
+  pushTokens            PushToken[]
+  referralCodes         ReferralCode[]
+  waitlistEntries       WaitlistEntry[]
+  memberships           CustomerMembership[]
+  tickets               Ticket[]
+  payments              Payment[]
   reviewIncentiveClaims ReviewIncentiveClaim[]
 
   @@unique([salonId, waId])
@@ -379,23 +382,23 @@ model Customer {
 }
 
 model Conversation {
-  id              String            @id @default(cuid())
-  salonId         String
-  salon           Salon             @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId      String
-  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  step            ConversationStep  @default(GREETING)
-  context         Json              @default("{}")
-  lastMessageAt           DateTime?
-  lastCustomerMessageAt   DateTime?
-  resolvedAt              DateTime?
-  endedAt                 DateTime?
-  handoffReason           String?
-  messageCount    Int               @default(0)
-  updatedAt   DateTime @default(now()) @updatedAt
-  createdAt       DateTime          @default(now())
+  id                    String           @id @default(cuid())
+  salonId               String
+  salon                 Salon            @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId            String
+  customer              Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  step                  ConversationStep @default(GREETING)
+  context               Json             @default("{}")
+  lastMessageAt         DateTime?
+  lastCustomerMessageAt DateTime?
+  resolvedAt            DateTime?
+  endedAt               DateTime?
+  handoffReason         String?
+  messageCount          Int              @default(0)
+  updatedAt             DateTime         @default(now()) @updatedAt
+  createdAt             DateTime         @default(now())
 
-  messages    Message[]
+  messages Message[]
 
   @@unique([salonId, customerId])
   @@index([customerId])
@@ -422,13 +425,13 @@ model Message {
 }
 
 model MessageLog {
-  id        String            @id @default(cuid())
+  id        String           @id @default(cuid())
   salonId   String?
-  salon     Salon?            @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  salon     Salon?           @relation(fields: [salonId], references: [id], onDelete: SetNull)
   faqId     String?
   direction MessageDirection
   status    MessageLogStatus
-  createdAt DateTime          @default(now())
+  createdAt DateTime         @default(now())
 
   @@index([salonId, createdAt])
   @@index([direction, createdAt])
@@ -445,39 +448,39 @@ model ServiceCategory {
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 
-  services  Service[]
+  services Service[]
 
   @@unique([salonId, slug])
   @@index([salonId])
 }
 
 model Service {
-  id              String           @id @default(cuid())
-  salonId         String
-  salon           Salon            @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name            String
-  aliases         String[]         @default([])
-  description     String?          @db.Text
-  durationMin     Int
-  bufferMin       Int              @default(0)
-  priceCents      Int
-  categoryId      String?
-  category        ServiceCategory? @relation(fields: [categoryId], references: [id])
-  depositCents    Int?             @ignore
-  depositPercent  Int?             @ignore
-  fullPay         Boolean          @default(false) @ignore
-  qualifiesLoyalty Boolean         @default(true)
-  active          Boolean          @default(true)
-  sortOrder       Int              @default(0)
-  deletedAt       DateTime?
+  id               String           @id @default(cuid())
+  salonId          String
+  salon            Salon            @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name             String
+  aliases          String[]         @default([])
+  description      String?          @db.Text
+  durationMin      Int
+  bufferMin        Int              @default(0)
+  priceCents       Int
+  categoryId       String?
+  category         ServiceCategory? @relation(fields: [categoryId], references: [id])
+  depositCents     Int?             @ignore
+  depositPercent   Int?             @ignore
+  fullPay          Boolean          @default(false) @ignore
+  qualifiesLoyalty Boolean          @default(true)
+  active           Boolean          @default(true)
+  sortOrder        Int              @default(0)
+  deletedAt        DateTime?
   /// Custom post-appointment care instructions sent ~10min after completion.
   /// Falls back to a keyword-based default template (barber/lashes/nails/etc.) when unset.
-  aftercareNote   String?          @db.Text
+  aftercareNote    String?          @db.Text
 
   staffLinks   StaffService[]
   appointments Appointment[]
-  addonLinks   ServiceAddon[]       @relation("ParentService")
-  addonOf      ServiceAddon[]       @relation("AddonService")
+  addonLinks   ServiceAddon[] @relation("ParentService")
+  addonOf      ServiceAddon[] @relation("AddonService")
 
   @@index([salonId])
   @@index([categoryId])
@@ -503,41 +506,43 @@ model ServiceAddon {
 }
 
 model Staff {
-  id            String   @id @default(cuid())
-  salonId       String
-  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  branchId      String?
-  branch        Branch?  @relation(fields: [branchId], references: [id])
-  name          String
-  displayName   String?
-  bio           String?  @db.Text
-  specialties   String[] @default([])
-  avatarUrl     String?
-  active        Boolean  @default(true)
-  isBookable    Boolean  @default(true)
-  breakMin      Int      @default(0)
-  sortOrder     Int      @default(0)
-  deletedAt     DateTime?
+  id          String    @id @default(cuid())
+  salonId     String
+  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  branchId    String?
+  branch      Branch?   @relation(fields: [branchId], references: [id])
+  name        String
+  displayName String?
+  bio         String?   @db.Text
+  specialties String[]  @default([])
+  avatarUrl   String?
+  active      Boolean   @default(true)
+  isBookable  Boolean   @default(true)
+  breakMin    Int       @default(0)
+  sortOrder   Int       @default(0)
+  deletedAt   DateTime?
 
-  services      StaffService[]
-  appointments  Appointment[]
-  timeOff       TimeOff[]
-  workingHours  WorkingHour[]
+  services               StaffService[]
+  appointments           Appointment[]
+  timeOff                TimeOff[]
+  workingHours           WorkingHour[]
   availabilityExceptions AvailabilityException[]
-  staffUsers    StaffUser[]
-  analyticsEvents AnalyticsEvent[]
-  preferredByCustomers Customer[]
+  staffUsers             StaffUser[]
+  analyticsEvents        AnalyticsEvent[]
+  preferredByCustomers   Customer[]
 
   @@index([salonId])
   @@index([branchId])
 }
 
 model StaffService {
-  staffId          String
-  serviceId        String
-  staff            Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  service          Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  /** Override the service's base price for this staff member. Null = use service default. */
+  staffId            String
+  serviceId          String
+  staff              Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  service            Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  /**
+   * Override the service's base price for this staff member. Null = use service default.
+   */
   priceCentsOverride Int?
 
   @@id([staffId, serviceId])
@@ -547,8 +552,8 @@ model BusinessHour {
   id        String @id @default(cuid())
   salonId   String
   salon     Salon  @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  dayOfWeek Int    /** 0 = Sunday .. 6 = Saturday */
-  openMin   Int    /** minutes from midnight */
+  dayOfWeek Int /** 0 = Sunday .. 6 = Saturday */
+  openMin   Int /** minutes from midnight */
   closeMin  Int
 
   @@unique([salonId, dayOfWeek])
@@ -565,18 +570,18 @@ model TimeOff {
 
 /// Per-staff recurring weekly availability (spec: working_hours)
 model WorkingHour {
-  id            String   @id @default(cuid())
-  salonId       String
-  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  staffId       String
-  staff         Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  branchId      String?
-  branch        Branch?  @relation(fields: [branchId], references: [id])
-  weekday       Int      /// 0=Sun .. 6=Sat
-  startTime     String   /// HH:MM (e.g. "09:00")
-  endTime       String   /// HH:MM (e.g. "18:00")
-  isBreak       Boolean  @default(false)
-  effectiveFrom DateTime @default(now())
+  id             String    @id @default(cuid())
+  salonId        String
+  salon          Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  staffId        String
+  staff          Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  branchId       String?
+  branch         Branch?   @relation(fields: [branchId], references: [id])
+  weekday        Int /// 0=Sun .. 6=Sat
+  startTime      String /// HH:MM (e.g. "09:00")
+  endTime        String /// HH:MM (e.g. "18:00")
+  isBreak        Boolean   @default(false)
+  effectiveFrom  DateTime  @default(now())
   effectiveUntil DateTime?
 
   @@index([staffId, weekday])
@@ -594,63 +599,63 @@ model AvailabilityException {
   startsAt    DateTime
   endsAt      DateTime
   reason      String?
-  isAvailable Boolean  /// true = special-open, false = closed
+  isAvailable Boolean /// true = special-open, false = closed
 
   @@index([salonId])
   @@index([staffId])
 }
 
 model Appointment {
-  id                  String             @id @default(cuid())
-  salonId             String
-  salon               Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  branchId            String?
-  branch              Branch?            @relation(fields: [branchId], references: [id])
-  customerId          String
-  customer            Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  serviceId           String
-  service             Service            @relation(fields: [serviceId], references: [id])
-  staffId             String
-  staff               Staff              @relation(fields: [staffId], references: [id])
-  start               DateTime
-  end                 DateTime
-  status              AppointmentStatus  @default(HELD)
-  notes               String?
-  paymentInvoiceId    String?            @map("depositInvoiceId")
-  loyaltyRedeemed     Boolean            @default(false)
-  cancellationReason  CancellationReason?
-  cancelledAt         DateTime?
-  cancelledBy         String?            /// 'customer' | 'staff' | 'system'
-  rescheduledFromId   String?            @unique
-  rescheduledFrom     Appointment?       @relation("RescheduleChain", fields: [rescheduledFromId], references: [id])
-  rescheduledTo       Appointment?       @relation("RescheduleChain")
-  noShowMarkedAt      DateTime?
-  confirmedAt         DateTime?
-  paymentLinkSentAt   DateTime?
-  reminderSentAt      DateTime?          /// @deprecated use reminder24hSentAt
-  reminder24hSentAt   DateTime?
-  reminder2hSentAt    DateTime?
-  reminder24hFailed   Boolean            @default(false)
-  reminder2hFailed    Boolean            @default(false)
-  reviewRequestSentAt DateTime?
-  penaltyWaivedAt     DateTime?
-  penaltyWaivedBy     String?            /// StaffUser id
-  cancellationPenaltyApplied Boolean     @default(false)
-  paymentForfeited    Boolean            @default(false) @map("depositForfeited")
-  addonServiceIds     String[]           @default([])
-  csatSentAt          DateTime?
-  csatScore           Int?               /// 1–5, null until customer replies
+  id                         String              @id @default(cuid())
+  salonId                    String
+  salon                      Salon               @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  branchId                   String?
+  branch                     Branch?             @relation(fields: [branchId], references: [id])
+  customerId                 String
+  customer                   Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId                  String
+  service                    Service             @relation(fields: [serviceId], references: [id])
+  staffId                    String
+  staff                      Staff               @relation(fields: [staffId], references: [id])
+  start                      DateTime
+  end                        DateTime
+  status                     AppointmentStatus   @default(HELD)
+  notes                      String?
+  paymentInvoiceId           String?             @map("depositInvoiceId")
+  loyaltyRedeemed            Boolean             @default(false)
+  cancellationReason         CancellationReason?
+  cancelledAt                DateTime?
+  cancelledBy                String? /// 'customer' | 'staff' | 'system'
+  rescheduledFromId          String?             @unique
+  rescheduledFrom            Appointment?        @relation("RescheduleChain", fields: [rescheduledFromId], references: [id])
+  rescheduledTo              Appointment?        @relation("RescheduleChain")
+  noShowMarkedAt             DateTime?
+  confirmedAt                DateTime?
+  paymentLinkSentAt          DateTime?
+  reminderSentAt             DateTime? /// @deprecated use reminder24hSentAt
+  reminder24hSentAt          DateTime?
+  reminder2hSentAt           DateTime?
+  reminder24hFailed          Boolean             @default(false)
+  reminder2hFailed           Boolean             @default(false)
+  reviewRequestSentAt        DateTime?
+  penaltyWaivedAt            DateTime?
+  penaltyWaivedBy            String? /// StaffUser id
+  cancellationPenaltyApplied Boolean             @default(false)
+  paymentForfeited           Boolean             @default(false) @map("depositForfeited")
+  addonServiceIds            String[]            @default([])
+  csatSentAt                 DateTime?
+  csatScore                  Int? /// 1–5, null until customer replies
   /// Number of people the booking is for (group bookings); 1 for a single customer.
-  partySize           Int                @default(1)
+  partySize                  Int                 @default(1)
   /// Customer-chosen settlement method for post-confirm payment (cash/EFT paid in person vs online).
-  paymentMethod       PaymentMethod?
-  aftercareSentAt     DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  paymentMethod              PaymentMethod?
+  aftercareSentAt            DateTime?
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @default(now()) @updatedAt
 
-  payments    Payment[]
-  invoices    Invoice[]
-  analyticsEvents AnalyticsEvent[]
+  payments              Payment[]
+  invoices              Invoice[]
+  analyticsEvents       AnalyticsEvent[]
   reviewIncentiveClaims ReviewIncentiveClaim[]
 
   @@index([salonId, start])
@@ -675,26 +680,26 @@ model ReviewIncentiveClaim {
   expiresAt     DateTime
   createdAt     DateTime     @default(now())
 
+  @@unique([appointmentId])
   @@index([salonId])
   @@index([customerId])
   @@index([appointmentId])
-  @@unique([appointmentId])
 }
 
 model Invoice {
-  id             String   @id @default(cuid())
-  salonId        String
-  salon          Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  appointmentId  String?
-  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
-  customerId     String
-  currency       String   @default("usd")
-  subtotalCents  Int
-  taxCents       Int      @default(0)
-  totalCents     Int
-  createdAt      DateTime @default(now())
+  id            String       @id @default(cuid())
+  salonId       String
+  salon         Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  customerId    String
+  currency      String       @default("usd")
+  subtotalCents Int
+  taxCents      Int          @default(0)
+  totalCents    Int
+  createdAt     DateTime     @default(now())
 
-  payments       Payment[]
+  payments Payment[]
 
   @@index([salonId])
   @@index([customerId])
@@ -733,7 +738,7 @@ model Payment {
   metadata              Json?
   paidAt                DateTime?
   createdAt             DateTime        @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  updatedAt             DateTime        @default(now()) @updatedAt
 
   @@index([salonId, createdAt])
   @@index([stripePaymentIntentId])
@@ -743,47 +748,47 @@ model Payment {
 }
 
 model LoyaltyProgram {
-  id                String  @id @default(cuid())
-  salonId           String  @unique
-  salon             Salon   @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  stampsPerReward   Int     @default(10)
-  rewardKind        String  @default("FREE_SERVICE_TIER")
-  rewardDescription String? @default("")
+  id                String   @id @default(cuid())
+  salonId           String   @unique
+  salon             Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  stampsPerReward   Int      @default(10)
+  rewardKind        String   @default("FREE_SERVICE_TIER")
+  rewardDescription String?  @default("")
   createdAt         DateTime @default(now())
 
   ledger LoyaltyLedger[]
 }
 
 model LoyaltyLedger {
-  id          String   @id @default(cuid())
-  programId   String
-  program     LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  delta       Int      /** +earn -redeem */
-  reason      String
-  appointmentId String?
-  createdAt   DateTime @default(now())
+  id                   String         @id @default(cuid())
+  programId            String
+  program              LoyaltyProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  customerId           String
+  customer             Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  delta                Int /** +earn -redeem */
+  reason               String
+  appointmentId        String?
+  createdAt            DateTime       @default(now())
   createdByStaffUserId String?
 
   @@index([customerId, createdAt])
 }
 
 model Ticket {
-  id          String       @id @default(cuid())
-  salonId     String
-  salon       Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  type        TicketType   @default(GENERAL)
-  status      TicketStatus @default(OPEN)
-  inboundCount Int         @default(0)
-  subject     String?
+  id                  String       @id @default(cuid())
+  salonId             String
+  salon               Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId          String
+  customer            Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type                TicketType   @default(GENERAL)
+  status              TicketStatus @default(OPEN)
+  inboundCount        Int          @default(0)
+  subject             String?
   assigneeStaffUserId String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @default(now()) @updatedAt
 
-  messages    TicketMessage[]
+  messages TicketMessage[]
 
   @@index([salonId])
   @@index([salonId, type, status])
@@ -793,7 +798,7 @@ model TicketMessage {
   id        String   @id @default(cuid())
   ticketId  String
   ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  direction String   /** in | out | internal */
+  direction String /** in | out | internal */
   body      String   @db.Text
   createdAt DateTime @default(now())
 }
@@ -805,20 +810,20 @@ enum FaqStatus {
 }
 
 model FaqItem {
-  id          String    @id @default(cuid())
-  salonId     String
-  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  question    String
-  answer      String    @db.Text
-  keywords    String[]  @default([])
-  status      FaqStatus @default(APPROVED)
-  sortOrder   Int       @default(0)
-  approvedAt  DateTime?
-  approvedBy  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @default(now()) @updatedAt
+  id         String    @id @default(cuid())
+  salonId    String
+  salon      Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  question   String
+  answer     String    @db.Text
+  keywords   String[]  @default([])
+  status     FaqStatus @default(APPROVED)
+  sortOrder  Int       @default(0)
+  approvedAt DateTime?
+  approvedBy String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
 
-  embeddings  FaqEmbedding[]
+  embeddings FaqEmbedding[]
 
   @@index([salonId])
   @@index([salonId, status])
@@ -826,16 +831,16 @@ model FaqItem {
 
 /// Vector embeddings for semantic FAQ search (pgvector)
 model FaqEmbedding {
-  id        String   @id @default(cuid())
+  id        String                       @id @default(cuid())
   faqItemId String
-  faqItem   FaqItem  @relation(fields: [faqItemId], references: [id], onDelete: Cascade)
+  faqItem   FaqItem                      @relation(fields: [faqItemId], references: [id], onDelete: Cascade)
   salonId   String
-  salon     Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  chunk     String   @db.Text
+  salon     Salon                        @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  chunk     String                       @db.Text
   /// Stored as float[] in Prisma; actual pgvector column created via migration SQL
   embedding Unsupported("vector(1536)")?
-  model     String   @default("text-embedding-3-small")
-  createdAt DateTime @default(now())
+  model     String                       @default("text-embedding-3-small")
+  createdAt DateTime                     @default(now())
 
   @@index([salonId])
   @@index([faqItemId])
@@ -843,37 +848,37 @@ model FaqEmbedding {
 
 /// Knowledge base documents (uploaded files, scraped content)
 model KnowledgeDocument {
-  id            String   @id @default(cuid())
-  salonId       String
-  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  title         String
-  sourceUrl     String?
-  mimeType      String   @default("text/plain")
-  content       String   @db.Text
-  chunkCount    Int      @default(0)
-  embeddedAt    DateTime?
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  id         String    @id @default(cuid())
+  salonId    String
+  salon      Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  title      String
+  sourceUrl  String?
+  mimeType   String    @default("text/plain")
+  content    String    @db.Text
+  chunkCount Int       @default(0)
+  embeddedAt DateTime?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt
 
-  chunks  KnowledgeChunk[]
+  chunks KnowledgeChunk[]
 
   @@index([salonId])
 }
 
 /// Individual chunks of a knowledge document with embeddings
 model KnowledgeChunk {
-  id         String              @id @default(cuid())
+  id         String                       @id @default(cuid())
   documentId String
-  document   KnowledgeDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   KnowledgeDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
   salonId    String
-  salon      Salon               @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  salon      Salon                        @relation(fields: [salonId], references: [id], onDelete: Cascade)
   chunkIndex Int
-  content    String              @db.Text
-  tokenCount Int                 @default(0)
+  content    String                       @db.Text
+  tokenCount Int                          @default(0)
   embedding  Unsupported("vector(1536)")?
-  model      String              @default("text-embedding-3-small")
-  createdAt  DateTime            @default(now())
+  model      String                       @default("text-embedding-3-small")
+  createdAt  DateTime                     @default(now())
 
   @@index([salonId])
   @@index([documentId, chunkIndex])
@@ -893,7 +898,7 @@ model StaffUser {
   active       Boolean   @default(true)
   createdAt    DateTime  @default(now())
 
-  auditLogs    AuditLog[]
+  auditLogs      AuditLog[]
   platformAlerts PlatformAlert[]
 }
 
@@ -950,16 +955,16 @@ model PlatformEvent {
 // ─── Push Notifications ───────────────────────────────────────────────
 
 model PushToken {
-  id          String   @id @default(cuid())
-  salonId     String
-  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  platform    String   /// ios | android | web
-  token       String
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  id         String   @id @default(cuid())
+  salonId    String
+  salon      Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  platform   String /// ios | android | web
+  token      String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
 
   @@unique([customerId, token])
   @@index([salonId])
@@ -968,84 +973,84 @@ model PushToken {
 // ─── Referrals & Loyalty Tiers ────────────────────────────────────────
 
 model ReferralCode {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   salonId      String
-  salon        Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  salon        Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
   customerId   String
-  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  code         String    @unique
-  usageCount   Int       @default(0)
-  maxUses      Int       @default(0)
-  rewardStamps Int       @default(1)
-  rewardCents  Int       @default(5000)
-  active       Boolean   @default(true)
-  createdAt    DateTime  @default(now())
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  code         String   @unique
+  usageCount   Int      @default(0)
+  maxUses      Int      @default(0)
+  rewardStamps Int      @default(1)
+  rewardCents  Int      @default(5000)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
 
-  redemptions  ReferralRedemption[]
+  redemptions ReferralRedemption[]
 
   @@index([salonId])
   @@index([code])
 }
 
 model ReferralRedemption {
-  id             String       @id @default(cuid())
-  referralCodeId String
-  referralCode   ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
+  id                 String       @id @default(cuid())
+  referralCodeId     String
+  referralCode       ReferralCode @relation(fields: [referralCodeId], references: [id], onDelete: Cascade)
   referredCustomerId String
-  createdAt      DateTime     @default(now())
+  createdAt          DateTime     @default(now())
 
   @@unique([referralCodeId, referredCustomerId])
 }
 
 model LoyaltyTier {
-  id              String   @id @default(cuid())
-  salonId         String
-  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name            String
-  minVisits       Int
-  multiplier      Float    @default(1.0)
-  perks           String?  @db.Text
-  sortOrder       Int      @default(0)
-  createdAt       DateTime @default(now())
+  id         String   @id @default(cuid())
+  salonId    String
+  salon      Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name       String
+  minVisits  Int
+  multiplier Float    @default(1.0)
+  perks      String?  @db.Text
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
 
-  @@index([salonId])
   @@unique([salonId, name])
+  @@index([salonId])
 }
 
 // ─── VIP Membership ─────────────────────────────────────────────────
 
 model MembershipPlan {
-  id              String   @id @default(cuid())
-  salonId         String
-  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name            String
-  description     String?  @db.Text
-  priceCents      Int
-  visitsPerMonth  Int      @default(4)
-  savingsCents    Int      @default(0)
-  active          Boolean  @default(true)
-  sortOrder       Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
+  id             String   @id @default(cuid())
+  salonId        String
+  salon          Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?  @db.Text
+  priceCents     Int
+  visitsPerMonth Int      @default(4)
+  savingsCents   Int      @default(0)
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
 
-  memberships     CustomerMembership[]
+  memberships CustomerMembership[]
 
   @@index([salonId])
 }
 
 model CustomerMembership {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   salonId         String
-  salon           Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  salon           Salon          @relation(fields: [salonId], references: [id], onDelete: Cascade)
   customerId      String
-  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer        Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   planId          String
   plan            MembershipPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   visitsRemaining Int
   renewsAt        DateTime
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
 
   @@index([salonId, customerId])
   @@index([salonId, active])
@@ -1062,48 +1067,58 @@ enum CampaignStatus {
 }
 
 model Campaign {
-  id            String         @id @default(cuid())
-  salonId       String
-  salon         Salon          @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  name          String
-  templateName  String
-  templateLang  String         @default("en")
-  /** Public HTTPS URL for WhatsApp image/video attachment */
-  mediaUrl      String?        @db.Text
-  /** image | video */
-  mediaType     String?
-  audienceFilter Json          @default("{}")
-  status        CampaignStatus @default(DRAFT)
-  scheduledAt   DateTime?
-  sentAt        DateTime?
-  totalRecipients Int          @default(0)
-  delivered     Int            @default(0)
-  failed        Int            @default(0)
-  createdBy     String?
-  createdAt     DateTime       @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  id              String         @id @default(cuid())
+  salonId         String
+  salon           Salon          @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name            String
+  templateName    String
+  templateLang    String         @default("en")
+  /**
+   * Public HTTPS URL for WhatsApp image/video attachment
+   */
+  mediaUrl        String?        @db.Text
+  /**
+   * image | video
+   */
+  mediaType       String?
+  audienceFilter  Json           @default("{}")
+  status          CampaignStatus @default(DRAFT)
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  totalRecipients Int            @default(0)
+  delivered       Int            @default(0)
+  failed          Int            @default(0)
+  createdBy       String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @default(now()) @updatedAt
 
-  send          CampaignSend?
-  recipients    CampaignRecipient[]
+  /**
+   * Approved WhatsApp template used to reach customers outside the 24h session window.
+   */
+  whatsappTemplateId String?
+  whatsappTemplate   WhatsappTemplate? @relation(fields: [whatsappTemplateId], references: [id])
+
+  send       CampaignSend?
+  recipients CampaignRecipient[]
 
   @@index([salonId, status])
 }
 
 model CampaignSend {
-  id              String   @id @default(cuid())
-  campaignId      String   @unique
-  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  salonId         String
-  sentAt          DateTime
-  sentCount       Int      @default(0)
-  deliveredCount  Int      @default(0)
-  readCount       Int      @default(0)
-  repliedCount    Int      @default(0)
-  bookedCount     Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  campaignId     String   @unique
+  campaign       Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  salonId        String
+  sentAt         DateTime
+  sentCount      Int      @default(0)
+  deliveredCount Int      @default(0)
+  readCount      Int      @default(0)
+  repliedCount   Int      @default(0)
+  bookedCount    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  recipients      CampaignRecipient[]
+  recipients CampaignRecipient[]
 
   @@index([salonId, sentAt])
 }
@@ -1128,22 +1143,71 @@ model CampaignRecipient {
   @@index([salonId, customerId])
 }
 
+enum WhatsappTemplateCategory {
+  MARKETING
+  UTILITY
+}
+
+enum WhatsappTemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/**
+ * A Meta-approved WhatsApp rich-card template (image header + body + CTA button),
+ * sent via Twilio's Content API so it can reach customers outside the 24h session window.
+ */
+model WhatsappTemplate {
+  id              String                   @id @default(cuid())
+  salonId         String
+  salon           Salon                    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  name            String
+  category        WhatsappTemplateCategory @default(MARKETING)
+  language        String                   @default("en")
+  headerText      String?
+  /**
+   * Public HTTPS URL for the card's header image
+   */
+  mediaUrl        String?                  @db.Text
+  body            String                   @db.Text
+  footer          String?
+  /**
+   * CardAction[] — { type, title, url?, phone?, code? }
+   */
+  buttons         Json                     @default("[]")
+  status          WhatsappTemplateStatus   @default(DRAFT)
+  contentSid      String?
+  rejectionReason String?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  createdBy       String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @default(now()) @updatedAt
+
+  campaigns Campaign[]
+
+  @@unique([salonId, name])
+  @@index([salonId, status])
+}
+
 // ─── Waitlist ─────────────────────────────────────────────────────────
 
 model WaitlistEntry {
-  id          String    @id @default(cuid())
-  salonId     String
-  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  serviceId   String
-  staffId     String?
-  branchId    String?
+  id            String    @id @default(cuid())
+  salonId       String
+  salon         Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceId     String
+  staffId       String?
+  branchId      String?
   preferredDate String?
-  notified    Boolean   @default(false)
-  notifiedAt  DateTime?
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
+  notified      Boolean   @default(false)
+  notifiedAt    DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([salonId, serviceId])
   @@index([salonId, notified])
@@ -1163,40 +1227,40 @@ model WebhookSubscription {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
-  deliveries  WebhookDelivery[]
+  deliveries WebhookDelivery[]
 
   @@index([salonId])
   @@index([salonId, active])
 }
 
 model WebhookDelivery {
-  id             String   @id @default(cuid())
+  id             String              @id @default(cuid())
   subscriptionId String
   subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   eventType      String
   payload        Json
   statusCode     Int?
-  responseBody   String?  @db.Text
-  attempts       Int      @default(1)
-  success        Boolean  @default(false)
+  responseBody   String?             @db.Text
+  attempts       Int                 @default(1)
+  success        Boolean             @default(false)
   deliveredAt    DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime            @default(now())
 
   @@index([subscriptionId, createdAt])
 }
 
 model AnalyticsEvent {
-  id            String   @id @default(cuid())
+  id            String       @id @default(cuid())
   salonId       String
-  salon         Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  salon         Salon        @relation(fields: [salonId], references: [id], onDelete: Cascade)
   customerId    String?
   appointmentId String?
   appointment   Appointment? @relation(fields: [appointmentId], references: [id])
   staffId       String?
-  staff         Staff?   @relation(fields: [staffId], references: [id])
-  type          String   /** booking_started, booking_complete, csat, ... */
+  staff         Staff?       @relation(fields: [staffId], references: [id])
+  type          String /** booking_started, booking_complete, csat, ... */
   payload       Json?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime     @default(now())
 
   @@index([salonId, type, createdAt])
 }
@@ -1219,10 +1283,10 @@ model Agency {
   contactEmail String?
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  updatedAt    DateTime @default(now()) @updatedAt
 
-  users        AgencyUser[]
-  salons       Salon[]
+  users  AgencyUser[]
+  salons Salon[]
 }
 
 model AgencyUser {
@@ -1236,7 +1300,7 @@ model AgencyUser {
   active       Boolean        @default(true)
   lastLoginAt  DateTime?
   createdAt    DateTime       @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  updatedAt    DateTime       @default(now()) @updatedAt
 
   @@index([agencyId])
 }
@@ -1244,15 +1308,15 @@ model AgencyUser {
 // ─── Platform Admin ───────────────────────────────────────────────────
 
 model AdminUser {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
   name         String
-  isSuperAdmin Boolean  @default(false)
-  active       Boolean  @default(true)
+  isSuperAdmin Boolean   @default(false)
+  active       Boolean   @default(true)
   lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
 }
 
 // ─── Subscription Billing ─────────────────────────────────────────────
@@ -1271,47 +1335,47 @@ enum SubscriptionBillingIssueKind {
 }
 
 model SubscriptionPlan {
-  id             String   @id @default(cuid())
-  name           String   /// e.g. "Starter", "Pro", "Enterprise"
-  tier           String   @unique /// starter | marineflow | pro | enterprise
-  priceMonthly   Int      /// cents (ZAR)
-  priceAnnual    Int      /// cents (ZAR)
-  setupFeeMonthly Int     @default(0) /// one-off onboarding (monthly billing path), cents
-  setupFeeAnnual  Int     @default(0) /// one-off onboarding (annual billing path), cents
-  maxStaff       Int      @default(3)
-  maxBranches    Int      @default(1)
-  maxServices    Int      @default(10)
-  features       String[] @default([])
-  aiEnabled      Boolean  @default(false)
-  isActive       Boolean  @default(true)
-  sortOrder      Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  id              String   @id @default(cuid())
+  name            String /// e.g. "Starter", "Pro", "Enterprise"
+  tier            String   @unique /// starter | marineflow | pro | enterprise
+  priceMonthly    Int /// cents (ZAR)
+  priceAnnual     Int /// cents (ZAR)
+  setupFeeMonthly Int      @default(0) /// one-off onboarding (monthly billing path), cents
+  setupFeeAnnual  Int      @default(0) /// one-off onboarding (annual billing path), cents
+  maxStaff        Int      @default(3)
+  maxBranches     Int      @default(1)
+  maxServices     Int      @default(10)
+  features        String[] @default([])
+  aiEnabled       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
 
-  subscriptions  SalonSubscription[]
+  subscriptions SalonSubscription[]
 }
 
 model SalonSubscription {
-  id                    String             @id @default(cuid())
-  salonId               String             @unique
-  salon                 Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  planId                String
-  plan                  SubscriptionPlan   @relation(fields: [planId], references: [id])
-  status                SubscriptionStatus @default(TRIAL)
-  billingProvider       String             @default("payfast") /// payfast | ozow
-  payfastSubscriptionId String?            @unique
-  currentPeriodStart    DateTime?
-  currentPeriodEnd      DateTime?
-  cancelAtPeriodEnd     Boolean            @default(false)
-  cancelledAt           DateTime?
-  trialEndsAt           DateTime?
-  lastPaymentAt         DateTime?
+  id                     String                        @id @default(cuid())
+  salonId                String                        @unique
+  salon                  Salon                         @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   SubscriptionPlan              @relation(fields: [planId], references: [id])
+  status                 SubscriptionStatus            @default(TRIAL)
+  billingProvider        String                        @default("payfast") /// payfast | ozow
+  payfastSubscriptionId  String?                       @unique
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean                       @default(false)
+  cancelledAt            DateTime?
+  trialEndsAt            DateTime?
+  lastPaymentAt          DateTime?
   lastPaymentAmountCents Int?
-  lastBillingIssueKind  SubscriptionBillingIssueKind?
-  lastBillingIssueAt    DateTime?
+  lastBillingIssueKind   SubscriptionBillingIssueKind?
+  lastBillingIssueAt     DateTime?
   lastBillingIssueDetail String?
-  createdAt             DateTime           @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @default(now()) @updatedAt
 
   @@index([salonId])
   @@index([status])
@@ -1321,18 +1385,18 @@ model SalonSubscription {
 // ─── POPIA/GDPR Consent ───────────────────────────────────────────────
 
 model ConsentRecord {
-  id          String    @id @default(cuid())
-  salonId     String
-  salon       Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  customerId  String
-  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  type        String    /// marketing | data_processing | communications
-  granted     Boolean
-  grantedAt   DateTime?
-  revokedAt   DateTime?
-  source      String    @default("whatsapp") /// whatsapp | web | manual
-  ipAddress   String?
-  createdAt   DateTime  @default(now())
+  id         String    @id @default(cuid())
+  salonId    String
+  salon      Salon     @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  type       String /// marketing | data_processing | communications
+  granted    Boolean
+  grantedAt  DateTime?
+  revokedAt  DateTime?
+  source     String    @default("whatsapp") /// whatsapp | web | manual
+  ipAddress  String?
+  createdAt  DateTime  @default(now())
 
   @@index([salonId])
   @@index([customerId])
@@ -1342,17 +1406,17 @@ model ConsentRecord {
 // ─── File Uploads ─────────────────────────────────────────────────────
 
 model UploadedFile {
-  id          String   @id @default(cuid())
-  salonId     String
-  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
-  key         String   @unique
-  filename    String
-  mimeType    String
-  sizeBytes   Int
-  purpose     String   @default("general")
-  uploadedBy  String?
-  url         String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  salonId    String
+  salon      Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  key        String   @unique
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  purpose    String   @default("general")
+  uploadedBy String?
+  url        String?
+  createdAt  DateTime @default(now())
 
   @@index([salonId])
   @@index([salonId, purpose])
@@ -1360,15 +1424,15 @@ model UploadedFile {
 
 /// Inbound webhook dedup + audit (spec: webhook_events)
 model WebhookEvent {
-  id           String   @id @default(cuid())
-  salonId      String?
-  salon        Salon?   @relation(fields: [salonId], references: [id], onDelete: SetNull)
-  provider     String
+  id              String    @id @default(cuid())
+  salonId         String?
+  salon           Salon?    @relation(fields: [salonId], references: [id], onDelete: SetNull)
+  provider        String
   providerEventId String
-  payload      Json
-  verified     Boolean  @default(false)
-  processedAt  DateTime?
-  createdAt    DateTime @default(now())
+  payload         Json
+  verified        Boolean   @default(false)
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
 
   @@unique([provider, providerEventId])
   @@index([salonId, createdAt])

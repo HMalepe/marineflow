@@ -116,6 +116,17 @@ import {
   resolveCampaignScheduleAfterPatch,
 } from '../services/campaigns.js';
 import { sendPopiaConsentBlast, countPopiaPendingCustomers } from '../api/campaigns/send-popia-blast.js';
+import {
+  WhatsappTemplateBusinessError,
+  createWhatsappTemplate,
+  deleteWhatsappTemplate,
+  getWhatsappTemplate,
+  listWhatsappTemplates,
+  refreshWhatsappTemplateStatus,
+  serializeWhatsappTemplate,
+  submitWhatsappTemplateForReview,
+} from '../services/whatsappTemplates.js';
+import type { WhatsappCardAction } from '../lib/integrations/messaging/whatsappTemplateContent.js';
 import { getBranchStats } from '../api/branches/stats.js';
 import { getCustomerStats, getCustomerStatsBatch } from '../api/customers/stats.js';
 import { getCustomerSegmentCounts } from '../api/customers/segments.js';
@@ -167,6 +178,14 @@ function mapCampaignBusinessError(err: unknown, reply: FastifyReply): { error: s
   if (err instanceof CampaignBusinessError) {
     reply.code(400);
     return { error: 'campaign_error', message: err.message };
+  }
+  return null;
+}
+
+function mapWhatsappTemplateBusinessError(err: unknown, reply: FastifyReply): { error: string; message: string } | null {
+  if (err instanceof WhatsappTemplateBusinessError) {
+    reply.code(400);
+    return { error: 'whatsapp_template_error', message: err.message };
   }
   return null;
 }
@@ -5080,6 +5099,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       message?: string;
       mediaUrl?: string | null;
       mediaType?: string | null;
+      whatsappTemplateId?: string | null;
       audienceFilter?: AudienceFilter;
       scheduledAt?: string | null;
       sendNow?: boolean;
@@ -5089,7 +5109,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
-        const { name, message, mediaUrl, mediaType, audienceFilter, scheduledAt, sendNow } =
+        const { name, message, mediaUrl, mediaType, whatsappTemplateId, audienceFilter, scheduledAt, sendNow } =
           request.body ?? {};
         if (!name?.trim()) {
           reply.code(400);
@@ -5103,7 +5123,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_media', message: mediaError };
         }
-        if (!trimmedMessage && !mediaUrl) {
+        if (!trimmedMessage && !mediaUrl && !whatsappTemplateId) {
           reply.code(400);
           return {
             error: 'content_required',
@@ -5147,6 +5167,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           message: trimmedMessage,
           mediaUrl: mediaUrl ?? null,
           mediaType: parsedMediaType,
+          whatsappTemplateId: whatsappTemplateId ?? null,
           audienceFilter: audience,
           scheduledAt: sendNow ? null : scheduleDate,
           createdBy: user.sub,
@@ -5184,6 +5205,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       mediaUrl?: string | null;
       mediaType?: string | null;
       clearMedia?: boolean;
+      whatsappTemplateId?: string | null;
       audienceFilter?: AudienceFilter;
       scheduledAt?: string | null;
     };
@@ -5198,7 +5220,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found' };
         }
 
-        const { name, message, mediaUrl, mediaType, clearMedia, audienceFilter, scheduledAt } =
+        const { name, message, mediaUrl, mediaType, clearMedia, whatsappTemplateId, audienceFilter, scheduledAt } =
           request.body ?? {};
         if (name !== undefined && !name.trim()) {
           reply.code(400);
@@ -5228,7 +5250,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_media', message: mediaError };
         }
-        if (!nextMessage && !nextMediaUrl) {
+        const nextWhatsappTemplateId =
+          whatsappTemplateId !== undefined ? whatsappTemplateId : existing.whatsappTemplateId;
+        if (!nextMessage && !nextMediaUrl && !nextWhatsappTemplateId) {
           reply.code(400);
           return {
             error: 'content_required',
@@ -5279,6 +5303,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             message: message !== undefined ? nextMessage : undefined,
             mediaUrl: clearMedia || mediaUrl !== undefined ? nextMediaUrl : undefined,
             mediaType: clearMedia || mediaUrl !== undefined || mediaType !== undefined ? nextMediaType : undefined,
+            whatsappTemplateId,
             audienceFilter,
             scheduledAt: scheduleDate,
           });
@@ -5334,7 +5359,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             reply.code(400);
             return { error: 'invalid_media', message: contentError };
           }
-          if (!existing.templateName?.trim() && !existing.mediaUrl) {
+          if (!existing.templateName?.trim() && !existing.mediaUrl && !existing.whatsappTemplateId) {
             reply.code(400);
             return {
               error: 'content_required',
@@ -5392,6 +5417,140 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             reply.code(409);
             return { error: 'campaign_not_cancellable', message: 'Only draft or scheduled campaigns can be cancelled.' };
           }
+          throw err;
+        }
+      });
+    },
+  );
+
+  app.get('/whatsapp-templates', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      const items = await listWhatsappTemplates();
+      return { templates: items.map(serializeWhatsappTemplate) };
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/whatsapp-templates/:id', async (request, reply) => {
+    return withUserTenant(request, reply, async () => {
+      let item = await getWhatsappTemplate(request.params.id);
+      if (!item) {
+        reply.code(404);
+        return { error: 'not_found' };
+      }
+      if (item.status === 'PENDING') {
+        item = await refreshWhatsappTemplateStatus(item.id);
+      }
+      return { template: serializeWhatsappTemplate(item) };
+    });
+  });
+
+  app.post<{
+    Body: {
+      name: string;
+      category: 'MARKETING' | 'UTILITY';
+      language?: string;
+      headerText?: string | null;
+      mediaUrl?: string | null;
+      body: string;
+      footer?: string | null;
+      buttons?: WhatsappCardAction[];
+    };
+  }>(
+    '/whatsapp-templates',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const { name, category, language, headerText, mediaUrl, body, footer, buttons } =
+          request.body ?? {};
+        if (!name?.trim()) {
+          reply.code(400);
+          return { error: 'name_required', message: 'Add a template name.' };
+        }
+        if (category !== 'MARKETING' && category !== 'UTILITY') {
+          reply.code(400);
+          return { error: 'invalid_category', message: 'Choose marketing or utility for the template category.' };
+        }
+
+        try {
+          const item = await createWhatsappTemplate({
+            salonId: user.salonId,
+            name: name.trim(),
+            category,
+            language,
+            headerText,
+            mediaUrl,
+            body,
+            footer,
+            buttons,
+            createdBy: user.sub,
+          });
+
+          await getTenantDb().auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'whatsapp_template_create',
+              entity: 'WhatsappTemplate',
+              entityId: item.id,
+            },
+          });
+
+          return { template: serializeWhatsappTemplate(item) };
+        } catch (err) {
+          const mapped = mapWhatsappTemplateBusinessError(err, reply);
+          if (mapped) return mapped;
+          throw err;
+        }
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/whatsapp-templates/:id/submit',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        try {
+          const item = await submitWhatsappTemplateForReview(request.params.id);
+          await getTenantDb().auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'whatsapp_template_submit',
+              entity: 'WhatsappTemplate',
+              entityId: item.id,
+            },
+          });
+          return { template: serializeWhatsappTemplate(item) };
+        } catch (err) {
+          const mapped = mapWhatsappTemplateBusinessError(err, reply);
+          if (mapped) return mapped;
+          throw err;
+        }
+      });
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/whatsapp-templates/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        try {
+          await deleteWhatsappTemplate(request.params.id);
+          await getTenantDb().auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'whatsapp_template_delete',
+              entity: 'WhatsappTemplate',
+              entityId: request.params.id,
+            },
+          });
+          return { ok: true };
+        } catch (err) {
+          const mapped = mapWhatsappTemplateBusinessError(err, reply);
+          if (mapped) return mapped;
           throw err;
         }
       });

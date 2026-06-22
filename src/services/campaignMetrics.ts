@@ -3,7 +3,8 @@ import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
 import { prisma } from '../lib/prisma.js';
 import { env, isTwilioAccountConfigured } from '../config.js';
 import { logger } from '../lib/logger.js';
-import { getTenantWhatsAppFrom, sendWhatsAppReplyWithStatusCallback } from '../lib/twilio.js';
+import { getTenantWhatsAppFrom, getTwilioAccountClient, sendWhatsAppReplyWithStatusCallback } from '../lib/twilio.js';
+import { normalizeTwilioWhatsAppFrom } from '../lib/salonDefaults.js';
 import { sendWithFallback } from './channelRouter.js';
 import type { CampaignMediaType } from './campaigns.js';
 
@@ -108,6 +109,79 @@ export async function sendCampaignOutbound(params: {
 
   if (!sent) {
     logger.warn({ recipientId: recipient.id, campaignId: params.campaignId }, 'campaign_recipient_send_failed');
+  }
+
+  return { sent, usesStatusCallback };
+}
+
+/**
+ * Send a campaign message using a Meta-approved WhatsApp template (Twilio Content
+ * API contentSid). Unlike sendCampaignOutbound, this can reach customers outside
+ * the 24h session window since the template has already cleared WhatsApp review.
+ */
+export async function sendCampaignTemplateOutbound(params: {
+  salonId: string;
+  campaignId: string;
+  campaignSendId: string;
+  customerId: string;
+  to: string;
+  contentSid: string;
+}): Promise<{ sent: boolean; usesStatusCallback: boolean }> {
+  const db = getTenantDb();
+  const statusCallback = twilioStatusCallbackUrl();
+
+  let providerSid: string | null = null;
+  let usesStatusCallback = false;
+
+  const tw = getTwilioAccountClient();
+  if (tw) {
+    try {
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: params.salonId },
+        select: { twilioWhatsAppNumber: true },
+      });
+      const rawFrom = salon.twilioWhatsAppNumber?.trim();
+      const from = rawFrom ? normalizeTwilioWhatsAppFrom(rawFrom) : null;
+      const toDigits = params.to.replace(/^whatsapp:/i, '').replace(/^\+/, '');
+
+      if (from) {
+        const msg = await tw.messages.create({
+          from,
+          to: `whatsapp:+${toDigits}`,
+          contentSid: params.contentSid,
+          contentVariables: JSON.stringify({}),
+          ...(statusCallback ? { statusCallback } : {}),
+        });
+        providerSid = msg.sid;
+        usesStatusCallback = Boolean(statusCallback) && Boolean(providerSid);
+      }
+    } catch (err) {
+      logger.error({ err, salonId: params.salonId, contentSid: params.contentSid }, 'campaign_template_send_failed');
+    }
+  }
+
+  const sent = Boolean(providerSid);
+
+  const recipient = await db.campaignRecipient.create({
+    data: {
+      campaignSendId: params.campaignSendId,
+      campaignId: params.campaignId,
+      salonId: params.salonId,
+      customerId: params.customerId,
+      providerSid,
+      delivered: sent && !usesStatusCallback,
+    },
+  });
+
+  if (sent && !usesStatusCallback) {
+    await db.campaignSend.update({
+      where: { id: params.campaignSendId },
+      data: { deliveredCount: { increment: 1 } },
+    });
+  }
+
+  if (!sent) {
+    logger.warn({ recipientId: recipient.id, campaignId: params.campaignId }, 'campaign_recipient_template_send_failed');
   }
 
   return { sent, usesStatusCallback };
