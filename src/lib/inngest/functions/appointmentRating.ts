@@ -1,7 +1,7 @@
 // Sends Google review request after the visit (45 min after appointment start by default,
 // or 15 min after admin marks client departed). Separate from CSAT rating.
 
-import { ConversationStep, MessageDirection } from '@prisma/client';
+import { ConversationStep, MessageDirection, type AppointmentStatus } from '@prisma/client';
 import { inngest } from '../client.js';
 import { prisma } from '../../prisma.js';
 import { sendWithFallback } from '../../../services/channelRouter.js';
@@ -32,7 +32,12 @@ export type AppointmentCompletedEvent = {
   };
 };
 
-const BLOCKED_STATUSES = new Set(['CANCELLED', 'RESCHEDULED', 'NO_SHOW']);
+const BLOCKED_STATUSES = new Set<AppointmentStatus>(['CANCELLED', 'RESCHEDULED', 'NO_SHOW']);
+
+const PAYMENT_FLOW_STEPS = new Set<ConversationStep>([
+  ConversationStep.CHOOSE_PAYMENT_METHOD,
+  ConversationStep.BOOKING_RATING,
+]);
 
 async function withJobTenant<T>(salonId: string, fn: () => Promise<T>): Promise<T> {
   await prisma.$executeRawUnsafe(`SELECT set_config('app.current_tenant', $1, true)`, salonId);
@@ -93,6 +98,34 @@ export const googleReviewRequest = inngest.createFunction(
           return { skipped: true, reason: 'already_sent_or_consent' };
         }
 
+        const openPayment = await prisma.appointment.findFirst({
+          where: {
+            salonId,
+            customerId,
+            status: 'PENDING_PAYMENT',
+          },
+          select: { id: true },
+        });
+        if (openPayment) {
+          return { skipped: true, reason: 'customer_pending_payment' };
+        }
+
+        const conv = await prisma.conversation.findUnique({
+          where: { salonId_customerId: { salonId, customerId } },
+          select: { step: true },
+        });
+        if (conv && PAYMENT_FLOW_STEPS.has(conv.step)) {
+          return { skipped: true, reason: 'customer_in_payment_flow' };
+        }
+
+        const claimed = await prisma.appointment.updateMany({
+          where: { id: appointmentId, reviewRequestSentAt: null },
+          data: { reviewRequestSentAt: new Date(), googleReviewScheduledAt: null },
+        });
+        if (claimed.count === 0) {
+          return { skipped: true, reason: 'already_sent' };
+        }
+
         const reviewCfg = automations.googleReview;
         const { body: followUpBody, claimUrl } = await prepareGoogleReviewFollowUp({
           salonId,
@@ -109,28 +142,31 @@ export const googleReviewRequest = inngest.createFunction(
           followUpBody +
           `\n\nThank you for supporting us!`;
 
-        await deliverGoogleReviewRequest({
-          salonId,
-          to: customerWaId,
-          googleReviewUrl: salon.googleReviewUrl,
-          incentiveEnabled: reviewCfg.incentiveEnabled,
-          incentiveCents: reviewCfg.incentiveCents,
-          claimUrl,
-          body,
-        });
+        try {
+          await deliverGoogleReviewRequest({
+            salonId,
+            to: customerWaId,
+            googleReviewUrl: salon.googleReviewUrl,
+            incentiveEnabled: reviewCfg.incentiveEnabled,
+            incentiveCents: reviewCfg.incentiveCents,
+            claimUrl,
+            body,
+          });
+        } catch (err) {
+          await prisma.appointment.updateMany({
+            where: { id: appointmentId },
+            data: { reviewRequestSentAt: null },
+          });
+          throw err;
+        }
 
-        await prisma.appointment.updateMany({
-          where: { id: appointmentId, reviewRequestSentAt: null },
-          data: { reviewRequestSentAt: new Date(), googleReviewScheduledAt: null },
-        });
-
-        const conv = await prisma.conversation.findUnique({
+        const convRecord = await prisma.conversation.findUnique({
           where: { salonId_customerId: { salonId, customerId } },
         });
-        if (conv) {
+        if (convRecord) {
           await prisma.message.create({
             data: {
-              conversationId: conv.id,
+              conversationId: convRecord.id,
               customerId,
               direction: MessageDirection.OUTBOUND,
               body,

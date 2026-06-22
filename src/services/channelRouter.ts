@@ -101,6 +101,11 @@ export async function sendWithFallback(params: {
     }
   }
 
+  /** List menus can fall back to numbered plain text; buttons/CTAs must not — that duplicates the body. */
+  function interactiveAllowsPlainFallback(interactive: InteractiveMessage): boolean {
+    return interactive.type === 'list';
+  }
+
   // Interactive lists/buttons — Twilio Content API only (no Meta Cloud interactive).
   if (params.interactive) {
     if (twilioReady && twilioFrom) {
@@ -112,21 +117,29 @@ export async function sendWithFallback(params: {
           logOutbound(params.salonId, true);
           return { channel: 'whatsapp', result };
         }
-        logger.warn({ salonId: params.salonId }, 'twilio_interactive_empty_id_retry_plain');
+        logger.warn(
+          { salonId: params.salonId, interactiveType: params.interactive.type },
+          'twilio_interactive_empty_id',
+        );
       } catch (err) {
-        logger.warn({ err, salonId: params.salonId }, 'twilio_interactive_fallthrough');
+        logger.warn(
+          { err, salonId: params.salonId, interactiveType: params.interactive.type },
+          'twilio_interactive_send_failed',
+        );
       }
 
-      try {
-        const result = await twilioMessaging.sendText(
-          twilioSendOpts(sendOpts, twilioFrom),
-        );
-        if (result.providerMessageId) {
-          logOutbound(params.salonId, true);
-          return { channel: 'whatsapp', result };
+      if (interactiveAllowsPlainFallback(params.interactive)) {
+        try {
+          const result = await twilioMessaging.sendText(
+            twilioSendOpts(sendOpts, twilioFrom),
+          );
+          if (result.providerMessageId) {
+            logOutbound(params.salonId, true);
+            return { channel: 'whatsapp', result };
+          }
+        } catch (err) {
+          logger.warn({ err }, 'twilio_whatsapp_fallthrough');
         }
-      } catch (err) {
-        logger.warn({ err }, 'twilio_whatsapp_fallthrough');
       }
     }
   } else if (cloudPhoneId) {

@@ -166,4 +166,27 @@ describe('sendWithFallback — interactive list delivery', () => {
       }),
     );
   });
+
+  it('does not send plain-text duplicate when a button interactive returns empty providerMessageId', async () => {
+    findUniqueOrThrowMock.mockResolvedValue({
+      whatsappPhoneId: null,
+      twilioWhatsAppNumber: '+14155238886',
+    });
+    twilioSendMock.mockResolvedValueOnce({ providerMessageId: null });
+
+    const result = await sendWithFallback({
+      salonId: 'salon-1',
+      to: '+27820000000',
+      body: 'Prefer to message us directly?',
+      interactive: {
+        type: 'button',
+        body: 'Prefer to message us directly?',
+        buttons: [{ id: 'write_review', title: 'Write Feedback' }],
+      },
+    });
+
+    expect(result.result.providerMessageId).toBeNull();
+    expect(twilioSendMock).toHaveBeenCalledTimes(1);
+    expect(twilioSendMock.mock.calls[0]![0].interactive).toBeDefined();
+  });
 });

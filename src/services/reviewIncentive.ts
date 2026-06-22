@@ -6,7 +6,6 @@ import { logger } from '../lib/logger.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import { withRatingFeedbackPreamble } from '../lib/feedbackCopy.js';
 import { sendWithFallback } from './channelRouter.js';
-import { buildWriteFeedbackInteractive } from './botInteractiveMenus.js';
 import type { InteractiveCtaUrl } from '../lib/integrations/messaging/types.js';
 
 const APP_BASE =
@@ -419,7 +418,7 @@ export async function prepareGoogleReviewFollowUp(params: {
   return { body, claimUrl };
 }
 
-/** Send Google review CTA (opens browser) plus optional Write Feedback quick reply. */
+/** Send Google review CTA (opens browser). In-chat feedback stays on the Support menu. */
 export async function deliverGoogleReviewRequest(params: {
   salonId: string;
   to: string;
@@ -449,16 +448,6 @@ export async function deliverGoogleReviewRequest(params: {
   };
 
   await sendWithFallback({ salonId: params.salonId, to: params.to, body, interactive: cta });
-
-  const writeFeedback = buildWriteFeedbackInteractive();
-  if (writeFeedback) {
-    await sendWithFallback({
-      salonId: params.salonId,
-      to: params.to,
-      body: writeFeedback.body,
-      interactive: writeFeedback,
-    });
-  }
 }
 
 export async function sendGoogleReviewFollowUp(params: {
