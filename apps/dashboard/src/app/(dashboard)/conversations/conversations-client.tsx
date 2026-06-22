@@ -323,7 +323,7 @@ export function ConversationsClient({ token, staffName }: Props) {
   const showThreadOnMobile = Boolean(selectedId);
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-4rem)]">
+    <div className="flex flex-col gap-4 dashboard-fit-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

@@ -165,7 +165,7 @@ export function PulseClient({ token, initialBranches }: Props) {
   const summary = data?.summary;
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>

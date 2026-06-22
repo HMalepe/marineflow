@@ -146,14 +146,19 @@ export function TicketsClient({ token }: Props) {
   ];
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-4rem)]">
+    <div className="flex flex-col gap-4 dashboard-fit-panel">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">{TICKETS_LABEL}</h1>
         <CommsPageHint active="tickets" />
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background">
-        <div className="w-80 shrink-0 flex flex-col border-r bg-background">
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background flex-col md:flex-row">
+        <div
+          className={cn(
+            'w-full md:w-80 shrink-0 flex flex-col border-b md:border-b-0 md:border-r bg-background min-h-0',
+            selected && 'hidden md:flex',
+          )}
+        >
           <div className="p-4 border-b">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Queue</h2>
@@ -170,10 +175,10 @@ export function TicketsClient({ token }: Props) {
                   type="button"
                   onClick={() => setFilter(tab.id)}
                   className={cn(
-                    'px-3 py-1 rounded-full text-xs font-medium transition-colors',
+                    'px-3 py-2 min-h-[2.25rem] rounded-full text-xs font-medium transition-colors touch-manipulation',
                     filter === tab.id
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-accent',
+                      : 'bg-muted text-muted-foreground hover:bg-accent active:bg-accent/80',
                   )}
                 >
                   {tab.label}
@@ -207,13 +212,24 @@ export function TicketsClient({ token }: Props) {
         </div>
 
         {selected ? (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b bg-background shrink-0">
-              <div>
-                <h2 className="font-semibold">{selected.subject ?? '(no subject)'}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {customerLabel(selected.customer)} · {selected.customer.waId}
-                </p>
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-b bg-background shrink-0">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="md:hidden shrink-0 -ml-2"
+                  onClick={() => setSelected(null)}
+                >
+                  Back
+                </Button>
+                <div className="min-w-0">
+                  <h2 className="font-semibold truncate">{selected.subject ?? '(no subject)'}</h2>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {customerLabel(selected.customer)} · {selected.customer.waId}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Badge
@@ -304,7 +320,8 @@ export function TicketsClient({ token }: Props) {
               )}
               <div className="flex gap-2">
                 <textarea
-                  className="flex-1 min-h-[72px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  data-slot="textarea"
+                  className="flex-1 min-h-[72px] resize-none rounded-md border border-input bg-background px-3 py-2 text-base md:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   placeholder="Type a reply — sent directly to customer on WhatsApp…"
                   value={replyBody}
                   onChange={(e) => setReplyBody(e.target.value)}
