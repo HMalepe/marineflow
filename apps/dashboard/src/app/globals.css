@@ -401,6 +401,33 @@
     padding-bottom: var(--safe-area-bottom);
   }
 
+  /** Horizontal chip / card strips — contain overscroll so the page doesn’t rubber-band sideways */
+  .dashboard-h-scroll {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .dashboard-h-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /** Modal / sheet inner lists — dvh-based max height instead of magic 100vh offsets */
+  .dashboard-scroll-panel {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    max-height: min(32rem, calc(100dvh - var(--dashboard-mobile-chrome) - 14rem));
+  }
+
+  @media (min-width: 768px) {
+    .dashboard-scroll-panel {
+      max-height: min(36rem, calc(100dvh - var(--dashboard-sticky-offset, 3.5rem) - 18rem));
+    }
+  }
+
   @media (max-width: 767px) {
     [data-slot='button']:not([data-size='xs']):not([data-size='icon-xs']) {
       min-height: 2.75rem;
@@ -422,6 +449,13 @@
 
 .dashboard-section-anchor {
   scroll-margin-top: calc(var(--dashboard-sticky-offset, 3.5rem) + 0.75rem);
+}
+
+@media (max-width: 767px) {
+  .dashboard-section-anchor {
+    scroll-margin-top: calc(var(--mobile-header-height) + var(--safe-area-top) + 0.75rem);
+    scroll-margin-bottom: var(--dashboard-mobile-bottom-padding);
+  }
 }
 
 .dark {

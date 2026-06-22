@@ -700,14 +700,14 @@ export function FaqsClient({ token }: Props) {
                 />
 
                 {/* Business type filter */}
-                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                <div className="dashboard-h-scroll gap-1.5 pb-1 snap-x snap-mandatory">
                   {templateBizType ? (
                     // Drilled in — show only the active pill + a clear button
                     <>
                       <button
                         type="button"
                         onClick={() => { setTemplateBizType(''); setTemplateCategory('All'); }}
-                        className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap"
+                        className="shrink-0 snap-start min-h-[2.25rem] inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap touch-manipulation"
                       >
                         ← All businesses
                       </button>
@@ -722,7 +722,7 @@ export function FaqsClient({ token }: Props) {
                         key={biz}
                         type="button"
                         onClick={() => setTemplateBizType(biz)}
-                        className="shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap"
+                        className="shrink-0 snap-start min-h-[2.25rem] inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors whitespace-nowrap touch-manipulation"
                       >
                         {biz}
                       </button>
@@ -760,7 +760,7 @@ export function FaqsClient({ token }: Props) {
                     return matchesBiz && matchesCat && matchesSearch;
                   });
                   return (
-                    <div className="space-y-1.5 max-h-[calc(100vh-380px)] overflow-y-auto pr-1">
+                    <div className="dashboard-scroll-panel space-y-1.5 pr-1">
                       {visibleTemplates.length === 0 && (
                         <p className="text-sm text-muted-foreground text-center py-6">
                           {unusedFaqTemplates.length === 0

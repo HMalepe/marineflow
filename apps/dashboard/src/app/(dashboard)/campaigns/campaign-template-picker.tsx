@@ -174,7 +174,7 @@ export function CampaignTemplatePicker({
             />
           </div>
 
-          <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
+          <div className="dashboard-h-scroll gap-1.5 pb-1 -mx-1 px-1 snap-x snap-mandatory">
             {TEMPLATE_CATEGORY_LABELS.map((cat) => (
               <button
                 key={cat.id}

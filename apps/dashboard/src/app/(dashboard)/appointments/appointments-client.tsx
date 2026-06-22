@@ -447,7 +447,7 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+        <div className="dashboard-h-scroll gap-3 pb-2 -mx-1 px-1 snap-x snap-mandatory">
           {todayAppts.map((a) => {
             const startTime = new Date(a.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
             const endTime = new Date(a.end).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
@@ -456,7 +456,7 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
             return (
               <div
                 key={a.id}
-                className={`shrink-0 rounded-xl border p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-all ${
+                className={`shrink-0 snap-start rounded-xl border p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-all ${
                   isNow
                     ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
                     : isPast

@@ -3,15 +3,20 @@ export function scrollToPageSection(id: string): void {
   const el = document.getElementById(id);
   if (!el) return;
 
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--dashboard-sticky-offset');
+  const root = getComputedStyle(document.documentElement);
   const isMobile = window.matchMedia('(max-width: 767px)').matches;
-  const mobileBottom = getComputedStyle(document.documentElement).getPropertyValue(
-    '--dashboard-mobile-bottom-padding',
-  );
-  const offset = isMobile
-    ? Number.parseFloat(mobileBottom) || 72
-    : Number.parseFloat(raw) || 56;
-  const top = el.getBoundingClientRect().top + window.scrollY - (isMobile ? 16 : offset) - 12;
+
+  let topOffset: number;
+  if (isMobile) {
+    const header = Number.parseFloat(root.getPropertyValue('--mobile-header-height')) || 56;
+    const safeTop = Number.parseFloat(root.getPropertyValue('--safe-area-top')) || 0;
+    topOffset = header + safeTop + 12;
+  } else {
+    const sticky = Number.parseFloat(root.getPropertyValue('--dashboard-sticky-offset')) || 56;
+    topOffset = sticky + 12;
+  }
+
+  const top = el.getBoundingClientRect().top + window.scrollY - topOffset;
 
   window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
 }
