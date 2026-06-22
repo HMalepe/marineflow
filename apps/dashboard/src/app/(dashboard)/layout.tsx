@@ -5,9 +5,8 @@ import { API_MISCONFIGURED_MESSAGE, isApiMisconfiguredForProduction } from '@/li
 import {
   getDashboardDebugEnvSnapshot,
   isDashboardDebugEnabled,
-  isNextInternalNavigationError,
-  serializeDashboardError,
 } from '@/lib/dashboard-debug';
+import { withDashboardDebugCatch } from '@/lib/with-dashboard-debug-catch';
 import { redirect } from 'next/navigation';
 import { LogoutButton, LogoutIconButton } from './logout-button';
 import { MobileNav } from './mobile-nav';
@@ -17,7 +16,6 @@ import { DashboardStickyHeader } from '@/components/dashboard-sticky-header';
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { DashboardDebugBanner } from '@/components/dashboard-debug-banner';
-import { DashboardDebugErrorView } from '@/components/dashboard-debug-error-view';
 
 function formatRole(role: string): string {
   return role
@@ -31,20 +29,9 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (isDashboardDebugEnabled()) {
-    try {
-      return await DashboardLayoutInner({ children });
-    } catch (error) {
-      if (isNextInternalNavigationError(error)) throw error;
-      return (
-        <DashboardDebugErrorView
-          context="(dashboard)/layout.tsx"
-          error={serializeDashboardError(error)}
-        />
-      );
-    }
-  }
-  return DashboardLayoutInner({ children });
+  return withDashboardDebugCatch('(dashboard)/layout.tsx', () =>
+    DashboardLayoutInner({ children })
+  );
 }
 
 async function DashboardLayoutInner({

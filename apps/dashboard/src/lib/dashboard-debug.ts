@@ -1,9 +1,9 @@
 import { getServerApiBaseUrl, isApiMisconfiguredForProduction } from './api-config';
+import { isDashboardDebugClientEnabled } from './dashboard-debug-flag';
 
 /** Enable with NEXT_PUBLIC_DASHBOARD_DEBUG=true on Vercel (or locally). */
 export function isDashboardDebugEnabled(): boolean {
-  const flag = process.env.NEXT_PUBLIC_DASHBOARD_DEBUG ?? process.env.DASHBOARD_DEBUG;
-  return flag === 'true' || flag === '1';
+  return isDashboardDebugClientEnabled();
 }
 
 export type SerializedDashboardError = {

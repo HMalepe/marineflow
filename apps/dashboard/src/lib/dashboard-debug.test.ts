@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { isDashboardDebugClientEnabled } from './dashboard-debug-flag';
 import {
   isDashboardDebugEnabled,
   isNextInternalNavigationError,
@@ -6,12 +7,13 @@ import {
 } from './dashboard-debug';
 
 describe('dashboard-debug', () => {
-  it('isDashboardDebugEnabled respects NEXT_PUBLIC_DASHBOARD_DEBUG', () => {
+  it('isDashboardDebugClientEnabled respects NEXT_PUBLIC_DASHBOARD_DEBUG', () => {
     const prev = process.env.NEXT_PUBLIC_DASHBOARD_DEBUG;
     process.env.NEXT_PUBLIC_DASHBOARD_DEBUG = 'true';
+    expect(isDashboardDebugClientEnabled()).toBe(true);
     expect(isDashboardDebugEnabled()).toBe(true);
     process.env.NEXT_PUBLIC_DASHBOARD_DEBUG = '0';
-    expect(isDashboardDebugEnabled()).toBe(false);
+    expect(isDashboardDebugClientEnabled()).toBe(false);
     if (prev === undefined) delete process.env.NEXT_PUBLIC_DASHBOARD_DEBUG;
     else process.env.NEXT_PUBLIC_DASHBOARD_DEBUG = prev;
   });

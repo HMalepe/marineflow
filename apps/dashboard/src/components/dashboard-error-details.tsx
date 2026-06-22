@@ -1,10 +1,7 @@
 'use client';
 
 import type { SerializedDashboardError } from '@/lib/dashboard-debug';
-
-const DEBUG_ON =
-  process.env.NEXT_PUBLIC_DASHBOARD_DEBUG === 'true' ||
-  process.env.NEXT_PUBLIC_DASHBOARD_DEBUG === '1';
+import { isDashboardDebugClientEnabled } from '@/lib/dashboard-debug-flag';
 
 type Props = {
   error: Error & { digest?: string };
@@ -26,11 +23,24 @@ function DebugBlock({ label, value }: { label: string; value: string }) {
 }
 
 export function DashboardErrorDetails({ error, hint }: Props) {
-  if (!DEBUG_ON) {
+  const debugOn = isDashboardDebugClientEnabled();
+
+  if (!debugOn) {
     return (
-      <p className="text-sm text-muted-foreground max-w-md text-center">
-        {error.message || hint || 'An unexpected error occurred. Please try again.'}
-      </p>
+      <div className="text-sm text-muted-foreground max-w-md text-center space-y-2">
+        <p>{error.message || hint || 'An unexpected error occurred. Please try again.'}</p>
+        {error.digest && (
+          <p className="text-xs font-mono text-muted-foreground/80">
+            Error ID: <span className="select-all">{error.digest}</span>
+            {' — search this in Vercel → Deployments → Logs'}
+          </p>
+        )}
+        <p className="text-xs">
+          For full stack traces on screen, set{' '}
+          <code className="font-mono text-[11px]">NEXT_PUBLIC_DASHBOARD_DEBUG=true</code> on Vercel
+          and redeploy.
+        </p>
+      </div>
     );
   }
 

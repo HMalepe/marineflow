@@ -19,16 +19,7 @@ import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { BusinessCoachCard } from '@/components/BusinessCoachCard';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
-import {
-  isDashboardDebugEnabled,
-  isNextInternalNavigationError,
-  serializeDashboardError,
-} from '@/lib/dashboard-debug';
-import { DashboardDebugErrorView } from '@/components/dashboard-debug-error-view';
-
-// ---------------------------------------------------------------------------
-// Shared types
-// ---------------------------------------------------------------------------
+import { withDashboardDebugCatch } from '@/lib/with-dashboard-debug-catch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -89,20 +80,7 @@ async function adminFetch<T>(path: string, token: string | null): Promise<T | nu
 // ---------------------------------------------------------------------------
 
 export default async function OverviewPage() {
-  if (isDashboardDebugEnabled()) {
-    try {
-      return await OverviewPageInner();
-    } catch (error) {
-      if (isNextInternalNavigationError(error)) throw error;
-      return (
-        <DashboardDebugErrorView
-          context="(dashboard)/page.tsx — Overview"
-          error={serializeDashboardError(error)}
-        />
-      );
-    }
-  }
-  return OverviewPageInner();
+  return withDashboardDebugCatch('(dashboard)/page.tsx — Overview', () => OverviewPageInner());
 }
 
 async function OverviewPageInner() {
