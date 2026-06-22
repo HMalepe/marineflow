@@ -5,6 +5,17 @@ import { API_MISCONFIGURED_MESSAGE, getServerApiBaseUrl, isApiMisconfiguredForPr
 
 const API_URL = getServerApiBaseUrl();
 
+function connectionError(context: string, err: unknown): { error: string } {
+  console.error(`[${context}] API request failed`, { apiUrl: API_URL, err });
+  const hint =
+    process.env.NEXT_PUBLIC_DASHBOARD_DEBUG === 'true' || process.env.NEXT_PUBLIC_DASHBOARD_DEBUG === '1'
+      ? ` (API_URL=${API_URL})`
+      : '';
+  return {
+    error: `Unable to connect to server${hint}. Check NEXT_PUBLIC_API_URL on Vercel (should be https://api.solupair.co.za) and redeploy.`,
+  };
+}
+
 type LoginInput =
   | { method: 'email'; email: string; password: string }
   | { method: 'phone'; phone: string; password: string };
@@ -47,8 +58,8 @@ export async function checkPhone(
       return { error: data.message ?? data.error ?? 'Could not verify number' };
     }
     return data as { status: 'login' | 'setup'; salonName: string };
-  } catch {
-    return { error: 'Unable to connect to server' };
+  } catch (err) {
+    return connectionError('checkPhone', err);
   }
 }
 
@@ -84,8 +95,8 @@ export async function setupPassword(
     const { token } = (await res.json()) as { token: string };
     await setToken(token);
     return {};
-  } catch {
-    return { error: 'Unable to connect to server' };
+  } catch (err) {
+    return connectionError('setupPassword', err);
   }
 }
 
@@ -127,7 +138,6 @@ export async function login(input: LoginInput): Promise<{ error?: string }> {
     await setToken(token);
     return {};
   } catch (err) {
-    console.error('[login] API request failed', { apiUrl: API_URL, err });
-    return { error: 'Unable to connect to server — set NEXT_PUBLIC_API_URL=https://marineflow.co.za on Vercel' };
+    return connectionError('login', err);
   }
 }

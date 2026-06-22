@@ -52,4 +52,4 @@ export function isApiMisconfiguredForProduction(): boolean {
 }
 
 export const API_MISCONFIGURED_MESSAGE =
-  'Dashboard cannot reach the MarineFlow API. Set NEXT_PUBLIC_API_URL to https://marineflow.co.za on Vercel (or your Railway dashboard service) and redeploy.';
+  'Dashboard cannot reach the MarineFlow API. Set NEXT_PUBLIC_API_URL to https://api.solupair.co.za on Vercel (Production + Preview) and redeploy.';
