@@ -112,6 +112,9 @@ function parseDeterministic(text: string, timezone: string): ParsedDateTime | nu
       const withoutTime = time ? t.replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b|\b\d{1,2}\s*(am|pm)\b/i, '') : t;
       const withoutWeekday = withoutTime.replace(weekdayMatch[0], '');
       if (/\d/.test(withoutWeekday)) return null;
+      // "Saturday in October" etc — a month name elsewhere means the customer is
+      // naming a specific occurrence, not just the nearest weekday. Defer to Claude.
+      if (Object.keys(MONTHS).some((m) => new RegExp(`\\b${m}\\b`).test(withoutWeekday))) return null;
 
       const wanted = wantedLuxonWeekday === 0 ? 7 : wantedLuxonWeekday;
       let diff = wanted - now.weekday;
