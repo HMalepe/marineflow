@@ -172,6 +172,8 @@ export type BotContext = Record<string, unknown> & {
   pendingPaymentAmountCents?: number;
   /** Carried through CHOOSE_PAYMENT_METHOD so the first-booking POPIA hint still fires once. */
   pendingPaymentIsFirstBooking?: boolean;
+  /** Customer chose cash — waiting for CASH confirm or switch to PayFast (1). */
+  awaitingCashConfirm?: boolean;
   /** Group booking headcount set at CONFIRM_BOOKING; defaults to 1 (no group). */
   partySize?: number;
   rescheduleAppointmentId?: string;
@@ -4821,18 +4823,7 @@ async function handleConfirm(
       },
       ConversationStep.CHOOSE_PAYMENT_METHOD,
     );
-    await reply(
-      conv,
-      [
-        `💳 *How would you like to pay?*`,
-        '',
-        `Amount due: *${formatCentsZar(paymentPlan.amountCents)}*`,
-        '',
-        `1 — Pay online now (card via PayFast)`,
-        `2 — Cash at the salon`,
-        `3 — EFT (bank transfer)`,
-      ].join('\n'),
-    );
+    await reply(conv, buildPaymentMethodPrompt(paymentPlan.amountCents));
     return;
   } else {
     void onBookingConfirmed({
@@ -4872,11 +4863,95 @@ async function finishBookingAfterPayment(
     await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
   }
 
-  await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
+  await saveCtx(
+    conv.id,
+    { pendingAppointmentId: appointment.id, awaitingCashConfirm: undefined },
+    ConversationStep.BOOKING_RATING,
+  );
   await reply(
     conv,
     'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
   );
+}
+
+function buildPaymentMethodPrompt(amountCents: number): string {
+  return [
+    `💳 *How would you like to pay?*`,
+    '',
+    `Amount due: *${formatCentsZar(amountCents)}*`,
+    '',
+    `*1 — Pay online now* _(recommended)_`,
+    `Secure card payment via PayFast — 100% safe, instant confirmation.`,
+    '',
+    `*2 — Cash at the salon*`,
+    `Pay when you arrive.`,
+  ].join('\n');
+}
+
+function buildCashPaymentNudge(amountCents: number): string {
+  return [
+    `No problem — cash on arrival works for us. 💵`,
+    '',
+    `*Amount due: ${formatCentsZar(amountCents)}*`,
+    '',
+    `Before you lock that in, our *recommended* option is PayFast:`,
+    `✅ *100% safe* — trusted by millions across South Africa`,
+    `✅ Encrypted checkout (we never see your card details)`,
+    `✅ Instant confirmation — your slot is fully secured`,
+    `✅ No cash to remember on the day — takes ~30 seconds`,
+    '',
+    `Reply *1* to pay securely online now`,
+    `Reply *CASH* to confirm you'll pay cash when you arrive`,
+  ].join('\n');
+}
+
+function isCashConfirmation(text: string, afterNudge = false): boolean {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+  if (afterNudge && /^2$/.test(trimmed)) return true;
+  return /^cash\b|confirm\b|^yes\b|pay\s*cash/i.test(lower);
+}
+
+async function finalizeCashPayment(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  appointment: { id: string; salonId: string; start: Date; status: AppointmentStatus; service: { name: string } },
+  amountCents: number,
+  isFirstBooking: boolean,
+) {
+  const tx = getTenantDb();
+  await tx.payment.create({
+    data: {
+      salonId: conv.salonId,
+      appointmentId: appointment.id,
+      customerId: conv.customerId,
+      provider: 'MANUAL',
+      method: 'CASH',
+      status: 'PENDING',
+      amountCents,
+      currency: 'ZAR',
+    },
+  });
+  await tx.appointment.update({
+    where: { id: appointment.id },
+    data: { paymentMethod: 'CASH' },
+  });
+
+  const ref = appointment.id.slice(0, 8).toUpperCase();
+  await reply(
+    conv,
+    [
+      `✅ *Cash on arrival confirmed*`,
+      '',
+      `Please settle *${formatCentsZar(amountCents)}* when you check in.`,
+      `Your booking is locked in — we can't wait to see you! 🙌`,
+      '',
+      `🔖 Ref: *${ref}*`,
+      '',
+      `_Tip: PayFast is still available if you'd rather pay securely online before the day — just ask us on WhatsApp._`,
+    ].join('\n'),
+  );
+
+  await finishBookingAfterPayment(conv, appointment, isFirstBooking);
 }
 
 async function handlePaymentMethodChoice(
@@ -4893,6 +4968,7 @@ async function handlePaymentMethodChoice(
   const appointmentId = c.pendingAppointmentId as string | undefined;
   const amountCents = c.pendingPaymentAmountCents as number | undefined;
   const isFirstBooking = Boolean(c.pendingPaymentIsFirstBooking);
+  const awaitingCashConfirm = Boolean(c.awaitingCashConfirm);
   if (!appointmentId || !amountCents) {
     await saveCtx(conv.id, {}, ConversationStep.IDLE);
     await replyMenu(conv);
@@ -4900,14 +4976,14 @@ async function handlePaymentMethodChoice(
   }
 
   const lower = trimmed.toLowerCase();
-  const isCard = /^1$/.test(trimmed) || /^(card|online|payfast)\b/i.test(lower);
-  const isCash = /^2$/.test(trimmed) || /^cash\b/i.test(lower);
-  const isEft = /^3$/.test(trimmed) || /^eft\b|bank\s*transfer/i.test(lower);
+  const isCard = /^1$/.test(trimmed) || /^(card|online|payfast|pay)\b/i.test(lower);
+  const isCashChoice = /^2$/.test(trimmed) || /^cash\b/i.test(lower);
 
-  if (!isCard && !isCash && !isEft) {
+  if (/^3$/.test(trimmed) || /^eft\b|bank\s*transfer/i.test(lower)) {
     await reply(
       conv,
-      'Please reply *1* to pay online, *2* for cash at the salon, or *3* for EFT.',
+      'We offer secure *PayFast* online or *cash at the salon* — no EFT on WhatsApp.\n\n' +
+        buildPaymentMethodPrompt(amountCents),
     );
     return;
   }
@@ -4917,6 +4993,41 @@ async function handlePaymentMethodChoice(
     where: { id: appointmentId },
     include: { service: true },
   });
+
+  if (awaitingCashConfirm) {
+    if (isCard) {
+      await saveCtx(conv.id, { awaitingCashConfirm: undefined }, ConversationStep.CHOOSE_PAYMENT_METHOD);
+      // fall through to PayFast below
+    } else if (isCashConfirmation(trimmed, true)) {
+      await finalizeCashPayment(conv, appointment, amountCents, isFirstBooking);
+      return;
+    } else if (isCashChoice) {
+      await reply(conv, buildCashPaymentNudge(amountCents));
+      return;
+    } else {
+      await reply(
+        conv,
+        `Reply *1* for secure PayFast payment, or *CASH* to confirm pay-on-arrival.\n\n` +
+          `_PayFast is 100% safe and the fastest way to secure your booking._`,
+      );
+      return;
+    }
+  }
+
+  if (!isCard && !isCashChoice) {
+    await reply(conv, buildPaymentMethodPrompt(amountCents));
+    return;
+  }
+
+  if (isCashChoice) {
+    await saveCtx(
+      conv.id,
+      { awaitingCashConfirm: true },
+      ConversationStep.CHOOSE_PAYMENT_METHOD,
+    );
+    await reply(conv, buildCashPaymentNudge(amountCents));
+    return;
+  }
 
   if (isCard) {
     let awaitingOnlinePayment = false;
@@ -4958,43 +5069,14 @@ async function handlePaymentMethodChoice(
     }
 
     if (awaitingOnlinePayment) {
-      await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.IDLE);
+      await saveCtx(conv.id, { pendingAppointmentId: appointment.id, awaitingCashConfirm: undefined }, ConversationStep.IDLE);
       if (isFirstBooking) {
         await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
       }
       return;
     }
     await finishBookingAfterPayment(conv, appointment, isFirstBooking);
-    return;
   }
-
-  // Cash / EFT — settled in person; record the intent so staff can collect/verify it.
-  const method = isCash ? 'CASH' : 'EFT';
-  await tx.payment.create({
-    data: {
-      salonId: conv.salonId,
-      appointmentId: appointment.id,
-      customerId: conv.customerId,
-      provider: 'MANUAL',
-      method,
-      status: 'PENDING',
-      amountCents,
-      currency: 'ZAR',
-    },
-  });
-  await tx.appointment.update({
-    where: { id: appointment.id },
-    data: { paymentMethod: method },
-  });
-
-  await reply(
-    conv,
-    isCash
-      ? `👍 Got it — please settle *${formatCentsZar(amountCents)}* in cash when you arrive.`
-      : `👍 Got it — we'll be in touch with our bank details to settle *${formatCentsZar(amountCents)}* via EFT before your appointment.`,
-  );
-
-  await finishBookingAfterPayment(conv, appointment, isFirstBooking);
 }
 
 async function handleBookingRating(
