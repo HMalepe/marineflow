@@ -124,6 +124,11 @@ import { getBusinessCoachInsights } from '../api/tenant/business-coach.js';
 import { getPulseSnapshot } from '../api/tenant/pulse.js';
 import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
+import {
+  cancelGoogleReviewForAppointment,
+  scheduleGoogleReviewAfterDeparture,
+  scheduleGoogleReviewForAppointment,
+} from '../lib/googleReviewSchedule.js';
 
 type FaqApiStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -1114,6 +1119,88 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.post<{ Params: { id: string } }>(
+    '/appointments/:id/client-arrived',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const appt = await db.appointment.findFirst({ where: { id: request.params.id } });
+        if (!appt) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        if (!['CONFIRMED', 'CONFIRMED_PAID', 'COMPLETED'].includes(appt.status)) {
+          reply.code(409);
+          return { error: 'invalid_status', message: 'Visit tracking is only for active bookings.' };
+        }
+        if (appt.clientArrivedAt) {
+          return { ok: true, clientArrivedAt: appt.clientArrivedAt.toISOString(), alreadyMarked: true };
+        }
+
+        const now = new Date();
+        await db.appointment.update({
+          where: { id: appt.id },
+          data: { clientArrivedAt: now },
+        });
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'appointment_client_arrived',
+            entity: 'Appointment',
+            entityId: appt.id,
+          },
+        });
+
+        return { ok: true, clientArrivedAt: now.toISOString() };
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/appointments/:id/client-departed',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const appt = await db.appointment.findFirst({ where: { id: request.params.id } });
+        if (!appt) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        if (['CANCELLED', 'RESCHEDULED', 'NO_SHOW'].includes(appt.status)) {
+          reply.code(409);
+          return { error: 'invalid_status', message: 'Cannot mark departure for a cancelled booking.' };
+        }
+
+        const now = new Date();
+        await db.appointment.update({
+          where: { id: appt.id },
+          data: {
+            clientDepartedAt: now,
+            clientArrivedAt: appt.clientArrivedAt ?? now,
+          },
+        });
+
+        await scheduleGoogleReviewAfterDeparture(appt.id);
+
+        await db.auditLog.create({
+          data: {
+            salonId: user.salonId,
+            actorUserId: user.sub,
+            action: 'appointment_client_departed',
+            entity: 'Appointment',
+            entityId: appt.id,
+          },
+        });
+
+        return { ok: true, clientDepartedAt: now.toISOString() };
+      });
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
     '/appointments/:id/no-show',
     { preHandler: requireRole('OWNER', 'MANAGER', 'STYLIST') },
     async (request, reply) => {
@@ -1154,6 +1241,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(paymentWasMade ? { paymentForfeited: true } : {}),
           },
         });
+
+        void cancelGoogleReviewForAppointment(appt.id).catch(() => undefined);
 
         const noShowRisk = await recordCustomerNoShow(appt.customerId, db);
 
@@ -4482,6 +4571,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: appt.id,
           },
         }).catch(() => {});
+
+        void scheduleGoogleReviewForAppointment(appt.id).catch(() => undefined);
 
         return { appointmentId: appt.id, start: appt.start.toISOString(), end: appt.end.toISOString() };
       });

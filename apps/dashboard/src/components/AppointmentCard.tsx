@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Banknote, Landmark, Link2, Loader2 } from 'lucide-react';
+import { Banknote, Landmark, Link2, Loader2, LogIn, LogOut } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -35,8 +35,18 @@ export interface AppointmentData {
   notes: string | null;
   cancellationReason: string | null;
   branch: { id: string; name: string } | null;
+  clientArrivedAt?: string | null;
+  clientDepartedAt?: string | null;
 }
 
+const VISIT_TRACKING_STATUSES = new Set(['CONFIRMED', 'CONFIRMED_PAID', 'COMPLETED']);
+
+function isVisitTrackingWindow(startIso: string): boolean {
+  const start = new Date(startIso).getTime();
+  const now = Date.now();
+  // Show from 30 min before appointment through 6 hours after start.
+  return now >= start - 30 * 60_000 && now <= start + 6 * 60 * 60_000;
+}
 const ACTIONABLE_STATUSES = new Set([
   'CONFIRMED',
   'CONFIRMED_PAID',
@@ -129,10 +139,14 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
   const [sendingLink, setSendingLink] = useState(false);
   const [markingCash, setMarkingCash] = useState(false);
   const [markingEft, setMarkingEft] = useState(false);
+  const [markingArrived, setMarkingArrived] = useState(false);
+  const [markingDeparted, setMarkingDeparted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [linkSentAt, setLinkSentAt] = useState<string | null>(appt.paymentLinkSentAt ?? null);
   const [localStatus, setLocalStatus] = useState(appt.status);
+  const [clientArrivedAt, setClientArrivedAt] = useState<string | null>(appt.clientArrivedAt ?? null);
+  const [clientDepartedAt, setClientDepartedAt] = useState<string | null>(appt.clientDepartedAt ?? null);
 
   const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
     CONFIRMED: 'default',
@@ -154,6 +168,11 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
   const staffLabel = appt.staff.displayName ?? appt.staff.name;
   const paymentStatus = getPaymentStatus(mergedAppt);
   const showPaymentActions = localStatus === 'PENDING_PAYMENT' && paymentStatus !== 'paid' && token;
+  const showVisitActions =
+    !!token &&
+    VISIT_TRACKING_STATUSES.has(localStatus) &&
+    isVisitTrackingWindow(appt.start) &&
+    !clientDepartedAt;
 
   async function sendPaymentLink() {
     setSendingLink(true);
@@ -205,6 +224,57 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
     }
   }
 
+  async function markClientArrived() {
+    setMarkingArrived(true);
+    setError(null);
+    try {
+      const res = await apiFetch<{ ok: boolean; clientArrivedAt?: string; message?: string }>(
+        `/appointments/${appt.id}/client-arrived`,
+        { method: 'POST' },
+        token,
+      );
+      if (!res.ok || !res.clientArrivedAt) {
+        setError(res.message ?? 'Could not mark arrival');
+        return;
+      }
+      setClientArrivedAt(res.clientArrivedAt);
+      setToast('Client marked as arrived & seated');
+      onUpdated?.({ id: appt.id, clientArrivedAt: res.clientArrivedAt });
+      window.setTimeout(() => setToast(null), 4000);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not mark arrival');
+    } finally {
+      setMarkingArrived(false);
+    }
+  }
+
+  async function markClientDeparted() {
+    setMarkingDeparted(true);
+    setError(null);
+    try {
+      const res = await apiFetch<{ ok: boolean; clientDepartedAt?: string; message?: string }>(
+        `/appointments/${appt.id}/client-departed`,
+        { method: 'POST' },
+        token,
+      );
+      if (!res.ok || !res.clientDepartedAt) {
+        setError(res.message ?? 'Could not mark departure');
+        return;
+      }
+      setClientDepartedAt(res.clientDepartedAt);
+      if (!clientArrivedAt) {
+        setClientArrivedAt(res.clientDepartedAt);
+      }
+      setToast('Client marked as gone — Google review in ~15 min');
+      onUpdated?.({ id: appt.id, clientDepartedAt: res.clientDepartedAt });
+      window.setTimeout(() => setToast(null), 5000);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not mark departure');
+    } finally {
+      setMarkingDeparted(false);
+    }
+  }
+
   return (
     <div className="rounded-lg border">
       <div className="flex items-start justify-between p-3 gap-3">
@@ -242,6 +312,16 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
           {appt.cancellationReason && (
             <span className="text-[10px] text-muted-foreground italic">
               Reason: {appt.cancellationReason.replace(/_/g, ' ').toLowerCase()}
+            </span>
+          )}
+          {clientArrivedAt && (
+            <span className="text-[10px] text-green-700 dark:text-green-400 font-medium">
+              ✓ Arrived {new Date(clientArrivedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          {clientDepartedAt && (
+            <span className="text-[10px] text-green-700 dark:text-green-400 font-medium">
+              ✓ Departed {new Date(clientDepartedAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
           {appt.notes && (
@@ -285,6 +365,43 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
           </div>
         </div>
       </div>
+
+      {showVisitActions && (
+        <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-3 py-2">
+          {!clientArrivedAt && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={markingArrived || markingDeparted}
+              onClick={() => void markClientArrived()}
+            >
+              {markingArrived ? (
+                <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <LogIn className="size-3.5 mr-1.5" />
+              )}
+              Client arrived & seated
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            className="h-8 text-xs"
+            disabled={markingArrived || markingDeparted}
+            onClick={() => void markClientDeparted()}
+          >
+            {markingDeparted ? (
+              <Loader2 className="size-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <LogOut className="size-3.5 mr-1.5" />
+            )}
+            Client paid & happy — gone
+          </Button>
+        </div>
+      )}
 
       {showPaymentActions && (
         <div className="flex flex-wrap gap-2 border-t bg-muted/20 px-3 py-2">

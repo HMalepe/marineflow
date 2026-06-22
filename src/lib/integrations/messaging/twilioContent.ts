@@ -17,6 +17,29 @@ const LIST_PICKER_MAX_ITEMS = 10;
 const QUICK_REPLY_MAX_ACTIONS = 3;
 
 function buildContentTypes(interactive: InteractiveMessage): Record<string, unknown> {
+  if (interactive.type === 'cta_url') {
+    const actions: Array<{ type: string; title: string; url: string }> = [
+      {
+        type: 'URL',
+        title: truncateListField(interactive.displayText.trim(), 25),
+        url: interactive.url.trim(),
+      },
+    ];
+    if (interactive.secondaryAction) {
+      actions.push({
+        type: 'URL',
+        title: truncateListField(interactive.secondaryAction.displayText.trim(), 25),
+        url: interactive.secondaryAction.url.trim(),
+      });
+    }
+    return {
+      'twilio/call-to-action': {
+        body: truncateListField(interactive.body.trim(), 1024),
+        actions,
+      },
+    };
+  }
+
   if (interactive.type === 'button') {
     return {
       'twilio/quick-reply': {

@@ -9,6 +9,7 @@ import {
 } from '../lib/hierarchicalMenu.js';
 import { getIndustryTemplate } from '../lib/industryTemplates.js';
 import { truncateListField } from '../lib/integrations/messaging/interactiveList.js';
+import { withRatingFeedbackPreamble } from '../lib/feedbackCopy.js';
 import type { InteractiveButtons, InteractiveList, InteractiveMessage } from '../lib/integrations/messaging/types.js';
 import type { QuickPickOption } from './botAssistant.js';
 import type { ServiceSubMenuOption } from './serviceMenuCatalog.js';
@@ -286,6 +287,13 @@ export function buildServiceCategoryPickerInteractive(
   );
 }
 
+export function buildWriteFeedbackInteractive(): InteractiveButtons {
+  return quickButtons(
+    'Prefer to message us directly?',
+    [{ id: 'write_review', title: 'Write Feedback' }],
+  )!;
+}
+
 export function buildInactivityReminderInteractive(salon: SalonMenuInput, body: string): InteractiveButtons {
   return quickButtons(
     body,
@@ -297,29 +305,54 @@ export function buildInactivityReminderInteractive(salon: SalonMenuInput, body: 
   )!;
 }
 
-export function buildBookingReviewFollowUpInteractive(
-  salon: SalonMenuInput,
-  body: string,
-  hasGoogleLink: boolean,
-): InteractiveButtons {
-  return quickButtons(
-    body,
-    hasGoogleLink
-      ? [
-          { id: 'google_review', title: 'Leave Google Review' },
-          { id: 'write_review', title: 'Write Feedback' },
-        ]
-      : [{ id: 'write_review', title: 'Write Feedback' }],
-    footerForSalon(salon),
-  )!;
-}
-
 export function buildConfirmBookingInteractive(salon: SalonMenuInput, body: string): InteractiveButtons {
   return quickButtons(
     body,
     [
       { id: 'yes', title: 'Yes, confirm' },
       { id: 'back', title: 'Back' },
+    ],
+    footerForSalon(salon),
+  )!;
+}
+
+export function buildBookingRatingBody(): string {
+  return [
+    `✨ *One quick thing — while it's fresh*`,
+    '',
+    `How easy was booking with us just now?`,
+    '',
+    `Your honest tap helps us refine the experience for you and every guest who books after.`,
+    '',
+    withRatingFeedbackPreamble(`Takes two seconds — tap your rating below.`),
+  ].join('\n');
+}
+
+export function buildStarRatingPromptBody(): string {
+  return withRatingFeedbackPreamble(
+    '⭐ *Share your experience*\n\nHow would you rate your last visit?',
+  );
+}
+
+export function buildNpsRatingPromptBody(): string {
+  return withRatingFeedbackPreamble(
+    'On a scale of 1–10, how likely are you to recommend us to a friend?\n_(1 = not at all · 10 = absolutely)_',
+  );
+}
+
+/** Post-booking process rating — interactive list (1–5 + skip). */
+export function buildBookingRatingInteractive(salon: SalonMenuInput): InteractiveMessage {
+  return numberedList(
+    buildBookingRatingBody(),
+    'Rate booking',
+    'Your experience',
+    [
+      { id: '5', title: '⭐⭐⭐⭐⭐', description: 'Effortless — loved it' },
+      { id: '4', title: '⭐⭐⭐⭐', description: 'Smooth & simple' },
+      { id: '3', title: '⭐⭐⭐', description: 'Fine — room to improve' },
+      { id: '2', title: '⭐⭐', description: 'A bit clunky' },
+      { id: '1', title: '⭐', description: 'Frustrating' },
+      { id: 'skip', title: 'Skip for now', description: 'Jump to main menu' },
     ],
     footerForSalon(salon),
   )!;
@@ -441,7 +474,7 @@ const STAR_LABELS = ['Poor', 'Below average', 'Average', 'Good', 'Excellent'] as
 
 export function buildStarRatingInteractive(salon: SalonMenuInput): InteractiveMessage {
   return numberedList(
-    '⭐ How would you rate your last visit?',
+    buildStarRatingPromptBody(),
     'Pick rating',
     'Rating',
     STAR_LABELS.map((label, i) => ({
@@ -455,7 +488,7 @@ export function buildStarRatingInteractive(salon: SalonMenuInput): InteractiveMe
 
 export function buildNpsRatingInteractive(salon: SalonMenuInput): InteractiveMessage {
   return numberedList(
-    'How likely are you to recommend us? (1 = not at all, 10 = definitely)',
+    buildNpsRatingPromptBody(),
     'Pick score',
     'NPS',
     Array.from({ length: 10 }, (_, i) => ({

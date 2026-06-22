@@ -1,4 +1,4 @@
-import type { InteractiveButtons, InteractiveMessage } from './types.js';
+import type { InteractiveButtons, InteractiveCtaUrl, InteractiveMessage } from './types.js';
 import {
   assertValidInteractiveList,
   normalizeInteractiveList,
@@ -43,20 +43,66 @@ export function assertValidInteractiveButtons(interactive: InteractiveButtons): 
   }
 }
 
+export function normalizeInteractiveCtaUrl(interactive: InteractiveCtaUrl): InteractiveCtaUrl {
+  const normalized: InteractiveCtaUrl = {
+    type: 'cta_url',
+    header: interactive.header ? truncateListField(interactive.header.trim(), 60) : undefined,
+    body: truncateListField(interactive.body.trim(), 1024),
+    footer: interactive.footer ? truncateListField(interactive.footer.trim(), 60) : undefined,
+    displayText: truncateListField(interactive.displayText.trim(), 20),
+    url: interactive.url.trim(),
+  };
+  if (interactive.secondaryAction) {
+    normalized.secondaryAction = {
+      displayText: truncateListField(interactive.secondaryAction.displayText.trim(), 20),
+      url: interactive.secondaryAction.url.trim(),
+    };
+  }
+  return normalized;
+}
+
+export function validateInteractiveCtaUrlPayload(interactive: InteractiveCtaUrl): string[] {
+  const errors: string[] = [];
+  if (interactive.type !== 'cta_url') errors.push('interactive.type must be "cta_url"');
+  if (!interactive.body?.trim()) errors.push('interactive.body is required');
+  if (!interactive.displayText?.trim()) errors.push('displayText is required');
+  if (!interactive.url?.trim()) errors.push('url is required');
+  if (!/^https:\/\//i.test(interactive.url.trim())) errors.push('url must start with https://');
+  if (interactive.secondaryAction) {
+    if (!interactive.secondaryAction.displayText?.trim()) {
+      errors.push('secondaryAction.displayText is required');
+    }
+    if (!interactive.secondaryAction.url?.trim()) {
+      errors.push('secondaryAction.url is required');
+    } else if (!/^https:\/\//i.test(interactive.secondaryAction.url.trim())) {
+      errors.push('secondaryAction.url must start with https://');
+    }
+  }
+  return errors;
+}
+
+export function assertValidInteractiveCtaUrl(interactive: InteractiveCtaUrl): void {
+  const errors = validateInteractiveCtaUrlPayload(interactive);
+  if (errors.length > 0) {
+    throw new Error(`Invalid interactive cta_url: ${errors.join('; ')}`);
+  }
+}
+
 export function normalizeInteractiveMessage(interactive: InteractiveMessage): InteractiveMessage {
-  return interactive.type === 'list'
-    ? normalizeInteractiveList(interactive)
-    : normalizeInteractiveButtons(interactive);
+  if (interactive.type === 'list') return normalizeInteractiveList(interactive);
+  if (interactive.type === 'cta_url') return normalizeInteractiveCtaUrl(interactive);
+  return normalizeInteractiveButtons(interactive);
 }
 
 export function validateInteractiveMessage(interactive: InteractiveMessage): string[] {
-  return interactive.type === 'list'
-    ? validateInteractiveListPayload(interactive)
-    : validateInteractiveButtonsPayload(interactive);
+  if (interactive.type === 'list') return validateInteractiveListPayload(interactive);
+  if (interactive.type === 'cta_url') return validateInteractiveCtaUrlPayload(interactive);
+  return validateInteractiveButtonsPayload(interactive);
 }
 
 export function assertValidInteractiveMessage(interactive: InteractiveMessage): void {
   if (interactive.type === 'list') assertValidInteractiveList(interactive);
+  else if (interactive.type === 'cta_url') assertValidInteractiveCtaUrl(interactive);
   else assertValidInteractiveButtons(interactive);
 }
 
@@ -77,6 +123,25 @@ export function buildCloudInteractivePayload(interactive: InteractiveMessage): R
             type: 'reply',
             reply: { id: b.id, title: b.title },
           })),
+        },
+      },
+    };
+  }
+
+  if (normalized.type === 'cta_url') {
+    return {
+      type: 'interactive',
+      interactive: {
+        type: 'cta_url',
+        ...(normalized.header ? { header: { type: 'text', text: normalized.header } } : {}),
+        body: { text: normalized.body },
+        ...(normalized.footer ? { footer: { text: normalized.footer } } : {}),
+        action: {
+          name: 'cta_url',
+          parameters: {
+            display_text: normalized.displayText,
+            url: normalized.url,
+          },
         },
       },
     };

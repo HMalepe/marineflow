@@ -4,6 +4,7 @@ import { prisma } from '../../prisma.js';
 import { sendWithFallback } from '../../../services/channelRouter.js';
 import { buildInactivityReminderInteractive } from '../../../services/botInteractiveMenus.js';
 import type { InteractiveMessage } from '../../integrations/messaging/types.js';
+import { shouldScheduleInactivityReminder } from '../../inactivityReminder.js';
 import { logger } from '../../logger.js';
 
 export type ConversationActivityEvent = {
@@ -54,7 +55,10 @@ async function sendAndRecord(opts: {
 export const conversationInactivity = inngest.createFunction(
   {
     id: 'conversation-inactivity',
-    cancelOn: [{ event: 'whatsapp/conversation.activity', match: 'data.conversationId' }],
+    cancelOn: [
+      { event: 'whatsapp/conversation.activity', match: 'data.conversationId' },
+      { event: 'whatsapp/conversation.inactivity.cancelled', match: 'data.conversationId' },
+    ],
     triggers: [{ event: 'whatsapp/conversation.activity' }],
   },
   async ({ event, step }) => {
@@ -90,6 +94,7 @@ export const conversationInactivity = inngest.createFunction(
         });
         if (!conv) return;
         if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
+        if (!shouldScheduleInactivityReminder(conv.step)) return;
         if (await hasInboundSince(conversationId, activityAt)) return;
 
         const firstName = conv.customer.firstName?.trim();
@@ -125,5 +130,17 @@ export async function scheduleConversationActivity(input: {
     });
   } catch (err) {
     logger.warn({ err, conversationId: input.conversationId }, 'inactivity_schedule_failed');
+  }
+}
+
+/** Cancel any pending inactivity reminder (e.g. after booking/payment/feedback is complete). */
+export async function cancelConversationInactivity(conversationId: string): Promise<void> {
+  try {
+    await inngest.send({
+      name: 'whatsapp/conversation.inactivity.cancelled',
+      data: { conversationId },
+    });
+  } catch (err) {
+    logger.warn({ err, conversationId }, 'inactivity_cancel_failed');
   }
 }

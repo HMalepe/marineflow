@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   REVIEW_TOKEN_RE,
-  buildGoogleReviewFollowUpMessage,
+  buildGoogleReviewFollowUpBody,
   buildReviewClaimUrl,
   buildWhatsAppClaimDeepLink,
   formatReviewReward,
@@ -165,43 +165,41 @@ describe('reviewIncentive — messaging', () => {
   });
 
   it('strips markdown injection from admin URLs', () => {
-    const body = buildGoogleReviewFollowUpMessage({
-      googleReviewUrl: 'https://g.page/r/test_*bold*_/review',
+    const body = buildGoogleReviewFollowUpBody({
       incentiveEnabled: true,
       incentiveCents: 5000,
-      claimUrl: 'https://app.example/review-reward/RVW-TEST1234',
+      hasClaimLink: true,
     });
     expect(body).not.toContain('*bold*');
     expect(body).toContain('good or bad');
     expect(body).toContain('R50');
     expect(body).toContain('REVIEWED');
+    expect(body).not.toContain('https://');
   });
 
-  it('includes incentive claim link when enabled', () => {
-    const body = buildGoogleReviewFollowUpMessage({
-      googleReviewUrl: 'https://g.page/r/test/review',
+  it('mentions claim reward when incentive enabled', () => {
+    const body = buildGoogleReviewFollowUpBody({
       incentiveEnabled: true,
       incentiveCents: 5000,
-      claimUrl: 'https://app.example/review-reward/RVW-TEST1234',
+      hasClaimLink: true,
     });
-    expect(body).toContain('https://app.example/review-reward/RVW-TEST1234');
+    expect(body).toContain('Claim reward');
   });
 
   it('omits incentive when disabled or zero', () => {
     expect(
-      buildGoogleReviewFollowUpMessage({
-        googleReviewUrl: 'https://g.page/r/test/review',
+      buildGoogleReviewFollowUpBody({
         incentiveEnabled: false,
         incentiveCents: 5000,
-        claimUrl: 'https://app.example/x',
+        hasClaimLink: true,
       }),
     ).not.toContain('R50');
 
     expect(
-      buildGoogleReviewFollowUpMessage({
-        googleReviewUrl: 'https://g.page/r/test/review',
+      buildGoogleReviewFollowUpBody({
         incentiveEnabled: true,
         incentiveCents: 0,
+        hasClaimLink: false,
       }),
     ).not.toContain('claim');
   });

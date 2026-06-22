@@ -53,4 +53,27 @@ describe('interactive button payloads', () => {
       },
     });
   });
+
+  it('builds Cloud API cta_url payload', () => {
+    const payload = buildCloudInteractivePayload({
+      type: 'cta_url',
+      body: 'Tap below to review us on Google.',
+      displayText: 'Leave Google Review',
+      url: 'https://g.page/r/test/review',
+    });
+    expect(payload).toMatchObject({
+      type: 'interactive',
+      interactive: {
+        type: 'cta_url',
+        body: { text: 'Tap below to review us on Google.' },
+        action: {
+          name: 'cta_url',
+          parameters: {
+            display_text: 'Leave Google Review',
+            url: 'https://g.page/r/test/review',
+          },
+        },
+      },
+    });
+  });
 });

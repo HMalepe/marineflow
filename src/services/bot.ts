@@ -52,7 +52,8 @@ import {
 } from './botAssistant.js';
 import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand, isContinueCommand, isWriteReviewCommand } from '../lib/botNavigation.js';
-import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
+import { scheduleConversationActivity, cancelConversationInactivity } from '../lib/inngest/functions/conversationInactivity.js';
+import { shouldScheduleInactivityReminder } from '../lib/inactivityReminder.js';
 import { getTimeGreeting, getOccasionLine, isBirthdayToday, pickCompliment } from './personalization.js';
 import {
   buildMainMenuText,
@@ -90,6 +91,7 @@ import {
   reviewedClaimErrorMessage,
   resolveGoogleReviewSettings,
   prepareGoogleReviewFollowUp,
+  deliverGoogleReviewRequest,
   isValidGoogleReviewUrl,
 } from './reviewIncentive.js';
 import {
@@ -117,7 +119,9 @@ import {
   SERVICE_SUBMENU_PRICES,
 } from './serviceMenuCatalog.js';
 import {
-  buildBookingReviewFollowUpInteractive,
+  buildBookingRatingInteractive,
+  buildNpsRatingPromptBody,
+  buildStarRatingPromptBody,
   buildBranchPickerInteractive,
   buildCategoryServiceListInteractive,
   buildCombinedConsentInteractive,
@@ -148,16 +152,17 @@ import {
   filterBookableCatalogServices,
 } from './serviceCatalogDisplay.js';
 import { formatCentsZar } from '../lib/formatPrice.js';
+import {
+  cancelGoogleReviewForAppointment,
+} from '../lib/googleReviewSchedule.js';
 import { incrementCustomerBookingCount } from './noShowRisk.js';
 import {
-  buildPopiaRightsHint,
   deleteCustomerData,
   exportCustomerData,
   formatMyDataAccessSummary,
   isDeletedCustomer,
   isPopiaDeleteCommand,
   isPopiaMyDataCommand,
-  notifyPopiaRightsOnce,
 } from './compliance.js';
 
 export type BotContext = Record<string, unknown> & {
@@ -1334,12 +1339,16 @@ async function processInboundWhatsApp(
   );
 
   const inboundAt = new Date().toISOString();
-  scheduleConversationActivity({
-    conversationId: conv.id,
-    salonId: salon.id,
-    customerWaId: waId,
-    activityAt: inboundAt,
-  }).catch(() => {});
+  if (shouldScheduleInactivityReminder(conv.step)) {
+    scheduleConversationActivity({
+      conversationId: conv.id,
+      salonId: salon.id,
+      customerWaId: waId,
+      activityAt: inboundAt,
+    }).catch(() => {});
+  } else {
+    cancelConversationInactivity(conv.id).catch(() => {});
+  }
 
   if (
     (salon.status === 'ACTIVE' || salon.status === 'TRIAL') &&
@@ -1439,14 +1448,13 @@ async function processInboundWhatsApp(
     return;
   }
 
-  // Tapped "Leave Google Review" on the post-booking review follow-up — the link
-  // was already sent as plain text in the same message, so just acknowledge.
+  // Legacy quick-reply title from old review messages — URL buttons open the browser
+  // directly now, so ignore this tap (no thank-you reply).
   if (lower === 'leave google review') {
-    await reply(conv, "Thank you so much — we really appreciate it! 🙏");
     return;
   }
 
-  // Tapped "Write Feedback" on the post-booking review follow-up.
+  // Tapped "Write Feedback" on the review follow-up.
   if (isWriteReviewCommand(text)) {
     await saveCtx(conv.id, {}, ConversationStep.WRITE_REVIEW);
     await reply(conv, "We'd love to hear it — please type your feedback below:");
@@ -3367,8 +3375,8 @@ async function menuActionLeaveReview(
 ): Promise<void> {
   const settings = resolveGoogleReviewSettings(conv.salon.metadata);
   const reviewUrl = conv.salon.googleReviewUrl?.trim();
-  if (settings.enabled && reviewUrl && isValidGoogleReviewUrl(reviewUrl)) {
-    const { body } = await prepareGoogleReviewFollowUp({
+  if (settings.enabled && reviewUrl && isValidGoogleReviewUrl(reviewUrl) && conv.customer.waId) {
+    const { claimUrl } = await prepareGoogleReviewFollowUp({
       salonId: conv.salonId,
       customerId: conv.customerId,
       appointmentId: null,
@@ -3376,8 +3384,15 @@ async function menuActionLeaveReview(
       incentiveEnabled: settings.incentiveEnabled,
       incentiveCents: settings.incentiveCents,
     });
+    await deliverGoogleReviewRequest({
+      salonId: conv.salonId,
+      to: conv.customer.waId,
+      googleReviewUrl: reviewUrl,
+      incentiveEnabled: settings.incentiveEnabled,
+      incentiveCents: settings.incentiveCents,
+      claimUrl,
+    });
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
-    await reply(conv, body);
     return;
   }
 
@@ -3392,8 +3407,7 @@ async function menuActionLeaveReview(
     },
     ConversationStep.RATE_EXPERIENCE,
   );
-  const ratingBody =
-    '⭐ *Leave a review*\n\nHow would you rate your last visit?\n1 ⭐ — Poor\n2 ⭐⭐ — Below average\n3 ⭐⭐⭐ — Average\n4 ⭐⭐⭐⭐ — Good\n5 ⭐⭐⭐⭐⭐ — Excellent';
+  const ratingBody = buildStarRatingPromptBody();
   await replyMaybeInteractive(conv, ratingBody, buildStarRatingInteractive(conv.salon));
 }
 
@@ -4732,6 +4746,7 @@ async function handleConfirm(
       replacedById: appointment.id,
       source: 'whatsapp',
     });
+    void cancelGoogleReviewForAppointment(reschedulingId).catch(() => undefined);
   }
 
   // Item 16: Notify owner on new booking — best-effort, never blocks booking
@@ -4833,23 +4848,20 @@ async function handleConfirm(
       status: appointment.status,
       salon: conv.salon,
     }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
-
-    if (isFirstBooking) {
-      await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-    }
   }
 
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
-  await reply(
-    conv,
-    'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
-  );
+  await promptBookingRating(conv);
+}
+
+async function promptBookingRating(conv: Conversation & { customer: Customer; salon: Salon }) {
+  const interactive = buildBookingRatingInteractive(conv.salon);
+  await replyMaybeInteractive(conv, interactive.body, interactive);
 }
 
 async function finishBookingAfterPayment(
   conv: Conversation & { customer: Customer; salon: Salon },
   appointment: { id: string; salonId: string; start: Date; status: AppointmentStatus },
-  isFirstBooking: boolean,
 ) {
   void onBookingConfirmed({
     id: appointment.id,
@@ -4859,19 +4871,12 @@ async function finishBookingAfterPayment(
     salon: conv.salon,
   }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
 
-  if (isFirstBooking) {
-    await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-  }
-
   await saveCtx(
     conv.id,
     { pendingAppointmentId: appointment.id, awaitingCashConfirm: undefined },
     ConversationStep.BOOKING_RATING,
   );
-  await reply(
-    conv,
-    'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
-  );
+  await promptBookingRating(conv);
 }
 
 function buildPaymentMethodPrompt(amountCents: number): string {
@@ -4916,7 +4921,6 @@ async function finalizeCashPayment(
   conv: Conversation & { customer: Customer; salon: Salon },
   appointment: { id: string; salonId: string; start: Date; status: AppointmentStatus; service: { name: string } },
   amountCents: number,
-  isFirstBooking: boolean,
 ) {
   const tx = getTenantDb();
   await tx.payment.create({
@@ -4951,7 +4955,7 @@ async function finalizeCashPayment(
     ].join('\n'),
   );
 
-  await finishBookingAfterPayment(conv, appointment, isFirstBooking);
+  await finishBookingAfterPayment(conv, appointment);
 }
 
 async function handlePaymentMethodChoice(
@@ -4967,7 +4971,6 @@ async function handlePaymentMethodChoice(
   const c = ctx(conv);
   const appointmentId = c.pendingAppointmentId as string | undefined;
   const amountCents = c.pendingPaymentAmountCents as number | undefined;
-  const isFirstBooking = Boolean(c.pendingPaymentIsFirstBooking);
   const awaitingCashConfirm = Boolean(c.awaitingCashConfirm);
   if (!appointmentId || !amountCents) {
     await saveCtx(conv.id, {}, ConversationStep.IDLE);
@@ -4999,7 +5002,7 @@ async function handlePaymentMethodChoice(
       await saveCtx(conv.id, { awaitingCashConfirm: undefined }, ConversationStep.CHOOSE_PAYMENT_METHOD);
       // fall through to PayFast below
     } else if (isCashConfirmation(trimmed, true)) {
-      await finalizeCashPayment(conv, appointment, amountCents, isFirstBooking);
+      await finalizeCashPayment(conv, appointment, amountCents);
       return;
     } else if (isCashChoice) {
       await reply(conv, buildCashPaymentNudge(amountCents));
@@ -5070,12 +5073,9 @@ async function handlePaymentMethodChoice(
 
     if (awaitingOnlinePayment) {
       await saveCtx(conv.id, { pendingAppointmentId: appointment.id, awaitingCashConfirm: undefined }, ConversationStep.IDLE);
-      if (isFirstBooking) {
-        await notifyPopiaRightsOnce(conv.id, () => reply(conv, buildPopiaRightsHint()));
-      }
       return;
     }
-    await finishBookingAfterPayment(conv, appointment, isFirstBooking);
+    await finishBookingAfterPayment(conv, appointment);
   }
 }
 
@@ -5083,14 +5083,15 @@ async function handleBookingRating(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  const upper = text.trim().toUpperCase();
-  if (upper === 'BACK' || upper === 'MENU' || upper === '0' || upper === 'SKIP') {
+  const trimmed = text.trim();
+  const upper = trimmed.toUpperCase();
+  if (upper === 'BACK' || upper === 'MENU' || upper === '0' || upper === 'SKIP' || /^skip$/i.test(trimmed)) {
     await goBackToMainMenu(conv);
     return;
   }
-  const rating = parseInt(text.trim(), 10);
+  const rating = parseInt(trimmed, 10);
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
-    await reply(conv, 'Please reply with a number between 1 and 5, or *SKIP* for the menu.');
+    await promptBookingRating(conv);
     return;
   }
   const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
@@ -5105,13 +5106,13 @@ async function handleBookingRating(
   });
   let thankYou: string;
   if (rating === 5) {
-    thankYou = 'Amazing! 🌟 So glad it was easy. See you soon!';
+    thankYou = 'You just made our day. 🌟 So glad booking felt effortless — we cannot wait to take care of you.';
   } else if (rating === 4) {
-    thankYou = 'Thanks! 😊 Glad that was smooth.';
+    thankYou = 'Thank you — that means a lot. 😊 Smooth bookings are what we aim for every time.';
   } else if (rating === 3) {
-    thankYou = 'Thanks for the feedback — we\'ll keep improving.';
+    thankYou = 'Appreciate the honesty. We\'re always tuning the experience — your feedback helps.';
   } else {
-    thankYou = 'Sorry it wasn\'t easier — we\'ll work on that.';
+    thankYou = 'Sorry it wasn\'t smoother — we\'ve flagged this so the team can improve.';
     await getTenantDb().ticket.create({
       data: {
         salonId: conv.salonId,
@@ -5128,20 +5129,8 @@ async function handleBookingRating(
     });
   }
   await reply(conv, thankYou);
+  await cancelConversationInactivity(conv.id).catch(() => {});
   await saveCtx(conv.id, {}, ConversationStep.IDLE);
-
-  const googleReviewUrl = conv.salon.googleReviewUrl?.trim();
-  const hasGoogleLink = isValidGoogleReviewUrl(googleReviewUrl);
-  if (rating >= 4) {
-    const followUpBody = hasGoogleLink
-      ? `Loved booking with us? We'd be so grateful for a quick Google review:\n${googleReviewUrl}\n\nOr tap below to write us your feedback directly.`
-      : "We'd love to hear more — tap below to write us your feedback directly.";
-    await replyMaybeInteractive(
-      conv,
-      followUpBody,
-      buildBookingReviewFollowUpInteractive(conv.salon, followUpBody, hasGoogleLink),
-    );
-  }
 }
 
 async function handleWriteReview(
@@ -5162,9 +5151,13 @@ async function handleWriteReview(
       payload: { text: text.trim() },
     },
   });
-  await reply(conv, "Thank you for taking the time to share that with us! 🙏");
+  await cancelConversationInactivity(conv.id).catch(() => {});
   await saveCtx(conv.id, {}, ConversationStep.MENU);
-  await replyMenu(conv);
+  await replyWithMenu(
+    conv,
+    `Thank you so much for sharing that with us — we truly appreciate your feedback. 🙏\n\n` +
+      `If there's anything else you need, just pick an option from the menu below.`,
+  );
 }
 
 async function handleManageBooking(
@@ -5441,6 +5434,8 @@ async function handleConfirmCancel(
     },
   });
 
+  void cancelGoogleReviewForAppointment(appt.id).catch(() => undefined);
+
   await afterAppointmentCancelled({
     salonId: conv.salonId,
     salon: conv.salon,
@@ -5670,7 +5665,7 @@ async function handleRateExperience(
     if (isNaN(stars) || stars < 1 || stars > 5) {
       await replyMaybeInteractive(
         conv,
-        'Please reply with a number from 1 to 5 (1 = Poor, 5 = Excellent), or BACK to cancel.',
+        buildStarRatingPromptBody(),
         buildStarRatingInteractive(conv.salon),
       );
       return;
@@ -5690,7 +5685,7 @@ async function handleRateExperience(
   if (subStep === 'comment') {
     const comment = text.toUpperCase() === 'SKIP' ? '' : text.trim();
     await saveCtx(conv.id, { ratingComment: comment, ratingSubStep: 'nps' });
-    const npsBody = 'On a scale of 1–10, how likely are you to recommend us to a friend?\n(1 = Not at all, 10 = Definitely!)';
+    const npsBody = buildNpsRatingPromptBody();
     await replyMaybeInteractive(conv, npsBody, buildNpsRatingInteractive(conv.salon));
     return;
   }
@@ -5700,7 +5695,7 @@ async function handleRateExperience(
     if (isNaN(nps) || nps < 1 || nps > 10) {
       await replyMaybeInteractive(
         conv,
-        'Please reply with a number from 1 to 10.',
+        buildNpsRatingPromptBody(),
         buildNpsRatingInteractive(conv.salon),
       );
       return;
@@ -5784,7 +5779,7 @@ async function handleRateExperience(
   await saveCtx(conv.id, { ratingSubStep: 'stars' }, ConversationStep.RATE_EXPERIENCE);
   await replyMaybeInteractive(
     conv,
-    '⭐ How would you rate your last visit? (1–5)',
+    buildStarRatingPromptBody(),
     buildStarRatingInteractive(conv.salon),
   );
 }
@@ -5938,7 +5933,7 @@ async function handleCsat(
   const rating = parseInt(text.trim(), 10);
 
   if (isNaN(rating) || rating < 1 || rating > 5) {
-    await reply(conv, 'Please reply with a number from 1 (poor) to 5 (excellent).');
+    await replyMaybeInteractive(conv, buildStarRatingPromptBody(), buildStarRatingInteractive(conv.salon));
     return;
   }
 
@@ -5990,6 +5985,7 @@ async function handleCsat(
     await sendGoogleReviewFollowUp({
       salonId: conv.salon.id,
       customerId: conv.customerId,
+      customerWaId: conv.customer.waId,
       appointmentId: appointmentId ?? null,
       googleReviewUrl: conv.salon.googleReviewUrl,
       googleReviewEnabled: reviewSettings.enabled,
@@ -5997,10 +5993,10 @@ async function handleCsat(
       incentiveCents: reviewSettings.incentiveCents,
       marketingConsentStatus: conv.customer.marketingConsentStatus,
       reviewRequestSentAt,
-      reply: (body) => reply(conv, body),
     });
   }
 
+  await cancelConversationInactivity(conv.id).catch(() => {});
   await saveCtx(conv.id, {}, ConversationStep.MENU);
   await replyMenu(conv);
 }

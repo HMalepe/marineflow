@@ -389,8 +389,8 @@ export function AutomationsClient({ token }: Props) {
             icon={Star}
             checked={draft.googleReview.enabled}
             onChange={(v) => patch('googleReview', { enabled: v })}
-            label="Request review after appointment"
-            description="Sends your Google review link + optional claim link after each visit. Add the review URL under Settings."
+            label="Request review after visit"
+            description="Sends your Google review link after the appointment — 45 minutes after the booked time by default, or 15 minutes after you tap “Client paid & happy — gone” on the Appointments page. Not sent at booking or payment."
           />
           <Toggle
             icon={Star}
@@ -415,16 +415,9 @@ export function AutomationsClient({ token }: Props) {
               />
             </div>
           )}
-          <div className="space-y-1.5 max-w-xs">
-            <Label className="text-xs">Hours after visit</Label>
-            <Input
-              type="number"
-              min={1}
-              max={168}
-              value={draft.googleReview.hoursAfterVisit}
-              onChange={(e) => patch('googleReview', { hoursAfterVisit: parseInt(e.target.value, 10) || 24 })}
-            />
-          </div>
+          <p className="text-xs text-muted-foreground max-w-lg">
+            Timing is automatic: review goes out 45 minutes after the confirmed appointment time, or 15 minutes after you mark the client as departed on the Appointments page.
+          </p>
         </CardContent>
       </Card>
 

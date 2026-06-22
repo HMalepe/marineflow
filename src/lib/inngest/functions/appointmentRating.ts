@@ -1,5 +1,5 @@
-// Sends Google review request after completed visit (configurable delay).
-// Separate from CSAT rating — focuses on public Google reviews.
+// Sends Google review request after the visit (45 min after appointment start by default,
+// or 15 min after admin marks client departed). Separate from CSAT rating.
 
 import { ConversationStep, MessageDirection } from '@prisma/client';
 import { inngest } from '../client.js';
@@ -9,7 +9,19 @@ import { parseAutomationsFromMetadata } from '../../automationSettings.js';
 import {
   prepareGoogleReviewFollowUp,
   shouldSendGoogleReviewFollowUp,
+  deliverGoogleReviewRequest,
 } from '../../../services/reviewIncentive.js';
+import { withRatingFeedbackPreamble } from '../../feedbackCopy.js';
+
+export type GoogleReviewScheduledEvent = {
+  data: {
+    appointmentId: string;
+    salonId: string;
+    customerId: string;
+    customerWaId: string;
+    sendAt: string;
+  };
+};
 
 export type AppointmentCompletedEvent = {
   data: {
@@ -20,6 +32,8 @@ export type AppointmentCompletedEvent = {
   };
 };
 
+const BLOCKED_STATUSES = new Set(['CANCELLED', 'RESCHEDULED', 'NO_SHOW']);
+
 async function withJobTenant<T>(salonId: string, fn: () => Promise<T>): Promise<T> {
   await prisma.$executeRawUnsafe(`SELECT set_config('app.current_tenant', $1, true)`, salonId);
   return fn();
@@ -29,81 +43,85 @@ export const googleReviewRequest = inngest.createFunction(
   {
     id: 'google-review-request',
     retries: 2,
-    triggers: [{ event: 'whatsapp/appointment.completed' }],
+    cancelOn: [{ event: 'whatsapp/google-review.cancelled', match: 'data.appointmentId' }],
+    triggers: [{ event: 'whatsapp/google-review.scheduled' }],
   },
   async ({ event, step }) => {
-    const { appointmentId, salonId, customerId, customerWaId } =
-      event.data as AppointmentCompletedEvent['data'];
+    const { appointmentId, salonId, customerId, customerWaId, sendAt } =
+      event.data as GoogleReviewScheduledEvent['data'];
 
-    const config = await step.run('load-config', async () =>
-      withJobTenant(salonId, async () => {
-        const salon = await prisma.salon.findUnique({
-          where: { id: salonId },
-          select: { metadata: true, googleReviewUrl: true, name: true, tradingName: true },
-        });
-        if (!salon) return null;
-        const automations = parseAutomationsFromMetadata(salon.metadata);
-        return {
-          automations,
-          googleReviewUrl: salon.googleReviewUrl,
-          salonName: salon.tradingName ?? salon.name,
-        };
-      }),
-    );
+    await step.sleepUntil('wait-until-send', sendAt);
 
-    if (!config?.automations.googleReview.enabled || !config.googleReviewUrl) {
-      return { skipped: true, reason: 'disabled_or_no_url' };
-    }
-
-    const sleepHours = config.automations.googleReview.hoursAfterVisit;
-    await step.sleep('wait-before-review', `${sleepHours}h`);
-
-    await step.run('send-review-request', async () =>
+    const result = await step.run('send-review-request', async () =>
       withJobTenant(salonId, async () => {
         const appt = await prisma.appointment.findUnique({
           where: { id: appointmentId },
           select: { status: true, reviewRequestSentAt: true },
         });
-        if (!appt || appt.status !== 'COMPLETED') return;
-        if (!customerWaId) return;
+        if (!appt || BLOCKED_STATUSES.has(appt.status)) {
+          return { skipped: true, reason: 'invalid_status' };
+        }
+        if (!customerWaId) return { skipped: true, reason: 'no_wa_id' };
+
+        const salon = await prisma.salon.findUnique({
+          where: { id: salonId },
+          select: { metadata: true, googleReviewUrl: true, name: true, tradingName: true },
+        });
+        if (!salon) return { skipped: true, reason: 'salon_not_found' };
+
+        const automations = parseAutomationsFromMetadata(salon.metadata);
+        if (!automations.googleReview.enabled || !salon.googleReviewUrl) {
+          return { skipped: true, reason: 'disabled_or_no_url' };
+        }
 
         const customer = await prisma.customer.findUnique({
           where: { id: customerId },
           select: { firstName: true, marketingConsentStatus: true, deletedAt: true },
         });
-        if (!customer || customer.deletedAt) return;
+        if (!customer || customer.deletedAt) {
+          return { skipped: true, reason: 'customer_unavailable' };
+        }
 
         if (
           !shouldSendGoogleReviewFollowUp({
-            googleReviewUrl: config.googleReviewUrl,
-            googleReviewEnabled: config.automations.googleReview.enabled,
+            googleReviewUrl: salon.googleReviewUrl,
+            googleReviewEnabled: automations.googleReview.enabled,
             marketingConsentStatus: customer.marketingConsentStatus,
             reviewRequestSentAt: appt.reviewRequestSentAt,
           })
         ) {
-          return;
+          return { skipped: true, reason: 'already_sent_or_consent' };
         }
 
-        const reviewCfg = config.automations.googleReview;
-        const { body: followUpBody } = await prepareGoogleReviewFollowUp({
+        const reviewCfg = automations.googleReview;
+        const { body: followUpBody, claimUrl } = await prepareGoogleReviewFollowUp({
           salonId,
           customerId,
           appointmentId,
-          googleReviewUrl: config.googleReviewUrl!,
+          googleReviewUrl: salon.googleReviewUrl,
           incentiveEnabled: reviewCfg.incentiveEnabled,
           incentiveCents: reviewCfg.incentiveCents,
         });
 
+        const salonName = salon.tradingName ?? salon.name;
         const body =
-          `Hi ${customer.firstName ?? 'there'}! Thanks for visiting ${config.salonName} 😊\n\n` +
+          `Hi ${customer.firstName ?? 'there'}! Thanks for visiting ${salonName} 😊\n\n` +
           followUpBody +
           `\n\nThank you for supporting us!`;
 
-        await sendWithFallback({ salonId, to: customerWaId, body });
+        await deliverGoogleReviewRequest({
+          salonId,
+          to: customerWaId,
+          googleReviewUrl: salon.googleReviewUrl,
+          incentiveEnabled: reviewCfg.incentiveEnabled,
+          incentiveCents: reviewCfg.incentiveCents,
+          claimUrl,
+          body,
+        });
 
         await prisma.appointment.updateMany({
           where: { id: appointmentId, reviewRequestSentAt: null },
-          data: { reviewRequestSentAt: new Date() },
+          data: { reviewRequestSentAt: new Date(), googleReviewScheduledAt: null },
         });
 
         const conv = await prisma.conversation.findUnique({
@@ -128,10 +146,12 @@ export const googleReviewRequest = inngest.createFunction(
             type: 'google_review_request_sent',
           },
         });
+
+        return { sent: true };
       }),
     );
 
-    return { sent: true, appointmentId };
+    return { appointmentId, ...result };
   },
 );
 
@@ -181,13 +201,15 @@ export const appointmentRating = inngest.createFunction(
 
         let body =
           `Hi ${firstName}! We hope you enjoyed your visit to ${salonName} 😊\n\n` +
-          `How would you rate your experience?\n\n` +
-          `⭐ 1 – Poor\n` +
-          `⭐⭐ 2 – Below average\n` +
-          `⭐⭐⭐ 3 – Good\n` +
-          `⭐⭐⭐⭐ 4 – Great\n` +
-          `⭐⭐⭐⭐⭐ 5 – Excellent\n\n` +
-          `Just reply with a number 1–5.`;
+          withRatingFeedbackPreamble(
+            `How would you rate your experience?\n\n` +
+              `⭐ 1 – Poor\n` +
+              `⭐⭐ 2 – Below average\n` +
+              `⭐⭐⭐ 3 – Good\n` +
+              `⭐⭐⭐⭐ 4 – Great\n` +
+              `⭐⭐⭐⭐⭐ 5 – Excellent\n\n` +
+              `Just reply with a number 1–5.`,
+          );
 
         await sendWithFallback({ salonId, to: customerWaId, body });
 

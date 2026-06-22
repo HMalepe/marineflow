@@ -7,8 +7,8 @@ import { isPayfastConfigured } from '../lib/integrations/payments/index.js';
 import { sendWithFallback } from './channelRouter.js';
 import { emitPlatformEvent } from './platformEvents.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
+import { scheduleGoogleReviewForAppointment } from '../lib/googleReviewSchedule.js';
 import { notifyAppointmentChangedLater } from './rosterSync.js';
-import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
 import { MessageDirection } from '@prisma/client';
@@ -127,10 +127,6 @@ export async function confirmAppointmentPaid(
     });
     if (!appt || appt.status === 'CONFIRMED_PAID') return null;
 
-    const priorSucceededPayments = await tx.payment.count({
-      where: { customerId: appt.customerId, status: 'SUCCEEDED' },
-    });
-
     await tx.payment.updateMany({
       where: { appointmentId, status: 'PENDING' },
       data: {
@@ -152,12 +148,6 @@ export async function confirmAppointmentPaid(
     const conv = await tx.conversation.findFirst({
       where: { salonId: appt.salonId, customerId: appt.customerId },
       orderBy: { updatedAt: 'desc' },
-    });
-
-    const convCtx = (conv?.context ?? {}) as Record<string, unknown>;
-    const includePopiaHint = shouldAttachPopiaRightsHint({
-      priorSucceededPayments,
-      popiaRightsNotified: Boolean(convCtx.popiaRightsNotified),
     });
 
     const zone = appt.salon.timezone;
@@ -188,9 +178,6 @@ export async function confirmAppointmentPaid(
       '',
       `We can't wait to see you at ${sanitizeForMessage(salonName)}! ✨`,
     ].join('\n');
-    if (includePopiaHint) {
-      confirmMsg += `\n\n${buildPopiaRightsHint()}`;
-    }
 
     let confirmSid: string | null = null;
     try {
@@ -203,14 +190,6 @@ export async function confirmAppointmentPaid(
     await tx.message.create({
       data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
     });
-
-    if (includePopiaHint) {
-      const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
-      await tx.conversation.update({
-        where: { id: conv.id },
-        data: { context: { ...currentCtx, popiaRightsNotified: true } as object },
-      });
-    }
 
     return { conversationId: conv.id, salonId: appt.salonId, customerId: appt.customerId, waId, appointmentId };
   });
@@ -247,6 +226,7 @@ export async function confirmAppointmentPaid(
       status: confirmed.status,
       salon: confirmed.salon,
     }).catch(() => undefined);
+    void scheduleGoogleReviewForAppointment(confirmed.id).catch(() => undefined);
   }
 
   return Boolean(ratingSchedule || paidAppt);

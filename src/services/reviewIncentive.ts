@@ -4,6 +4,10 @@ import { getTenantDb } from '../lib/db/tenantSession.js';
 import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
+import { withRatingFeedbackPreamble } from '../lib/feedbackCopy.js';
+import { sendWithFallback } from './channelRouter.js';
+import { buildWriteFeedbackInteractive } from './botInteractiveMenus.js';
+import type { InteractiveCtaUrl } from '../lib/integrations/messaging/types.js';
 
 const APP_BASE =
   process.env.APP_PUBLIC_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.marineflow.co.za';
@@ -93,27 +97,38 @@ export function buildWhatsAppClaimDeepLink(params: {
   return `https://wa.me/${digits}?text=${text}`;
 }
 
+export function buildGoogleReviewFollowUpBody(params: {
+  incentiveEnabled: boolean;
+  incentiveCents: number;
+  hasClaimLink?: boolean;
+}): string {
+  const reward = formatReviewReward(params.incentiveCents);
+
+  if (params.incentiveEnabled && params.incentiveCents > 0 && params.hasClaimLink) {
+    return withRatingFeedbackPreamble(
+      `We'd love your honest feedback on Google — good or bad, it all helps us improve.\n\n` +
+        `Leave your review using the button below, then tap *Claim reward* for ${reward} off your next visit — or reply *REVIEWED* here after you've reviewed.`,
+    );
+  }
+
+  return withRatingFeedbackPreamble(
+    `We'd love your honest feedback on Google — good or bad, it all helps us improve.\n\n` +
+      `Tap the button below to leave your review.`,
+  );
+}
+
+/** @deprecated Body-only helper — URLs are sent via CTA buttons, not inline text. */
 export function buildGoogleReviewFollowUpMessage(params: {
   googleReviewUrl: string;
   incentiveEnabled: boolean;
   incentiveCents: number;
   claimUrl?: string;
 }): string {
-  const safeUrl = params.googleReviewUrl.replace(/[*_~`[\]]/g, '');
-  const reward = formatReviewReward(params.incentiveCents);
-
-  if (params.incentiveEnabled && params.incentiveCents > 0 && params.claimUrl) {
-    const safeClaim = params.claimUrl.replace(/[*_~`[\]]/g, '');
-    return (
-      `We'd love your honest feedback on Google — good or bad, it all helps us improve:\n${safeUrl}\n\n` +
-      `Leave your review, then claim ${reward} off your next visit:\n${safeClaim}\n\n` +
-      `Open the link above and tap "Claim on WhatsApp", or reply *REVIEWED* here after you've reviewed.`
-    );
-  }
-
-  return (
-    `We'd love your honest feedback on Google — good or bad, it all helps us improve:\n${safeUrl}`
-  );
+  return buildGoogleReviewFollowUpBody({
+    incentiveEnabled: params.incentiveEnabled,
+    incentiveCents: params.incentiveCents,
+    hasClaimLink: Boolean(params.claimUrl),
+  });
 }
 
 export async function getOrCreateReviewClaim(params: {
@@ -383,7 +398,6 @@ export async function prepareGoogleReviewFollowUp(params: {
   incentiveEnabled: boolean;
   incentiveCents: number;
 }): Promise<{ body: string; claimUrl?: string }> {
-  const url = params.googleReviewUrl.trim();
   let claimUrl: string | undefined;
 
   if (params.incentiveEnabled && params.incentiveCents > 0) {
@@ -396,19 +410,61 @@ export async function prepareGoogleReviewFollowUp(params: {
     claimUrl = claim.claimUrl;
   }
 
-  const body = buildGoogleReviewFollowUpMessage({
-    googleReviewUrl: url,
+  const body = buildGoogleReviewFollowUpBody({
     incentiveEnabled: params.incentiveEnabled,
     incentiveCents: params.incentiveCents,
-    claimUrl,
+    hasClaimLink: Boolean(claimUrl),
   });
 
   return { body, claimUrl };
 }
 
+/** Send Google review CTA (opens browser) plus optional Write Feedback quick reply. */
+export async function deliverGoogleReviewRequest(params: {
+  salonId: string;
+  to: string;
+  googleReviewUrl: string;
+  incentiveEnabled: boolean;
+  incentiveCents: number;
+  claimUrl?: string;
+  /** Override the default review prompt body (e.g. post-visit greeting wrapper). */
+  body?: string;
+}): Promise<void> {
+  const body =
+    params.body ??
+    buildGoogleReviewFollowUpBody({
+      incentiveEnabled: params.incentiveEnabled,
+      incentiveCents: params.incentiveCents,
+      hasClaimLink: Boolean(params.claimUrl),
+    });
+
+  const cta: InteractiveCtaUrl = {
+    type: 'cta_url',
+    body,
+    displayText: 'Leave Google Review',
+    url: params.googleReviewUrl.trim(),
+    ...(params.claimUrl && params.incentiveEnabled && params.incentiveCents > 0
+      ? { secondaryAction: { displayText: 'Claim reward', url: params.claimUrl } }
+      : {}),
+  };
+
+  await sendWithFallback({ salonId: params.salonId, to: params.to, body, interactive: cta });
+
+  const writeFeedback = buildWriteFeedbackInteractive();
+  if (writeFeedback) {
+    await sendWithFallback({
+      salonId: params.salonId,
+      to: params.to,
+      body: writeFeedback.body,
+      interactive: writeFeedback,
+    });
+  }
+}
+
 export async function sendGoogleReviewFollowUp(params: {
   salonId: string;
   customerId: string;
+  customerWaId: string;
   appointmentId: string | null;
   googleReviewUrl: string;
   googleReviewEnabled: boolean;
@@ -416,7 +472,6 @@ export async function sendGoogleReviewFollowUp(params: {
   incentiveCents: number;
   marketingConsentStatus?: string | null;
   reviewRequestSentAt?: Date | null;
-  reply: (body: string) => Promise<void>;
 }): Promise<boolean> {
   if (
     !shouldSendGoogleReviewFollowUp({
@@ -430,7 +485,7 @@ export async function sendGoogleReviewFollowUp(params: {
   }
 
   try {
-    const { body } = await prepareGoogleReviewFollowUp({
+    const { claimUrl } = await prepareGoogleReviewFollowUp({
       salonId: params.salonId,
       customerId: params.customerId,
       appointmentId: params.appointmentId,
@@ -439,7 +494,14 @@ export async function sendGoogleReviewFollowUp(params: {
       incentiveCents: params.incentiveCents,
     });
 
-    await params.reply(body);
+    await deliverGoogleReviewRequest({
+      salonId: params.salonId,
+      to: params.customerWaId,
+      googleReviewUrl: params.googleReviewUrl.trim(),
+      incentiveEnabled: params.incentiveEnabled,
+      incentiveCents: params.incentiveCents,
+      claimUrl,
+    });
 
     if (params.appointmentId) {
       await getTenantDb().appointment.updateMany({

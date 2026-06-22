@@ -1,5 +1,6 @@
 import type { PrismaTx } from '../../lib/db/tenantSession.js';
 import { scheduleAppointmentReminders } from '../../services/appointmentReminders.js';
+import { scheduleGoogleReviewForAppointment } from '../../lib/googleReviewSchedule.js';
 import { notifyAppointmentChangedLater } from '../../services/rosterSync.js';
 
 export type MarkManuallyPaidResult =
@@ -89,6 +90,7 @@ export async function markAppointmentManuallyPaid(
       source: input.method === 'CASH' ? 'dashboard_cash' : 'dashboard_eft',
     });
     void scheduleAppointmentReminders(updated).catch(() => undefined);
+    void scheduleGoogleReviewForAppointment(updated.id).catch(() => undefined);
   }
 
   return { ok: true, status: 'CONFIRMED_PAID', paymentStatus };

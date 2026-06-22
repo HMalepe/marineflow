@@ -11,6 +11,9 @@ import { getOrCreateReferralCode, buildReferralShareMessage } from './referralPr
 import { checkCancellationAllowed } from './cancellationRules.js';
 import { notifyWaitlistOnCancel } from './waitlist.js';
 import { scheduleAppointmentReminders } from './appointmentReminders.js';
+import {
+  scheduleGoogleReviewForAppointment,
+} from '../lib/googleReviewSchedule.js';
 import { validateSlotAvailable } from './slots.js';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { getFrequentCoBookedService } from './addonRecommendation.js';
@@ -280,8 +283,12 @@ export async function onBookingConfirmed(appt: {
   status: import('@prisma/client').AppointmentStatus;
   salon: Pick<Salon, 'metadata' | 'timezone'>;
 }): Promise<void> {
-  if (appt.start.getTime() <= Date.now()) return;
-  await scheduleAppointmentReminders(appt);
+  if (appt.start.getTime() > Date.now()) {
+    await scheduleAppointmentReminders(appt);
+  }
+  if (appt.status === 'CONFIRMED' || appt.status === 'CONFIRMED_PAID') {
+    void scheduleGoogleReviewForAppointment(appt.id).catch(() => undefined);
+  }
 }
 
 export async function computeAppointmentEnd(params: {

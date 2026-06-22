@@ -633,6 +633,12 @@ model Appointment {
   reminder24hFailed   Boolean            @default(false)
   reminder2hFailed    Boolean            @default(false)
   reviewRequestSentAt DateTime?
+  /// Salon marked client seated (dashboard quick action).
+  clientArrivedAt     DateTime?
+  /// Salon marked client paid and left — triggers review 15 min later.
+  clientDepartedAt    DateTime?
+  /// When the Google review Inngest job is due to fire (for dashboard visibility).
+  googleReviewScheduledAt DateTime?
   penaltyWaivedAt     DateTime?
   penaltyWaivedBy     String?            /// StaffUser id
   cancellationPenaltyApplied Boolean     @default(false)

@@ -16,7 +16,7 @@
     "too_many_messages": "Too many messages — please wait a minute and try again.",
     "inactive": "This business is not accepting bookings right now. Please try again later.",
     "reschedule_confirm": "Got it! Your old booking is cancelled. Let's pick a new time.",
-    "csat_ask": "How was your experience? Rate 1-5:\n1 ⭐ Poor\n2 ⭐⭐ Below average\n3 ⭐⭐⭐ Average\n4 ⭐⭐⭐⭐ Good\n5 ⭐⭐⭐⭐⭐ Excellent",
+    "csat_ask": "_We truly value your feedback — it helps us keep refining and improving your experience with us._\n\nHow was your experience? Rate 1-5:\n1 ⭐ Poor\n2 ⭐⭐ Below average\n3 ⭐⭐⭐ Average\n4 ⭐⭐⭐⭐ Good\n5 ⭐⭐⭐⭐⭐ Excellent",
     "csat_thanks_1": "We're sorry to hear that. We'll work to improve. Thank you for the feedback.",
     "csat_thanks_2": "Thank you for letting us know. We'll do better next time.",
     "csat_thanks_3": "Thanks for the feedback! We appreciate it.",
