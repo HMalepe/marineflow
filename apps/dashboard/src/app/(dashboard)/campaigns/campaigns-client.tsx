@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   AlertTriangle,
+  BadgeCheck,
   CalendarClock,
   CheckCircle2,
   Clock,
@@ -20,6 +21,7 @@ import {
   Sparkles,
   Target,
   Users,
+  X,
   XCircle,
 } from 'lucide-react';
 import { DashboardToast } from '@/components/dashboard-toast';
@@ -50,6 +52,8 @@ import {
 } from './campaign-template-picker';
 import { EmojiBar } from './emoji-bar';
 import { CampaignHistoryCard } from '@/components/CampaignHistoryCard';
+import { WhatsappCardPreview } from './whatsapp-templates/whatsapp-card-preview';
+import type { WhatsappTemplate } from './whatsapp-templates/whatsapp-template-types';
 
 type CampaignStatus = 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'COMPLETED' | 'CANCELLED';
 type StatusFilter = 'all' | 'draft' | 'scheduled' | 'sent';
@@ -78,6 +82,7 @@ interface Campaign {
   message: string;
   mediaUrl: string | null;
   mediaType: CampaignMediaType | null;
+  whatsappTemplateId: string | null;
   status: CampaignStatus;
   audienceFilter: AudienceFilter;
   scheduledAt: string | null;
@@ -95,6 +100,7 @@ interface CampaignForm {
   message: string;
   mediaUrl: string | null;
   mediaType: CampaignMediaType | null;
+  whatsappTemplateId: string | null;
   audienceType: AudienceType;
   tags: string[];
   inactiveDays: string;
@@ -111,6 +117,7 @@ const emptyForm: CampaignForm = {
   message: '',
   mediaUrl: null,
   mediaType: null,
+  whatsappTemplateId: null,
   audienceType: 'all',
   tags: [],
   inactiveDays: '90',
@@ -157,6 +164,7 @@ function formFromCampaign(c: Campaign): CampaignForm {
     message: c.message,
     mediaUrl: c.mediaUrl,
     mediaType: c.mediaType,
+    whatsappTemplateId: c.whatsappTemplateId,
     audienceType: af.type ?? 'all',
     tags: af.tags ?? [],
     inactiveDays: String(af.inactiveDays ?? 90),
@@ -463,8 +471,10 @@ export function CampaignsClient({ token }: Props) {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [contentTab, setContentTab] = useState<'templates' | 'custom'>('templates');
+  const [contentTab, setContentTab] = useState<'templates' | 'custom' | 'whatsapp'>('templates');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsappTemplate[]>([]);
+  const [whatsappTemplatesLoading, setWhatsappTemplatesLoading] = useState(false);
   const { error: saveError, clear: clearSaveFeedback, reportError } = useSaveFeedback();
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
@@ -575,6 +585,19 @@ export function CampaignsClient({ token }: Props) {
     }
   }, [token]);
 
+  const loadWhatsappTemplates = useCallback(async () => {
+    if (!token) return;
+    setWhatsappTemplatesLoading(true);
+    try {
+      const res = await apiFetch<{ templates: WhatsappTemplate[] }>('/whatsapp-templates', {}, token);
+      setWhatsappTemplates(res.templates.filter((t) => t.status === 'APPROVED'));
+    } catch {
+      setWhatsappTemplates([]);
+    } finally {
+      setWhatsappTemplatesLoading(false);
+    }
+  }, [token]);
+
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...emptyForm, scheduledAtLocal: defaultScheduleLocal() });
@@ -584,6 +607,7 @@ export function CampaignsClient({ token }: Props) {
     setSelectedTemplateId(null);
     setSheetOpen(true);
     void loadTemplates();
+    void loadWhatsappTemplates();
   };
 
   const openEdit = (c: Campaign) => {
@@ -591,10 +615,11 @@ export function CampaignsClient({ token }: Props) {
     setForm(formFromCampaign(c));
     setAudienceCount(null);
     setConfirmSendInSheet(false);
-    setContentTab(c.message.trim() ? 'custom' : 'templates');
+    setContentTab(c.whatsappTemplateId ? 'whatsapp' : c.message.trim() ? 'custom' : 'templates');
     setSelectedTemplateId(null);
     setSheetOpen(true);
     void loadTemplates();
+    void loadWhatsappTemplates();
   };
 
   const closeSheet = () => {
@@ -611,6 +636,7 @@ export function CampaignsClient({ token }: Props) {
       ...f,
       message: template.message,
       name: f.name.trim() ? f.name : template.name,
+      whatsappTemplateId: null,
       audienceType: template.category === 'win-back' ? 'inactive' : f.audienceType,
     }));
     setContentTab('custom');
@@ -620,6 +646,21 @@ export function CampaignsClient({ token }: Props) {
     setSelectedTemplateId(null);
     setForm((f) => ({ ...f, message: '' }));
     setContentTab('templates');
+  };
+
+  const applyWhatsappTemplate = (template: WhatsappTemplate) => {
+    setForm((f) => ({
+      ...f,
+      whatsappTemplateId: template.id,
+      name: f.name.trim() ? f.name : template.name,
+      message: '',
+      mediaUrl: null,
+      mediaType: null,
+    }));
+  };
+
+  const clearWhatsappTemplateSelection = () => {
+    setForm((f) => ({ ...f, whatsappTemplateId: null }));
   };
 
   const clearMessage = () => {
@@ -678,8 +719,8 @@ export function CampaignsClient({ token }: Props) {
       reportError('Add a newsletter name so you can find it later');
       return false;
     }
-    if (!form.message.trim() && !form.mediaUrl) {
-      reportError('Add a caption, photo, or video for your newsletter');
+    if (!form.message.trim() && !form.mediaUrl && !form.whatsappTemplateId) {
+      reportError('Add a caption, photo, video, or an approved WhatsApp template');
       return false;
     }
     if (form.audienceType === 'tags' && form.tags.length === 0) {
@@ -741,6 +782,7 @@ export function CampaignsClient({ token }: Props) {
         message: form.message.trim(),
         mediaUrl: form.mediaUrl,
         mediaType: form.mediaType,
+        whatsappTemplateId: form.whatsappTemplateId,
         audienceFilter,
       };
 
@@ -894,19 +936,28 @@ export function CampaignsClient({ token }: Props) {
             </div>
           </div>
         </div>
-        <div className="flex gap-2 shrink-0 sm:pt-8">
-          <Button variant="outline" size="sm" onClick={() => void loadAll(true)} disabled={refreshing}>
-            <RefreshCw className={cn('size-4 mr-1.5', refreshing && 'animate-spin')} />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={openCreate}
-            className="bg-[#128c7e] hover:bg-[#0d6b5f] text-white shadow-sm"
+        <div className="flex flex-col items-end gap-2 shrink-0 sm:pt-8">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => void loadAll(true)} disabled={refreshing}>
+              <RefreshCw className={cn('size-4 mr-1.5', refreshing && 'animate-spin')} />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              onClick={openCreate}
+              className="bg-[#128c7e] hover:bg-[#0d6b5f] text-white shadow-sm"
+            >
+              <Plus className="size-4 mr-1.5" />
+              New newsletter
+            </Button>
+          </div>
+          <Link
+            href="/campaigns/whatsapp-templates"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-[#128c7e] hover:underline"
           >
-            <Plus className="size-4 mr-1.5" />
-            New newsletter
-          </Button>
+            <BadgeCheck className="size-3.5" />
+            Manage approved templates
+          </Link>
         </div>
       </div>
 
@@ -1120,6 +1171,12 @@ export function CampaignsClient({ token }: Props) {
                               {c.mediaType === 'video' ? 'Video' : 'Photo'}
                             </Badge>
                           )}
+                          {c.whatsappTemplateId && (
+                            <Badge variant="outline" className="text-xs gap-1 font-normal">
+                              <BadgeCheck className="size-3" />
+                              Approved card
+                            </Badge>
+                          )}
                           {rate && (
                             <Badge variant="outline" className="text-xs font-normal">
                               {rate}
@@ -1293,6 +1350,98 @@ export function CampaignsClient({ token }: Props) {
                 />
               </div>
               </>
+              )}
+
+              {contentTab === 'whatsapp' && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="camp-name-wa">Internal name</Label>
+                    <Input
+                      id="camp-name-wa"
+                      placeholder="March mid-week promo"
+                      value={form.name}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    />
+                    <p className="text-[11px] text-muted-foreground">Only visible to you — not sent to customers.</p>
+                  </div>
+
+                  {whatsappTemplatesLoading ? (
+                    <div className="space-y-2">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
+                      ))}
+                    </div>
+                  ) : whatsappTemplates.length === 0 ? (
+                    <div className="rounded-xl border border-dashed p-4 text-center space-y-2">
+                      <p className="text-sm text-muted-foreground">
+                        No approved WhatsApp templates yet. These rich card templates reach
+                        customers outside the 24-hour session window.
+                      </p>
+                      <Link
+                        href="/campaigns/whatsapp-templates"
+                        className="text-sm font-medium text-[#128c7e] hover:underline"
+                      >
+                        Create an approved template &rarr;
+                      </Link>
+                    </div>
+                  ) : (
+                    <ul className="space-y-2 max-h-[min(42vh,320px)] overflow-y-auto pr-1 -mr-1">
+                      {whatsappTemplates.map((t) => (
+                        <li key={t.id}>
+                          <button
+                            type="button"
+                            onClick={() => applyWhatsappTemplate(t)}
+                            className={cn(
+                              'w-full text-left rounded-xl border p-3 transition-all hover:border-[#128c7e]/50 hover:bg-[#25d366]/5',
+                              form.whatsappTemplateId === t.id &&
+                                'border-[#128c7e] bg-[#25d366]/5 ring-1 ring-[#128c7e]/20',
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-medium leading-snug">{t.name}</p>
+                              <Badge variant="outline" className="shrink-0 text-[10px] gap-1">
+                                <BadgeCheck className="size-3" />
+                                Approved
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{t.body}</p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {form.whatsappTemplateId && (
+                    <>
+                      {(() => {
+                        const selected = whatsappTemplates.find((t) => t.id === form.whatsappTemplateId);
+                        if (!selected) return null;
+                        return (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-medium text-muted-foreground">Card preview</p>
+                              <button
+                                type="button"
+                                onClick={clearWhatsappTemplateSelection}
+                                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+                              >
+                                <X className="size-3" />
+                                Clear selection
+                              </button>
+                            </div>
+                            <WhatsappCardPreview
+                              headerText={selected.headerText}
+                              mediaUrl={selected.mediaUrl}
+                              body={selected.body}
+                              footer={selected.footer}
+                              buttons={selected.buttons}
+                            />
+                          </div>
+                        );
+                      })()}
+                    </>
+                  )}
+                </div>
               )}
             </FormSection>
 
@@ -1487,7 +1636,7 @@ export function CampaignsClient({ token }: Props) {
                   audienceLoading ||
                   (audienceCount === 0 &&
                     (form.deliveryMode === 'now' || form.deliveryMode === 'schedule')) ||
-                  (!form.message.trim() && !form.mediaUrl)
+                  (!form.message.trim() && !form.mediaUrl && !form.whatsappTemplateId)
                 }
               >
                 {saving ? (

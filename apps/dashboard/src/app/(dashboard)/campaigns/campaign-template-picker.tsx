@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { LayoutTemplate, PenLine, Search, X } from 'lucide-react';
+import { BadgeCheck, LayoutTemplate, PenLine, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -63,8 +63,8 @@ export function CampaignTemplatePicker({
   selectedTemplateId: string | null;
   onSelect: (template: CampaignTemplate) => void;
   onClearSelection: () => void;
-  contentTab: 'templates' | 'custom';
-  onContentTabChange: (tab: 'templates' | 'custom') => void;
+  contentTab: 'templates' | 'custom' | 'whatsapp';
+  onContentTabChange: (tab: 'templates' | 'custom' | 'whatsapp') => void;
 }) {
   const [category, setCategory] = useState<CampaignTemplateCategory | 'all'>('all');
   const [query, setQuery] = useState('');
@@ -128,6 +128,19 @@ export function CampaignTemplatePicker({
         >
           <PenLine className="size-3.5" />
           Write your own
+        </button>
+        <button
+          type="button"
+          onClick={() => onContentTabChange('whatsapp')}
+          className={cn(
+            'flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium transition-colors',
+            contentTab === 'whatsapp'
+              ? 'bg-background shadow-sm text-foreground'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <BadgeCheck className="size-3.5" />
+          Approved card
         </button>
       </div>
 

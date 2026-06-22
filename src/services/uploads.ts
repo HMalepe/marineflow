@@ -18,6 +18,12 @@ export const CAMPAIGN_MEDIA_MIMES = [
   'video/quicktime',
 ] as const;
 
+export const WHATSAPP_TEMPLATE_MEDIA_MIMES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+] as const;
+
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const VIDEO_MAX_BYTES = 16 * 1024 * 1024;
 
@@ -58,6 +64,14 @@ export function validateUploadPurpose(
       throw new UploadError(
         isVideo ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.',
       );
+    }
+  }
+  if (purpose === 'whatsapp-template') {
+    if (!WHATSAPP_TEMPLATE_MEDIA_MIMES.includes(mimeType as (typeof WHATSAPP_TEMPLATE_MEDIA_MIMES)[number])) {
+      throw new UploadError('Template header images must be JPEG, PNG, or WebP.');
+    }
+    if (sizeBytes > IMAGE_MAX_BYTES) {
+      throw new UploadError('Header images must be under 5 MB.');
     }
   }
 }
