@@ -47,7 +47,14 @@ export async function handleTwilioWhatsAppWebhook(
   const messageSid = params['MessageSid'] ?? '';
   const from = params['From'] ?? '';
   const to = params['To'] ?? '';
-  const body = params['Body'] ?? '';
+  // Quick Reply (twilio/quick-reply) taps set Body to the button's human-readable
+  // title and the machine-readable id separately in ButtonPayload — our menus use
+  // plain numbers ("1"/"2"/"3") as ids, so prefer ButtonPayload whenever it's purely
+  // numeric. Non-numeric ids (e.g. accept_all, yes, back) fall through to Body
+  // unchanged, since several flows match on the literal title text. List Picker taps
+  // already report the row id straight in Body, so they're unaffected either way.
+  const buttonPayload = (params['ButtonPayload'] ?? '').trim();
+  const body = /^\d+$/.test(buttonPayload) ? buttonPayload : params['Body'] ?? '';
 
   const tenantForTo = to ? await resolveTenantFromTwilioAddress(to) : null;
   if (to && !tenantForTo) {

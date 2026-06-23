@@ -43,8 +43,11 @@ export const twilioMessaging: MessagingProvider = {
     const params = payload as Record<string, string>;
     const from = params['From'] ?? '';
     const to = params['To'] ?? '';
-    // List/button taps may arrive in Body or ButtonPayload depending on channel.
-    const body = (params['Body'] ?? '').trim() || (params['ButtonPayload'] ?? '').trim();
+    // Quick Reply taps set Body to the button's title and ButtonPayload to its id —
+    // prefer the id only when it's one of our plain-number menu choices ("1"/"2"/"3"),
+    // since other flows match on the literal title text in Body.
+    const buttonPayload = (params['ButtonPayload'] ?? '').trim();
+    const body = /^\d+$/.test(buttonPayload) ? buttonPayload : (params['Body'] ?? '').trim();
     const sid = params['MessageSid'] ?? '';
     if (!from || !sid) return [];
     return [{
