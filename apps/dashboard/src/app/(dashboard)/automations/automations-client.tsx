@@ -494,7 +494,7 @@ export function AutomationsClient({ token }: Props) {
             onChange={(v) => {
               patch('membership', { enabled: v });
               if (v) {
-                void apiFetch('/membership/plans/seed-default', { method: 'POST', token }).catch(() => undefined);
+                void apiFetch('/membership/plans/seed-default', { method: 'POST' }, token).catch(() => undefined);
               }
             }}
             label="Membership subscriptions"
