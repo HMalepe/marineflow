@@ -493,7 +493,7 @@ export function AutomationsClient({ token }: Props) {
             checked={draft.membership.enabled}
             onChange={(v) => patch('membership', { enabled: v })}
             label="Membership subscriptions"
-            description="Offer monthly plans (e.g. 4 cuts/month). Configure plans via API; bot menu item 10."
+            description="Monthly VIP via PayFast (e.g. R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month."
           />
         </CardContent>
       </Card>

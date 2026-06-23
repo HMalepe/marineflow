@@ -6,7 +6,7 @@ import {
   parseWaitlistClaim,
   resolveExtendedMenuActions,
 } from '../lib/powerFeaturesMenu.js';
-import { getActiveMembershipPlans, formatMembershipPlansMenu, getCustomerActiveMembership } from './membership.js';
+import { getActiveMembershipPlans, formatMembershipPlansMenu, getCustomerActiveMembership, createMembershipCheckoutSession, formatMembershipCheckoutPrompt } from './membership.js';
 import { getOrCreateReferralCode, buildReferralShareMessage } from './referralProgram.js';
 import { checkCancellationAllowed } from './cancellationRules.js';
 import { notifyWaitlistOnCancel } from './waitlist.js';
@@ -208,6 +208,7 @@ export async function handleReferralMenuItem(
 export async function handleMembershipMenuItem(
   conv: Conversation & { customer: Customer; salon: Salon },
   reply: (body: string) => Promise<void>,
+  options?: { onPlansShown?: (planIds: string[]) => Promise<void> },
 ): Promise<void> {
   const auto = getSalonAutomations(conv.salon);
   if (!auto.membership.enabled) {
@@ -223,6 +224,8 @@ export async function handleMembershipMenuItem(
         `${active.visitsRemaining} visit${active.visitsRemaining === 1 ? '' : 's'} remaining this month`,
         `Renews: ${DateTime.fromJSDate(active.renewsAt).toFormat('dd MMM yyyy')}`,
         '',
+        'PayFast debits automatically each month on the same day.',
+        '',
         'Reply BACK for menu.',
       ].join('\n'),
     );
@@ -230,7 +233,48 @@ export async function handleMembershipMenuItem(
   }
 
   const plans = await getActiveMembershipPlans(conv.salonId);
+  if (!plans.length) {
+    await reply('No membership plans available right now.');
+    return;
+  }
+  await options?.onPlansShown?.(plans.map((p) => p.id));
   await reply(formatMembershipPlansMenu(plans));
+}
+
+export async function startMembershipPlanCheckout(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  planId: string,
+  replyInteractive: (
+    body: string,
+    interactive: import('../lib/integrations/messaging/types.js').InteractiveMessage | null | undefined,
+  ) => Promise<void>,
+  replyPlain: (body: string) => Promise<void>,
+): Promise<'ok' | 'error'> {
+  const plan = (await getActiveMembershipPlans(conv.salonId)).find((p) => p.id === planId);
+  if (!plan) {
+    await replyPlain('That plan is no longer available. Reply BACK for menu.');
+    return 'error';
+  }
+
+  const result = await createMembershipCheckoutSession({
+    salonId: conv.salonId,
+    customerId: conv.customerId,
+    planId: plan.id,
+  });
+
+  if (result.error === 'already_subscribed') {
+    await replyPlain('You already have an active VIP membership. Reply BACK for menu.');
+    return 'error';
+  }
+  if (result.error === 'payfast_not_configured' || !result.checkoutUrl) {
+    await replyPlain('Online membership signup is not available right now. Please contact the salon.');
+    return 'error';
+  }
+
+  const body = formatMembershipCheckoutPrompt(plan);
+  const { buildPaymentCheckoutCta } = await import('./botInteractiveMenus.js');
+  await replyInteractive(body, buildPaymentCheckoutCta(body, result.checkoutUrl));
+  return 'ok';
 }
 
 export async function tryCancelWithRules(params: {

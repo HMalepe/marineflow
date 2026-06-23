@@ -1,4 +1,4 @@
-import { Badge } from '@/components/ui/badge';
+import { Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ConversationListCustomer {
@@ -76,8 +76,15 @@ export function waitingMinutes(lastCustomerMessageAt: string | null): number | n
   return Math.floor(diffMs / 60_000);
 }
 
-export function sortConversationsByPriority<T extends ConversationListItemData>(convs: T[]): T[] {
+export function sortConversationsByPriority<T extends ConversationListItemData>(
+  convs: T[],
+  pinnedIds?: Set<string>,
+): T[] {
   return [...convs].sort((a, b) => {
+    const aPin = pinnedIds?.has(a.id) ? 0 : 1;
+    const bPin = pinnedIds?.has(b.id) ? 0 : 1;
+    if (aPin !== bPin) return aPin - bPin;
+
     const aHandoff = a.step === 'HANDOFF' ? 0 : 1;
     const bHandoff = b.step === 'HANDOFF' ? 0 : 1;
     if (aHandoff !== bHandoff) return aHandoff - bHandoff;
@@ -98,32 +105,10 @@ export function sortConversationsByPriority<T extends ConversationListItemData>(
 
 export function pickDefaultConversation<T extends ConversationListItemData>(
   convs: T[],
+  pinnedIds?: Set<string>,
 ): T | null {
-  const sorted = sortConversationsByPriority(convs);
+  const sorted = sortConversationsByPriority(convs, pinnedIds);
   return sorted[0] ?? null;
-}
-
-function StepBadge({ step }: { step: string }) {
-  const label = stepLabel(step);
-  if (step === 'HANDOFF') {
-    return (
-      <Badge variant="destructive" className="animate-pulse shrink-0">
-        {label}
-      </Badge>
-    );
-  }
-  if (step === 'MENU' || step === 'IDLE') {
-    return (
-      <Badge className="shrink-0 bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30">
-        {label}
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="shrink-0 bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border-yellow-500/30">
-      {label}
-    </Badge>
-  );
 }
 
 function CustomerAvatar({ customer, size = 'md' }: { customer: ConversationListCustomer; size?: 'sm' | 'md' }) {
@@ -158,44 +143,95 @@ export function WaitingTimeIndicator({ lastCustomerMessageAt }: { lastCustomerMe
   );
 }
 
+function stepHint(step: string): string | null {
+  if (step === 'HANDOFF') return 'Needs you';
+  if (step === 'MENU' || step === 'IDLE') return null;
+  const label = stepLabel(step);
+  return label.length > 24 ? `${label.slice(0, 22)}…` : label;
+}
+
 interface ConversationListItemProps {
   conversation: ConversationListItemData;
   active: boolean;
+  pinned?: boolean;
   onSelect: (id: string) => void;
+  onTogglePin?: (id: string) => void;
 }
 
-export function ConversationListItem({ conversation: conv, active, onSelect }: ConversationListItemProps) {
+export function ConversationListItem({
+  conversation: conv,
+  active,
+  pinned = false,
+  onSelect,
+  onTogglePin,
+}: ConversationListItemProps) {
   const preview =
     conv.lastMessage?.direction === 'OUTBOUND'
       ? `You: ${conv.lastMessage.body}`
       : conv.lastMessage?.body ?? 'No messages yet';
+  const needsYou = conv.step === 'HANDOFF';
+  const hint = stepHint(conv.step);
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(conv.id)}
+    <div
       className={cn(
-        'w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors',
-        active && 'bg-muted border-l-2 border-l-primary',
-        conv.step === 'HANDOFF' && !active && 'bg-destructive/5',
+        'chat-list-item group relative',
+        active && 'chat-list-item-active',
+        needsYou && !active && 'chat-list-item-urgent',
       )}
     >
-      <div className="flex items-start gap-3">
-        <CustomerAvatar customer={conv.customer} size="sm" />
+      <button type="button" onClick={() => onSelect(conv.id)} className="chat-list-item-button">
+        <div className="relative shrink-0">
+          <CustomerAvatar customer={conv.customer} size="sm" />
+          {needsYou && (
+            <span
+              className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-destructive ring-2 ring-card"
+              aria-label="Needs attention"
+            />
+          )}
+        </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <span className="font-medium text-sm truncate">{customerLabel(conv.customer)}</span>
-            <StepBadge step={conv.step} />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{preview}</p>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
-            <WaitingTimeIndicator lastCustomerMessageAt={conv.lastCustomerMessageAt} />
-            <span className="text-[11px] text-muted-foreground">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-medium text-[15px] truncate text-foreground">
+              {customerLabel(conv.customer)}
+            </span>
+            <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
               {formatConversationTime(conv.lastMessageAt)}
             </span>
           </div>
+          <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-1 leading-snug">{preview}</p>
+          <div className="flex items-center gap-2 mt-1 min-h-[1rem]">
+            {pinned && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-primary">
+                <Pin className="size-2.5" aria-hidden />
+                Pinned
+              </span>
+            )}
+            {hint && (
+              <span className={cn('text-[10px]', needsYou ? 'text-destructive font-medium' : 'text-muted-foreground')}>
+                {hint}
+              </span>
+            )}
+            <WaitingTimeIndicator lastCustomerMessageAt={conv.lastCustomerMessageAt} />
+          </div>
         </div>
-      </div>
-    </button>
+      </button>
+      {onTogglePin && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin(conv.id);
+          }}
+          className={cn(
+            'absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full touch-manipulation transition-opacity',
+            pinned ? 'opacity-100 text-primary' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 text-muted-foreground hover:text-foreground',
+          )}
+          aria-label={pinned ? 'Unpin conversation' : 'Pin conversation'}
+        >
+          <Pin className={cn('size-4', pinned && 'fill-current')} />
+        </button>
+      )}
+    </div>
   );
 }

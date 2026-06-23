@@ -16,7 +16,7 @@ interface PremiumDisclosureProps {
 export function PremiumDisclosure({
   label,
   children,
-  desktopOpen = true,
+  desktopOpen = false,
   className,
 }: PremiumDisclosureProps) {
   const [open, setOpen] = useState(false);

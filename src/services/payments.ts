@@ -11,7 +11,7 @@ import { scheduleGoogleReviewForAppointment } from '../lib/googleReviewSchedule.
 import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
-import { MessageDirection } from '@prisma/client';
+import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
 import { DateTime } from 'luxon';
 
@@ -145,10 +145,19 @@ export async function confirmAppointmentPaid(
 
     const salonName = appt.salon.tradingName?.trim() || appt.salon.name;
 
-    const conv = await tx.conversation.findFirst({
-      where: { salonId: appt.salonId, customerId: appt.customerId },
-      orderBy: { updatedAt: 'desc' },
+    let conv = await tx.conversation.findUnique({
+      where: { salonId_customerId: { salonId: appt.salonId, customerId: appt.customerId } },
     });
+
+    if (!conv) {
+      conv = await tx.conversation.create({
+        data: {
+          salonId: appt.salonId,
+          customerId: appt.customerId,
+          step: ConversationStep.IDLE,
+        },
+      });
+    }
 
     const zone = appt.salon.timezone;
     const startDt = DateTime.fromJSDate(appt.start).setZone(zone);
@@ -185,7 +194,19 @@ export async function confirmAppointmentPaid(
       confirmSid = result.providerMessageId ?? null;
     } catch { /* best-effort */ }
 
-    if (!conv) return null;
+    const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
+    await tx.conversation.update({
+      where: { id: conv.id },
+      data: {
+        context: {
+          ...currentCtx,
+          pendingAppointmentId: appointmentId,
+          pendingPaymentCheckoutUrl: undefined,
+          pendingPaymentAmountCents: undefined,
+          awaitingCashConfirm: undefined,
+        } as object,
+      },
+    });
 
     await tx.message.create({
       data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
@@ -234,7 +255,10 @@ export async function confirmAppointmentPaid(
 
 export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
   const verified = payfastAdapter.verifyWebhook(body, {});
-  if (!verified.valid) return;
+  if (!verified.valid) {
+    logger.warn({ reference: body.m_payment_id }, 'payfast_appointment_itn_invalid');
+    return;
+  }
 
   const reference = verified.reference;
   if (!reference?.startsWith('appt_')) return;

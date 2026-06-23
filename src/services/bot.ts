@@ -76,6 +76,7 @@ import {
   afterServiceSelected,
   handleReferralMenuItem,
   handleMembershipMenuItem,
+  startMembershipPlanCheckout,
   tryCancelWithRules,
   afterAppointmentCancelled,
   onBookingConfirmed,
@@ -219,6 +220,8 @@ export type BotContext = Record<string, unknown> & {
   staffOrderIds?: string[];
   /** Hierarchical main-menu sub-section (my_appointments, services, …). */
   menuCategory?: MenuCategoryId | LegacyMenuCategoryId;
+  /** VIP membership plan ids shown while awaiting a numbered reply. */
+  membershipPlanOptions?: string[];
   /** Category ids shown during PICK_SERVICE_CATEGORY step. */
   serviceCategoryOptions?: string[];
   /** When set, PICK_SERVICE only shows these service ids (from Services submenu or chosen category). */
@@ -3473,7 +3476,13 @@ async function handleSubMenuChoice(
       break;
     case 'promotions':
       if (choice === 1) return menuActionShowSpecials(conv);
-      if (choice === 2) return handleMembershipMenuItem(conv, (body) => reply(conv, body));
+      if (choice === 2)
+        return handleMembershipMenuItem(conv, (body) => reply(conv, body), {
+          onPlansShown: async (planIds) => {
+            await saveCtx(conv.id, { membershipPlanOptions: planIds }, ConversationStep.IDLE);
+            syncConvContext(conv, { membershipPlanOptions: planIds }, ConversationStep.IDLE);
+          },
+        });
       if (choice === 3) {
         await reply(
           conv,
@@ -3568,6 +3577,34 @@ async function handleMenu(
 ) {
   const trimmed = text.trim();
   const upper = trimmed.toUpperCase();
+
+  const membershipPlanIds = ctx(conv).membershipPlanOptions as string[] | undefined;
+  if (membershipPlanIds?.length) {
+    if (isBackToMainMenuCommand(trimmed) || upper === 'BACK') {
+      await saveCtx(conv.id, { membershipPlanOptions: undefined }, ConversationStep.MENU);
+      syncConvContext(conv, { membershipPlanOptions: undefined }, ConversationStep.MENU);
+      await replyMenu(conv);
+      return;
+    }
+    const pick = parseInt(trimmed, 10);
+    if (Number.isFinite(pick) && pick >= 1 && pick <= membershipPlanIds.length) {
+      const planId = membershipPlanIds[pick - 1]!;
+      await saveCtx(conv.id, { membershipPlanOptions: undefined }, ConversationStep.IDLE);
+      syncConvContext(conv, { membershipPlanOptions: undefined }, ConversationStep.IDLE);
+      await startMembershipPlanCheckout(
+        conv,
+        planId,
+        (body, interactive) => replyMaybeInteractive(conv, body, interactive),
+        (body) => reply(conv, body),
+      );
+      return;
+    }
+    await reply(
+      conv,
+      `Reply with a number 1–${membershipPlanIds.length} to subscribe, or BACK for menu.`,
+    );
+    return;
+  }
 
   if (upper === 'REFERRAL') {
     await handleReferralMenuItem(conv, (body) => reply(conv, body));

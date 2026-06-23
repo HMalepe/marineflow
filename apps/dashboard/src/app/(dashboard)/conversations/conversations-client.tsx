@@ -6,8 +6,8 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
-import { CommsPageHint } from '@/components/comms-page-hint';
+import { CONVERSATIONS_LABEL, CONVERSATIONS_TAGLINE, TICKETS_LABEL } from '@/lib/dashboard-nav';
+import Link from 'next/link';
 import {
   ConversationListItem,
   customerInitials,
@@ -16,8 +16,21 @@ import {
   sortConversationsByPriority,
   type ConversationListItemData,
 } from '@/components/ConversationListItem';
-import { Search, RefreshCw } from 'lucide-react';
+import { Search, RefreshCw, Pin, ChevronLeft, MoreHorizontal } from 'lucide-react';
 import { PaneHeader } from '@/components/section-panel';
+import { MobileFilterBar } from '@/components/mobile-filter-bar';
+import { PremiumDisclosure } from '@/components/premium-disclosure';
+import {
+  ChatComposer,
+  ChatEmptyState,
+  ChatListSectionLabel,
+  ChatThread,
+  type ChatMessage,
+} from '@/components/chat-ui';
+import {
+  loadPinnedConversationIds,
+  togglePinnedConversationId,
+} from '@/lib/conversation-pins';
 import { cn } from '@/lib/utils';
 
 interface Customer {
@@ -58,35 +71,16 @@ function formatTime(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  if (diffMs < 60_000) return 'Just now';
   if (d.toDateString() === now.toDateString()) {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function StepBadge({ step }: { step: string }) {
-  const label = STEP_LABELS[step] ?? step.replace(/_/g, ' ').toLowerCase();
-  if (step === 'HANDOFF') {
-    return (
-      <Badge variant="destructive" className="animate-pulse shrink-0">
-        {label}
-      </Badge>
-    );
-  }
-  if (step === 'MENU' || step === 'IDLE') {
-    return (
-      <Badge className="shrink-0 bg-green-600/15 text-green-700 dark:text-green-400 border-green-600/30">
-        {label}
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="shrink-0 bg-yellow-500/15 text-yellow-800 dark:text-yellow-300 border-yellow-500/30">
-      {label}
-    </Badge>
-  );
+function stepStatusLabel(step: string): string {
+  if (step === 'HANDOFF') return 'You’re replying';
+  if (step === 'MENU' || step === 'IDLE') return 'Bot active';
+  return STEP_LABELS[step] ?? step.replace(/_/g, ' ').toLowerCase();
 }
 
 function CustomerAvatar({ customer, size = 'md' }: { customer: Customer; size?: 'sm' | 'md' }) {
@@ -119,6 +113,8 @@ export function ConversationsClient({ token, staffName }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<EscalationAlert[]>([]);
   const [staffSentIds, setStaffSentIds] = useState<Set<string>>(new Set());
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(() => new Set());
+  const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
   const conversationsRef = useRef<ConversationListItemData[]>([]);
@@ -128,17 +124,19 @@ export function ConversationsClient({ token, staffName }: Props) {
   selectedIdRef.current = selectedId;
 
   const handoffCount = conversations.filter((c) => c.step === 'HANDOFF').length;
-  const visibleConversations = sortConversationsByPriority(
-    conversations.filter((c) => {
-      if (filter === 'handoff' && c.step !== 'HANDOFF') return false;
-      if (!search.trim()) return true;
-      const q = search.trim().toLowerCase();
-      return (
-        customerLabel(c.customer).toLowerCase().includes(q) ||
-        c.customer.waId.toLowerCase().includes(q)
-      );
-    }),
-  );
+  const filteredConversations = conversations.filter((c) => {
+    if (filter === 'handoff' && c.step !== 'HANDOFF') return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      customerLabel(c.customer).toLowerCase().includes(q) ||
+      c.customer.waId.toLowerCase().includes(q)
+    );
+  });
+  const visibleConversations = sortConversationsByPriority(filteredConversations, pinnedIds);
+  const pinnedConversations = visibleConversations.filter((c) => pinnedIds.has(c.id));
+  const recentConversations = visibleConversations.filter((c) => !pinnedIds.has(c.id));
+  const filterActiveCount = (filter !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0);
 
   const showError = useCallback((msg: string) => {
     setError(msg);
@@ -153,11 +151,11 @@ export function ConversationsClient({ token, staffName }: Props) {
         {},
         token,
       );
-      const sorted = sortConversationsByPriority(data.conversations ?? []);
+      const sorted = sortConversationsByPriority(data.conversations ?? [], pinnedIds);
       setConversations(sorted);
 
       if (!didAutoSelectRef.current && !selectedIdRef.current && sorted.length > 0) {
-        const pick = pickDefaultConversation(sorted);
+        const pick = pickDefaultConversation(sorted, pinnedIds);
         if (pick) {
           setSelectedId(pick.id);
           didAutoSelectRef.current = true;
@@ -168,7 +166,15 @@ export function ConversationsClient({ token, staffName }: Props) {
     } finally {
       setLoadingList(false);
     }
-  }, [token]);
+  }, [token, pinnedIds]);
+
+  useEffect(() => {
+    setPinnedIds(loadPinnedConversationIds());
+  }, []);
+
+  function handleTogglePin(conversationId: string) {
+    setPinnedIds(togglePinnedConversationId(conversationId));
+  }
 
   const loadMessages = useCallback(
     async (conversationId: string, silent = false) => {
@@ -303,8 +309,8 @@ export function ConversationsClient({ token, staffName }: Props) {
     }
   }
 
-  async function handleSendReply(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSendReply(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!selectedId || !replyText.trim()) return;
     setSending(true);
     setError(null);
@@ -327,285 +333,362 @@ export function ConversationsClient({ token, staffName }: Props) {
 
   const isHandoff = selectedStep === 'HANDOFF';
   const showThreadOnMobile = Boolean(selectedId);
+  const isSelectedPinned = selectedId ? pinnedIds.has(selectedId) : false;
 
-  return (
-    <div className="dashboard-workspace">
-      <div
-        className={cn(
-          'flex flex-wrap items-start justify-between gap-3 shrink-0',
-          showThreadOnMobile && 'hidden md:flex',
+  const chatMessages: ChatMessage[] = messages.map((msg) => {
+    const inbound = msg.direction === 'INBOUND';
+    const sender = inbound
+      ? selectedCustomer
+        ? customerLabel(selectedCustomer)
+        : 'Customer'
+      : staffSentIds.has(msg.id)
+        ? staffName
+        : isHandoff
+          ? 'You'
+          : 'Bot';
+    return {
+      id: msg.id,
+      direction: inbound ? 'inbound' : 'outbound',
+      body: msg.body,
+      createdAt: msg.createdAt,
+      senderLabel: sender,
+    };
+  });
+
+  function renderConversationList() {
+    if (loadingList) {
+      return <p className="p-6 text-sm text-muted-foreground text-center">Loading conversations…</p>;
+    }
+    if (visibleConversations.length === 0) {
+      return (
+        <p className="p-8 text-sm text-muted-foreground text-center leading-relaxed">
+          {filter === 'handoff'
+            ? 'No conversations need your attention right now.'
+            : 'No WhatsApp conversations yet.'}
+        </p>
+      );
+    }
+
+    return (
+      <>
+        {pinnedConversations.length > 0 && (
+          <>
+            <ChatListSectionLabel>Pinned</ChatListSectionLabel>
+            {pinnedConversations.map((conv) => (
+              <ConversationListItem
+                key={conv.id}
+                conversation={conv}
+                active={conv.id === selectedId}
+                pinned
+                onSelect={setSelectedId}
+                onTogglePin={handleTogglePin}
+              />
+            ))}
+          </>
         )}
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl md:text-3xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
-            <span
-              className="inline-flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground"
-              title={connected ? 'Live updates connected' : 'Connecting…'}
-            >
-              <span
-                className={cn(
-                  'size-2 rounded-full',
-                  connected ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40',
-                )}
-              />
-              <span className="hidden sm:inline">{connected ? 'Live' : 'Offline'}</span>
-            </span>
-          </div>
-          <CommsPageHint active="conversations" />
-        </div>
-        <Button variant="outline" size="sm" onClick={refreshAll} className="shrink-0 touch-manipulation">
-          <RefreshCw className="size-4 md:mr-0" />
-          <span className="hidden md:inline ml-1.5">Refresh</span>
-        </Button>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive shrink-0">
-          {error}
-        </div>
-      )}
-
-      {alerts.length > 0 && !showThreadOnMobile && (
-        <div className="space-y-2">
-          {alerts.map((alert) => (
-            <div
-              key={alert.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            >
-              <span>
-                Bot escalation — <strong>{alert.customerLabel}</strong> needs human help
-              </span>
-              <div className="flex gap-2 shrink-0">
-                {alert.conversationId && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedId(alert.conversationId!);
-                      setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
-                    }}
-                  >
-                    Open chat
-                  </Button>
-                )}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setAlerts((prev) => prev.filter((a) => a.id !== alert.id))}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="dashboard-inbox-frame flex-col md:flex-row">
-        <div
-          className={cn(
-            'dashboard-inbox-pane w-full md:w-96 shrink-0',
-            showThreadOnMobile && 'hidden md:flex',
-          )}
-        >
-          <PaneHeader
-            title="Inbox"
-            trailing={
-              handoffCount > 0 ? (
-                <Badge variant="destructive" className="animate-pulse text-xs">
-                  {handoffCount} need{handoffCount === 1 ? 's' : ''} you
-                </Badge>
-              ) : undefined
-            }
-          />
-          <div className="dashboard-pane-toolbar space-y-2.5">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name or number…"
-                className="pl-8 h-9 md:h-8 text-base md:text-xs"
-              />
-            </div>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={() => setFilter('all')}
-                className={cn(
-                  'flex-1 rounded-md px-2 py-2 min-h-[2.25rem] text-xs font-medium transition-colors touch-manipulation',
-                  filter === 'all' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                )}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilter('handoff')}
-                className={cn(
-                  'flex-1 rounded-md px-2 py-2 min-h-[2.25rem] text-xs font-medium transition-colors touch-manipulation',
-                  filter === 'handoff' ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                )}
-              >
-                Needs you{handoffCount > 0 && ` (${handoffCount})`}
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto overscroll-y-contain divide-y divide-border/70 dashboard-thread-scroll min-h-0">
-            {loadingList && (
-              <p className="p-4 text-sm text-muted-foreground">Loading conversations…</p>
-            )}
-            {!loadingList && visibleConversations.length === 0 && (
-              <p className="p-6 text-sm text-muted-foreground text-center">
-                {filter === 'handoff'
-                  ? 'No conversations need your attention right now.'
-                  : 'No WhatsApp conversations yet.'}
-              </p>
-            )}
-            {visibleConversations.map((conv) => (
+        {recentConversations.length > 0 && (
+          <>
+            {pinnedConversations.length > 0 && <ChatListSectionLabel>Recent</ChatListSectionLabel>}
+            {recentConversations.map((conv) => (
               <ConversationListItem
                 key={conv.id}
                 conversation={conv}
                 active={conv.id === selectedId}
                 onSelect={setSelectedId}
+                onTogglePin={handleTogglePin}
               />
             ))}
+          </>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="dashboard-workspace dashboard-comms-page">
+      <div className={cn('shrink-0 dashboard-page-header', showThreadOnMobile && 'hidden md:block')}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl md:text-2xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground"
+                title={connected ? 'Live updates connected' : 'Connecting…'}
+              >
+                <span
+                  className={cn(
+                    'size-2 rounded-full',
+                    connected ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40',
+                  )}
+                />
+                {connected ? 'Live' : 'Connecting…'}
+              </span>
+            </div>
+            <PremiumDisclosure label="Conversations vs tickets" desktopOpen={false} className="mt-1">
+              {CONVERSATIONS_TAGLINE} For complaints, open{' '}
+              <Link href="/tickets" className="text-primary underline-offset-4 hover:underline">
+                {TICKETS_LABEL}
+              </Link>
+              .
+            </PremiumDisclosure>
+          </div>
+          <Button variant="outline" size="sm" onClick={refreshAll} className="shrink-0 touch-manipulation hidden md:inline-flex">
+            <RefreshCw className="size-4 mr-1.5" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-2.5 text-sm text-destructive shrink-0">
+          {error}
+        </div>
+      )}
+
+      <div className="dashboard-inbox-frame dashboard-inbox-frame--chat flex-col md:flex-row">
+        <div
+          className={cn(
+            'dashboard-inbox-pane dashboard-inbox-pane--list w-full md:w-[22rem] lg:w-96 shrink-0',
+            showThreadOnMobile && 'hidden md:flex',
+          )}
+        >
+          <PaneHeader
+            title="Chats"
+            trailing={
+              handoffCount > 0 ? (
+                <Badge variant="destructive" className="text-[10px] px-2 py-0">
+                  {handoffCount}
+                </Badge>
+              ) : (
+                <Button variant="ghost" size="icon" className="size-8 md:hidden" onClick={refreshAll} aria-label="Refresh">
+                  <RefreshCw className="size-4" />
+                </Button>
+              )
+            }
+          />
+          <div className="dashboard-pane-toolbar">
+            <MobileFilterBar
+              activeCount={filterActiveCount}
+              primary={
+                <div className="relative w-full min-w-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search chats…"
+                    className="pl-9 h-10 rounded-full bg-muted/30 border-transparent focus-visible:border-border text-base md:text-sm"
+                  />
+                </div>
+              }
+              secondary={
+                <div className="flex gap-1.5 p-0.5 rounded-full bg-muted/40 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setFilter('all')}
+                    className={cn(
+                      'flex-1 sm:flex-none rounded-full px-4 py-2 text-xs font-medium transition-colors touch-manipulation',
+                      filter === 'all' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilter('handoff')}
+                    className={cn(
+                      'flex-1 sm:flex-none rounded-full px-4 py-2 text-xs font-medium transition-colors touch-manipulation',
+                      filter === 'handoff' ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground',
+                    )}
+                  >
+                    Needs you{handoffCount > 0 ? ` · ${handoffCount}` : ''}
+                  </button>
+                </div>
+              }
+            />
+          </div>
+
+          {alerts.length > 0 && !showThreadOnMobile && (
+            <div className="px-3 py-2 border-b border-destructive/20 bg-destructive/5 space-y-2">
+              {alerts.map((alert) => (
+                <div key={alert.id} className="flex items-center justify-between gap-2 text-xs text-destructive">
+                  <span className="truncate">
+                    <strong>{alert.customerLabel}</strong> needs help
+                  </span>
+                  {alert.conversationId && (
+                    <button
+                      type="button"
+                      className="shrink-0 font-medium underline-offset-2 hover:underline"
+                      onClick={() => {
+                        setSelectedId(alert.conversationId!);
+                        setAlerts((prev) => prev.filter((a) => a.id !== alert.id));
+                      }}
+                    >
+                      Open
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="chat-list-scroll flex-1 overflow-y-auto overscroll-y-contain min-h-0">
+            {renderConversationList()}
           </div>
         </div>
 
         <div
           className={cn(
-            'dashboard-inbox-pane flex-1',
+            'dashboard-inbox-pane dashboard-inbox-pane--thread flex-1 min-w-0',
             !showThreadOnMobile && 'hidden md:flex',
           )}
         >
           {!selectedId ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2 p-8">
-              <p className="text-sm font-medium">Select a conversation</p>
-              <p className="text-xs text-center max-w-xs">
-                Choose a customer from the inbox to read messages and reply via WhatsApp.
-              </p>
-            </div>
+            <ChatEmptyState
+              title="Select a chat"
+              hint="Pick a customer from the list to read messages and reply on WhatsApp."
+            />
           ) : (
             <>
-              <div className="dashboard-pane-header dashboard-pane-header--thread shrink-0">
+              <div className="chat-thread-header shrink-0">
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="md:hidden shrink-0 -ml-2 min-h-[2.75rem] touch-manipulation"
+                  size="icon"
+                  className="md:hidden shrink-0 rounded-full touch-manipulation"
                   onClick={() => setSelectedId(null)}
+                  aria-label="Back to chats"
                 >
-                  ← Back
+                  <ChevronLeft className="size-5" />
                 </Button>
-                {selectedCustomer && <CustomerAvatar customer={selectedCustomer} />}
+                {selectedCustomer && <CustomerAvatar customer={selectedCustomer} size="sm" />}
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate text-sm">
+                  <p className="font-semibold truncate text-[15px]">
                     {selectedCustomer ? customerLabel(selectedCustomer) : '…'}
                   </p>
-                  {selectedCustomer?.waId && (
-                    <p className="text-xs text-muted-foreground font-mono truncate">
-                      {selectedCustomer.waId}
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground truncate">
+                    {selectedStep ? stepStatusLabel(selectedStep) : '…'}
+                    {selectedCustomer?.waId ? ` · ${selectedCustomer.waId}` : ''}
+                  </p>
                 </div>
-                {selectedStep && (
-                  <div className="shrink-0 ml-auto">
-                    <StepBadge step={selectedStep} />
-                  </div>
-                )}
-              </div>
-
-              <div
-                ref={threadScrollRef}
-                className="flex-1 overflow-y-auto overscroll-y-contain dashboard-thread-scroll px-4 py-4 space-y-4 bg-muted/15 dark:bg-muted/20 min-h-0"
-              >
-                {loadingThread && messages.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">Loading messages…</p>
-                )}
-                {!loadingThread && messages.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-8">No messages in this thread.</p>
-                )}
-                {messages.map((msg) => {
-                  const inbound = msg.direction === 'INBOUND';
-                  const sender = inbound
-                    ? selectedCustomer
-                      ? customerLabel(selectedCustomer)
-                      : 'Customer'
-                    : staffSentIds.has(msg.id)
-                      ? staffName
-                      : isHandoff
-                        ? 'Staff'
-                        : 'Bot';
-
-                  return (
-                    <div
-                      key={msg.id}
-                      className={cn('flex flex-col max-w-[85%]', inbound ? 'items-start' : 'items-end ml-auto')}
-                    >
-                      <span className="text-[11px] text-muted-foreground mb-1 px-1">{sender}</span>
-                      <div
-                        className={cn(
-                          'rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words shadow-sm',
-                          inbound
-                            ? 'bg-white dark:bg-muted text-foreground rounded-tl-sm'
-                            : 'bg-primary/12 border border-primary/15 text-foreground dark:bg-primary/20 dark:text-primary-foreground rounded-tr-sm',
-                        )}
-                      >
-                        {msg.body}
-                      </div>
-                      <span className="text-[10px] text-muted-foreground mt-1 px-1">
-                        {formatTime(msg.createdAt)}
-                      </span>
-                    </div>
-                  );
-                })}
-                <div ref={threadEndRef} />
-              </div>
-
-              <div className="border-t px-4 py-3 bg-card shrink-0 safe-area-pb">
-                {!isHandoff ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground hidden md:block">
-                      The bot is handling this chat. Take over to reply manually.
-                    </p>
-                    <Button onClick={handleTakeOver} disabled={actionLoading} className="w-full touch-manipulation">
-                      {actionLoading ? 'Taking over…' : 'Take over'}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <form onSubmit={handleSendReply} className="flex gap-2">
-                      <Input
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Reply on WhatsApp…"
-                        disabled={sending}
-                        className="flex-1"
-                        autoComplete="off"
-                      />
-                      <Button type="submit" disabled={sending || !replyText.trim()} className="shrink-0 touch-manipulation">
-                        {sending ? '…' : 'Send'}
-                      </Button>
-                    </form>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-9"
+                    onClick={() => selectedId && handleTogglePin(selectedId)}
+                    aria-label={isSelectedPinned ? 'Unpin chat' : 'Pin chat'}
+                  >
+                    <Pin className={cn('size-4', isSelectedPinned && 'fill-current text-primary')} />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full size-9 hidden md:inline-flex"
+                    onClick={refreshAll}
+                    aria-label="Refresh messages"
+                  >
+                    <RefreshCw className="size-4" />
+                  </Button>
+                  <div className="relative">
                     <Button
-                      onClick={handleQueryComplete}
-                      disabled={actionLoading}
-                      className="w-full touch-manipulation"
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full size-9"
+                      onClick={() => setThreadMenuOpen((v) => !v)}
+                      aria-label="More actions"
                     >
-                      {actionLoading ? 'Completing…' : 'Done — hand back to bot'}
+                      <MoreHorizontal className="size-4" />
                     </Button>
-                    <button
-                      type="button"
-                      onClick={handleHandBack}
-                      disabled={actionLoading}
-                      className="w-full text-xs text-muted-foreground hover:text-foreground py-1 touch-manipulation"
-                    >
-                      Skip rating · return to bot
-                    </button>
+                    {threadMenuOpen && (
+                      <>
+                        <button
+                          type="button"
+                          className="fixed inset-0 z-40 cursor-default"
+                          aria-label="Close menu"
+                          onClick={() => setThreadMenuOpen(false)}
+                        />
+                        <div className="absolute right-0 top-full mt-1 z-50 min-w-[11rem] rounded-xl border bg-popover p-1 shadow-lg text-sm">
+                          {!isHandoff ? (
+                            <button
+                              type="button"
+                              className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted touch-manipulation"
+                              disabled={actionLoading}
+                              onClick={() => {
+                                setThreadMenuOpen(false);
+                                void handleTakeOver();
+                              }}
+                            >
+                              Take over chat
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted touch-manipulation"
+                                disabled={actionLoading}
+                                onClick={() => {
+                                  setThreadMenuOpen(false);
+                                  void handleQueryComplete();
+                                }}
+                              >
+                                Done — hand back to bot
+                              </button>
+                              <button
+                                type="button"
+                                className="w-full text-left px-3 py-2 rounded-lg hover:bg-muted text-muted-foreground touch-manipulation"
+                                disabled={actionLoading}
+                                onClick={() => {
+                                  setThreadMenuOpen(false);
+                                  void handleHandBack();
+                                }}
+                              >
+                                Skip rating
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
+
+              <ChatThread
+                messages={chatMessages}
+                loading={loadingThread}
+                emptyLabel="No messages in this thread yet."
+                scrollRef={threadScrollRef}
+                endRef={threadEndRef}
+              />
+
+              {!isHandoff ? (
+                <div className="chat-composer shrink-0 safe-area-pb px-4 py-3 border-t bg-card/80">
+                  <p className="text-xs text-muted-foreground text-center mb-3">The bot is handling this chat.</p>
+                  <Button onClick={handleTakeOver} disabled={actionLoading} className="w-full rounded-full touch-manipulation">
+                    {actionLoading ? 'Taking over…' : 'Take over to reply'}
+                  </Button>
+                </div>
+              ) : (
+                <ChatComposer
+                  value={replyText}
+                  onChange={setReplyText}
+                  onSubmit={() => void handleSendReply()}
+                  placeholder="Type a message…"
+                  sending={sending}
+                  footer={
+                    <p className="text-[11px] text-muted-foreground text-center pb-2 px-2">
+                      Sent via WhatsApp ·{' '}
+                      <button
+                        type="button"
+                        className="text-primary hover:underline"
+                        onClick={() => void handleQueryComplete()}
+                        disabled={actionLoading}
+                      >
+                        Mark done
+                      </button>
+                    </p>
+                  }
+                />
+              )}
             </>
           )}
         </div>

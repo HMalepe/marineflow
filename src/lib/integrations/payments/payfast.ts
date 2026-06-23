@@ -80,6 +80,84 @@ export function buildPayfastCheckoutForm(input: CreateCheckoutInput): PayfastChe
   return { action: payfastProcessUrl(), fields };
 }
 
+const RECURRING_FIELD_ORDER = [
+  'merchant_id',
+  'merchant_key',
+  'return_url',
+  'cancel_url',
+  'notify_url',
+  'name_first',
+  'name_last',
+  'email_address',
+  'cell_number',
+  'm_payment_id',
+  'amount',
+  'item_name',
+  'item_description',
+  'subscription_type',
+  'frequency',
+  'cycles',
+  'custom_int1',
+  'custom_int2',
+  'custom_int3',
+  'custom_int4',
+  'custom_int5',
+  'custom_str1',
+  'custom_str2',
+  'custom_str3',
+  'custom_str4',
+  'custom_str5',
+] as const;
+
+/** PayFast subscription checkout — monthly debit on the same calendar day each cycle. */
+export function buildPayfastRecurringCheckoutForm(input: {
+  reference: string;
+  amountCents: number;
+  description: string;
+  returnUrl: string;
+  cancelUrl: string;
+  notifyUrl: string;
+  customStr1: string;
+  customStr2: string;
+  customStr3?: string;
+  /** PayFast frequency code — 3 = monthly, 6 = annually */
+  frequency?: '3' | '6';
+  /** 0 = indefinite recurring */
+  cycles?: string;
+}): PayfastCheckoutForm {
+  const { merchantId, merchantKey, passphrase } = payfastCredentials();
+  if (!merchantId || !merchantKey) {
+    throw new Error('PAYFAST_MERCHANT_ID and PAYFAST_MERCHANT_KEY required');
+  }
+
+  const data: Record<string, string> = {
+    merchant_id: merchantId,
+    merchant_key: merchantKey,
+    return_url: input.returnUrl,
+    cancel_url: input.cancelUrl,
+    notify_url: input.notifyUrl,
+    m_payment_id: input.reference,
+    amount: (input.amountCents / 100).toFixed(2),
+    item_name: input.description,
+    subscription_type: '1',
+    frequency: input.frequency ?? '3',
+    cycles: input.cycles ?? '0',
+    custom_str1: input.customStr1,
+    custom_str2: input.customStr2,
+  };
+  if (input.customStr3) data.custom_str3 = input.customStr3;
+
+  const orderedFields = RECURRING_FIELD_ORDER.filter(
+    (key) => data[key] !== undefined && data[key] !== '',
+  ).map((key) => [key, data[key]!] as [string, string]);
+
+  const signature = buildPayfastSignature(orderedFields, passphrase || undefined);
+  const fields: Record<string, string> = Object.fromEntries(orderedFields);
+  fields.signature = signature;
+
+  return { action: payfastProcessUrl(), fields };
+}
+
 function checkoutFieldOrder(data: Record<string, string>): Array<[string, string]> {
   const order = [
     'merchant_id',

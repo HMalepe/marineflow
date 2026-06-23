@@ -567,6 +567,160 @@
     }
   }
 
+  /* ── Modern chat (WhatsApp / WeChat style) ─────────────────────── */
+  .dashboard-comms-page .dashboard-inbox-frame--chat {
+    min-height: min(32rem, calc(100dvh - var(--dashboard-mobile-chrome) - 8rem));
+  }
+
+  @media (min-width: 768px) {
+    .dashboard-comms-page .dashboard-inbox-frame--chat {
+      min-height: min(36rem, calc(100dvh - var(--dashboard-sticky-offset, 3.5rem) - 7rem));
+    }
+  }
+
+  .dashboard-inbox-pane--thread {
+    background: color-mix(in oklch, var(--muted) 18%, var(--background));
+  }
+
+  .chat-list-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  .chat-list-item {
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+  }
+
+  .chat-list-item-button {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 3rem 0.875rem 1rem;
+    text-align: left;
+    transition: background-color 0.15s ease;
+    touch-action: manipulation;
+  }
+
+  .chat-list-item-button:active {
+    background: color-mix(in oklch, var(--muted) 70%, transparent);
+  }
+
+  .chat-list-item-active .chat-list-item-button {
+    background: color-mix(in oklch, var(--primary) 8%, var(--card));
+  }
+
+  .chat-list-item-urgent .chat-list-item-button {
+    background: color-mix(in oklch, var(--destructive) 6%, var(--card));
+  }
+
+  .chat-thread-header {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+    background: var(--card);
+  }
+
+  .chat-thread {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% 0%, oklch(0.52 0.24 288 / 0.04) 0%, transparent 55%),
+      color-mix(in oklch, var(--muted) 12%, var(--background));
+  }
+
+  .chat-thread-inner {
+    padding: 1rem 1rem 1.5rem;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .chat-day-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    background: color-mix(in oklch, var(--card) 85%, var(--muted));
+    border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+    box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+  }
+
+  .chat-bubble {
+    border-radius: 1.125rem;
+    box-shadow: 0 1px 1px oklch(0 0 0 / 0.04);
+  }
+
+  .chat-bubble-inbound {
+    background: var(--card);
+    color: var(--foreground);
+    border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
+    border-bottom-left-radius: 0.375rem;
+  }
+
+  .chat-bubble-outbound {
+    background: linear-gradient(
+      135deg,
+      oklch(0.58 0.22 288) 0%,
+      oklch(0.52 0.24 288) 100%
+    );
+    color: oklch(0.99 0 0);
+    border-bottom-right-radius: 0.375rem;
+  }
+
+  .dark .chat-bubble-outbound {
+    background: linear-gradient(
+      135deg,
+      oklch(0.62 0.2 295) 0%,
+      oklch(0.55 0.22 288) 100%
+    );
+  }
+
+  .chat-composer {
+    padding: 0.75rem 1rem 1rem;
+    background: var(--card);
+    border-top: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  }
+
+  .chat-composer-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.375rem 0.375rem 1rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+    background: color-mix(in oklch, var(--muted) 35%, var(--card));
+  }
+
+  .chat-composer-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    font-size: 1rem;
+    line-height: 1.4;
+    padding: 0.5rem 0;
+    outline: none;
+    color: var(--foreground);
+  }
+
+  .chat-composer-input::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  .chat-composer-send {
+    background-image: var(--solupair-gradient);
+    color: oklch(0.99 0 0);
+    border: none;
+  }
+
   .dashboard-page-header {
     padding-bottom: 1rem;
     border-bottom: 1px solid color-mix(in oklch, var(--border) 75%, var(--solupair-violet) 25%);
@@ -575,7 +729,7 @@
   .dashboard-page-flow {
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    gap: 1.5rem;
   }
 
   @media (min-width: 768px) {

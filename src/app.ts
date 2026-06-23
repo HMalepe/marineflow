@@ -257,6 +257,17 @@ export async function buildApp() {
     return reply.send('OK');
   });
 
+  app.post('/webhooks/payfast/membership', async (request, reply) => {
+    const body = request.body as Record<string, string>;
+    try {
+      const { handlePayfastMembershipWebhook } = await import('./services/membership.js');
+      await handlePayfastMembershipWebhook(body);
+    } catch (err) {
+      logger.error({ err, reference: body.m_payment_id }, 'payfast_membership_itn_error');
+    }
+    return reply.send('OK');
+  });
+
   app.post('/webhooks/payfast/subscription', async (request, reply) => {
     const body = request.body as Record<string, string>;
     const verified = payfastAdapter.verifyWebhook(body, {});

@@ -1050,11 +1050,14 @@ model CustomerMembership {
   visitsRemaining Int
   renewsAt        DateTime
   active          Boolean  @default(true)
+  payfastToken          String?
+  payfastSubscriptionId String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @default(now()) @updatedAt
 
   @@index([salonId, customerId])
   @@index([salonId, active])
+  @@index([salonId, payfastToken])
 }
 
 // ─── Marketing Campaigns ──────────────────────────────────────────────

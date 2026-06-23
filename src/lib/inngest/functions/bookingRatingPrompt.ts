@@ -8,6 +8,9 @@ import {
   buildBookingRatingInteractive,
 } from '../../../services/botInteractiveMenus.js';
 
+/** Wait after payment confirmation before the rating prompt — avoids WhatsApp dropping back-to-back messages. */
+export const BOOKING_RATING_DELAY = '25s';
+
 export type BookingRatingPromptEvent = {
   data: {
     conversationId: string;
@@ -23,17 +26,27 @@ async function withJobTenant<T>(salonId: string, fn: () => Promise<T>): Promise<
   return fn();
 }
 
-/** Send the booking-process rating prompt immediately (interactive list). */
+/** Send the booking-process rating prompt (interactive list). */
 export async function sendBookingRatingPromptNow(input: BookingRatingPromptEvent['data']): Promise<void> {
   const { conversationId, salonId, customerId, waId, appointmentId } = input;
   await withJobTenant(salonId, async () => {
-    const conv = await prisma.conversation.findUnique({
+    let conv = await prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { salon: true },
     });
-    if (!conv) return;
+    if (!conv) {
+      conv = await prisma.conversation.findUnique({
+        where: { salonId_customerId: { salonId, customerId } },
+        include: { salon: true },
+      });
+    }
+    if (!conv) {
+      conv = await prisma.conversation.create({
+        data: { salonId, customerId, step: ConversationStep.IDLE },
+        include: { salon: true },
+      });
+    }
     if (conv.step === ConversationStep.HANDOFF || conv.step === ConversationStep.CLOSED) return;
-    // Already collecting a rating from the live booking flow — avoid a duplicate prompt.
     if (conv.step === ConversationStep.BOOKING_RATING) return;
 
     const body = buildBookingRatingBody();
@@ -48,13 +61,14 @@ export async function sendBookingRatingPromptNow(input: BookingRatingPromptEvent
         interactive,
       });
       providerSid = result.providerMessageId ?? null;
-    } catch {
-      /* best-effort */
+    } catch (err) {
+      logger.warn({ err, conversationId: conv.id, appointmentId }, 'booking_rating_send_failed');
+      return;
     }
 
     await prisma.message.create({
       data: {
-        conversationId,
+        conversationId: conv.id,
         customerId,
         direction: MessageDirection.OUTBOUND,
         body,
@@ -64,16 +78,22 @@ export async function sendBookingRatingPromptNow(input: BookingRatingPromptEvent
 
     const currentCtx = (conv.context ?? {}) as Record<string, unknown>;
     await prisma.conversation.update({
-      where: { id: conversationId },
+      where: { id: conv.id },
       data: {
         step: ConversationStep.BOOKING_RATING,
-        context: { ...currentCtx, pendingAppointmentId: appointmentId } as object,
+        context: {
+          ...currentCtx,
+          pendingAppointmentId: appointmentId,
+          pendingPaymentCheckoutUrl: undefined,
+          pendingPaymentAmountCents: undefined,
+          awaitingCashConfirm: undefined,
+        } as object,
+        lastMessageAt: new Date(),
       },
     });
   });
 }
 
-/** @deprecated Kept for in-flight Inngest events — now sends immediately with no delay. */
 export const bookingRatingPrompt = inngest.createFunction(
   {
     id: 'booking-rating-prompt',
@@ -81,6 +101,7 @@ export const bookingRatingPrompt = inngest.createFunction(
   },
   async ({ event, step }) => {
     const data = event.data as BookingRatingPromptEvent['data'];
+    await step.sleep('wait-after-payment-confirmation', BOOKING_RATING_DELAY);
     await step.run('send-rating-prompt', () => sendBookingRatingPromptNow(data));
   },
 );
@@ -93,8 +114,17 @@ export async function scheduleBookingRatingPrompt(input: {
   appointmentId: string;
 }): Promise<void> {
   try {
-    await sendBookingRatingPromptNow(input);
+    await inngest.send({
+      name: 'whatsapp/booking.rating.requested',
+      data: input,
+    });
   } catch (err) {
-    logger.warn({ err, conversationId: input.conversationId }, 'booking_rating_prompt_failed');
+    logger.warn({ err, conversationId: input.conversationId }, 'booking_rating_inngest_failed');
+    // Fallback when Inngest is unavailable (e.g. local dev without dev server).
+    setTimeout(() => {
+      void sendBookingRatingPromptNow(input).catch((sendErr) => {
+        logger.warn({ err: sendErr, conversationId: input.conversationId }, 'booking_rating_fallback_failed');
+      });
+    }, 25_000);
   }
 }
