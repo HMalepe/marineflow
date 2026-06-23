@@ -81,6 +81,7 @@ import {
   tryHandleWaitlistReply,
   computeAppointmentEnd,
 } from './botPowerFeatures.js';
+import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
 import {
   claimReviewIncentive,
@@ -1460,6 +1461,10 @@ async function processInboundWhatsApp(
     }
     await sendReceptionistGreeting(conv);
     return;
+  }
+
+  if (conv.step === ConversationStep.IDLE || conv.step === ConversationStep.BOOKING_RATING) {
+    if (await tryUndoRecentBooking(conv, text)) return;
   }
 
   if (WHATSAPP_BOOKING_STEPS.includes(conv.step)) {
@@ -5147,6 +5152,74 @@ async function handleManageBooking(
     '• *REDO 1* — book a past visit again',
     '• *BACK* — return to main menu',
   ].join('\n'));
+}
+
+const UNDO_BOOKING_GRACE_MS = 15 * 60_000;
+
+/**
+ * "UNDO"/"CANCEL" sent right after an instant AI-confirmed booking — reverses
+ * a mis-parsed booking immediately instead of routing through the full
+ * MANAGE > CANCEL N > YES flow, which also enforces the salon's normal
+ * notice-period cancellation policy (irrelevant to a booking made seconds
+ * ago by mistake, and no money has actually been captured yet either way).
+ * Returns false (caller falls through to normal handling) once the grace
+ * window has passed, so it can't be used to dodge the real cancellation policy.
+ */
+async function tryUndoRecentBooking(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+): Promise<boolean> {
+  const trimmed = text.trim().toUpperCase();
+  if (trimmed !== 'UNDO' && trimmed !== 'CANCEL') return false;
+
+  const appointmentId = ctx(conv).pendingAppointmentId as string | undefined;
+  if (!appointmentId) return false;
+
+  const appt = await getTenantDb().appointment.findFirst({
+    where: {
+      id: appointmentId,
+      customerId: conv.customerId,
+      status: { in: ['CONFIRMED', 'PENDING_PAYMENT'] },
+    },
+    include: { service: true, staff: true },
+  });
+  if (!appt || Date.now() - appt.createdAt.getTime() > UNDO_BOOKING_GRACE_MS) return false;
+
+  await getTenantDb().appointment.update({
+    where: { id: appt.id },
+    data: {
+      status: 'CANCELLED',
+      cancellationReason: 'CUSTOMER_REQUEST',
+      cancelledAt: new Date(),
+      cancelledBy: 'customer',
+    },
+  });
+
+  await afterAppointmentCancelled({
+    salonId: conv.salonId,
+    salon: conv.salon,
+    serviceId: appt.serviceId,
+    staffId: appt.staffId,
+    start: appt.start,
+  });
+  notifyAppointmentChangedLater(conv.salonId, appt.id, { status: 'CANCELLED', source: 'whatsapp_undo' });
+
+  await getTenantDb().analyticsEvent.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      appointmentId: appt.id,
+      type: 'booking_cancel',
+      payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp_undo' },
+    },
+  }).catch(() => {});
+
+  await saveCtx(conv.id, { pendingAppointmentId: undefined }, ConversationStep.MENU);
+  await replyWithMenu(
+    conv,
+    `↩️ Done — your *${sanitize(appt.service.name)}* booking has been undone. No charge was made.\n\nReply *1* to book again, or tell me what you'd like instead.`,
+  );
+  return true;
 }
 
 async function handleConfirmCancel(

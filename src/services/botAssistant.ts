@@ -343,6 +343,8 @@ async function tryInstantConfirm(
     partySize && partySize > 1 ? `👥 Party size: ${partySize}` : '',
     '',
     `🔖 Ref: *${ref}*`,
+    '',
+    `_Not what you meant? Reply *UNDO* within 15 minutes to cancel this — no charge._`,
   ];
 
   if (paymentPlan) {
@@ -480,10 +482,14 @@ async function tryDirectDateTimeBooking(
 
     // All 5 variables (service, staff, date, time, party size) resolved to a real
     // open slot — book instantly instead of asking the customer to reply YES.
-    // Any guardrail failure (slot just taken, salon suspended, double-booking)
-    // falls through to the normal "Reply YES" confirm prompt below, which
-    // re-runs the same checks before actually creating the appointment.
-    const instant = await tryInstantConfirm(conv, service, staff, matched.start, partySize, explicitStaff);
+    // Only when the customer named the stylist themselves: an auto-assigned
+    // stylist is the case most likely to surprise them, so that case still
+    // gets the normal "Reply YES" confirm prompt. Any guardrail failure (slot
+    // just taken, salon suspended, double-booking) also falls through to that
+    // same prompt, which re-runs the same checks before actually booking.
+    const instant = explicitStaff
+      ? await tryInstantConfirm(conv, service, staff, matched.start, partySize, explicitStaff)
+      : null;
     if (instant) return instant;
 
     const dt = DateTime.fromJSDate(matched.start).setZone(conv.salon.timezone);
