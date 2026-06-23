@@ -1558,7 +1558,7 @@ async function processInboundWhatsApp(
         if (BOT_DEBUG) {
           await reply(conv, debugMsg('menu_handler_error', err, { step: conv.step, convId: conv.id }));
         } else {
-          await reply(conv, 'Something went wrong. Reply *MENU* to see the menu and try again.');
+          await reply(conv, "Hmm, something slipped on our end. Reply *MENU* and we'll get you sorted. 🙏");
         }
       }
     }
@@ -1754,7 +1754,7 @@ async function processInboundWhatsApp(
         );
         syncConvContext(conv, { ...PENDING_PROFILE_CLEAR, errorCount }, ConversationStep.MENU);
         if (!BOT_DEBUG) {
-          await reply(conv, "Sorry, something went wrong. Let's start fresh:");
+          await reply(conv, "That didn't quite work on our end — let's start fresh:");
         }
         await replyMenu(conv);
       }
@@ -2592,7 +2592,7 @@ async function routeConversation(
   ) {
     await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.IDLE);
     syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.IDLE);
-    await replyWithMenu(conv, '👋 It\'s been a while — your previous session has ended. Here\'s the menu to start fresh:');
+    await replyWithMenu(conv, "👋 Good to see you again — it's been a little while, so here's a fresh menu to get you going:");
     return;
   }
 
@@ -3113,7 +3113,7 @@ async function menuActionViewBookings(
   }
 
   if (upcoming.length === 0 && past.length === 0) {
-    await replyWithMenu(conv, 'No bookings found yet.');
+    await replyWithMenu(conv, "You don't have any bookings with us yet — reply *1* whenever you're ready and we'll get you booked in. 😊");
     return;
   }
 
@@ -3173,7 +3173,7 @@ async function menuActionLoyaltyBalance(
 ): Promise<void> {
   const salon = conv.salon;
   if (!salon.botLoyaltyEnabled) {
-    await replyWithMenu(conv, 'Rewards are not available at this salon right now.');
+    await replyWithMenu(conv, "Rewards aren't switched on here just yet — but we're always glad to see you. Reply *MENU* for other options.");
     return;
   }
 
@@ -3213,7 +3213,7 @@ async function menuActionShowFaqs(
     take: 10,
   });
   if (faqs.length === 0) {
-    await replyWithMenu(conv, 'No FAQs available yet.');
+    await replyWithMenu(conv, "We haven't added any FAQs just yet — ask me anything directly, or reply *MENU*.");
     return;
   }
   await saveCtx(conv.id, { menuCategory: undefined }, ConversationStep.FAQ);
@@ -3336,7 +3336,7 @@ async function menuActionShowAllPrices(
 ): Promise<void> {
   const services = await loadSalonServiceCatalog(conv.salonId);
   if (services.length === 0) {
-    await replyWithMenu(conv, 'No services listed yet.');
+    await replyWithMenu(conv, "We're still setting up our services list — please check back soon, or reply *MENU*.");
     return;
   }
   const lines = buildCategorizedPriceLines(services, sanitize);
@@ -3486,7 +3486,7 @@ async function handleSubMenuChoice(
       if (choice === 2) return menuActionLeaveReview(conv);
       if (choice === 3) {
         await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.COMPLAINT);
-        await reply(conv, 'Please describe the issue — our team will follow up shortly.');
+        await reply(conv, "We're sorry to hear that. Please tell us a little more about what happened, and our team will follow up shortly. 🙏");
         return;
       }
       if (choice === 4) {
@@ -3514,7 +3514,7 @@ async function handleMainMenuSelection(
   }
   if (selection.kind === 'category') {
     if (selection.id === 'rewards' && !conv.salon.botLoyaltyEnabled) {
-      await replyWithMenu(conv, 'Rewards are not available at this salon right now.');
+      await replyWithMenu(conv, "Rewards aren't switched on here just yet — but we're always glad to see you. Reply *MENU* for other options.");
       return;
     }
     if (selection.id === 'services') {
@@ -3544,7 +3544,7 @@ async function handleFreeTextSupportIntent(
   }
   if (intent === 'report_issue') {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.COMPLAINT);
-    await reply(conv, 'Please describe the issue — our team will follow up shortly.');
+    await reply(conv, "We're sorry to hear that. Please tell us a little more about what happened, and our team will follow up shortly. 🙏");
     return;
   }
   await saveCtx(conv.id, { menuCategory: 'support', ...PENDING_PROFILE_CLEAR }, ConversationStep.MENU);
@@ -5115,7 +5115,7 @@ async function handleManageBooking(
         include: { service: true, staff: true },
       });
       if (!appt) {
-        await reply(conv, 'Booking not found.');
+        await reply(conv, "We couldn't find that booking — it may have already changed. Reply *BACK* to see your current bookings.");
         return;
       }
       await saveCtx(conv.id, { pendingManageIdx: idx }, ConversationStep.MANAGE_BOOKING);
@@ -5143,7 +5143,7 @@ async function handleManageBooking(
   if (cancelMatch) {
     const idx = parseInt(cancelMatch[1]!, 10);
     if (!Number.isFinite(idx) || idx < 1 || idx > ids.length) {
-      await reply(conv, 'Invalid booking number. Please try again, or reply *BACK* to go back.');
+      await reply(conv, "That number doesn't match a booking on the list — please try again, or reply *BACK*.");
       return;
     }
     const id = ids[idx - 1]!;
@@ -5152,7 +5152,7 @@ async function handleManageBooking(
       include: { service: true, staff: true },
     });
     if (!appt) {
-      await reply(conv, 'Booking not found.');
+      await reply(conv, "We couldn't find that booking — it may have already been cancelled.");
       return;
     }
 
@@ -5192,7 +5192,7 @@ async function handleManageBooking(
   if (rescheduleMatch) {
     const idx = parseInt(rescheduleMatch[1]!, 10);
     if (!Number.isFinite(idx) || idx < 1 || idx > ids.length) {
-      await reply(conv, 'Invalid booking number.');
+      await reply(conv, "That number doesn't match a booking on the list — please try again, or reply *BACK*.");
       return;
     }
     const id = ids[idx - 1]!;
@@ -5201,7 +5201,7 @@ async function handleManageBooking(
       include: { service: true, staff: true },
     });
     if (!appt) {
-      await reply(conv, 'Booking not found or cannot be rescheduled.');
+      await reply(conv, "That booking can't be rescheduled right now — it may have already changed. Reply *BACK* to see your current bookings.");
       return;
     }
 
@@ -5242,7 +5242,7 @@ async function handleManageBooking(
     const pastIds = (c.managePastList as string[] | undefined) ?? [];
     const idx = redoMatch[1] ? parseInt(redoMatch[1], 10) : 1;
     if (!Number.isFinite(idx) || idx < 1 || idx > pastIds.length) {
-      await reply(conv, 'Invalid booking number. Please try again, or reply *BACK* to go back.');
+      await reply(conv, "That number doesn't match a past booking — please try again, or reply *BACK*.");
       return;
     }
     const id = pastIds[idx - 1]!;
@@ -5251,11 +5251,11 @@ async function handleManageBooking(
       include: { service: true, staff: true },
     });
     if (!appt) {
-      await reply(conv, 'Booking not found.');
+      await reply(conv, "We couldn't find that past booking — reply *BACK* to see your other bookings.");
       return;
     }
     if (!appt.service.active || appt.service.deletedAt || !appt.staff.active || appt.staff.deletedAt) {
-      await reply(conv, 'That service or stylist is no longer available — please book from scratch instead.');
+      await reply(conv, "That service or stylist isn't available anymore — let's get you booked in fresh instead!");
       return;
     }
 
