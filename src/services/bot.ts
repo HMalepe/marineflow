@@ -384,6 +384,10 @@ const APPOINTMENT_SLOT_HINT =
   '💬 Or type a time — e.g. *14:00* or *2pm* — or a full date & time for another day.';
 const APPOINTMENT_DATE_MISPARSE =
   "Hmm, I couldn't quite place that. Try e.g. *Saturday 15:00*, *25/06 14:30*, or *next Friday at 2pm*, or pick a number below:";
+const SERVICE_TYPE_HINT = '💬 Or just type the service name — e.g. *Haircut*.';
+const STAFF_TYPE_HINT = '💬 Or just type their name — e.g. *Mmaki*.';
+const MAIN_MENU_FREE_TEXT_HINT =
+  '💬 Or just tell me everything at once — e.g. *"Haircut with Mmaki, Monday 15:00"* — and I\'ll book it for you.';
 
 /** WhatsApp list body — title plus type-to-book hint (shown above the tap button). */
 function bookingInteractiveBody(title: string, hint = APPOINTMENT_DATE_HINT): string {
@@ -802,6 +806,8 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
         ...(occasionLine ? [occasionLine] : []),
         '',
         `Let's get you set up.`,
+        '',
+        MAIN_MENU_FREE_TEXT_HINT,
       ].join('\n'),
       null,
       interactive ? { interactive } : undefined,
@@ -848,6 +854,8 @@ async function sendReceptionistGreeting(conv: Conversation & { customer: Custome
       ...(!birthdayToday && occasionLine ? [occasionLine] : []),
       '',
       `Great to see you again. ${usualLine}`,
+      '',
+      MAIN_MENU_FREE_TEXT_HINT,
     ].join('\n'),
     null,
     interactive ? { interactive } : undefined,
@@ -2120,7 +2128,7 @@ async function repromptPickService(conv: Conversation & { customer: Customer; sa
   const page = (ctx(conv).servicePage as number | undefined) ?? 0;
   await replyMaybeInteractive(
     conv,
-    [header, ...lines, '', 'Reply BACK to go back.'].join('\n'),
+    [header, ...lines, '', SERVICE_TYPE_HINT, 'Reply BACK to go back.'].join('\n'),
     buildServicePickerInteractive(services, page, SVC_PAGE_SIZE, conv.salon, header),
   );
 }
@@ -2147,7 +2155,7 @@ async function repromptPickStaff(conv: Conversation & { customer: Customer; salo
     : `Choose ${providerNoun}:`;
   await replyMaybeInteractive(
     conv,
-    [header, ...staffMenuLines(staffList, preferredId, providerNoun), '', 'Reply BACK to go back.'].join('\n'),
+    [header, ...staffMenuLines(staffList, preferredId, providerNoun), '', STAFF_TYPE_HINT, 'Reply BACK to go back.'].join('\n'),
     buildStaffPickerInteractive(staffList, preferredId, conv.salon, header),
   );
 }
@@ -3699,8 +3707,8 @@ function buildServicePage(services: { id: string; name: string; priceCents: numb
     ? (services.length > SVC_PAGE_SIZE ? `We have ${services.length} services. Here are the first ${SVC_PAGE_SIZE}:` : 'Pick a service:')
     : `Services ${start + 1}–${start + slice.length} of ${services.length}:`;
   const footer = hasMore
-    ? ['', 'Reply a *number* to pick · *MORE* to see more · *BACK* for menu.']
-    : ['', 'Reply a *number* to pick · *BACK* for menu.'];
+    ? ['', SERVICE_TYPE_HINT, 'Reply a *number* to pick · *MORE* to see more · *BACK* for menu.']
+    : ['', SERVICE_TYPE_HINT, 'Reply a *number* to pick · *BACK* for menu.'];
   return [header, ...lines, ...footer].join('\n');
 }
 
@@ -3949,7 +3957,7 @@ async function continueAfterServicePick(
     : `*${sanitize(service.name)}*\nChoose ${providerNoun}:`;
   await replyMaybeInteractive(
     conv,
-    [header, ...staffMenuLines(staff, preferredId, providerNoun), '', 'BACK'].join('\n'),
+    [header, ...staffMenuLines(staff, preferredId, providerNoun), '', STAFF_TYPE_HINT, 'BACK'].join('\n'),
     buildStaffPickerInteractive(staff, preferredId, conv.salon, header),
   );
 }

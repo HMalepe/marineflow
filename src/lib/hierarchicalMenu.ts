@@ -112,7 +112,7 @@ export function buildMainMenuText(salon: SalonMenuInput): string {
     welcome,
     ...lines,
     '',
-    '💬 Or just tell me what you need — e.g. "Monday 15:00 low fade" — and I\'ll book it for you.',
+    '💬 Or just tell me everything at once — e.g. "Haircut with Mmaki, Monday 15:00" — and I\'ll book it for you.',
     'Reply BACK anytime for this menu.',
   ].join('\n') + specialLine;
 }
