@@ -9,6 +9,11 @@ export interface CreateCheckoutInput {
   notifyUrl: string;
   description?: string;
   metadata?: Record<string, string>;
+  /** Pre-fills PayFast's "How can we get hold of you?" step so returning customers skip it. */
+  nameFirst?: string;
+  nameLast?: string;
+  emailAddress?: string;
+  cellNumber?: string;
 }
 
 export interface CheckoutResult {

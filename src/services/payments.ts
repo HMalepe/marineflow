@@ -11,11 +11,13 @@ import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { buildPopiaRightsHint, shouldAttachPopiaRightsHint } from './compliance.js';
 import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
+import { toSouthAfricanLocalCellNumber } from '../lib/phone.js';
 import { MessageDirection } from '@prisma/client';
 import type { Service } from '@prisma/client';
 import { DateTime } from 'luxon';
 
 const PAYFAST_NOTIFY_PATH = '/webhooks/payfast/appointment';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Strip WhatsApp markdown control characters from user-supplied names. */
 function sanitizeForMessage(s: string): string {
@@ -64,6 +66,14 @@ export async function createPaymentCheckoutSession(input: {
   const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const reference = appointmentPaymentReference(input.appointmentId);
 
+  const customer = await getTenantDb().customer.findUnique({
+    where: { id: input.customerId },
+    select: { firstName: true, lastName: true, email: true, waId: true },
+  });
+  const cellNumber = customer?.waId ? toSouthAfricanLocalCellNumber(customer.waId) ?? undefined : undefined;
+  const emailAddress =
+    customer?.email && EMAIL_RE.test(customer.email.trim()) ? customer.email.trim() : undefined;
+
   try {
     const result = await payfastAdapter.createCheckout({
       salonId: input.salonId,
@@ -75,6 +85,10 @@ export async function createPaymentCheckoutSession(input: {
       returnUrl: `${baseUrl}/pay/success?ref=${reference}`,
       cancelUrl: `${baseUrl}/pay/cancel?ref=${reference}`,
       notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
+      nameFirst: customer?.firstName?.trim() || undefined,
+      nameLast: customer?.lastName?.trim() || undefined,
+      emailAddress,
+      cellNumber,
     });
 
     if (!result.form) {

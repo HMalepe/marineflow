@@ -22,3 +22,17 @@ export function normalizeLoginPhone(input: string): string {
   const digits = normalizeWaId(withPlus);
   return `+${digits}`;
 }
+
+/**
+ * South-African local mobile format (e.g. 0821234567) expected by PayFast's
+ * cell_number field. Returns null for anything that isn't a 27-prefixed SA
+ * mobile number, so callers can omit the field rather than send a value
+ * PayFast's checkout form would reject.
+ */
+export function toSouthAfricanLocalCellNumber(waId: string): string | null {
+  const digits = waId.replace(/\D/g, '');
+  if (digits.startsWith('27') && digits.length === 11) {
+    return '0' + digits.slice(2);
+  }
+  return null;
+}
