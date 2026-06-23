@@ -177,7 +177,7 @@ export function AppointmentsClient({
   return (
     <div className="space-y-6">
       {bulkToast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-foreground text-background px-4 py-2 text-sm shadow-lg">
+        <div className="fixed right-4 z-50 rounded-lg bg-foreground text-background px-4 py-2.5 text-sm shadow-lg dashboard-toast-bottom max-w-[calc(100vw-2rem)]">
           {bulkToast}
         </div>
       )}
@@ -243,19 +243,19 @@ export function AppointmentsClient({
       >
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:ml-auto">
           {/* Search */}
-          <div className="relative flex-1 sm:flex-none sm:w-56">
+          <div className="relative flex-1 sm:flex-none sm:w-56 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Customer, service, staff…"
-              className="pl-8 h-8 text-xs"
+              className="pl-8 h-9 md:h-8 text-base md:text-xs"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-foreground touch-manipulation"
               >
                 <X className="size-3.5" />
               </button>
@@ -282,12 +282,12 @@ export function AppointmentsClient({
             </div>
           )}
           {/* Payment filter */}
-          <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40">
+          <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40 w-full sm:w-auto overflow-x-auto overscroll-x-contain">
           {(['all', 'pending', 'paid'] as PaymentFilter[]).map((f) => (
             <button
               key={f}
               onClick={() => setPaymentFilter(f)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+              className={`shrink-0 px-3 py-2 min-h-[2.25rem] rounded-md text-xs font-medium transition-colors touch-manipulation ${
                 paymentFilter === f
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -334,7 +334,7 @@ export function AppointmentsClient({
                   {isCompletable && (
                     <input
                       type="checkbox"
-                      className="mt-4 size-4 cursor-pointer accent-primary shrink-0"
+                      className="mt-4 size-5 cursor-pointer accent-primary shrink-0 touch-manipulation"
                       checked={bulkSelected.has(appt.id)}
                       onChange={(e) => {
                         const next = new Set(bulkSelected);
@@ -405,7 +405,7 @@ export function AppointmentsClient({
                     onClick={() => void handleRemoveWaitlist(entry.id)}
                     disabled={removingWaitlistId === entry.id}
                     title="Remove from waitlist"
-                    className="h-8 w-8 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 shrink-0"
+                    className="min-h-[2.75rem] min-w-[2.75rem] rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 shrink-0 touch-manipulation"
                   >
                     {removingWaitlistId === entry.id ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />

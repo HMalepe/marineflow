@@ -317,15 +317,7 @@ export function buildConfirmBookingInteractive(salon: SalonMenuInput, body: stri
 }
 
 export function buildBookingRatingBody(): string {
-  return [
-    `✨ *One quick thing — while it's fresh*`,
-    '',
-    `How easy was booking with us just now?`,
-    '',
-    `Your honest tap helps us refine the experience for you and every guest who books after.`,
-    '',
-    withRatingFeedbackPreamble(`Takes two seconds — tap your rating below.`),
-  ].join('\n');
+  return `⭐ *How was booking?* Tap a rating below — or skip.`;
 }
 
 export function buildStarRatingPromptBody(): string {

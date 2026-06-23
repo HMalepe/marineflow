@@ -6,7 +6,6 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
 import { CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
 import { CommsPageHint } from '@/components/comms-page-hint';
 import {
@@ -120,6 +119,7 @@ export function ConversationsClient({ token, staffName }: Props) {
   const [alerts, setAlerts] = useState<EscalationAlert[]>([]);
   const [staffSentIds, setStaffSentIds] = useState<Set<string>>(new Set());
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
   const conversationsRef = useRef<ConversationListItemData[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   const didAutoSelectRef = useRef(false);
@@ -205,8 +205,13 @@ export function ConversationsClient({ token, staffName }: Props) {
   }, [selectedId, loadMessages]);
 
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const container = threadScrollRef.current;
+    if (!container) return;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: messages.length > 3 ? 'smooth' : 'auto',
+    });
+  }, [messages, selectedId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -323,8 +328,13 @@ export function ConversationsClient({ token, staffName }: Props) {
   const showThreadOnMobile = Boolean(selectedId);
 
   return (
-    <div className="flex flex-col gap-4 dashboard-fit-panel">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="dashboard-workspace">
+      <div
+        className={cn(
+          'flex flex-wrap items-start justify-between gap-3 shrink-0',
+          showThreadOnMobile && 'hidden md:flex',
+        )}
+      >
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
@@ -349,12 +359,12 @@ export function ConversationsClient({ token, staffName }: Props) {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive shrink-0">
           {error}
         </div>
       )}
 
-      {alerts.length > 0 && (
+      {alerts.length > 0 && !showThreadOnMobile && (
         <div className="space-y-2">
           {alerts.map((alert) => (
             <div
@@ -390,14 +400,14 @@ export function ConversationsClient({ token, staffName }: Props) {
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 gap-4">
-        <Card
+      <div className="dashboard-inbox-frame flex-col md:flex-row">
+        <div
           className={cn(
-            'w-full md:w-96 shrink-0 flex flex-col min-h-0 py-0 gap-0',
+            'w-full md:w-96 shrink-0 flex flex-col min-h-0 border-b md:border-b-0 md:border-r bg-card',
             showThreadOnMobile && 'hidden md:flex',
           )}
         >
-          <div className="px-4 py-3 border-b space-y-2.5">
+          <div className="px-4 py-3 border-b space-y-2.5 shrink-0">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-sm">Inbox</span>
               {handoffCount > 0 && (
@@ -412,7 +422,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name or number…"
-                className="pl-8 h-8 text-xs"
+                className="pl-8 h-9 md:h-8 text-base md:text-xs"
               />
             </div>
             <div className="flex gap-1">
@@ -420,7 +430,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                 type="button"
                 onClick={() => setFilter('all')}
                 className={cn(
-                  'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  'flex-1 rounded-md px-2 py-2 min-h-[2.25rem] text-xs font-medium transition-colors touch-manipulation',
                   filter === 'all' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
                 )}
               >
@@ -430,7 +440,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                 type="button"
                 onClick={() => setFilter('handoff')}
                 className={cn(
-                  'flex-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                  'flex-1 rounded-md px-2 py-2 min-h-[2.25rem] text-xs font-medium transition-colors touch-manipulation',
                   filter === 'handoff' ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
                 )}
               >
@@ -438,7 +448,7 @@ export function ConversationsClient({ token, staffName }: Props) {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto divide-y">
+          <div className="flex-1 overflow-y-auto overscroll-y-contain divide-y dashboard-thread-scroll min-h-0">
             {loadingList && (
               <p className="p-4 text-sm text-muted-foreground">Loading conversations…</p>
             )}
@@ -458,11 +468,11 @@ export function ConversationsClient({ token, staffName }: Props) {
               />
             ))}
           </div>
-        </Card>
+        </div>
 
-        <Card
+        <div
           className={cn(
-            'flex-1 flex flex-col min-h-0 py-0 gap-0',
+            'flex-1 flex flex-col min-h-0 bg-card',
             !showThreadOnMobile && 'hidden md:flex',
           )}
         >
@@ -475,11 +485,11 @@ export function ConversationsClient({ token, staffName }: Props) {
             </div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b flex items-center gap-3">
+              <div className="px-4 py-3 border-b flex items-center gap-3 shrink-0 bg-card">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="md:hidden shrink-0 -ml-2"
+                  className="md:hidden shrink-0 -ml-2 min-h-[2.75rem] touch-manipulation"
                   onClick={() => setSelectedId(null)}
                 >
                   ← Back
@@ -498,7 +508,10 @@ export function ConversationsClient({ token, staffName }: Props) {
                 {selectedStep && <StepBadge step={selectedStep} />}
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-[#e5ddd5]/30 dark:bg-muted/20">
+              <div
+                ref={threadScrollRef}
+                className="flex-1 overflow-y-auto overscroll-y-contain dashboard-thread-scroll px-4 py-4 space-y-4 bg-[#e5ddd5]/30 dark:bg-muted/20 min-h-0"
+              >
                 {loadingThread && messages.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-8">Loading messages…</p>
                 )}
@@ -542,20 +555,20 @@ export function ConversationsClient({ token, staffName }: Props) {
                 <div ref={threadEndRef} />
               </div>
 
-              <div className="border-t px-4 py-3 bg-card">
+              <div className="border-t px-4 py-3 bg-card shrink-0 safe-area-pb">
                 {!isHandoff ? (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
                       The bot is handling this chat. Take over to reply manually.
                     </p>
-                    <Button onClick={handleTakeOver} disabled={actionLoading} className="w-full">
+                    <Button onClick={handleTakeOver} disabled={actionLoading} className="w-full touch-manipulation">
                       {actionLoading ? 'Taking over…' : 'Take Over Conversation'}
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      You&apos;re in control — the bot is silent. Reply to the customer, then click <strong>Query Completed</strong> when done.
+                      You&apos;re in control — the bot is silent. Reply to the customer, then tap <strong>Query Completed</strong> when done.
                     </p>
                     <form onSubmit={handleSendReply} className="flex gap-2">
                       <Input
@@ -566,14 +579,14 @@ export function ConversationsClient({ token, staffName }: Props) {
                         className="flex-1"
                         autoComplete="off"
                       />
-                      <Button type="submit" disabled={sending || !replyText.trim()}>
+                      <Button type="submit" disabled={sending || !replyText.trim()} className="shrink-0 touch-manipulation">
                         {sending ? 'Sending…' : 'Send'}
                       </Button>
                     </form>
                     <Button
                       onClick={handleQueryComplete}
                       disabled={actionLoading}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                      className="w-full touch-manipulation"
                     >
                       {actionLoading ? 'Completing…' : '✓ Query Completed'}
                     </Button>
@@ -582,7 +595,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                       size="sm"
                       onClick={handleHandBack}
                       disabled={actionLoading}
-                      className="w-full text-muted-foreground text-xs"
+                      className="w-full text-muted-foreground text-xs touch-manipulation"
                     >
                       Hand back to bot without rating
                     </Button>
@@ -591,7 +604,7 @@ export function ConversationsClient({ token, staffName }: Props) {
               </div>
             </>
           )}
-        </Card>
+        </div>
       </div>
     </div>
   );

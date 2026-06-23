@@ -527,6 +527,15 @@ function ctx(conv: Conversation): BotContext {
   return (conv.context ?? {}) as BotContext;
 }
 
+/** Slot queries scoped to this customer — excludes times they already booked elsewhere. */
+function customerSlotScope(conv: Conversation) {
+  const c = ctx(conv);
+  return {
+    customerId: conv.customerId,
+    excludeAppointmentId: c.managingAppointmentId as string | undefined,
+  };
+}
+
 /** undefined in patch = delete key (Prisma Json rejects undefined values). */
 function applyContextPatch(base: BotContext, patch: Partial<BotContext>): BotContext {
   const next: BotContext = { ...base };
@@ -2213,6 +2222,7 @@ async function repromptPickSlot(conv: Conversation & { customer: Customer; salon
     service,
     staff,
     localDateStr,
+    ...customerSlotScope(conv),
   });
   if (tooLong || slots.length === 0) {
     await saveCtx(conv.id, { localDateStr: undefined, slotStartIso: undefined }, ConversationStep.PICK_DATE);
@@ -2263,6 +2273,7 @@ async function repromptFlatSlotPicker(conv: Conversation & { customer: Customer;
     salonId: conv.salonId,
     service,
     staff,
+    ...customerSlotScope(conv),
   });
   if (tooLong || flatSlots.length === 0) {
     await saveCtx(conv.id, { flatSlotOptions: undefined, awaitingDateList: undefined });
@@ -4060,6 +4071,7 @@ async function handlePickStaff(
     salonId: conv.salonId,
     service,
     staff,
+    ...customerSlotScope(conv),
   });
   if (tooLong) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -4164,7 +4176,13 @@ async function handlePickDate(
 
   const tryConfirmExactTime = async (parsed: { localDateStr: string; hour?: number; minute?: number }): Promise<boolean> => {
     if (parsed.hour == null) return false;
-    const { slots, tooLong } = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr: parsed.localDateStr });
+    const { slots, tooLong } = await getAvailableSlots({
+      salonId: conv.salonId,
+      service,
+      staff,
+      localDateStr: parsed.localDateStr,
+      ...customerSlotScope(conv),
+    });
     if (tooLong || slots.length === 0) return false;
     const wantedMin = parsed.hour * 60 + (parsed.minute ?? 0);
     const match =
@@ -4268,6 +4286,7 @@ async function handlePickDate(
     service,
     staff,
     localDateStr,
+    ...customerSlotScope(conv),
   });
   if (tooLong) {
     await saveCtx(conv.id, {}, ConversationStep.MENU);
@@ -4387,6 +4406,7 @@ async function handlePickSlot(
       service,
       staff,
       localDateStr: localDateStr!,
+      ...customerSlotScope(conv),
     });
     if (tooLong || slots.length === 0) {
       await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
@@ -4462,6 +4482,7 @@ async function handlePickSlot(
     service,
     staff,
     localDateStr,
+    ...customerSlotScope(conv),
   });
   if (tooLong || slots.length === 0) {
     await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
@@ -4576,7 +4597,13 @@ async function handleConfirm(
     const localDateStr = c.localDateStr as string | undefined;
     if (localDateStr) {
       // EC-11: destructure new return type
-      const { slots: freshSlots } = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr });
+      const { slots: freshSlots } = await getAvailableSlots({
+        salonId: conv.salonId,
+        service,
+        staff,
+        localDateStr,
+        ...customerSlotScope(conv),
+      });
       if (freshSlots.length > 0) {
         await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
         const slotLines = formatSlotMenuLines(freshSlots, conv.salon.timezone);
@@ -4994,16 +5021,7 @@ async function finalizeCashPayment(
   const ref = appointment.id.slice(0, 8).toUpperCase();
   await reply(
     conv,
-    [
-      `✅ *Cash on arrival confirmed*`,
-      '',
-      `Please settle *${formatCentsZar(amountCents)}* when you check in.`,
-      `Your booking is locked in — we can't wait to see you! 🙌`,
-      '',
-      `🔖 Ref: *${ref}*`,
-      '',
-      `_Tip: PayFast is still available if you'd rather pay securely online before the day — just ask us on WhatsApp._`,
-    ].join('\n'),
+    `✅ *Confirmed* — pay *${formatCentsZar(amountCents)}* when you arrive.\nRef: *${ref}*`,
   );
 
   await finishBookingAfterPayment(conv, appointment);

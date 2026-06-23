@@ -173,7 +173,7 @@ async function DashboardLayoutInner({
       {/* Main */}
       <main className="dashboard-main-shell flex-1 min-w-0 min-h-dvh flex flex-col">
         <DashboardStickyHeader isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
-        <div className="flex-1 p-4 pb-mobile-main md:p-8 min-w-0 overflow-x-clip">
+        <div className="flex-1 p-4 pb-mobile-main md:p-8 min-w-0 min-h-0 overflow-x-clip flex flex-col">
           {children}
         </div>
       </main>

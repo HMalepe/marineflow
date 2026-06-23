@@ -25,16 +25,14 @@ export function payfastCredentials(): {
 } {
   const sandbox = resolvePayfastIsSandbox(env.PAYFAST_IS_TEST, env.NODE_ENV);
   if (sandbox) {
-    const merchantId =
-      trimPayfastCredential(env.PAYFAST_SANDBOX_MERCHANT_ID) ||
-      trimPayfastCredential(env.PAYFAST_MERCHANT_ID);
-    const merchantKey =
-      trimPayfastCredential(env.PAYFAST_SANDBOX_MERCHANT_KEY) ||
-      trimPayfastCredential(env.PAYFAST_MERCHANT_KEY);
-    const passphrase =
-      trimPayfastCredential(env.PAYFAST_SANDBOX_PASSPHRASE) ||
-      trimPayfastCredential(env.PAYFAST_PASSPHRASE);
-    return { merchantId, merchantKey, passphrase, sandbox: true };
+    // Never fall back to live credentials in sandbox — live merchant IDs cause
+    // PayFast "Invalid merchant ID" (400) on sandbox.payfast.co.za.
+    return {
+      merchantId: trimPayfastCredential(env.PAYFAST_SANDBOX_MERCHANT_ID),
+      merchantKey: trimPayfastCredential(env.PAYFAST_SANDBOX_MERCHANT_KEY),
+      passphrase: trimPayfastCredential(env.PAYFAST_SANDBOX_PASSPHRASE),
+      sandbox: true,
+    };
   }
   return {
     merchantId: trimPayfastCredential(env.PAYFAST_MERCHANT_ID),

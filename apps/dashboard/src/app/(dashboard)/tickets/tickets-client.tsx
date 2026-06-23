@@ -49,6 +49,7 @@ export function TicketsClient({ token }: Props) {
   const [resolving, setResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
+  const threadScrollRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -71,8 +72,13 @@ export function TicketsClient({ token }: Props) {
   }, [load]);
 
   useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [selected?.messages.length]);
+    const container = threadScrollRef.current;
+    if (!container) return;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: (selected?.messages.length ?? 0) > 3 ? 'smooth' : 'auto',
+    });
+  }, [selected?.messages.length, selected?.id]);
 
   const queueTickets = tickets.filter((t) => isActiveQueueTicket(t.status));
   const noiseTickets = tickets.filter((t) => isNoiseTicket(t.status));
@@ -145,14 +151,16 @@ export function TicketsClient({ token }: Props) {
     { id: 'noise', label: 'Noise', count: noiseTickets.length },
   ];
 
+  const showDetailOnMobile = Boolean(selected);
+
   return (
-    <div className="flex flex-col gap-4 dashboard-fit-panel">
-      <div>
+    <div className="dashboard-workspace">
+      <div className={cn('shrink-0', showDetailOnMobile && 'hidden md:block')}>
         <h1 className="text-2xl font-bold tracking-tight">{TICKETS_LABEL}</h1>
         <CommsPageHint active="tickets" />
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border bg-background flex-col md:flex-row">
+      <div className="dashboard-inbox-frame flex-col md:flex-row">
         <div
           className={cn(
             'w-full md:w-80 shrink-0 flex flex-col border-b md:border-b-0 md:border-r bg-background min-h-0',
@@ -188,7 +196,7 @@ export function TicketsClient({ token }: Props) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y">
+          <div className="flex-1 overflow-y-auto overscroll-y-contain divide-y dashboard-thread-scroll min-h-0">
             {filtered.length === 0 && (
               <p className="p-4 text-sm text-muted-foreground">
                 {filter === 'noise'
@@ -219,7 +227,7 @@ export function TicketsClient({ token }: Props) {
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="md:hidden shrink-0 -ml-2"
+                  className="md:hidden shrink-0 -ml-2 min-h-[2.75rem] touch-manipulation"
                   onClick={() => setSelected(null)}
                 >
                   Back
@@ -263,7 +271,10 @@ export function TicketsClient({ token }: Props) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+            <div
+              ref={threadScrollRef}
+              className="flex-1 overflow-y-auto overscroll-y-contain dashboard-thread-scroll p-4 sm:p-6 space-y-3 min-h-0"
+            >
               {selected.messages.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-8">No messages yet</p>
               )}
@@ -306,7 +317,7 @@ export function TicketsClient({ token }: Props) {
               <div ref={threadEndRef} />
             </div>
 
-            <div className="px-6 py-4 border-t bg-background shrink-0 space-y-2">
+            <div className="px-4 sm:px-6 py-4 border-t bg-background shrink-0 safe-area-pb space-y-2">
               {error && <p className="text-sm text-destructive">{error}</p>}
               {selected.status === 'AUTO_RESOLVED' && (
                 <p className="text-xs text-muted-foreground text-center py-1">

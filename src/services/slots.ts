@@ -23,6 +23,14 @@ function hasAppointmentConflict(
   return busy.some((b) => b.staffId === staffId && b.start < end && b.end > start);
 }
 
+function hasCustomerAppointmentConflict(
+  start: Date,
+  end: Date,
+  busy: Pick<Appointment, 'start' | 'end'>[],
+): boolean {
+  return busy.some((b) => b.start < end && b.end > start);
+}
+
 /**
  * Build candidate slots for a calendar day (YYYY-MM-DD) in the salon's timezone.
  * Returns { slots, tooLong } where tooLong = true means the service duration
@@ -33,6 +41,10 @@ export async function getAvailableSlots(input: {
   service: Service;
   staff: Staff;
   localDateStr: string;
+  /** When set, slots overlapping this customer's other bookings are excluded. */
+  customerId?: string;
+  /** Reschedule flow — ignore the appointment being moved. */
+  excludeAppointmentId?: string;
   /** Override the salon's default slot grid (e.g. step by the service's own
    *  duration so a 45-min cut and a 30-min kids cut naturally space out
    *  differently, instead of both using one fixed 15-min grid). */
@@ -73,7 +85,7 @@ export async function getAvailableSlots(input: {
   const openUtc = open.toUTC();
   const closeUtc = close.toUTC();
 
-  const [timeOffs, appts] = await Promise.all([
+  const [timeOffs, appts, customerAppts] = await Promise.all([
     getTenantDb().timeOff.findMany({
       where: {
         staffId: input.staff.id,
@@ -90,6 +102,18 @@ export async function getAvailableSlots(input: {
         status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
       },
     }),
+    input.customerId
+      ? getTenantDb().appointment.findMany({
+          where: {
+            customerId: input.customerId,
+            start: { lt: closeUtc.toJSDate() },
+            end: { gt: openUtc.toJSDate() },
+            status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
+            ...(input.excludeAppointmentId ? { NOT: { id: input.excludeAppointmentId } } : {}),
+          },
+          select: { start: true, end: true },
+        })
+      : Promise.resolve([] as Pick<Appointment, 'start' | 'end'>[]),
   ]);
 
   const slots: Slot[] = [];
@@ -103,7 +127,8 @@ export async function getAvailableSlots(input: {
     if (
       start.getTime() > nowMs &&
       !hasTimeOffConflict(input.staff.id, start, end, timeOffs) &&
-      !hasAppointmentConflict(input.staff.id, start, end, appts)
+      !hasAppointmentConflict(input.staff.id, start, end, appts) &&
+      !hasCustomerAppointmentConflict(start, end, customerAppts)
     ) {
       slots.push({ start, end });
     }
@@ -144,6 +169,8 @@ export async function getNextAvailableSlots(input: {
   salonId: string;
   service: Service;
   staff: Staff;
+  customerId?: string;
+  excludeAppointmentId?: string;
   maxSlots?: number;
   maxPerDay?: number;
   scanDays?: number;
@@ -167,6 +194,8 @@ export async function getNextAvailableSlots(input: {
       service: input.service,
       staff: input.staff,
       localDateStr,
+      customerId: input.customerId,
+      excludeAppointmentId: input.excludeAppointmentId,
       slotStepOverrideMin,
     });
     if (tooLong) return { slots: [], tooLong: true, hasMore: false };

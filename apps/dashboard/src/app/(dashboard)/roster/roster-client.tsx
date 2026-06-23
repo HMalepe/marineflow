@@ -273,7 +273,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
       )}
 
       {/* Month navigation */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 roster-month-nav">
         <Button variant="outline" size="sm" onClick={() => canGoPrev && setMonth((m) => addMonths(m, -1))} disabled={!canGoPrev}>
           <ChevronLeft className="w-4 h-4" />
         </Button>
@@ -317,7 +317,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
 
       {/* Staff legend */}
       {!loading && staff.length > 0 && (
-        <div className="flex flex-wrap gap-3">
+        <div className="roster-staff-strip">
           {staff.map((s) => (
             <StaffCard
               key={s.id}
@@ -368,7 +368,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
                       onClick={() => !isPast && setSelectedDate(date)}
                       disabled={isPast || loading}
                       className={cn(
-                        'rounded-lg border p-2 text-left transition-all min-h-[90px] flex flex-col gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                        'roster-day-cell rounded-lg border p-2 text-left transition-all min-h-[90px] flex flex-col gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary touch-manipulation',
                         isPast
                           ? 'bg-muted/10 border-transparent opacity-40 cursor-not-allowed'
                           : 'border-border/50 hover:border-primary/40 hover:bg-accent/5 cursor-pointer',
@@ -490,7 +490,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
       {/* Toast */}
       {toast && (
         <div className={cn(
-          'fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3 rounded-full shadow-2xl text-sm font-medium transition-all',
+          'fixed left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 px-5 py-3 rounded-full shadow-2xl text-sm font-medium transition-all dashboard-toast-bottom',
           toast.type === 'success'
             ? 'bg-foreground text-background'
             : 'bg-destructive text-destructive-foreground',
@@ -632,7 +632,7 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-lg dashboard-sheet-scroll flex flex-col">
         <SheetHeader>
           <SheetTitle className="text-lg">{dayLabel}</SheetTitle>
           <SheetDescription>
@@ -692,7 +692,7 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
                           setTimeout(() => setCopiedId(null), 2000);
                         }}
                         title="Copy this shift"
-                        className="h-8 w-8 rounded-lg border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                        className="min-h-[2.75rem] min-w-[2.75rem] rounded-lg border flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors touch-manipulation"
                       >
                         {copiedId === s.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
@@ -704,7 +704,7 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
                         onClick={() => handlePasteShift(s)}
                         disabled={busy}
                         title={`Paste ${copiedShift.startTime}–${copiedShift.endTime} to ${DAY_NAMES[wd]}s`}
-                        className="h-8 px-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-50 flex items-center gap-1"
+                        className="min-h-[2.75rem] px-3 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-50 flex items-center gap-1 touch-manipulation"
                       >
                         <ClipboardPaste className="w-3 h-3" />
                         Paste
@@ -717,7 +717,7 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
                       disabled={busy}
                       title={isTimeOff ? 'Mark as working' : 'Mark as off'}
                       className={cn(
-                        'h-8 px-2.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50',
+                        'min-h-[2.75rem] px-3 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 touch-manipulation',
                         isTimeOff
                           ? 'bg-green-600/10 border border-green-600/30 text-green-700 dark:text-green-400 hover:bg-green-600/20'
                           : 'bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20',
@@ -733,7 +733,7 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
                   <button
                     onClick={() => handlePasteToWeekdays(s)}
                     disabled={busy}
-                    className="w-full text-xs text-primary/80 hover:text-primary border border-dashed border-primary/20 hover:border-primary/40 rounded-lg py-1.5 transition-all disabled:opacity-50"
+                    className="w-full text-xs text-primary/80 hover:text-primary border border-dashed border-primary/20 hover:border-primary/40 rounded-lg py-2.5 min-h-[2.75rem] transition-all disabled:opacity-50 touch-manipulation"
                   >
                     Apply {copiedShift.startTime}–{copiedShift.endTime} to all Mon–Fri →
                   </button>
@@ -743,7 +743,7 @@ function DaySheet({ token, staff, date, today, copiedShift, onCopy, onClose, onR
                 {!isTimeOff && (
                   <button
                     onClick={() => setExpandId(isExpanded ? null : s.id)}
-                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline min-h-[2.75rem] touch-manipulation"
                   >
                     {isExpanded ? 'Cancel' : 'Add leave / date range…'}
                   </button>
@@ -865,7 +865,7 @@ function AddStaffSheet({ token, branchId, open, onOpenChange, onCreated, onError
         if (!next) resetForm();
       }}
     >
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-md dashboard-sheet-scroll flex flex-col">
         <SheetHeader>
           <SheetTitle>Add staff member</SheetTitle>
           <SheetDescription>
@@ -991,7 +991,7 @@ function EditStaffSheet({ token, staff, onClose, onSaved, onError }: EditStaffSh
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:max-w-md dashboard-sheet-scroll flex flex-col">
         <SheetHeader>
           <SheetTitle>{staff.displayName ?? staff.name}</SheetTitle>
           <SheetDescription>
