@@ -45,20 +45,17 @@ function fmtMoney(cents: number): string {
 }
 
 /**
- * Match a service from free text (menu tap title, typed name, or sentence).
- * Prefers exact matches, then longest unambiguous substring match — never defaults
- * to the first catalog item.
+ * Match a named entity (service or staff) from free text (menu tap title, typed
+ * name, or sentence). Prefers exact matches, then longest unambiguous substring
+ * match — never defaults to the first item in the list.
  */
-export function matchServiceInText(
-  services: Array<{ id: string; name: string }>,
-  text: string,
-): string | null {
+function matchNameInText(entities: Array<{ id: string; name: string }>, text: string): string | null {
   const hay = text.toLowerCase().trim();
-  if (!hay || services.length === 0) return null;
+  if (!hay || entities.length === 0) return null;
 
   type Scored = { id: string; score: number };
   const scored: Scored[] = [];
-  for (const s of services) {
+  for (const s of entities) {
     const name = s.name.toLowerCase();
     if (hay === name) {
       scored.push({ id: s.id, score: name.length + 1000 });
@@ -74,6 +71,48 @@ export function matchServiceInText(
   const runnerUp = scored[1];
   if (runnerUp && runnerUp.score === best.score) return null;
   return best.id;
+}
+
+/**
+ * Match a service from free text (menu tap title, typed name, or sentence).
+ * Prefers exact matches, then longest unambiguous substring match — never defaults
+ * to the first catalog item.
+ */
+export function matchServiceInText(
+  services: Array<{ id: string; name: string }>,
+  text: string,
+): string | null {
+  return matchNameInText(services, text);
+}
+
+/**
+ * Match a staff member by name from free text, e.g. "stylist Mmaki" or a returning
+ * customer naming who they want in a compound booking message. Same scoring rules
+ * as matchServiceInText — never guesses when ambiguous.
+ */
+export function matchStaffInText(
+  staff: Array<{ id: string; name: string }>,
+  text: string,
+): string | null {
+  return matchNameInText(staff, text);
+}
+
+/** Party-size bound shared with the CONFIRM_BOOKING free-text capture step. */
+const MIN_PARTY_SIZE = 2;
+const MAX_PARTY_SIZE = 20;
+
+/**
+ * Extract a party size from free text like "for 2 people" or "table of 4" —
+ * keyword-anchored so it never mistakes a date/time/phone digit for a headcount.
+ */
+export function extractPartySize(text: string): number | null {
+  const m =
+    text.match(/\b(\d{1,2})\s*(?:people|persons?|pax|ppl|guests?)\b/i) ??
+    text.match(/\b(?:party|table|group)\s+of\s+(\d{1,2})\b/i);
+  if (!m) return null;
+  const n = parseInt(m[1]!, 10);
+  if (n >= MIN_PARTY_SIZE && n <= MAX_PARTY_SIZE) return n;
+  return null;
 }
 
 function resolveServiceId(

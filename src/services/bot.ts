@@ -46,6 +46,8 @@ import { createPaymentCheckoutSession, resolvePostConfirmPayment, salonRequiresP
 import {
   matchQuickPick,
   matchServiceInText,
+  matchStaffInText,
+  extractPartySize,
   tryAiAssist,
   isBrowseServicesRequest,
   type QuickPickOption,
@@ -3950,6 +3952,14 @@ async function continueAfterServicePick(
   );
 }
 
+/** Cheap heuristic gate — true when text plausibly mentions a date/time, so a
+ *  staff-name match knows whether to forward into the date parser. */
+function looksLikeDateTimeHint(text: string): boolean {
+  return /\d|\b(today|tomorrow|tonight|next|mon|tue|wed|thu|fri|sat|sun|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i.test(
+    text,
+  );
+}
+
 async function handlePickStaff(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3993,25 +4003,45 @@ async function handlePickStaff(
     );
   };
 
-  const n = parseInt(text, 10);
+  const trimmedText = text.trim();
+  const isPureNumber = /^\d{1,2}$/.test(trimmedText);
+  const n = isPureNumber ? parseInt(trimmedText, 10) : NaN;
   const anyIdx = renderedIds.length + 1;
-  if (!Number.isFinite(n) || n < 1 || n > anyIdx) {
+
+  let staffId: string | undefined;
+  let isAny = false;
+  // Returning customers often skip the menu and name their stylist directly in
+  // free text (e.g. "stylist Mmaki"), sometimes bundled with a date/time/party
+  // size in one message — fall back to name-matching rather than rejecting
+  // anything that isn't a bare menu number.
+  let viaNameMatch = false;
+
+  if (n >= 1 && n <= anyIdx) {
+    isAny = n === anyIdx;
+    if (!isAny) {
+      const chosen = staffList.find((s) => s.id === renderedIds[n - 1]);
+      if (!chosen) {
+        // That provider became unavailable between menu render and reply —
+        // never silently book whoever shifted into their slot number.
+        await rerenderMenu(`Sorry, that ${providerNoun} just became unavailable. Here are the current options:`);
+        return;
+      }
+      staffId = chosen.id;
+    }
+  } else {
+    const matchedId = matchStaffInText(staffList, text);
+    if (matchedId) {
+      staffId = matchedId;
+      viaNameMatch = true;
+    }
+  }
+
+  if (!staffId && !isAny) {
     await rerenderMenu(`Invalid choice. Pick a number (1–${staffList.length + 1}):`);
     return;
   }
 
-  const isAny = n === anyIdx;
-  let staffId: string;
-  if (!isAny) {
-    const chosen = staffList.find((s) => s.id === renderedIds[n - 1]);
-    if (!chosen) {
-      // That provider became unavailable between menu render and reply —
-      // never silently book whoever shifted into their slot number.
-      await rerenderMenu(`Sorry, that ${providerNoun} just became unavailable. Here are the current options:`);
-      return;
-    }
-    staffId = chosen.id;
-  } else {
+  if (isAny) {
     // EC-06: Load-balance by selecting staff with the fewest upcoming appointments
     const counts = await Promise.all(
       staffList.map(async (s) => {
@@ -4029,7 +4059,8 @@ async function handlePickStaff(
     staffId = counts[0]!.id;
   }
 
-  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId } });
+  const partySize = extractPartySize(text);
+  const staff = await getTenantDb().staff.findUniqueOrThrow({ where: { id: staffId! } });
   const { slots: flatSlots, tooLong, hasMore } = await getNextAvailableSlots({
     salonId: conv.salonId,
     service,
@@ -4050,28 +4081,26 @@ async function handlePickStaff(
     return;
   }
 
-  await saveCtx(
-    conv.id,
-    {
-      selectedStaffId: staffId,
-      anyStaff: isAny,
-      staffOrderIds: undefined,
-      flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
-      awaitingDateList: undefined,
-    },
-    ConversationStep.PICK_DATE,
-  );
-  syncConvContext(
-    conv,
-    {
-      selectedStaffId: staffId,
-      anyStaff: isAny,
-      staffOrderIds: undefined,
-      flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
-      awaitingDateList: undefined,
-    },
-    ConversationStep.PICK_DATE,
-  );
+  const staffPickPatch = {
+    selectedStaffId: staffId,
+    anyStaff: isAny,
+    staffOrderIds: undefined,
+    flatSlotOptions: flatSlots.map((s) => ({ startIso: s.start.toISOString(), localDateStr: s.localDateStr })),
+    awaitingDateList: undefined,
+    ...(partySize != null ? { partySize } : {}),
+  };
+  await saveCtx(conv.id, staffPickPatch, ConversationStep.PICK_DATE);
+  syncConvContext(conv, staffPickPatch, ConversationStep.PICK_DATE);
+
+  // The same free-text message that named the stylist may also carry the
+  // date/time (e.g. "15th July 10am .. stylist Mmaki") — forward it into the
+  // date parser instead of always showing the generic soonest-available menu,
+  // so an exact time isn't silently dropped.
+  if (viaNameMatch && looksLikeDateTimeHint(text)) {
+    await handlePickDate(conv, text);
+    return;
+  }
+
   const prefix = '⚡ *Soonest available times* — tap one below:';
   const lines = formatFlatSlotMenuLines(flatSlots, conv.salon.timezone, hasMore);
   await replyMaybeInteractive(
@@ -4161,7 +4190,7 @@ async function handlePickDate(
     }).catch(() => {});
     const dt = DateTime.fromJSDate(match.start).setZone(conv.salon.timezone);
     const endDt = DateTime.fromJSDate(match.end).setZone(conv.salon.timezone);
-    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt, undefined, {
+    const confirmBody = buildConfirmBookingBody(conv, service.name, staff.name, dt, c.partySize as number | undefined, {
       priceCents: service.priceCents,
       endDt,
     });
@@ -4183,7 +4212,13 @@ async function handlePickDate(
       void getTenantDb().analyticsEvent.create({
         data: { salonId: conv.salonId, customerId: conv.customerId, type: 'funnel_pick_slot' },
       }).catch(() => {});
-      const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, new Date(picked.startIso));
+      const confirmBody = await buildConfirmBookingBodyForService(
+        conv,
+        service,
+        staff,
+        new Date(picked.startIso),
+        c.partySize as number | undefined,
+      );
       await sendConfirmBookingPrompt(conv, confirmBody);
       return;
     }
@@ -4320,7 +4355,13 @@ async function handlePickSlot(
       ConversationStep.CONFIRM_BOOKING,
     );
     const dt = DateTime.fromISO(quickPick.slotStartIso).setZone(conv.salon.timezone);
-    const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, dt.toJSDate());
+    const confirmBody = await buildConfirmBookingBodyForService(
+      conv,
+      service,
+      staff,
+      dt.toJSDate(),
+      c.partySize as number | undefined,
+    );
     await sendConfirmBookingPrompt(conv, confirmBody);
     return;
   }
@@ -4384,7 +4425,13 @@ async function handlePickSlot(
         { slotStartIso: slot.start.toISOString(), quickPickOptions: undefined },
         ConversationStep.CONFIRM_BOOKING,
       );
-      const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, slot.start);
+      const confirmBody = await buildConfirmBookingBodyForService(
+        conv,
+        service,
+        staff,
+        slot.start,
+        c.partySize as number | undefined,
+      );
       await sendConfirmBookingPrompt(conv, confirmBody);
       return;
     }
