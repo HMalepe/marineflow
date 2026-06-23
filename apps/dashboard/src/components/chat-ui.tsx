@@ -183,11 +183,7 @@ export function ChatComposer({
 }
 
 export function ChatListSectionLabel({ children }: { children: ReactNode }) {
-  return (
-    <div className="chat-list-section-label px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 bg-muted/20">
-      {children}
-    </div>
-  );
+  return <div className="chat-list-section-label">{children}</div>;
 }
 
 export function ChatEmptyState({ title, hint }: { title: string; hint?: string }) {

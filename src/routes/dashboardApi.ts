@@ -1489,6 +1489,34 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     },
   );
 
+  app.post(
+    '/membership/plans/seed-default',
+    { preHandler: requireRole('OWNER', 'MANAGER') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const existing = await db.membershipPlan.findFirst({
+          where: { salonId: user.salonId, active: true },
+          orderBy: { sortOrder: 'asc' },
+        });
+        if (existing) return { plan: existing, created: false };
+
+        const plan = await db.membershipPlan.create({
+          data: {
+            salonId: user.salonId,
+            name: 'VIP 6 Cuts',
+            description: 'Up to 6 haircuts per month — big saving vs walk-in. Your 10th cut loyalty reward still applies!',
+            priceCents: 79900,
+            visitsPerMonth: 6,
+            savingsCents: 40000,
+            sortOrder: 0,
+          },
+        });
+        return { plan, created: true };
+      });
+    },
+  );
+
   app.get<{ Params: { serviceId: string } }>('/services/:serviceId/addons', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const addons = await getTenantDb().serviceAddon.findMany({

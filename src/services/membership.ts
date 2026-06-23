@@ -98,7 +98,7 @@ export async function createMembershipCheckoutSession(input: {
         reference,
         provider: 'payfast',
         payfastForm: form,
-      },
+      } as object,
     },
   });
 
@@ -121,11 +121,6 @@ async function sendMembershipWelcomeWhatsApp(input: {
   });
   if (!customer?.waId) return;
 
-  const salon = await prisma.salon.findUnique({
-    where: { id: input.salonId },
-    select: { name: true, tradingName: true },
-  });
-  const salonName = salon?.tradingName?.trim() || salon?.name || 'us';
   const price = (input.priceCents / 100).toFixed(0);
   const savings =
     input.savingsCents > 0 ? `\n💰 Save up to *R${(input.savingsCents / 100).toFixed(0)}* when you use all ${input.visitsPerMonth} cuts.` : '';

@@ -69,6 +69,18 @@
   --solupair-glow-strong: 0 0 48px -6px oklch(0.62 0.26 330 / 0.45);
   --solupair-glass-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.12);
   --solupair-glass-highlight-subtle: inset 0 1px 0 0 oklch(1 0 0 / 0.06);
+  --chat-thread-gradient: linear-gradient(
+    168deg,
+    oklch(0.98 0.02 275) 0%,
+    oklch(0.96 0.045 288) 38%,
+    oklch(0.94 0.07 300) 72%,
+    oklch(0.93 0.06 315) 100%
+  );
+  --chat-pane-gradient: linear-gradient(
+    180deg,
+    oklch(0.99 0.015 280) 0%,
+    oklch(0.97 0.04 288) 100%
+  );
 
   /* Mobile shell — safe areas + tab bar (see viewport-fit: cover in layout) */
   --mobile-tab-bar-height: 3.75rem;
@@ -147,6 +159,17 @@
   --sidebar-accent-foreground: oklch(0.9 0.06 300);
   --sidebar-border: oklch(0.36 0.024 272 / 45%);
   --sidebar-ring: oklch(0.72 0.18 300 / 50%);
+  --chat-thread-gradient: linear-gradient(
+    168deg,
+    oklch(0.16 0.03 275) 0%,
+    oklch(0.17 0.045 288) 40%,
+    oklch(0.19 0.065 300) 100%
+  );
+  --chat-pane-gradient: linear-gradient(
+    180deg,
+    oklch(0.15 0.025 275) 0%,
+    oklch(0.17 0.04 288) 100%
+  );
 }
 
 @layer base {
@@ -579,7 +602,11 @@
   }
 
   .dashboard-inbox-pane--thread {
-    background: color-mix(in oklch, var(--muted) 18%, var(--background));
+    background: var(--chat-pane-gradient);
+  }
+
+  .dashboard-inbox-pane--list {
+    background: var(--card);
   }
 
   .chat-list-scroll {
@@ -628,8 +655,16 @@
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     background:
-      radial-gradient(ellipse 80% 50% at 50% 0%, oklch(0.52 0.24 288 / 0.04) 0%, transparent 55%),
-      color-mix(in oklch, var(--muted) 12%, var(--background));
+      radial-gradient(ellipse 90% 60% at 15% 0%, oklch(0.78 0.14 192 / 0.12) 0%, transparent 55%),
+      radial-gradient(ellipse 70% 50% at 95% 10%, oklch(0.62 0.26 330 / 0.1) 0%, transparent 50%),
+      var(--chat-thread-gradient);
+  }
+
+  .dark .chat-thread {
+    background:
+      radial-gradient(ellipse 85% 55% at 10% 0%, oklch(0.78 0.14 192 / 0.08) 0%, transparent 52%),
+      radial-gradient(ellipse 65% 45% at 100% 5%, oklch(0.62 0.26 330 / 0.12) 0%, transparent 48%),
+      var(--chat-thread-gradient);
   }
 
   .chat-thread-inner {
@@ -647,10 +682,34 @@
     border-radius: 999px;
     font-size: 0.6875rem;
     font-weight: 500;
-    color: var(--muted-foreground);
-    background: color-mix(in oklch, var(--card) 85%, var(--muted));
-    border: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
-    box-shadow: 0 1px 2px oklch(0 0 0 / 0.04);
+    color: oklch(0.45 0.08 288);
+    background: oklch(1 0 0 / 0.72);
+    border: 1px solid oklch(0.52 0.24 288 / 0.15);
+    box-shadow: 0 1px 3px oklch(0.52 0.24 288 / 0.08);
+    backdrop-filter: blur(8px);
+  }
+
+  .dark .chat-day-pill {
+    color: oklch(0.82 0.06 300);
+    background: oklch(0.22 0.04 288 / 0.85);
+    border-color: oklch(0.62 0.2 300 / 0.2);
+  }
+
+  .chat-list-section-label {
+    padding: 0.5rem 1rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: oklch(0.48 0.1 288);
+    background: oklch(0.52 0.24 288 / 0.06);
+    border-bottom: 1px solid oklch(0.52 0.24 288 / 0.1);
+  }
+
+  .dark .chat-list-section-label {
+    color: oklch(0.75 0.08 300);
+    background: oklch(0.52 0.24 288 / 0.12);
+    border-bottom-color: oklch(0.62 0.2 300 / 0.15);
   }
 
   .chat-bubble {
@@ -659,10 +718,16 @@
   }
 
   .chat-bubble-inbound {
-    background: var(--card);
+    background: oklch(1 0 0 / 0.94);
     color: var(--foreground);
-    border: 1px solid color-mix(in oklch, var(--border) 75%, transparent);
+    border: 1px solid oklch(0.52 0.24 288 / 0.12);
     border-bottom-left-radius: 0.375rem;
+    box-shadow: 0 1px 3px oklch(0.52 0.24 288 / 0.06);
+  }
+
+  .dark .chat-bubble-inbound {
+    background: oklch(0.22 0.03 288 / 0.92);
+    border-color: oklch(0.62 0.2 300 / 0.18);
   }
 
   .chat-bubble-outbound {

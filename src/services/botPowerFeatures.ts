@@ -272,7 +272,7 @@ export async function startMembershipPlanCheckout(
   }
 
   const body = formatMembershipCheckoutPrompt(plan);
-  const { buildPaymentCheckoutCta } = await import('./botInteractiveMenus.js');
+  const { buildPaymentCheckoutCta } = await import('../lib/paymentPromptCopy.js');
   await replyInteractive(body, buildPaymentCheckoutCta(body, result.checkoutUrl));
   return 'ok';
 }

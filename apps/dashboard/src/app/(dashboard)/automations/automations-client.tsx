@@ -491,9 +491,14 @@ export function AutomationsClient({ token }: Props) {
           <Toggle
             icon={Crown}
             checked={draft.membership.enabled}
-            onChange={(v) => patch('membership', { enabled: v })}
+            onChange={(v) => {
+              patch('membership', { enabled: v });
+              if (v) {
+                void apiFetch('/membership/plans/seed-default', { method: 'POST', token }).catch(() => undefined);
+              }
+            }}
             label="Membership subscriptions"
-            description="Monthly VIP via PayFast (e.g. R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month."
+            description="Monthly VIP via PayFast (R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month."
           />
         </CardContent>
       </Card>
