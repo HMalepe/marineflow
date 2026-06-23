@@ -5367,7 +5367,7 @@ async function handleConfirmCancel(
 
   if (lower === 'no' || lower === 'n') {
     await saveCtx(conv.id, { pendingCancelApptId: undefined }, ConversationStep.MENU);
-    await reply(conv, "No problem! Your booking is still on. 😊\n\n_Type *MENU* to see your options._");
+    await reply(conv, "Lovely — your booking is safe and sound. 😊\n\n_Type *MENU* whenever you need me._");
     return;
   }
 
@@ -5392,9 +5392,14 @@ async function handleConfirmCancel(
   });
   if (!appt) {
     await saveCtx(conv.id, { pendingCancelApptId: undefined }, ConversationStep.MENU);
-    await replyWithMenu(conv, 'Booking not found — it may have already been cancelled.');
+    await replyWithMenu(conv, "That booking couldn't be found — it may already have been cancelled.");
     return;
   }
+
+  const paidPayment = await getTenantDb().payment.findFirst({
+    where: { appointmentId: appt.id, status: { in: ['SUCCEEDED', 'CAPTURED'] } },
+    orderBy: { createdAt: 'desc' },
+  });
 
   await getTenantDb().appointment.update({
     where: { id: appt.id },
@@ -5414,21 +5419,74 @@ async function handleConfirmCancel(
     start: appt.start,
   });
 
+  // Notify the salon's own dashboard immediately (live booking feed) — same
+  // channel used for the instant-undo path, so admins see cancellations
+  // in real time regardless of which route the customer took.
+  notifyAppointmentChangedLater(conv.salonId, appt.id, {
+    status: 'CANCELLED',
+    source: 'whatsapp',
+    refundNeeded: !!paidPayment,
+  });
+
+  // Notify the platform team (super admin activity feed) of every cancellation.
+  emitPlatformEvent({
+    type: 'APPOINTMENT_CANCELLED',
+    salonId: conv.salonId,
+    metadata: {
+      appointmentId: appt.id,
+      serviceName: appt.service.name,
+      refundNeeded: !!paidPayment,
+      amountCents: paidPayment?.amountCents ?? null,
+    },
+  });
+
+  if (paidPayment) {
+    // Refunds are a staff-triggered dashboard action (refundPaymentStaff) — the
+    // bot flags the need via a Ticket rather than attempting to move money itself.
+    await getTenantDb().ticket.create({
+      data: {
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        status: 'OPEN',
+        subject: `Refund needed — ${sanitize(appt.service.name)} cancelled`,
+        messages: {
+          create: {
+            direction: MessageDirection.INBOUND,
+            body: [
+              'Customer cancelled a paid booking via WhatsApp — please process their refund.',
+              `Service: ${appt.service.name}`,
+              `Staff: ${appt.staff.name}`,
+              `Amount paid: ${formatCentsZar(paidPayment.amountCents)}`,
+              `Payment ID: ${paidPayment.id}`,
+            ].join('\n'),
+          },
+        },
+      },
+    }).catch((err) => logger.warn({ err, appointmentId: appt.id }, 'refund_ticket_create_failed'));
+  }
+
   await getTenantDb().analyticsEvent.create({
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
       appointmentId: appt.id,
       type: 'booking_cancel',
-      payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp' },
+      payload: { reason: 'CUSTOMER_REQUEST', source: 'whatsapp', refundNeeded: !!paidPayment },
     },
   }).catch(() => {});
 
   await saveCtx(conv.id, { pendingCancelApptId: undefined }, ConversationStep.MENU);
-  await replyWithMenu(
-    conv,
-    `✅ Your *${sanitize(appt.service.name)}* appointment has been cancelled. We hope to see you again soon! 😊`,
-  );
+
+  const confirmationLines = [`Done — your *${sanitize(appt.service.name)}* appointment has been cancelled. 💫`];
+  if (paidPayment) {
+    confirmationLines.push(
+      '',
+      `Your payment of *${formatCentsZar(paidPayment.amountCents)}* will be refunded — our team has been notified and is starting that now. You'll have it back with you shortly.`,
+    );
+  }
+  confirmationLines.push('', "We hope to welcome you back soon. 😊");
+
+  await replyWithMenu(conv, confirmationLines.join('\n'));
 }
 
 async function handleComplaint(
