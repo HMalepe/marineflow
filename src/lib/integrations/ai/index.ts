@@ -7,6 +7,11 @@ export {
   type OrchestratorInput,
   type OrchestratorResult,
 } from './orchestrator.js';
+export {
+  runReceptionAgent,
+  type ReceptionAgentInput,
+  type ReceptionAgentResult,
+} from './receptionAgent.js';
 
 export interface ClassifierResult {
   intent: string;

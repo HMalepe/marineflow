@@ -53,6 +53,8 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   CLAUDE_MODEL: z.string().default('claude-sonnet-4-5'),
+  /** Optional — enables live distance/ETA lookups in the reception agent's location tool. */
+  GOOGLE_MAPS_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().default('text-embedding-3-small'),
   EMBEDDING_DIMENSIONS: z.coerce.number().default(1536),
   DASHBOARD_URL: z.string().url().optional(),

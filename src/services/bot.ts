@@ -53,6 +53,7 @@ import {
   type QuickPickOption,
 } from './botAssistant.js';
 import { createConfirmedAppointment } from './bookingConfirm.js';
+import { getSalonLocationInfo } from './salonLocation.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand, isContinueCommand, isWriteReviewCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import { getTimeGreeting, getOccasionLine, isBirthdayToday, pickCompliment } from './personalization.js';
@@ -3250,22 +3251,16 @@ async function menuActionShowHours(
 }
 
 /** Shared by the "Find us" menu action and the reception AI fallback below. */
-function buildLocationReply(salon: Salon): string {
-  const address = salon.addressLine ?? 'Address not on file.';
-  const mapsUrl = (salon as unknown as { mapsUrl?: string }).mapsUrl;
+async function buildLocationReply(salon: Salon): Promise<string> {
+  const info = await getSalonLocationInfo(salon);
   const lines = [
     `📍 *Find us*`,
-    address,
-    salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : null,
-    salon.accessibility ? `♿ ${salon.accessibility}` : null,
-  ].filter(Boolean) as string[];
-
-  if (mapsUrl) {
-    lines.push('', `📌 Open in maps:\n${mapsUrl}`);
-  } else {
-    const query = encodeURIComponent(`${salonDisplayName(salon)} ${address}`);
-    lines.push('', `📌 Google Maps: https://maps.google.com/?q=${query}`);
-  }
+    info.address,
+    info.parkingNotes ? `Parking: ${info.parkingNotes}` : null,
+    info.accessibility ? `♿ ${info.accessibility}` : null,
+    '',
+    `📌 Open in maps:\n${info.mapsUrl}`,
+  ].filter((l) => l !== null);
 
   return lines.join('\n');
 }
@@ -3277,7 +3272,7 @@ const LOCATION_QUERY_RE =
 async function menuActionShowLocation(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
-  await reply(conv, buildLocationReply(conv.salon));
+  await reply(conv, await buildLocationReply(conv.salon));
   await replyMenu(conv);
 }
 
@@ -5463,15 +5458,49 @@ async function handleComplaint(
 }
 
 // ─── Other / Something Else ────────────────────────────────────────────
-// Flow: customer asks anything → AI answers → "Did that help? YES / NO"
-//   YES → menu  |  NO → open ticket + IDLE (human picks up)
+// "Speak To Reception" — a real, tool-using conversational agent (location
+// lookups, FAQ search, service/price lookups) rather than a single-shot
+// classifier with a robotic "Did that help? YES/NO" gate. The agent can hand
+// off to the normal deterministic booking flow or to a human, but never books
+// or escalates by itself — see runReceptionAgent's terminal tool contract.
+async function escalateReceptionToHuman(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+  reason: string,
+  urgent: boolean,
+): Promise<void> {
+  if (urgent) {
+    await escalateNegativeSentiment(conv, text);
+    return;
+  }
+
+  await getTenantDb().ticket.create({
+    data: {
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      status: 'OPEN',
+      subject: 'Customer needs human help',
+      messages: {
+        create: {
+          direction: MessageDirection.INBOUND,
+          body: `${reason}\nCustomer message: "${text.slice(0, 300)}"`,
+        },
+      },
+    },
+  });
+  await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.IDLE);
+  const isOpen = isWithinBusinessHours(conv.salon);
+  if (isOpen) {
+    await reply(conv, "No problem — I've flagged this for a team member who will be with you shortly. 🙏");
+  } else {
+    await reply(conv, `${afterHoursHumanReply(conv.salon)}\n\nI've noted your question and a team member will follow up when we open.`);
+  }
+}
+
 async function handleOtherQuery(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ) {
-  const c = ctx(conv);
-  const answered = c.otherQueryAnswered as boolean | undefined;
-
   if (isBackToMainMenuCommand(text)) {
     await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU, ctx(conv));
     syncConvContext(conv, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
@@ -5479,66 +5508,54 @@ async function handleOtherQuery(
     return;
   }
 
-  // If we already gave an answer and are waiting for YES/NO
-  if (answered) {
-    const upper = text.toUpperCase();
-    if (upper === 'YES' || upper === 'Y') {
-      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
-      await replyWithMenu(conv, `Great! 😊 Anything else I can help with?`);
-      return;
-    }
-    if (upper === 'NO' || upper === 'N') {
-      // Escalate to human
-      const isOpen = isWithinBusinessHours(conv.salon);
-      await getTenantDb().ticket.create({
-        data: {
-          salonId: conv.salonId,
-          customerId: conv.customerId,
-          status: 'OPEN',
-          subject: 'Customer needs human help',
-          messages: {
-            create: {
-              direction: MessageDirection.INBOUND,
-              body: `Customer was not satisfied with AI answer.\nOriginal query: ${(c.otherQueryText as string | undefined) ?? text}`,
-            },
-          },
-        },
-      });
-      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.IDLE);
-      if (isOpen) {
-        await reply(conv, "No problem — I've flagged this for a team member who will be with you shortly. 🙏");
-      } else {
-        await reply(conv, `${afterHoursHumanReply(conv.salon)}\n\nI've noted your question and a team member will follow up when we open.`);
-      }
-      return;
-    }
-    // They sent something new — treat it as a follow-up question
-  }
-
-  // Try AI assist
   try {
-    const aiResult = await tryAiAssist(conv, text);
-    // §4.4/§5 — negative sentiment detected: escalate immediately, skip FAQ loop
-    if (aiResult.negativeSentiment) {
-      await escalateNegativeSentiment(conv, text);
+    const { runReceptionAgent } = await import('../lib/integrations/ai/receptionAgent.js');
+    const db = getTenantDb();
+    const [recentMessages, hasPaymentHistory] = await Promise.all([
+      db.message.findMany({
+        where: { conversationId: conv.id },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { direction: true, body: true },
+      }),
+      customerHasSucceededPayments(conv.customerId, conv.salonId),
+    ]);
+
+    const result = await runReceptionAgent({
+      salon: conv.salon,
+      salonId: conv.salonId,
+      history: recentMessages.reverse().map((m) => ({
+        direction: m.direction === MessageDirection.INBOUND ? ('in' as const) : ('out' as const),
+        body: m.body,
+      })),
+      inboundText: text,
+      hasPaymentHistory,
+    });
+
+    if (result?.kind === 'reply') {
+      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: text });
+      await reply(conv, result.reply);
       return;
     }
-    if (aiResult.handled && aiResult.reply) {
-      await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
-      await reply(conv, aiResult.reply);
-      await reply(conv, 'Did that answer your question? Reply YES or NO.');
+    if (result?.kind === 'start_booking') {
+      await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
+      syncConvContext(conv, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.MENU);
+      await menuActionStartBooking(conv);
       return;
     }
-  } catch {
-    // AI unavailable — fall through to the deterministic lookups below
+    if (result?.kind === 'escalate') {
+      await escalateReceptionToHuman(conv, text, result.reason, result.urgent);
+      return;
+    }
+  } catch (err) {
+    logger.warn({ err, convId: conv.id }, 'reception_agent_failed');
   }
 
-  // AI didn't classify this — before giving up, try lookups that don't depend
-  // on the orchestrator: the salon's own address/maps link, then the FAQ knowledge base.
+  // Reception agent unavailable (no API key) or failed — deterministic
+  // fallback: the salon's own address/maps link, then the FAQ knowledge base,
+  // then hand off to a human rather than leaving the customer stuck.
   if (LOCATION_QUERY_RE.test(text)) {
-    await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
-    await reply(conv, buildLocationReply(conv.salon));
-    await reply(conv, 'Did that answer your question? Reply YES or NO.');
+    await reply(conv, await buildLocationReply(conv.salon));
     return;
   }
 
@@ -5550,18 +5567,14 @@ async function handleOtherQuery(
       const chunks = results.map((r) => r.content);
       const synthesized = await synthesizeFaqAnswer(conv.salon, text, chunks);
       const answer = synthesized ?? results[0]!.content;
-      await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
       await reply(conv, answer);
-      await reply(conv, 'Did that answer your question? Reply YES or NO.');
       return;
     }
   } catch {
-    // Semantic search unavailable — fall through to escalation prompt
+    // Semantic search unavailable — fall through to escalation
   }
 
-  // Nothing matched — offer human
-  await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
-  await reply(conv, "I'm not sure I have the answer to that one. Would you like me to pass this on to a team member? Reply YES or NO.");
+  await escalateReceptionToHuman(conv, text, 'AI assistant unavailable — could not classify query', false);
 }
 
 // ─── Post-Handoff Satisfaction Rating ──────────────────────────────────

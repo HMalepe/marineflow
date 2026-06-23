@@ -51,6 +51,29 @@ export async function claudeJson<T>(input: {
   }
 }
 
+/** Single tool-aware turn — caller drives the loop (executing tools, feeding results back). */
+export async function claudeConverse(input: {
+  system: string;
+  messages: Anthropic.MessageParam[];
+  tools: Anthropic.Tool[];
+  maxTokens?: number;
+}): Promise<Anthropic.Message | null> {
+  if (!isAnthropicConfigured()) return null;
+
+  try {
+    return await getClient().messages.create({
+      model: env.CLAUDE_MODEL,
+      max_tokens: input.maxTokens ?? 1024,
+      system: input.system,
+      messages: input.messages,
+      tools: input.tools,
+    });
+  } catch (err) {
+    logger.warn({ err }, 'claude_converse_failed');
+    return null;
+  }
+}
+
 export async function claudeText(input: {
   system: string;
   user: string;
