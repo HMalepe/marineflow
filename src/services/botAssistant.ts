@@ -597,7 +597,7 @@ export async function tryAiAssist(
           handled: true,
           reply: `${ai.reply}\n\n_Type *MENU* to see all options._`,
           step: ConversationStep.MENU,
-          contextPatch: { quickPickOptions: undefined, menuCategory: undefined },
+          contextPatch: { quickPickOptions: undefined, menuCategory: undefined, awaitingChatReply: undefined },
         };
 
       case 'hours': {
@@ -611,7 +611,7 @@ export async function tryAiAssist(
           handled: true,
           reply: `${ai.reply}\n\n${lines.join('\n')}\n\n_Type *MENU* to see all options._`,
           step: ConversationStep.MENU,
-          contextPatch: { menuCategory: undefined },
+          contextPatch: { menuCategory: undefined, awaitingChatReply: undefined },
         };
       }
 
@@ -645,7 +645,7 @@ export async function tryAiAssist(
             handled: true,
             reply: `${ai.reply}\n\n_Type *MENU* to see all options, or reply with what service you'd like._`,
             step: ConversationStep.MENU,
-            contextPatch: { menuCategory: undefined },
+            contextPatch: { menuCategory: undefined, awaitingChatReply: undefined },
           };
         }
 
@@ -668,7 +668,7 @@ export async function tryAiAssist(
             handled: true,
             reply: `${ai.reply}\n\nI couldn't find any open slots right now — type *MENU* and choose *Appointments › Book* to pick dates manually, or *Support › Speak To Reception* to chat with our team.`,
             step: ConversationStep.MENU,
-            contextPatch: { menuCategory: undefined },
+            contextPatch: { menuCategory: undefined, awaitingChatReply: undefined },
           };
         }
 
@@ -691,18 +691,39 @@ export async function tryAiAssist(
             slotStartIso: undefined,
             flatSlotOptions: undefined,
             quickPickOptions,
+            awaitingChatReply: undefined,
           },
         };
       }
 
-      case 'chat':
+      case 'chat': {
+        // First small-talk turn: just have the moment, no menu hint yet — wait
+        // for their reply before steering back. Second consecutive turn: same
+        // warm reply, but nudge back toward booking instead of chatting on.
+        const awaitingChatReply = (conv.context as Record<string, unknown> | null)?.awaitingChatReply === true;
+        if (awaitingChatReply) {
+          return {
+            handled: true,
+            reply: `${ai.reply}\n\nAnyway, shall we get you booked in? Just tell me what you're after, or type *MENU* to see everything. 😊`,
+            step: ConversationStep.MENU,
+            contextPatch: { menuCategory: undefined, awaitingChatReply: undefined },
+          };
+        }
+        return {
+          handled: true,
+          reply: ai.reply,
+          step: ConversationStep.MENU,
+          contextPatch: { menuCategory: undefined, awaitingChatReply: true },
+        };
+      }
+
       case 'unknown':
       default:
         return {
           handled: true,
           reply: `${ai.reply}\n\n_Type *MENU* anytime to see all options._`,
           step: ConversationStep.MENU,
-          contextPatch: { menuCategory: undefined },
+          contextPatch: { menuCategory: undefined, awaitingChatReply: undefined },
         };
     }
   } catch (err) {
