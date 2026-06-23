@@ -30,7 +30,16 @@ export function buildSecurePaymentPromptBody(
     '',
     serviceLine,
     '',
-    `Tap below for encrypted PayFast checkout. Your card details never touch us — just instant confirmation when payment goes through.`,
+    `Tap below for secure PayFast checkout, or choose cash on arrival.`,
+  ].join('\n');
+}
+
+/** Revealed via the "Read more" button — the reassurance copy trimmed from the main prompt. */
+export function buildPaymentSecurityInfoBody(): string {
+  return [
+    `🔒 *About your payment*`,
+    '',
+    `Tap *Pay securely now* for encrypted PayFast checkout. Your card details never touch us — just instant confirmation when payment goes through.`,
     '',
     `_Prefer to pay on arrival? Reply *2* or tap *Cash on arrival* below._`,
   ].join('\n');

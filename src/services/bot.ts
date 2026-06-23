@@ -149,6 +149,7 @@ import {
   buildCashPaymentNudgeBody,
   buildPaymentCheckoutCta,
   buildPaymentMethodFallbackText,
+  buildPaymentSecurityInfoBody,
   buildSecurePaymentPromptBody,
 } from '../lib/paymentPromptCopy.js';
 import {
@@ -4880,6 +4881,11 @@ async function handlePaymentMethodChoice(
   const lower = trimmed.toLowerCase();
   const isCard = /^1$/.test(trimmed) || /^(card|online|payfast|pay)\b/i.test(lower);
   const isCashChoice = /^2$/.test(trimmed) || /^cash\b/i.test(lower);
+
+  if (trimmed === 'read_more' || /^read\s*more$/i.test(lower)) {
+    await reply(conv, buildPaymentSecurityInfoBody());
+    return;
+  }
 
   if (/^3$/.test(trimmed) || /^eft\b|bank\s*transfer/i.test(lower)) {
     await reply(

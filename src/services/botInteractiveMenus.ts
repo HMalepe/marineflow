@@ -471,11 +471,14 @@ export function buildSkipOnlyInteractive(body: string, salon: SalonMenuInput): I
   return quickButtons(body, [{ id: 'skip', title: 'Skip' }], footerForSalon(salon))!;
 }
 
-/** Companion to the PayFast CTA — one-tap cash choice without typing "2". */
+/** Companion to the PayFast CTA — one-tap cash choice without typing "2", plus more info on demand. */
 export function buildPaymentCashOptionInteractive(salon: SalonMenuInput): InteractiveButtons {
   return quickButtons(
     `Or pay when you arrive — no card needed.`,
-    [{ id: '2', title: 'Cash on arrival' }],
+    [
+      { id: '2', title: 'Cash on arrival' },
+      { id: 'read_more', title: 'Read more' },
+    ],
     footerForSalon(salon),
   )!;
 }

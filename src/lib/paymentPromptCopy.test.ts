@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPaymentCheckoutCta,
   buildPaymentMethodFallbackText,
+  buildPaymentSecurityInfoBody,
   buildSecurePaymentPromptBody,
 } from './paymentPromptCopy.js';
 
@@ -14,6 +15,16 @@ describe('paymentPromptCopy', () => {
     expect(cta.url).toMatch(/^https:\/\//);
     expect(body).toContain('R 450.00');
     expect(body).toContain('Secure your booking');
+  });
+
+  it('keeps the main prompt short — reassurance copy lives in the read-more body', () => {
+    const body = buildSecurePaymentPromptBody(45000);
+    expect(body).not.toContain('card details never touch us');
+    expect(body).not.toContain('Prefer to pay on arrival');
+
+    const readMore = buildPaymentSecurityInfoBody();
+    expect(readMore).toContain('card details never touch us');
+    expect(readMore).toContain('Prefer to pay on arrival');
   });
 
   it('includes service name when provided', () => {
