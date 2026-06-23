@@ -35,14 +35,13 @@ import { redis, touchBotSession } from '../lib/redis.js';
 import { logMessageLog } from './messageLog.js';
 import { handleFaq as runFaqHandler } from '../bot/faqHandler.js';
 import { DateTime } from 'luxon';
-import { getAvailableSlots, getNextAvailableSlots, getStaffForService, suggestBookingDates, validateSlotAvailable } from './slots.js';
+import { getAvailableSlots, getNextAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
 import { parseNaturalDateTime, isDateMenuNumber } from './naturalDateTime.js';
 import {
   ensureLoyaltyProgram,
   getStampBalance,
-  redeemForNextBookingTx,
 } from './loyalty.js';
-import { createPaymentCheckoutSession, resolvePostConfirmPayment, salonRequiresPostConfirmPayment } from './payments.js';
+import { createPaymentCheckoutSession, salonRequiresPostConfirmPayment } from './payments.js';
 import {
   matchQuickPick,
   matchServiceInText,
@@ -52,7 +51,7 @@ import {
   isBrowseServicesRequest,
   type QuickPickOption,
 } from './botAssistant.js';
-import { notifyAppointmentBookedLater, notifyAppointmentChangedLater } from './rosterSync.js';
+import { createConfirmedAppointment } from './bookingConfirm.js';
 import { isBackCommand, isBackToMainMenuCommand, isMainMenuCommand, isContinueCommand, isWriteReviewCommand } from '../lib/botNavigation.js';
 import { scheduleConversationActivity } from '../lib/inngest/functions/conversationInactivity.js';
 import { getTimeGreeting, getOccasionLine, isBirthdayToday, pickCompliment } from './personalization.js';
@@ -85,7 +84,6 @@ import {
 import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
 import {
   claimReviewIncentive,
-  applyReviewCreditTx,
   formatReviewReward,
   sendGoogleReviewFollowUp,
   parseReviewClaimCommand,
@@ -150,7 +148,6 @@ import {
   filterBookableCatalogServices,
 } from './serviceCatalogDisplay.js';
 import { formatCentsZar } from '../lib/formatPrice.js';
-import { incrementCustomerBookingCount } from './noShowRisk.js';
 import {
   buildPopiaRightsHint,
   deleteCustomerData,
@@ -4564,43 +4561,31 @@ async function handleConfirm(
     return;
   }
 
-  // EC-17: Re-check salon status in case it was suspended after the booking flow started
-  const freshSalon = await getTenantDb().salon.findUniqueOrThrow({ where: { id: conv.salonId } });
-  if (freshSalon.status === 'SUSPENDED' || freshSalon.status === 'CHURNED') {
-    await saveCtx(conv.id, {}, ConversationStep.MENU);
-    await replyWithMenu(conv, `Sorry, this salon is not currently accepting bookings. Please try again later.`);
-    return;
-  }
-
   const start = new Date(slotIso);
   const addonIds = (c.selectedAddonIds as string[] | undefined) ?? [];
-  const end = await computeAppointmentEnd({
+  const reschedulingId = c.managingAppointmentId as string | undefined;
+
+  const result = await createConfirmedAppointment({
+    conv,
+    service,
+    staff,
     start,
-    serviceDurationMin: service.durationMin,
-    serviceBufferMin: service.bufferMin,
-    staffBreakMin: staff.breakMin,
-    addonServiceIds: addonIds,
-    salonId: conv.salonId,
+    addonIds,
+    partySize: (c.partySize as number | undefined) ?? 1,
+    reschedulingId,
+    anyStaff: Boolean(c.anyStaff),
   });
 
-  // EC-01: Advisory lock to serialise concurrent bookings for the same staff/time slot
-  await getTenantDb().$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${staff.id + ':' + start.toISOString()}))`;
-
-  const slotFree = await validateSlotAvailable({
-    salonId: conv.salonId,
-    staffId: staff.id,
-    start,
-    end,
-    excludeAppointmentId: (ctx(conv).managingAppointmentId as string | undefined),
-  });
-  if (!slotFree) {
-    const localDateStr = c.localDateStr as string | undefined;
-    if (localDateStr) {
-      // EC-11: destructure new return type
-      const { slots: freshSlots } = await getAvailableSlots({ salonId: conv.salonId, service, staff, localDateStr });
-      if (freshSlots.length > 0) {
+  if (!result.ok) {
+    if (result.reason === 'salon_suspended') {
+      await saveCtx(conv.id, {}, ConversationStep.MENU);
+      await replyWithMenu(conv, `Sorry, this salon is not currently accepting bookings. Please try again later.`);
+      return;
+    }
+    if (result.reason === 'slot_taken') {
+      if (result.freshSlots.length > 0) {
         await saveCtx(conv.id, {}, ConversationStep.PICK_SLOT);
-        const slotLines = formatSlotMenuLines(freshSlots, conv.salon.timezone);
+        const slotLines = formatSlotMenuLines(result.freshSlots, conv.salon.timezone);
         const slotBody = [
           'Sorry, that slot was just taken. Please pick another time:',
           ...slotLines,
@@ -4613,7 +4598,7 @@ async function handleConfirm(
           conv,
           slotBody,
           buildSlotPickerInteractive(
-            freshSlots,
+            result.freshSlots,
             conv.salon.timezone,
             conv.salon,
             bookingInteractiveBody('Pick another time:', APPOINTMENT_SLOT_HINT),
@@ -4621,217 +4606,23 @@ async function handleConfirm(
         );
         return;
       }
+      await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
+      await reply(conv, 'Sorry, that slot was just taken and no others remain that day. Please reply BACK to choose another date.');
+      return;
     }
-    await saveCtx(conv.id, {}, ConversationStep.PICK_DATE);
-    await reply(conv, 'Sorry, that slot was just taken and no others remain that day. Please reply BACK to choose another date.');
+    // customer_overlap
+    const dt = DateTime.fromJSDate(new Date(result.overlapStart)).setZone(conv.salon.timezone);
+    await reply(
+      conv,
+      `You already have a booking at that time — ${sanitize(result.overlapServiceName)} at ${dt.toFormat('HH:mm')}. You're trying to book *${sanitize(service.name)}* at the same time. Reply BACK to choose a different slot, or MANAGE to view your bookings.`,
+    );
     return;
   }
 
-  // EC-DUP: Prevent customer from booking two overlapping appointments
-  {
-    const reschedulingId = c.managingAppointmentId as string | undefined;
-    const customerOverlap = await getTenantDb().appointment.findFirst({
-      where: {
-        customerId: conv.customerId,
-        status: { notIn: ['CANCELLED', 'RESCHEDULED', 'NO_SHOW'] },
-        start: { lt: end },
-        end: { gt: start },
-        ...(reschedulingId ? { NOT: { id: reschedulingId } } : {}),
-      },
-      include: { service: true },
-    });
-    if (customerOverlap) {
-      const dt = DateTime.fromJSDate(new Date(customerOverlap.start)).setZone(conv.salon.timezone);
-      await reply(
-        conv,
-        `You already have a booking at that time — ${sanitize(customerOverlap.service.name)} at ${dt.toFormat('HH:mm')}. You're trying to book *${sanitize(service.name)}* at the same time. Reply BACK to choose a different slot, or MANAGE to view your bookings.`,
-      );
-      return;
-    }
-  }
-
-  const tx = getTenantDb();
-  const redeem = await redeemForNextBookingTx(tx, {
-    salonId: conv.salonId,
-    customerId: conv.customerId,
-    service,
-  });
-
-  let bookingTotalCents = service.priceCents;
-  if (addonIds.length) {
-    const addonServices = await tx.service.findMany({
-      where: { id: { in: addonIds }, salonId: conv.salonId },
-      select: { priceCents: true },
-    });
-    bookingTotalCents += addonServices.reduce((sum, a) => sum + a.priceCents, 0);
-  }
-
-  const paymentPlan = resolvePostConfirmPayment({
-    bookingTotalCents,
-    loyaltyRedeemed: redeem.redeemed,
-    requirePaymentStep: salonRequiresPostConfirmPayment(freshSalon),
-  });
-  const reviewCredit = await applyReviewCreditTx(tx, {
-    customerId: conv.customerId,
-    servicePriceCents: bookingTotalCents,
-    atVisitOnly: Boolean(paymentPlan),
-  });
-  const reschedulingId = c.managingAppointmentId as string | undefined;
-
-  const isFirstSalonBooking =
-    (await tx.appointment.count({ where: { salonId: conv.salonId } })) === 0;
-
-  const appointment = await tx.appointment.create({
-    data: {
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      serviceId: service.id,
-      staffId: staff.id,
-      start,
-      end,
-      addonServiceIds: (c.selectedAddonIds as string[] | undefined) ?? [],
-      partySize: (c.partySize as number | undefined) ?? 1,
-      status: redeem.redeemed ? 'CONFIRMED' : paymentPlan ? 'PENDING_PAYMENT' : 'CONFIRMED',
-      loyaltyRedeemed: redeem.redeemed,
-      rescheduledFromId: reschedulingId ?? undefined,
-      confirmedAt: new Date(),
-    },
-  });
-
-  if (reschedulingId) {
-    await tx.appointment.update({
-      where: { id: reschedulingId },
-      data: {
-        status: 'RESCHEDULED',
-        cancellationReason: 'CUSTOMER_REQUEST',
-        cancelledAt: new Date(),
-        cancelledBy: 'customer',
-      },
-    });
-  }
-
-  await tx.auditLog.create({
-    data: {
-      salonId: conv.salonId,
-      action: reschedulingId ? 'appointment_reschedule' : 'appointment_create',
-      entity: 'Appointment',
-      entityId: appointment.id,
-      payload: { source: 'whatsapp', rescheduledFromId: reschedulingId ?? null },
-    },
-  });
-  await tx.analyticsEvent.create({
-    data: {
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      appointmentId: appointment.id,
-      type: 'booking_complete',
-      payload: { serviceId: service.id },
-    },
-  });
-
-  if (reviewCredit.appliedCents > 0) {
-    await tx.analyticsEvent.create({
-      data: {
-        salonId: conv.salonId,
-        customerId: conv.customerId,
-        appointmentId: appointment.id,
-        type: 'review_credit_applied',
-        payload: { appliedCents: reviewCredit.appliedCents },
-      },
-    });
-  }
-
-  // Track booking count for no-show risk scoring (best-effort — must not fail booking)
-  const isFirstBooking = conv.customer.bookingCount === 0;
-  try {
-    await incrementCustomerBookingCount(conv.customerId, tx);
-  } catch (err) {
-    logger.warn({ err, customerId: conv.customerId }, 'booking_count_increment_failed');
-  }
-
-  // Notify dashboard + invalidate slot cache immediately — including unpaid bookings.
-  notifyAppointmentBookedLater(conv.salonId, appointment.id, {
-    staffId: staff.id,
-    serviceId: service.id,
-    start: start.toISOString(),
-    status: appointment.status,
-    source: 'whatsapp',
-    rescheduledFromId: reschedulingId ?? null,
-  });
-  if (isFirstSalonBooking && !reschedulingId) {
-    emitPlatformEvent({
-      type: 'APPOINTMENT_BOOKED',
-      salonId: conv.salonId,
-      metadata: {
-        appointmentId: appointment.id,
-        serviceName: service.name,
-        firstBooking: true,
-      },
-    });
-  }
-  if (reschedulingId) {
-    notifyAppointmentChangedLater(conv.salonId, reschedulingId, {
-      status: 'RESCHEDULED',
-      staffId: staff.id,
-      serviceId: service.id,
-      replacedById: appointment.id,
-      source: 'whatsapp',
-    });
-  }
-
-  // Item 16: Notify owner on new booking — best-effort, never blocks booking
-  void (async () => {
-    try {
-      const ownerUser = await getTenantDb().staffUser.findFirst({
-        where: { salonId: conv.salonId, role: 'OWNER', active: true },
-        select: { phone: true },
-        orderBy: { createdAt: 'asc' },
-      });
-      const ownerPhone = ownerUser?.phone?.trim();
-      if (ownerPhone) {
-        const dt = DateTime.fromJSDate(start).setZone(conv.salon.timezone);
-        const customerName = conv.customer.displayName ?? conv.customer.firstName ?? conv.customer.waId;
-        await sendWithFallback({
-          salonId: conv.salonId,
-          to: ownerPhone,
-          body: [
-            `📅 New booking (${appointment.id.slice(0, 8)})`,
-            `Customer: ${sanitize(customerName)}`,
-            `Service: ${sanitize(service.name)} with ${sanitize(staff.name)}`,
-            dt.toFormat('cccc, dd LLL yyyy HH:mm'),
-          ].join('\n'),
-        });
-      }
-    } catch {
-      // never let owner notification fail the booking flow
-    }
-  })();
-
-  // §6.1 — remember the stylist for next booking, but only when the customer
-  // explicitly chose them this booking. Skipped for:
-  //  - "Any available" / auto-assigned staff (anyStaff)
-  //  - reschedules, which silently reuse the original appointment's staff —
-  //    if that staff was explicitly chosen the preference is already stored.
-  // Awaited with try/catch rather than fire-and-forget: getTenantDb() is a
-  // transaction client, so a dangling promise could outlive the transaction.
-  // A failure here must never fail the booking itself.
-  if (!c.anyStaff && !reschedulingId) {
-    try {
-      await tx.customer.update({
-        where: { id: conv.customerId },
-        data: { preferredStaffId: staff.id },
-      });
-    } catch (err) {
-      logger.warn(
-        { err, convId: conv.id, customerId: conv.customerId, staffId: staff.id },
-        'preferred_staff_update_failed',
-      );
-    }
-  }
+  const { appointment, end, paymentPlan, isFirstBooking, bookingNotes } = result;
 
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id, partySize: undefined }, ConversationStep.IDLE);
 
-  const bookingNotes = [redeem.note, reviewCredit.note].filter(Boolean).join('\n');
   const confirmFirstName = conv.customer.firstName?.trim();
   const partySize = (c.partySize as number | undefined) ?? 1;
   await reply(

@@ -9,6 +9,11 @@ import { getAvailableSlots, getStaffForService, suggestBookingDates } from './sl
 import { parseNaturalDateTime } from './naturalDateTime.js';
 import { pickCompliment } from './personalization.js';
 import { logger } from '../lib/logger.js';
+import { createConfirmedAppointment } from './bookingConfirm.js';
+import { createPaymentCheckoutSession } from './payments.js';
+import { onBookingConfirmed } from './botPowerFeatures.js';
+import { buildPopiaRightsHint, notifyPopiaRightsOnce } from './compliance.js';
+import type { Service, Staff } from '@prisma/client';
 
 /** EC-13: Strip WhatsApp markdown chars from user-controlled strings to prevent formatting injection. */
 function sanitize(s: string): string {
@@ -296,6 +301,131 @@ async function pickLeastBusyStaff<T extends { id: string }>(staffList: T[]): Pro
 }
 
 /**
+ * Books immediately — no "Reply YES" round trip and no separate "choose payment
+ * method" menu — when a free-text first message already resolves service, staff,
+ * date, and an exact available time slot to a single outbound confirmation +
+ * payment link. Falls back to null (caller shows the normal "Reply YES" confirm
+ * prompt) on any guardrail failure, so the slower always-safe path is the
+ * fallback rather than a second silent attempt.
+ */
+async function tryInstantConfirm(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  service: Service,
+  staff: Staff,
+  start: Date,
+  partySize: number | null,
+  explicitStaff: boolean,
+): Promise<AiAssistResult | null> {
+  const result = await createConfirmedAppointment({
+    conv,
+    service,
+    staff,
+    start,
+    partySize: partySize ?? 1,
+    anyStaff: !explicitStaff,
+  });
+  if (!result.ok) return null;
+
+  const { appointment, end, paymentPlan, isFirstBooking, bookingNotes } = result;
+  const zone = conv.salon.timezone;
+  const dt = DateTime.fromJSDate(start).setZone(zone);
+  const firstName = conv.customer.firstName?.trim();
+  const ref = appointment.id.slice(0, 8).toUpperCase();
+
+  const lines = [
+    bookingNotes ? `${bookingNotes}\n` : '',
+    firstName ? `✅ *You're all set, ${sanitize(firstName)}!*` : `✅ *Booking confirmed!*`,
+    '',
+    `📋 *${sanitize(service.name)}*`,
+    `👤 with ${sanitize(staff.name)}`,
+    `📅 ${dt.toFormat('cccc, d MMMM yyyy')}`,
+    `🕐 ${dt.toFormat('HH:mm')} – ${DateTime.fromJSDate(end).setZone(zone).toFormat('HH:mm')}`,
+    partySize && partySize > 1 ? `👥 Party size: ${partySize}` : '',
+    '',
+    `🔖 Ref: *${ref}*`,
+  ];
+
+  if (paymentPlan) {
+    try {
+      const sessionUrl = await createPaymentCheckoutSession({
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        appointmentId: appointment.id,
+        service,
+        amountCents: paymentPlan.amountCents,
+      });
+      if (sessionUrl) {
+        lines.push(
+          '',
+          `💳 *Complete payment*`,
+          `Amount due: *${fmtMoney(paymentPlan.amountCents)}*`,
+          '',
+          `Pay securely via PayFast:`,
+          sessionUrl,
+          '',
+          `_We'll mark your booking as paid once payment goes through._`,
+        );
+      } else {
+        lines.push(
+          '',
+          'We could not generate a payment link right now — you can pay in-store or contact us to pay over the phone.',
+        );
+      }
+    } catch (err) {
+      logger.warn({ err, appointmentId: appointment.id }, 'instant_confirm_payment_link_failed');
+      lines.push(
+        '',
+        'We could not generate a payment link right now — you can pay in-store or contact us to pay over the phone.',
+      );
+    }
+  } else {
+    void onBookingConfirmed({
+      id: appointment.id,
+      salonId: conv.salonId,
+      start,
+      status: appointment.status,
+      salon: conv.salon,
+    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'reminder_schedule_failed'));
+  }
+
+  if (isFirstBooking) {
+    await notifyPopiaRightsOnce(conv.id, async () => {
+      lines.push('', buildPopiaRightsHint());
+    });
+  }
+
+  if (!paymentPlan) {
+    lines.push(
+      '',
+      'How was the booking process? Reply 1–5 ⭐ (1 = frustrating, 5 = super easy)\nOr reply *SKIP* to go to the menu.',
+    );
+  } else {
+    lines.push(
+      '',
+      firstName
+        ? `_See you then, ${sanitize(firstName)}! Reply *MENU* anytime to manage your bookings._`
+        : `_Reply *MENU* anytime to manage your bookings._`,
+    );
+  }
+
+  return {
+    handled: true,
+    reply: lines.filter(Boolean).join('\n'),
+    step: paymentPlan ? ConversationStep.IDLE : ConversationStep.BOOKING_RATING,
+    contextPatch: {
+      selectedServiceId: service.id,
+      selectedStaffId: staff.id,
+      anyStaff: !explicitStaff,
+      pendingAppointmentId: appointment.id,
+      pendingPaymentAmountCents: paymentPlan?.amountCents,
+      pendingPaymentIsFirstBooking: isFirstBooking,
+      partySize: undefined,
+      quickPickOptions: undefined,
+    },
+  };
+}
+
+/**
  * When a free-text booking request already names a date/time (parsed via
  * parseNaturalDateTime), try to resolve it directly to a bookable slot so the
  * customer can bypass staff-pick, date-pick, and slot-pick in one message.
@@ -346,6 +476,16 @@ async function tryDirectDateTimeBooking(
   }
 
   if (matched) {
+    const partySize = extractPartySize(trimmed);
+
+    // All 5 variables (service, staff, date, time, party size) resolved to a real
+    // open slot — book instantly instead of asking the customer to reply YES.
+    // Any guardrail failure (slot just taken, salon suspended, double-booking)
+    // falls through to the normal "Reply YES" confirm prompt below, which
+    // re-runs the same checks before actually creating the appointment.
+    const instant = await tryInstantConfirm(conv, service, staff, matched.start, partySize, explicitStaff);
+    if (instant) return instant;
+
     const dt = DateTime.fromJSDate(matched.start).setZone(conv.salon.timezone);
     const firstName = conv.customer.firstName?.trim();
     const opener = firstName
@@ -367,6 +507,7 @@ async function tryDirectDateTimeBooking(
         anyStaff: !explicitStaff,
         localDateStr: parsed.localDateStr,
         slotStartIso: matched.start.toISOString(),
+        partySize: partySize ?? undefined,
         quickPickOptions: undefined,
       },
     };
