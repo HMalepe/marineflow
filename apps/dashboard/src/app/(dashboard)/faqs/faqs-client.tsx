@@ -221,7 +221,7 @@ export function FaqsClient({ token }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback();
+  const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback(3000);
   const [templateStep, setTemplateStep] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateCategory, setTemplateCategory] = useState<string>('All');
@@ -396,17 +396,18 @@ export function FaqsClient({ token }: Props) {
           body: JSON.stringify(payload),
         }, token);
         showToast(SAVE_MESSAGES.changesSaved, 'success');
+        reportSuccess(SAVE_MESSAGES.changesSaved);
         closeSheet();
       } else {
         await apiFetch('/faqs', {
           method: 'POST',
           body: JSON.stringify({ ...payload, sortOrder: faqs.length }),
         }, token);
+        showToast('FAQ added', 'success');
+        reportSuccess('FAQ added');
         if (andClose) {
-          showToast('FAQ added', 'success');
           closeSheet();
         } else {
-          reportSuccess('FAQ added — keep going or click Done');
           setForm(emptyForm);
           setTemplateStep(false);
         }
@@ -805,7 +806,7 @@ export function FaqsClient({ token }: Props) {
                     : 'New FAQs start as pending. Approve them when ready for the WhatsApp bot.'}
                 </SheetDescription>
               </SheetHeader>
-              <form onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
+              <form noValidate onSubmit={(e) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
                 {!editingId && (
                   <button
                     type="button"
@@ -864,7 +865,7 @@ export function FaqsClient({ token }: Props) {
                   )}
                 </div>
                 <SheetFooter className="px-0 flex-col items-stretch gap-2">
-                  <SaveFormFooter success={saveSuccess} error={saveError}>
+                  <SaveFormFooter success={saveSuccess} error={saveError} loading={saving}>
                   <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="outline" onClick={closeSheet}>
                     {editingId ? 'Cancel' : 'Done'}

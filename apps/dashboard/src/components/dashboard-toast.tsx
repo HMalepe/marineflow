@@ -21,7 +21,7 @@ export function DashboardToast({
     <div
       role="status"
       className={cn(
-        'fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-lg max-w-sm animate-in slide-in-from-bottom-4',
+        'fixed right-4 z-50 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-lg max-w-sm animate-in slide-in-from-bottom-4 dashboard-toast-bottom',
         type === 'success'
           ? 'bg-card border-green-600/30 text-green-700 dark:text-green-400'
           : 'bg-destructive/10 border-destructive/40 text-destructive',

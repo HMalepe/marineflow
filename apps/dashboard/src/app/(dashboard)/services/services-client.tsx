@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
 import { ChevronRight, FolderOpen, Folder, Pencil, Plus } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -81,6 +81,53 @@ function formatPrice(cents: number): string {
   return `R ${(cents / 100).toFixed(2)}`;
 }
 
+/** Accept "250", "250.50", or "250,50" from mobile keyboards. */
+function parsePriceRands(raw: string): number | null {
+  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
+  if (!normalized) return null;
+  const n = parseFloat(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round((n + Number.EPSILON) * 100);
+}
+
+function parsePositiveInt(raw: string): number | null {
+  const n = parseInt(raw.trim(), 10);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
+type ServiceFieldErrors = Partial<Record<keyof ServiceForm, string>>;
+
+function validateServiceForm(form: ServiceForm): { ok: true; priceCents: number; durationMin: number; bufferMin: number } | { ok: false; errors: ServiceFieldErrors; firstMessage: string } {
+  const errors: ServiceFieldErrors = {};
+
+  if (!form.name.trim()) {
+    errors.name = 'Service name is required';
+  }
+
+  const priceCents = parsePriceRands(form.priceRands);
+  if (priceCents === null) {
+    errors.priceRands = 'Enter a valid price in Rands (e.g. 250 or 250.00)';
+  }
+
+  const durationMin = parsePositiveInt(form.durationMin);
+  if (durationMin === null || durationMin < 1) {
+    errors.durationMin = 'Duration must be at least 1 minute';
+  }
+
+  const bufferMin = parsePositiveInt(form.bufferMin) ?? 0;
+  if (bufferMin < 0) {
+    errors.bufferMin = 'Buffer time cannot be negative';
+  }
+
+  if (Object.keys(errors).length > 0) {
+    const firstMessage = errors.name ?? errors.priceRands ?? errors.durationMin ?? errors.bufferMin ?? 'Please fix the highlighted fields';
+    return { ok: false, errors, firstMessage };
+  }
+
+  return { ok: true, priceCents: priceCents!, durationMin: durationMin!, bufferMin };
+}
+
 function serviceToForm(s: Service): ServiceForm {
   return {
     name: s.name,
@@ -124,7 +171,9 @@ export function ServicesClient({ token }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback();
+  const { success: saveSuccess, error: saveError, clear: clearSaveFeedback, reportSuccess, reportError } = useSaveFeedback(3000);
+  const saveFeedbackRef = useRef<HTMLDivElement>(null);
+  const [fieldErrors, setFieldErrors] = useState<ServiceFieldErrors>({});
 
   // Staff assignment
   const [allStaff, setAllStaff] = useState<StaffBrief[]>([]);
@@ -156,9 +205,15 @@ export function ServicesClient({ token }: Props) {
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 4500);
+    const timer = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  const scrollSaveFeedbackIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      saveFeedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }, []);
 
   const loadServices = useCallback(async (silent = false) => {
     if (!token) return;
@@ -398,6 +453,7 @@ export function ServicesClient({ token }: Props) {
 
   function openCreate(presetCategoryId = '') {
     clearSaveFeedback();
+    setFieldErrors({});
     setEditingId(null);
     setForm({ ...emptyForm, categoryId: presetCategoryId });
     setTemplateStep(true);
@@ -409,6 +465,7 @@ export function ServicesClient({ token }: Props) {
 
   function openEdit(service: Service) {
     clearSaveFeedback();
+    setFieldErrors({});
     setEditingId(service.id);
     setForm(serviceToForm(service));
     setTemplateStep(false);
@@ -420,6 +477,7 @@ export function ServicesClient({ token }: Props) {
   function closeSheet(force = false) {
     if (!force && formIsDirty && !window.confirm('You have unsaved changes. Close anyway?')) return;
     clearSaveFeedback();
+    setFieldErrors({});
     setSheetOpen(false);
     setEditingId(null);
     setForm(emptyForm);
@@ -447,30 +505,21 @@ export function ServicesClient({ token }: Props) {
 
   async function handleSave(e: FormEvent, andClose = false) {
     e.preventDefault();
+    clearSaveFeedback();
+    setFieldErrors({});
+
     const submitter = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name');
     const shouldClose = andClose || submitter === 'addAndClose' || !!editingId;
 
-    if (!form.name.trim()) {
-      reportError('Name is required');
+    const validated = validateServiceForm(form);
+    if (!validated.ok) {
+      setFieldErrors(validated.errors);
+      reportError(validated.firstMessage);
+      scrollSaveFeedbackIntoView();
       return;
     }
 
-    const priceCents = Math.round((parseFloat(form.priceRands) + Number.EPSILON) * 100);
-    const durationMin = parseInt(form.durationMin, 10);
-    const bufferMin = parseInt(form.bufferMin, 10) || 0;
-
-    if (!Number.isFinite(priceCents) || priceCents < 0) {
-      reportError('Enter a valid price in Rands');
-      return;
-    }
-    if (!Number.isFinite(durationMin) || durationMin < 1) {
-      reportError('Duration must be at least 1 minute');
-      return;
-    }
-    if (bufferMin < 0) {
-      reportError('Buffer time cannot be negative');
-      return;
-    }
+    const { priceCents, durationMin, bufferMin } = validated;
 
     setSaving(true);
     try {
@@ -490,7 +539,6 @@ export function ServicesClient({ token }: Props) {
           method: 'PATCH',
           body: JSON.stringify(payload),
         }, token);
-        // Save staff assignment
         if (allStaff.length > 0) {
           await apiFetch(`/services/${editingId}/staff`, {
             method: 'PUT',
@@ -508,16 +556,21 @@ export function ServicesClient({ token }: Props) {
 
       const successMessage = editingId ? SAVE_MESSAGES.changesSaved : `${savedName} added`;
 
+      showToast(successMessage, 'success');
+      reportSuccess(successMessage);
+      scrollSaveFeedbackIntoView();
+
       if (shouldClose) {
-        showToast(successMessage, 'success');
-        closeSheet();
+        closeSheet(true);
       } else {
-        reportSuccess(successMessage);
         setForm({ ...emptyForm, categoryId: form.categoryId });
         setTemplateStep(false);
       }
-    } catch (e) {
-      reportError(e instanceof ApiError ? e.message : 'Save failed');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Save failed — please try again';
+      reportError(message);
+      showToast(message, 'error');
+      scrollSaveFeedbackIntoView();
     } finally {
       setSaving(false);
     }
@@ -932,7 +985,7 @@ export function ServicesClient({ token }: Props) {
       </Card>
 
       <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet(false)}>
-        <SheetContent side="right" className="sm:max-w-md overflow-y-auto">
+        <SheetContent side="right" className="sm:max-w-md flex flex-col p-0 gap-0">
           {templateStep ? (
             <>
               <SheetHeader>
@@ -941,6 +994,7 @@ export function ServicesClient({ token }: Props) {
                   Pick a service to pre-fill the form, then customise it. Or start from scratch.
                 </SheetDescription>
               </SheetHeader>
+              <div className="flex-1 overflow-y-auto overscroll-y-contain dashboard-sheet-scroll min-h-0">
               <TemplatePicker
                 search={templateSearch}
                 onSearch={setTemplateSearch}
@@ -953,6 +1007,7 @@ export function ServicesClient({ token }: Props) {
                 onSelect={applyTemplate}
                 onSkip={() => setTemplateStep(false)}
               />
+              </div>
             </>
           ) : (
             <>
@@ -975,17 +1030,27 @@ export function ServicesClient({ token }: Props) {
                   </button>
                 </div>
               )}
-              <form onSubmit={(e: React.FormEvent<HTMLFormElement>) => void handleSave(e)} className="flex flex-col gap-4 px-4 pb-4">
+              <form
+                noValidate
+                onSubmit={(e: React.FormEvent<HTMLFormElement>) => void handleSave(e)}
+                className="flex flex-1 flex-col min-h-0"
+              >
+                <div className="flex-1 overflow-y-auto overscroll-y-contain dashboard-sheet-scroll px-4 py-4 flex flex-col gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Name *</Label>
                   <Input
                     id="name"
                     value={form.name}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, name: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+                      setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                      setForm((f: ServiceForm) => ({ ...f, name: e.target.value }));
+                    }}
                     placeholder="e.g. Haircut & Style"
                     autoFocus
-                    required
+                    aria-invalid={!!fieldErrors.name}
+                    className={cn(fieldErrors.name && 'border-destructive')}
                   />
+                  {fieldErrors.name && <p className="text-xs text-destructive">{fieldErrors.name}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
@@ -1026,26 +1091,38 @@ export function ServicesClient({ token }: Props) {
                     <Label htmlFor="price">Price (R) *</Label>
                     <Input
                       id="price"
-                      type="number"
-                      min="0"
-                      step="0.01"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
                       value={form.priceRands}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, priceRands: e.target.value }))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+                        setFieldErrors((prev) => ({ ...prev, priceRands: undefined }));
+                        setForm((f: ServiceForm) => ({ ...f, priceRands: e.target.value }));
+                      }}
                       placeholder="250.00"
-                      required
+                      aria-invalid={!!fieldErrors.priceRands}
+                      className={cn(fieldErrors.priceRands && 'border-destructive')}
                     />
+                    {fieldErrors.priceRands && <p className="text-xs text-destructive">{fieldErrors.priceRands}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="duration">Duration (min) *</Label>
                     <Input
                       id="duration"
-                      type="number"
-                      min="1"
-                      step="5"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
                       value={form.durationMin}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, durationMin: e.target.value }))}
-                      required
+                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+                        setFieldErrors((prev) => ({ ...prev, durationMin: undefined }));
+                        setForm((f: ServiceForm) => ({ ...f, durationMin: e.target.value.replace(/\D/g, '') }));
+                      }}
+                      placeholder="60"
+                      aria-invalid={!!fieldErrors.durationMin}
+                      className={cn(fieldErrors.durationMin && 'border-destructive')}
                     />
+                    {fieldErrors.durationMin && <p className="text-xs text-destructive">{fieldErrors.durationMin}</p>}
                   </div>
                 </div>
                 <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground">
@@ -1057,11 +1134,16 @@ export function ServicesClient({ token }: Props) {
                   <Label htmlFor="buffer">Buffer after appointment (min)</Label>
                   <Input
                     id="buffer"
-                    type="number"
-                    min="0"
-                    step="5"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={form.bufferMin}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, bufferMin: e.target.value }))}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+                      setFieldErrors((prev) => ({ ...prev, bufferMin: undefined }));
+                      setForm((f: ServiceForm) => ({ ...f, bufferMin: e.target.value.replace(/\D/g, '') || '0' }));
+                    }}
+                    aria-invalid={!!fieldErrors.bufferMin}
+                    className={cn(fieldErrors.bufferMin && 'border-destructive')}
                   />
                   {slotPreviewMin > 0 && (
                     <p className="text-xs text-muted-foreground">
@@ -1101,8 +1183,10 @@ export function ServicesClient({ token }: Props) {
                     )}
                   </div>
                 )}
-                <SheetFooter className="px-0 pt-2 flex-col items-stretch gap-2 sm:flex-col">
-                  <SaveFormFooter success={saveSuccess} error={saveError}>
+                </div>
+                <div ref={saveFeedbackRef} className="shrink-0 border-t bg-card/95 backdrop-blur-sm safe-area-pb">
+                <SheetFooter className="px-4 py-4 flex-col items-stretch gap-2 sm:flex-col">
+                  <SaveFormFooter success={saveSuccess} error={saveError} loading={saving}>
                   <div className="flex flex-row justify-end gap-2 flex-wrap">
                   {editingId ? (
                     <>
@@ -1119,16 +1203,17 @@ export function ServicesClient({ token }: Props) {
                         Done
                       </Button>
                       <Button type="submit" name="addAndClose" variant="outline" size="sm" disabled={saving}>
-                        Add &amp; close
+                        {saving ? 'Adding…' : 'Add & close'}
                       </Button>
                       <Button type="submit" name="addMore" size="sm" disabled={saving}>
-                        {saving ? 'Saving…' : 'Add service →'}
+                        {saving ? 'Adding…' : 'Add service'}
                       </Button>
                     </>
                   )}
                   </div>
                   </SaveFormFooter>
                 </SheetFooter>
+                </div>
               </form>
             </>
           )}

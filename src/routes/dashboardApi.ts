@@ -2928,6 +2928,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       bufferMin?: number;
       active?: boolean;
       aftercareNote?: string | null;
+      categoryId?: string | null;
     };
   }>(
     '/services',
@@ -2935,7 +2936,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const { name, description, priceCents, durationMin, bufferMin, active, aftercareNote } = request.body;
+        const { name, description, priceCents, durationMin, bufferMin, active, aftercareNote, categoryId } =
+          request.body;
         if (!name?.trim()) {
           reply.code(400);
           return { error: 'name_required' };
@@ -2949,6 +2951,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'invalid_duration' };
         }
 
+        let resolvedCategoryId: string | null = null;
+        if (categoryId) {
+          const cat = await db.serviceCategory.findFirst({
+            where: { id: categoryId, salonId: user.salonId },
+          });
+          if (!cat) {
+            reply.code(400);
+            return { error: 'invalid_category', message: 'Category not found.' };
+          }
+          resolvedCategoryId = cat.id;
+        }
+
         const service = await db.service.create({
           data: {
             salonId: user.salonId,
@@ -2959,6 +2973,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             bufferMin: Math.round(bufferMin ?? 0),
             active: active ?? true,
             aftercareNote: aftercareNote?.trim() || null,
+            categoryId: resolvedCategoryId,
           },
         });
 

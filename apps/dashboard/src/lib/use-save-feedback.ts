@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { SectionFeedback } from '@/components/save-feedback';
 
 /** Inline success/error for a single save form (clears success after timeout). */
-export function useSaveFeedback(autoClearMs = 5000) {
+export function useSaveFeedback(autoClearMs = 3000) {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,7 +33,7 @@ export function useSaveFeedback(autoClearMs = 5000) {
 }
 
 /** Per-section feedback for settings-style pages with many save blocks. */
-export function useMultiSectionSaveFeedback(autoClearMs = 5000) {
+export function useMultiSectionSaveFeedback(autoClearMs = 3000) {
   const [sections, setSections] = useState<Record<string, SectionFeedback>>({});
 
   const reportSuccess = useCallback(
