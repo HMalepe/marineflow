@@ -509,6 +509,11 @@
     flex-shrink: 0;
   }
 
+  .dashboard-pane-header--thread {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .dark .dashboard-pane-header {
     background: color-mix(in oklch, var(--muted) 30%, var(--card));
     border-bottom-color: oklch(0.38 0.04 288 / 45%);

@@ -18,6 +18,7 @@ import {
 } from '@/components/ConversationListItem';
 import { Search, RefreshCw } from 'lucide-react';
 import { PaneHeader } from '@/components/section-panel';
+import { cn } from '@/lib/utils';
 
 interface Customer {
   id: string;
@@ -404,19 +405,21 @@ export function ConversationsClient({ token, staffName }: Props) {
       <div className="dashboard-inbox-frame flex-col md:flex-row">
         <div
           className={cn(
-            'w-full md:w-96 shrink-0 flex flex-col min-h-0 border-b md:border-b-0 md:border-r bg-card',
+            'dashboard-inbox-pane w-full md:w-96 shrink-0',
             showThreadOnMobile && 'hidden md:flex',
           )}
         >
-          <div className="px-4 py-3 border-b space-y-2.5 shrink-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold text-sm hidden md:inline">Inbox</span>
-              {handoffCount > 0 && (
-                <Badge variant="destructive" className="animate-pulse text-xs ml-auto md:ml-0">
+          <PaneHeader
+            title="Inbox"
+            trailing={
+              handoffCount > 0 ? (
+                <Badge variant="destructive" className="animate-pulse text-xs">
                   {handoffCount} need{handoffCount === 1 ? 's' : ''} you
                 </Badge>
-              )}
-            </div>
+              ) : undefined
+            }
+          />
+          <div className="dashboard-pane-toolbar space-y-2.5">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
               <Input
@@ -449,7 +452,7 @@ export function ConversationsClient({ token, staffName }: Props) {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto overscroll-y-contain divide-y dashboard-thread-scroll min-h-0">
+          <div className="flex-1 overflow-y-auto overscroll-y-contain divide-y divide-border/70 dashboard-thread-scroll min-h-0">
             {loadingList && (
               <p className="p-4 text-sm text-muted-foreground">Loading conversations…</p>
             )}
@@ -473,7 +476,7 @@ export function ConversationsClient({ token, staffName }: Props) {
 
         <div
           className={cn(
-            'flex-1 flex flex-col min-h-0 bg-card',
+            'dashboard-inbox-pane flex-1',
             !showThreadOnMobile && 'hidden md:flex',
           )}
         >
@@ -486,7 +489,7 @@ export function ConversationsClient({ token, staffName }: Props) {
             </div>
           ) : (
             <>
-              <div className="px-4 py-3 border-b flex items-center gap-3 shrink-0 bg-card">
+              <div className="dashboard-pane-header dashboard-pane-header--thread shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -497,7 +500,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                 </Button>
                 {selectedCustomer && <CustomerAvatar customer={selectedCustomer} />}
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">
+                  <p className="font-medium truncate text-sm">
                     {selectedCustomer ? customerLabel(selectedCustomer) : '…'}
                   </p>
                   {selectedCustomer?.waId && (
@@ -506,7 +509,11 @@ export function ConversationsClient({ token, staffName }: Props) {
                     </p>
                   )}
                 </div>
-                {selectedStep && <StepBadge step={selectedStep} />}
+                {selectedStep && (
+                  <div className="shrink-0 ml-auto">
+                    <StepBadge step={selectedStep} />
+                  </div>
+                )}
               </div>
 
               <div

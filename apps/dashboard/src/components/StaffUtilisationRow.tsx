@@ -23,21 +23,25 @@ interface StaffUtilisationRowProps {
   staff: StaffUtilisationMember[];
   utilisation: StaffUtilisationData[];
   dateLabel?: string;
+  /** Inside a CollapsibleSection — skip outer card chrome */
+  embedded?: boolean;
 }
 
-export function StaffUtilisationRow({ staff, utilisation, dateLabel = 'Today' }: StaffUtilisationRowProps) {
+export function StaffUtilisationRow({ staff, utilisation, dateLabel = 'Today', embedded = false }: StaffUtilisationRowProps) {
   const byId = new Map(utilisation.map((u) => [u.staffId, u]));
 
   if (staff.length === 0) return null;
 
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{dateLabel}</h2>
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-          Booked slots vs capacity
-        </span>
-      </div>
+    <div className={embedded ? 'space-y-3' : 'rounded-xl border bg-card p-4 space-y-3'}>
+      {!embedded && (
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">{dateLabel}</h2>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+            Booked slots vs capacity
+          </span>
+        </div>
+      )}
 
       <div className="space-y-2.5">
         {staff.map((s) => {
