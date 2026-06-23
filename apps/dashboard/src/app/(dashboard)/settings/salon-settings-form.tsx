@@ -106,7 +106,7 @@ function WhatsAppPreview({
   const timeLabel = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="rounded-xl overflow-hidden border shadow-sm bg-[#e5ddd5] dark:bg-[#0b141a]">
+    <div className="rounded-xl overflow-hidden border shadow-sm bg-muted/20 dark:bg-[#0b141a]">
       <div className="bg-[#075e54] dark:bg-[#1f2c34] px-4 py-3 flex items-center gap-3">
         <div className="size-9 rounded-full bg-[#25d366]/30 flex items-center justify-center text-white text-sm font-semibold shrink-0">
           {salonName.charAt(0).toUpperCase()}
@@ -116,19 +116,12 @@ function WhatsAppPreview({
           <p className="text-white/70 text-xs">{botName} · online</p>
         </div>
       </div>
-      <div
-        className="p-4 min-h-[160px]"
-        style={{
-          backgroundColor: '#e5ddd5',
-          backgroundImage:
-            'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23d4cdc4\' fill-opacity=\'0.45\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")',
-        }}
-      >
-        <div className="max-w-[92%] rounded-lg rounded-tl-none bg-white dark:bg-[#1f2c34] shadow-sm px-3 py-2">
-          <p className="text-sm whitespace-pre-wrap break-words text-[#111b21] dark:text-[#e9edef]">
+      <div className="p-4 min-h-[160px] bg-muted/15 dark:bg-[#0b141a]">
+        <div className="max-w-[92%] rounded-lg rounded-tl-none bg-card shadow-sm px-3 py-2 border border-border/60">
+          <p className="text-sm whitespace-pre-wrap break-words text-foreground">
             {message}
           </p>
-          <p className="text-[10px] text-[#667781] text-right mt-1">{timeLabel}</p>
+          <p className="text-[10px] text-muted-foreground text-right mt-1">{timeLabel}</p>
         </div>
       </div>
     </div>

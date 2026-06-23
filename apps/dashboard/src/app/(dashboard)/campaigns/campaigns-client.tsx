@@ -353,7 +353,7 @@ function WhatsAppPreview({
   const fullText = caption.startsWith('Hi ') ? caption : caption ? `${greeting} ${caption}` : greeting;
 
   return (
-    <div className="rounded-xl border bg-gradient-to-b from-[#e5ddd5] to-[#d9d0c7] dark:from-[#0b141a] dark:to-[#111b21] p-4 shadow-inner">
+    <div className="rounded-xl border bg-muted/20 p-4">
       <div className="flex items-center gap-2 mb-3">
         <MessageSquare className="size-3.5 text-[#128c7e]" />
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">

@@ -155,8 +155,8 @@ export function TicketsClient({ token }: Props) {
 
   return (
     <div className="dashboard-workspace">
-      <div className={cn('shrink-0', showDetailOnMobile && 'hidden md:block')}>
-        <h1 className="text-2xl font-bold tracking-tight">{TICKETS_LABEL}</h1>
+      <div className={cn('shrink-0 dashboard-page-header', showDetailOnMobile && 'hidden md:block')}>
+        <h1 className="text-xl md:text-2xl font-bold tracking-tight">{TICKETS_LABEL}</h1>
         <CommsPageHint active="tickets" />
       </div>
 

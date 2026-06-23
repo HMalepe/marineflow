@@ -5,29 +5,30 @@ import {
   TICKETS_LABEL,
   TICKETS_TAGLINE,
 } from '@/lib/dashboard-nav';
+import { PremiumDisclosure } from '@/components/premium-disclosure';
 
 type Props = { active: 'conversations' | 'tickets' };
 
 export function CommsPageHint({ active }: Props) {
   if (active === 'conversations') {
     return (
-      <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-        {CONVERSATIONS_TAGLINE} For logged complaints and report-a-problem issues, see{' '}
+      <PremiumDisclosure label="Conversations vs tickets">
+        {CONVERSATIONS_TAGLINE} For complaints and report-a-problem issues, open{' '}
         <Link href="/tickets" className="text-primary underline-offset-4 hover:underline">
           {TICKETS_LABEL}
         </Link>
         .
-      </p>
+      </PremiumDisclosure>
     );
   }
 
   return (
-    <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-      {TICKETS_TAGLINE} For live back-and-forth chat, use{' '}
+    <PremiumDisclosure label="Tickets vs conversations">
+      {TICKETS_TAGLINE} For live chat, use{' '}
       <Link href="/conversations" className="text-primary underline-offset-4 hover:underline">
         {CONVERSATIONS_LABEL}
       </Link>
       .
-    </p>
+    </PremiumDisclosure>
   );
 }

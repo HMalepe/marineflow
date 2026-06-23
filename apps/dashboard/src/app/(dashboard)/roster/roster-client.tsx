@@ -15,6 +15,9 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Copy, Check, X, ClipboardPaste, Plus } from 'lucide-react';
+import { CollapsibleSection } from '@/components/collapsible-section';
+import { PremiumDisclosure } from '@/components/premium-disclosure';
+import { SectionPanel } from '@/components/section-panel';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { StaffAvatar } from '@/components/staff-avatar';
 import { StaffAvatarUpload } from '@/components/staff-avatar-upload';
@@ -207,32 +210,35 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5">
+    <div className="dashboard-page-flow">
 
       {/* Header */}
       {!hidePageHeader && (
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap dashboard-page-header">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Roster</h1>
-          <p className="text-muted-foreground text-sm mt-0.5 flex items-center gap-2 flex-wrap">
-            Click any date to manage shifts and time off.
+          <h1 className="text-xl md:text-3xl font-bold tracking-tight">Roster</h1>
+          <PremiumDisclosure label="How roster works">
+            Tap any future date to manage shifts and time off.
             {liveConnected && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-                Live sync
-              </span>
+              <>
+                {' '}
+                <span className="inline-flex items-center gap-1 text-emerald-600">
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                  Live sync
+                </span>
+              </>
             )}
-          </p>
+          </PremiumDisclosure>
         </div>
 
-        <Button size="sm" onClick={() => setAddStaffOpen(true)}>
+        <Button size="sm" onClick={() => setAddStaffOpen(true)} className="shrink-0">
           <Plus className="w-4 h-4 mr-1" />
           Add staff
         </Button>
 
-        {/* Copied shift chip */}
+        {/* Copied shift chip — desktop only inline; mobile shows below when set */}
         {copiedShift && (
-          <div className="flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary rounded-full px-4 py-1.5 text-sm font-medium">
+          <div className="hidden md:flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary rounded-full px-4 py-1.5 text-sm font-medium">
             <ClipboardPaste className="w-3.5 h-3.5" />
             {copiedShift.startTime}–{copiedShift.endTime} ready to paste
             <button onClick={() => setCopiedShift(null)} className="ml-1 opacity-60 hover:opacity-100">
@@ -272,91 +278,112 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
         </div>
       )}
 
-      {/* Month navigation */}
-      <div className="flex items-center gap-3 roster-month-nav">
-        <Button variant="outline" size="sm" onClick={() => canGoPrev && setMonth((m) => addMonths(m, -1))} disabled={!canGoPrev}>
-          <ChevronLeft className="w-4 h-4" />
-        </Button>
-        <Button
-          variant={month.getTime() === currentMonth.getTime() ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setMonth(currentMonth)}
-        >
-          Today
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => canGoNext && setMonth((m) => addMonths(m, 1))} disabled={!canGoNext}>
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-        <span className="text-base font-semibold ml-1">
-          {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
-        </span>
-        {loading && <span className="text-xs text-muted-foreground animate-pulse ml-auto">Loading…</span>}
-      </div>
-
-      {/* Error */}
       {error && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center justify-between gap-3">
-          <span>{error}</span>
-          <Button size="sm" variant="outline" onClick={() => fetchRoster(month, monthEnd)}>Retry</Button>
+        <div className="dashboard-section border-destructive/40 bg-destructive/5">
+          <div className="dashboard-section-body flex items-center justify-between gap-3 text-sm text-destructive py-3">
+            <span>{error}</span>
+            <Button size="sm" variant="outline" onClick={() => fetchRoster(month, monthEnd)}>Retry</Button>
+          </div>
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && staff.length === 0 && !error && (
-        <div className="rounded-xl border border-dashed px-8 py-16 text-center space-y-3">
-          <p className="text-muted-foreground">No staff members yet.</p>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Add your team for this location so they appear on the roster and in WhatsApp booking.
-          </p>
-          <Button size="sm" onClick={() => setAddStaffOpen(true)}>
-            <Plus className="w-4 h-4 mr-1" />
-            Add staff
-          </Button>
+        <div className="dashboard-section border-dashed">
+          <div className="dashboard-section-body px-6 py-14 text-center space-y-3">
+            <p className="text-muted-foreground">No staff members yet.</p>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              Add your team so they appear on the roster and in WhatsApp booking.
+            </p>
+            <Button size="sm" onClick={() => setAddStaffOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" />
+              Add staff
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Staff legend */}
-      {!loading && staff.length > 0 && (
-        <div className="roster-staff-strip">
-          {staff.map((s) => (
-            <StaffCard
-              key={s.id}
-              staff={s}
-              token={token}
-              onEdit={() => setEditStaff(s)}
-              onServicesLinked={() => {
-                void fetchRoster(month, monthEnd, true);
-                void fetchUtilisation();
-              }}
-            />
-          ))}
+      {copiedShift && (
+        <div className="md:hidden flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary rounded-full px-3 py-2 text-xs font-medium w-fit">
+          <ClipboardPaste className="w-3 h-3" />
+          {copiedShift.startTime}–{copiedShift.endTime}
+          <button onClick={() => setCopiedShift(null)} className="opacity-60 hover:opacity-100 touch-manipulation min-h-[2rem] min-w-[2rem] flex items-center justify-center">
+            <X className="w-3 h-3" />
+          </button>
         </div>
       )}
 
-      {/* Today utilisation */}
       {!loading && staff.length > 0 && (
-        <StaffUtilisationRow staff={staff} utilisation={utilisation} />
+        <CollapsibleSection
+          title="Your team"
+          count={staff.length}
+          subtitle="Tap a member to edit"
+          collapseOnMobile
+        >
+          <div className="roster-staff-strip">
+            {staff.map((s) => (
+              <StaffCard
+                key={s.id}
+                staff={s}
+                token={token}
+                onEdit={() => setEditStaff(s)}
+                onServicesLinked={() => {
+                  void fetchRoster(month, monthEnd, true);
+                  void fetchUtilisation();
+                }}
+              />
+            ))}
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {!loading && staff.length > 0 && (
+        <CollapsibleSection
+          title="Today's capacity"
+          subtitle="Booked slots vs availability"
+          collapseOnMobile
+        >
+          <StaffUtilisationRow staff={staff} utilisation={utilisation} embedded />
+        </CollapsibleSection>
       )}
 
       {/* Calendar */}
       {(loading || staff.length > 0) && (
-        <div>
-          {/* Day headers */}
-          <div className="grid grid-cols-7 mb-1">
-            {WEEKDAY_LABELS.map((label) => (
-              <div key={label} className="text-center text-xs font-semibold text-muted-foreground py-2">
-                {label}
-              </div>
-            ))}
-          </div>
-
-          {/* Weeks */}
-          <div className="space-y-1">
+        <SectionPanel
+          className="roster-calendar-section"
+          title="Schedule calendar"
+          subtitle={month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          action={
+            <div className="flex items-center gap-1 roster-month-nav">
+              <Button variant="outline" size="sm" onClick={() => canGoPrev && setMonth((m) => addMonths(m, -1))} disabled={!canGoPrev}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={month.getTime() === currentMonth.getTime() ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMonth(currentMonth)}
+              >
+                Today
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => canGoNext && setMonth((m) => addMonths(m, 1))} disabled={!canGoNext}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          }
+        >
+          {loading && (
+            <p className="text-xs text-muted-foreground animate-pulse px-1 pb-2">Loading schedule…</p>
+          )}
+          <div className="roster-calendar-grid">
+            <div className="roster-weekday-row">
+              {WEEKDAY_LABELS.map((label) => (
+                <div key={label}>{label}</div>
+              ))}
+            </div>
             {weeks.map((week, wi) => (
-              <div key={wi} className="grid grid-cols-7 gap-1">
+              <div key={wi} className="roster-week-row">
                 {week.map((date, di) => {
                   if (!date) return (
-                    <div key={di} className="rounded-lg bg-muted/10 min-h-[90px]" />
+                    <div key={di} className="bg-muted/15 min-h-[90px]" />
                   );
                   const dateStr = toIso(date);
                   const isPast  = date.getTime() < today.getTime();
@@ -368,11 +395,11 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
                       onClick={() => !isPast && setSelectedDate(date)}
                       disabled={isPast || loading}
                       className={cn(
-                        'roster-day-cell rounded-lg border p-2 text-left transition-all min-h-[90px] flex flex-col gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary touch-manipulation',
+                        'roster-day-cell p-2 text-left transition-colors min-h-[90px] flex flex-col gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset touch-manipulation',
                         isPast
-                          ? 'bg-muted/10 border-transparent opacity-40 cursor-not-allowed'
-                          : 'border-border/50 hover:border-primary/40 hover:bg-accent/5 cursor-pointer',
-                        isToday && 'border-primary bg-primary/5',
+                          ? 'bg-muted/20 opacity-45 cursor-not-allowed'
+                          : 'bg-card hover:bg-accent/10 cursor-pointer',
+                        isToday && 'bg-primary/[0.07] ring-1 ring-inset ring-primary/35',
                       )}
                     >
                       <span className={cn(
@@ -442,7 +469,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
               </div>
             ))}
           </div>
-        </div>
+        </SectionPanel>
       )}
 
       <AddStaffSheet

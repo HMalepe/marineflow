@@ -16,8 +16,8 @@ import {
   sortConversationsByPriority,
   type ConversationListItemData,
 } from '@/components/ConversationListItem';
-import { Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Search, RefreshCw } from 'lucide-react';
+import { PaneHeader } from '@/components/section-panel';
 
 interface Customer {
   id: string;
@@ -335,26 +335,27 @@ export function ConversationsClient({ token, staffName }: Props) {
           showThreadOnMobile && 'hidden md:flex',
         )}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
+            <h1 className="text-xl md:text-3xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
             <span
-              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+              className="inline-flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground"
               title={connected ? 'Live updates connected' : 'Connecting…'}
             >
               <span
                 className={cn(
                   'size-2 rounded-full',
-                  connected ? 'bg-green-500 animate-pulse' : 'bg-muted-foreground/40',
+                  connected ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40',
                 )}
               />
-              {connected ? 'Live' : 'Offline'}
+              <span className="hidden sm:inline">{connected ? 'Live' : 'Offline'}</span>
             </span>
           </div>
           <CommsPageHint active="conversations" />
         </div>
-        <Button variant="outline" size="sm" onClick={refreshAll}>
-          Refresh
+        <Button variant="outline" size="sm" onClick={refreshAll} className="shrink-0 touch-manipulation">
+          <RefreshCw className="size-4 md:mr-0" />
+          <span className="hidden md:inline ml-1.5">Refresh</span>
         </Button>
       </div>
 
@@ -408,10 +409,10 @@ export function ConversationsClient({ token, staffName }: Props) {
           )}
         >
           <div className="px-4 py-3 border-b space-y-2.5 shrink-0">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-sm">Inbox</span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-semibold text-sm hidden md:inline">Inbox</span>
               {handoffCount > 0 && (
-                <Badge variant="destructive" className="animate-pulse text-xs">
+                <Badge variant="destructive" className="animate-pulse text-xs ml-auto md:ml-0">
                   {handoffCount} need{handoffCount === 1 ? 's' : ''} you
                 </Badge>
               )}
@@ -510,7 +511,7 @@ export function ConversationsClient({ token, staffName }: Props) {
 
               <div
                 ref={threadScrollRef}
-                className="flex-1 overflow-y-auto overscroll-y-contain dashboard-thread-scroll px-4 py-4 space-y-4 bg-[#e5ddd5]/30 dark:bg-muted/20 min-h-0"
+                className="flex-1 overflow-y-auto overscroll-y-contain dashboard-thread-scroll px-4 py-4 space-y-4 bg-muted/15 dark:bg-muted/20 min-h-0"
               >
                 {loadingThread && messages.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-8">Loading messages…</p>
@@ -541,7 +542,7 @@ export function ConversationsClient({ token, staffName }: Props) {
                           'rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words shadow-sm',
                           inbound
                             ? 'bg-white dark:bg-muted text-foreground rounded-tl-sm'
-                            : 'bg-[#dcf8c6] dark:bg-primary text-foreground dark:text-primary-foreground rounded-tr-sm',
+                            : 'bg-primary/12 border border-primary/15 text-foreground dark:bg-primary/20 dark:text-primary-foreground rounded-tr-sm',
                         )}
                       >
                         {msg.body}
@@ -558,29 +559,26 @@ export function ConversationsClient({ token, staffName }: Props) {
               <div className="border-t px-4 py-3 bg-card shrink-0 safe-area-pb">
                 {!isHandoff ? (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground hidden md:block">
                       The bot is handling this chat. Take over to reply manually.
                     </p>
                     <Button onClick={handleTakeOver} disabled={actionLoading} className="w-full touch-manipulation">
-                      {actionLoading ? 'Taking over…' : 'Take Over Conversation'}
+                      {actionLoading ? 'Taking over…' : 'Take over'}
                     </Button>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      You&apos;re in control — the bot is silent. Reply to the customer, then tap <strong>Query Completed</strong> when done.
-                    </p>
                     <form onSubmit={handleSendReply} className="flex gap-2">
                       <Input
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Type a WhatsApp reply…"
+                        placeholder="Reply on WhatsApp…"
                         disabled={sending}
                         className="flex-1"
                         autoComplete="off"
                       />
                       <Button type="submit" disabled={sending || !replyText.trim()} className="shrink-0 touch-manipulation">
-                        {sending ? 'Sending…' : 'Send'}
+                        {sending ? '…' : 'Send'}
                       </Button>
                     </form>
                     <Button
@@ -588,17 +586,16 @@ export function ConversationsClient({ token, staffName }: Props) {
                       disabled={actionLoading}
                       className="w-full touch-manipulation"
                     >
-                      {actionLoading ? 'Completing…' : '✓ Query Completed'}
+                      {actionLoading ? 'Completing…' : 'Done — hand back to bot'}
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                    <button
+                      type="button"
                       onClick={handleHandBack}
                       disabled={actionLoading}
-                      className="w-full text-muted-foreground text-xs touch-manipulation"
+                      className="w-full text-xs text-muted-foreground hover:text-foreground py-1 touch-manipulation"
                     >
-                      Hand back to bot without rating
-                    </Button>
+                      Skip rating · return to bot
+                    </button>
                   </div>
                 )}
               </div>

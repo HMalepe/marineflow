@@ -276,7 +276,7 @@ export function AppointmentCard({ appt, showRisk = false, token = '', onUpdated 
   }
 
   return (
-    <div className="rounded-lg border">
+    <div className="dashboard-appointment-card rounded-lg border border-border/70 bg-card overflow-hidden">
       <div className="flex items-start justify-between p-3 gap-3">
         <div className="space-y-1 min-w-0 flex-1">
           <p className="text-sm font-medium truncate">

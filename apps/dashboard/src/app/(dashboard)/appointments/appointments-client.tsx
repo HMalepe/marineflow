@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppointmentCard, type AppointmentData } from '@/components/AppointmentCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { apiFetch, ApiError } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
-import { AlertTriangle, Calendar, CheckSquare, Clock, Loader2, Search, X } from 'lucide-react';
+import { AlertTriangle, Calendar, CheckSquare, Loader2, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { CollapsibleSection } from '@/components/collapsible-section';
+import { MobileFilterBar } from '@/components/mobile-filter-bar';
+import { DataList, DataRow, SectionPanel } from '@/components/section-panel';
 
 interface WaitlistEntry {
   id: string;
@@ -174,8 +176,11 @@ export function AppointmentsClient({
     return [...upcoming, ...past].some((a) => new Date(a.start).toDateString() === todayStr);
   }, [upcoming, past]);
 
+  const filterActiveCount =
+    (paymentFilter !== 'all' ? 1 : 0) + (search.trim() ? 1 : 0) + (bulkSelected.size > 0 ? 1 : 0);
+
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page-flow">
       {bulkToast && (
         <div className="fixed right-4 z-50 rounded-lg bg-foreground text-background px-4 py-2.5 text-sm shadow-lg dashboard-toast-bottom max-w-[calc(100vw-2rem)]">
           {bulkToast}
@@ -213,9 +218,9 @@ export function AppointmentsClient({
       )}
 
       {!hidePageHeader && (
-        <div id="appointments-intro" data-section-label="Summary" className="dashboard-section-anchor">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
-          <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2 flex-wrap">
+        <div id="appointments-intro" data-section-label="Summary" className="dashboard-section-anchor dashboard-page-header">
+          <h1 className="text-xl md:text-3xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
+          <p className="text-muted-foreground text-sm mt-1.5 hidden md:flex items-center gap-2 flex-wrap">
             View and manage all bookings.
             {liveConnected && (
               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
@@ -224,6 +229,12 @@ export function AppointmentsClient({
               </span>
             )}
           </p>
+          {liveConnected && (
+            <span className="md:hidden inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 mt-1">
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+              Live
+            </span>
+          )}
         </div>
       )}
       {hidePageHeader && liveConnected && (
@@ -237,67 +248,72 @@ export function AppointmentsClient({
       )}
 
       <div
-        className="flex items-center gap-2 flex-wrap w-full dashboard-section-anchor"
+        className="dashboard-section-anchor dashboard-filter-section"
         id="appointments-filters"
         data-section-label="Search & filters"
       >
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:ml-auto">
-          {/* Search */}
-          <div className="relative flex-1 sm:flex-none sm:w-56 min-w-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Customer, service, staff…"
-              className="pl-8 h-9 md:h-8 text-base md:text-xs"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-foreground touch-manipulation"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
-          </div>
-          {completableIds.length > 0 && (
-            <div className="flex items-center gap-2 rounded-lg border border-dashed p-1.5 bg-muted/40">
-              <span className="text-xs text-muted-foreground px-1">
-                {bulkSelected.size > 0 ? `${bulkSelected.size} selected` : `${completableIds.length} completable`}
-              </span>
-              <button
-                type="button"
-                className="text-xs text-primary hover:underline"
-                onClick={() => setBulkSelected(bulkSelected.size === completableIds.length ? new Set() : new Set(completableIds))}
-              >
-                {bulkSelected.size === completableIds.length ? 'Deselect all' : 'Select all'}
-              </button>
-              {bulkSelected.size > 0 && (
-                <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={() => setConfirmBulkOpen(true)} disabled={bulkCompleting}>
-                  {bulkCompleting ? <Loader2 className="size-3 animate-spin" /> : <CheckSquare className="size-3" />}
-                  Mark complete
-                </Button>
+        <MobileFilterBar
+          activeCount={filterActiveCount}
+          primary={
+            <div className="relative w-full min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search bookings…"
+                className="pl-8 h-9 md:h-8 text-base md:text-xs"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 min-h-[2.75rem] min-w-[2.75rem] flex items-center justify-center text-muted-foreground hover:text-foreground touch-manipulation"
+                >
+                  <X className="size-3.5" />
+                </button>
               )}
             </div>
-          )}
-          {/* Payment filter */}
-          <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/40 w-full sm:w-auto overflow-x-auto overscroll-x-contain">
-          {(['all', 'pending', 'paid'] as PaymentFilter[]).map((f) => (
-            <button
-              key={f}
-              onClick={() => setPaymentFilter(f)}
-              className={`shrink-0 px-3 py-2 min-h-[2.25rem] rounded-md text-xs font-medium transition-colors touch-manipulation ${
-                paymentFilter === f
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {f === 'all' ? 'All' : f === 'pending' ? 'Payment pending' : 'Paid'}
-            </button>
-          ))}
-          </div>
-        </div>
+          }
+          secondary={
+            <>
+              {completableIds.length > 0 && (
+                <div className="flex items-center gap-2 rounded-lg border border-dashed p-2 bg-muted/30 w-full sm:w-auto">
+                  <span className="text-xs text-muted-foreground px-1">
+                    {bulkSelected.size > 0 ? `${bulkSelected.size} selected` : `${completableIds.length} ready to complete`}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline touch-manipulation min-h-[2.25rem]"
+                    onClick={() => setBulkSelected(bulkSelected.size === completableIds.length ? new Set() : new Set(completableIds))}
+                  >
+                    {bulkSelected.size === completableIds.length ? 'Clear' : 'Select all'}
+                  </button>
+                  {bulkSelected.size > 0 && (
+                    <Button size="sm" className="h-8 gap-1.5 text-xs ml-auto" onClick={() => setConfirmBulkOpen(true)} disabled={bulkCompleting}>
+                      {bulkCompleting ? <Loader2 className="size-3 animate-spin" /> : <CheckSquare className="size-3" />}
+                      Complete
+                    </Button>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/30 w-full sm:w-auto overflow-x-auto overscroll-x-contain">
+                {(['all', 'pending', 'paid'] as PaymentFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setPaymentFilter(f)}
+                    className={`shrink-0 px-3 py-2 min-h-[2.25rem] rounded-md text-xs font-medium transition-colors touch-manipulation ${
+                      paymentFilter === f
+                        ? 'bg-background shadow-sm text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {f === 'all' ? 'All' : f === 'pending' ? 'Pending pay' : 'Paid'}
+                  </button>
+                ))}
+              </div>
+            </>
+          }
+        />
       </div>
 
       {hasTodayAppointments && (
@@ -306,35 +322,38 @@ export function AppointmentsClient({
         </div>
       )}
 
-      <Card id="appointments-upcoming" data-section-label="Upcoming" className="dashboard-section-anchor">
-        <CardHeader>
-          <CardTitle>Upcoming ({filteredUpcoming.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {filteredUpcoming.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="size-12 rounded-full bg-muted/60 flex items-center justify-center mb-3">
-                <Calendar className="size-6 text-muted-foreground/50" />
-              </div>
-              <p className="text-sm font-medium text-foreground">
-                {paymentFilter !== 'all' ? 'No appointments match this filter' : 'No upcoming appointments'}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                {paymentFilter !== 'all'
-                  ? 'Try switching the filter above to see all bookings.'
-                  : 'New bookings from WhatsApp will appear here automatically.'}
-              </p>
+      <SectionPanel
+        id="appointments-upcoming"
+        title="Upcoming bookings"
+        count={filteredUpcoming.length}
+        subtitle="Confirmed and pending appointments"
+        compact
+        className="dashboard-section-anchor"
+      >
+        {filteredUpcoming.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+            <div className="size-12 rounded-full bg-muted/60 flex items-center justify-center mb-3 border border-border/60">
+              <Calendar className="size-6 text-muted-foreground/50" />
             </div>
-          )}
-          <div className="space-y-3">
+            <p className="text-sm font-medium text-foreground">
+              {paymentFilter !== 'all' ? 'No appointments match this filter' : 'No upcoming appointments'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+              {paymentFilter !== 'all'
+                ? 'Try switching the filter above to see all bookings.'
+                : 'New bookings from WhatsApp will appear here automatically.'}
+            </p>
+          </div>
+        ) : (
+          <DataList>
             {filteredUpcoming.map((appt) => {
               const isCompletable = completableIds.includes(appt.id);
               return (
-                <div key={appt.id} className="flex items-start gap-2">
+                <DataRow key={appt.id} className="flex items-start gap-2 p-3 md:p-4">
                   {isCompletable && (
                     <input
                       type="checkbox"
-                      className="mt-4 size-5 cursor-pointer accent-primary shrink-0 touch-manipulation"
+                      className="mt-3 size-5 cursor-pointer accent-primary shrink-0 touch-manipulation"
                       checked={bulkSelected.has(appt.id)}
                       onChange={(e) => {
                         const next = new Set(bulkSelected);
@@ -351,73 +370,76 @@ export function AppointmentsClient({
                       onUpdated={patchAppointment}
                     />
                   </div>
-                </div>
+                </DataRow>
               );
             })}
-          </div>
-        </CardContent>
-      </Card>
+          </DataList>
+        )}
+      </SectionPanel>
 
       {filteredPast.length > 0 && (
-        <Card id="appointments-past" data-section-label="Past" className="dashboard-section-anchor">
-          <CardHeader>
-            <CardTitle>Past ({filteredPast.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {filteredPast.slice(0, 20).map((appt) => (
-                <AppointmentCard key={appt.id} appt={appt} token={token} onUpdated={patchAppointment} />
-              ))}
-              {filteredPast.length > 20 && (
-                <p className="text-xs text-muted-foreground text-center pt-2">
-                  Showing 20 of {filteredPast.length} past appointments
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <CollapsibleSection
+          id="appointments-past"
+          title="Past bookings"
+          count={filteredPast.length}
+          subtitle="Last 20 shown"
+          collapseOnMobile
+          className="dashboard-section-anchor"
+        >
+          <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">
+            {filteredPast.slice(0, 20).map((appt) => (
+              <DataRow key={appt.id} className="p-3 md:p-4">
+                <AppointmentCard appt={appt} token={token} onUpdated={patchAppointment} />
+              </DataRow>
+            ))}
+          </DataList>
+          {filteredPast.length > 20 && (
+            <p className="text-xs text-muted-foreground text-center pt-3 px-4">
+              Showing 20 of {filteredPast.length}
+            </p>
+          )}
+        </CollapsibleSection>
       )}
 
       {waitlist.length > 0 && (
-        <Card id="appointments-waitlist" data-section-label="Waitlist" className="dashboard-section-anchor">
-          <CardHeader>
-            <CardTitle>Waitlist ({waitlist.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-3">
-              Customers waiting for an opening — they will be notified automatically when a slot becomes available.
-            </p>
-            <div className="space-y-2">
-              {waitlist.map((entry) => (
-                <div key={entry.id} className="flex items-center gap-3 p-3 rounded-lg border text-sm">
-                  <div className="flex-1 space-y-0.5 min-w-0">
-                    <p className="font-medium truncate">{entry.customerName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {entry.serviceName ?? 'Any service'}
-                      {entry.staffName ? ` · ${entry.staffName}` : ''}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Since {new Date(entry.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
-                      {entry.expiresAt && ` · Expires ${new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}`}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => void handleRemoveWaitlist(entry.id)}
-                    disabled={removingWaitlistId === entry.id}
-                    title="Remove from waitlist"
-                    className="min-h-[2.75rem] min-w-[2.75rem] rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 shrink-0 touch-manipulation"
-                  >
-                    {removingWaitlistId === entry.id ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <X className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+        <CollapsibleSection
+          id="appointments-waitlist"
+          title="Waitlist"
+          count={waitlist.length}
+          subtitle="Notified when a slot opens"
+          collapseOnMobile
+          className="dashboard-section-anchor"
+        >
+          <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">
+            {waitlist.map((entry) => (
+              <DataRow key={entry.id} className="flex items-center gap-3 p-3 md:p-4 text-sm">
+                <div className="flex-1 space-y-0.5 min-w-0">
+                  <p className="font-medium truncate">{entry.customerName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {entry.serviceName ?? 'Any service'}
+                    {entry.staffName ? ` · ${entry.staffName}` : ''}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Since {new Date(entry.createdAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}
+                    {entry.expiresAt && ` · Expires ${new Date(entry.expiresAt).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })}`}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <button
+                  onClick={() => void handleRemoveWaitlist(entry.id)}
+                  disabled={removingWaitlistId === entry.id}
+                  title="Remove from waitlist"
+                  className="min-h-[2.75rem] min-w-[2.75rem] rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors disabled:opacity-40 shrink-0 touch-manipulation"
+                >
+                  {removingWaitlistId === entry.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <X className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </DataRow>
+            ))}
+          </DataList>
+        </CollapsibleSection>
       )}
     </div>
   );
@@ -433,22 +455,14 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
   if (todayAppts.length === 0) return null;
 
   return (
-    <Card className="border-primary/20 bg-gradient-to-r from-primary/[0.04] to-transparent overflow-hidden">
-      <CardHeader className="pb-2 sm:pb-3">
-        <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
-          <span className="relative flex size-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-50" />
-            <span className="relative inline-flex rounded-full size-2.5 bg-primary" />
-          </span>
-          <span>Today — {today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
-          <span className="ml-auto text-xs font-normal text-muted-foreground">
-            {todayAppts.length} appointment{todayAppts.length === 1 ? '' : 's'}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="dashboard-h-scroll gap-3 pb-2 -mx-1 px-1 snap-x snap-mandatory">
-          {todayAppts.map((a) => {
+    <SectionPanel
+      title="Today"
+      count={todayAppts.length}
+      subtitle={today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}
+      bodyClassName="pt-3"
+    >
+      <div className="dashboard-h-scroll gap-3 pb-1 snap-x snap-mandatory">
+        {todayAppts.map((a) => {
             const startTime = new Date(a.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
             const endTime = new Date(a.end).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
             const isPast = new Date(a.end) < new Date();
@@ -456,7 +470,7 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
             return (
               <div
                 key={a.id}
-                className={`shrink-0 snap-start rounded-xl border p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-all ${
+                className={`shrink-0 snap-start rounded-lg border border-border/70 p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-colors bg-card ${
                   isNow
                     ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
                     : isPast
@@ -484,8 +498,7 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
               </div>
             );
           })}
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </SectionPanel>
   );
 }
