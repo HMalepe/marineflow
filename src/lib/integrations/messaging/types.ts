@@ -54,7 +54,20 @@ export interface InteractiveButtons {
   }>;
 }
 
-export type InteractiveMessage = InteractiveList | InteractiveButtons;
+/** WhatsApp CTA URL button — opens a link in the browser (max 1 URL on Meta Cloud API). */
+export interface InteractiveCtaUrl {
+  type: 'cta_url';
+  header?: string;
+  body: string;
+  footer?: string;
+  /** Button label — max 20 characters (Meta); max 25 on Twilio */
+  displayText: string;
+  url: string;
+  /** Optional second URL (Twilio call-to-action only — ignored on Meta Cloud). */
+  secondaryAction?: { displayText: string; url: string };
+}
+
+export type InteractiveMessage = InteractiveList | InteractiveButtons | InteractiveCtaUrl;
 
 export interface TemplateParam {
   name: string;

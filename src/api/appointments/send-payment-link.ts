@@ -1,17 +1,14 @@
 import type { PrismaTx } from '../../lib/db/tenantSession.js';
 import { env } from '../../config.js';
-import { getTenantWhatsAppFrom, formatZaWhatsAppPhone, sendPaymentLinkMessage } from '../../lib/twilio.js';
+import { formatZaWhatsAppPhone } from '../../lib/twilio.js';
+import { buildManualPaymentLinkBody, buildPaymentCheckoutCta } from '../../lib/paymentPromptCopy.js';
+import { sendWithFallback } from '../../services/channelRouter.js';
 import { createPaymentCheckoutSession } from '../../services/payments.js';
 
 function checkoutUrl(paymentId: string): string {
   const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
   return `${baseUrl}/pay/checkout/${paymentId}`;
 }
-
-function formatZar(cents: number): string {
-  return `R${(cents / 100).toLocaleString('en-ZA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
-}
-
 export type SendPaymentLinkResult =
   | { ok: true; phone: string; paymentLinkSentAt: string; checkoutUrl: string }
   | { ok: false; error: string; message?: string };
@@ -72,23 +69,21 @@ export async function sendAppointmentPaymentLink(
     }
   }
 
-  let twilioFrom: string;
-  try {
-    twilioFrom = await getTenantWhatsAppFrom(input.salonId);
-  } catch {
-    return {
-      ok: false,
-      error: 'no_whatsapp_number',
-      message: 'This business has no WhatsApp number configured — assign one in admin',
-    };
-  }
-
-  const sid = await sendPaymentLinkMessage(waId, link, {
-    twilioFrom,
+  const amountCents = pendingPayment?.amountCents ?? appt.service.priceCents;
+  const body = buildManualPaymentLinkBody({
     salonName: appt.salon.tradingName?.trim() || appt.salon.name,
     serviceName: appt.service.name,
-    amountLabel: formatZar(pendingPayment?.amountCents ?? appt.service.priceCents),
+    amountCents,
   });
+  const cta = buildPaymentCheckoutCta(body, link);
+
+  const { result } = await sendWithFallback({
+    salonId: input.salonId,
+    to: waId,
+    body,
+    interactive: cta,
+  });
+  const sid = result.providerMessageId ?? null;
 
   if (!sid) {
     return {
