@@ -3249,10 +3249,8 @@ async function menuActionShowHours(
   await replyMenu(conv);
 }
 
-async function menuActionShowLocation(
-  conv: Conversation & { customer: Customer; salon: Salon },
-): Promise<void> {
-  const salon = conv.salon;
+/** Shared by the "Find us" menu action and the reception AI fallback below. */
+function buildLocationReply(salon: Salon): string {
   const address = salon.addressLine ?? 'Address not on file.';
   const mapsUrl = (salon as unknown as { mapsUrl?: string }).mapsUrl;
   const lines = [
@@ -3260,7 +3258,7 @@ async function menuActionShowLocation(
     address,
     salon.parkingNotes ? `Parking: ${salon.parkingNotes}` : null,
     salon.accessibility ? `♿ ${salon.accessibility}` : null,
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
 
   if (mapsUrl) {
     lines.push('', `📌 Open in maps:\n${mapsUrl}`);
@@ -3269,7 +3267,17 @@ async function menuActionShowLocation(
     lines.push('', `📌 Google Maps: https://maps.google.com/?q=${query}`);
   }
 
-  await reply(conv, lines.join('\n'));
+  return lines.join('\n');
+}
+
+/** Catches "how far/where/directions/parking" style questions even when the AI orchestrator can't classify them. */
+const LOCATION_QUERY_RE =
+  /\b(how far|distance|directions?|where (?:are|is) (?:you|it|the (?:salon|store|shop|place))|located|location|address|find (?:you|us)|get to you|parking)\b/i;
+
+async function menuActionShowLocation(
+  conv: Conversation & { customer: Customer; salon: Salon },
+): Promise<void> {
+  await reply(conv, buildLocationReply(conv.salon));
   await replyMenu(conv);
 }
 
@@ -5522,10 +5530,36 @@ async function handleOtherQuery(
       return;
     }
   } catch {
-    // AI unavailable — fall through to escalation prompt
+    // AI unavailable — fall through to the deterministic lookups below
   }
 
-  // AI couldn't answer — offer human
+  // AI didn't classify this — before giving up, try lookups that don't depend
+  // on the orchestrator: the salon's own address/maps link, then the FAQ knowledge base.
+  if (LOCATION_QUERY_RE.test(text)) {
+    await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
+    await reply(conv, buildLocationReply(conv.salon));
+    await reply(conv, 'Did that answer your question? Reply YES or NO.');
+    return;
+  }
+
+  try {
+    const { semanticSearch } = await import('../lib/integrations/ai/index.js');
+    const { synthesizeFaqAnswer } = await import('./botAssistant.js');
+    const results = await semanticSearch(conv.salonId, text, { limit: 3, threshold: 0.65 });
+    if (results.length > 0) {
+      const chunks = results.map((r) => r.content);
+      const synthesized = await synthesizeFaqAnswer(conv.salon, text, chunks);
+      const answer = synthesized ?? results[0]!.content;
+      await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
+      await reply(conv, answer);
+      await reply(conv, 'Did that answer your question? Reply YES or NO.');
+      return;
+    }
+  } catch {
+    // Semantic search unavailable — fall through to escalation prompt
+  }
+
+  // Nothing matched — offer human
   await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
   await reply(conv, "I'm not sure I have the answer to that one. Would you like me to pass this on to a team member? Reply YES or NO.");
 }
