@@ -37,7 +37,22 @@ export function customerLabel(c: TicketCardCustomer): string {
   if (c.displayName) return c.displayName;
   const parts = [c.firstName, c.lastName].filter(Boolean);
   if (parts.length) return parts.join(' ');
-  return c.waId;
+  return formatTicketPhone(c.waId);
+}
+
+export function formatTicketPhone(raw: string): string {
+  const digits = raw.replace(/^\+/, '');
+  if (digits.startsWith('27') && digits.length === 11) {
+    return `+27 ${digits.slice(2, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+  }
+  return raw.startsWith('+') ? raw : `+${raw}`;
+}
+
+export function customerSubtitle(c: TicketCardCustomer): string {
+  const name = customerLabel(c);
+  const phone = formatTicketPhone(c.waId);
+  if (name === phone) return phone;
+  return `${name} · ${phone}`;
 }
 
 export function timeAgo(dateStr: string): string {
@@ -76,28 +91,30 @@ export function TicketCard({ ticket, active, onSelect }: TicketCardProps) {
       type="button"
       onClick={() => onSelect(ticket)}
       className={cn(
-        'w-full text-left px-4 py-3 hover:bg-accent transition-colors',
+        'chat-list-item w-full text-left px-3 py-2.5 hover:bg-accent/70 transition-colors border-b border-border/50',
         active && 'bg-accent',
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="font-medium text-sm truncate flex-1">
+        <span className="font-medium text-[13px] leading-snug line-clamp-2 flex-1">
           {ticket.subject ?? '(no subject)'}
         </span>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          <Badge variant="outline" className={cn('text-[10px]', badge.className)}>
+        <div className="flex items-center gap-1 shrink-0">
+          <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0', badge.className)}>
             {badge.label}
           </Badge>
           <TicketSlaBadge status={ticket.status} createdAt={ticket.createdAt} />
         </div>
       </div>
-      <div className="text-xs text-muted-foreground mt-0.5 truncate">
-        {customerLabel(ticket.customer)} · {ticket.customer.waId}
+      <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+        {customerSubtitle(ticket.customer)}
       </div>
       {last && (
-        <div className="text-xs text-muted-foreground mt-1 truncate opacity-70">{last.body}</div>
+        <div className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-snug opacity-80">
+          {last.body}
+        </div>
       )}
-      <div className="text-[10px] text-muted-foreground mt-1">{timeAgo(ticket.updatedAt)}</div>
+      <div className="text-[10px] text-muted-foreground/80 mt-1">{timeAgo(ticket.updatedAt)}</div>
     </button>
   );
 }

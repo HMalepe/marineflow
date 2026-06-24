@@ -6,7 +6,6 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PremiumDisclosure } from '@/components/premium-disclosure';
-import { MobileFilterBar } from '@/components/mobile-filter-bar';
 import { PaneHeader } from '@/components/section-panel';
 import {
   ChatComposer,
@@ -19,6 +18,7 @@ import {
   TicketCard,
   TicketSlaBadge,
   customerLabel,
+  customerSubtitle,
   type TicketCardData,
 } from '@/components/TicketCard';
 import { TICKETS_LABEL, TICKETS_TAGLINE, CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
@@ -159,7 +159,6 @@ export function TicketsClient({ token }: Props) {
   ];
 
   const showDetailOnMobile = Boolean(selected);
-  const filterActiveCount = filter !== 'open' ? 1 : 0;
 
   const chatMessages: ChatMessage[] = useMemo(() => {
     if (!selected) return [];
@@ -192,7 +191,7 @@ export function TicketsClient({ token }: Props) {
       <div className="dashboard-inbox-frame dashboard-inbox-frame--chat flex-col md:flex-row">
         <div
           className={cn(
-            'dashboard-inbox-pane dashboard-inbox-pane--list w-full md:w-[22rem] lg:w-80 shrink-0',
+            'dashboard-inbox-pane dashboard-inbox-pane--list w-full md:w-[17rem] lg:w-72 shrink-0 overflow-hidden',
             selected && 'hidden md:flex',
           )}
         >
@@ -206,39 +205,33 @@ export function TicketsClient({ token }: Props) {
               ) : undefined
             }
           />
-          <div className="dashboard-pane-toolbar">
-            <MobileFilterBar
-              activeCount={filterActiveCount}
-              primary={<span className="text-sm text-muted-foreground px-1">Support tickets</span>}
-              secondary={
-                <div className="flex flex-wrap gap-1.5">
-                  {filterTabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setFilter(tab.id)}
-                      className={cn(
-                        'rounded-full px-3 py-2 min-h-[2.25rem] text-xs font-medium transition-colors touch-manipulation',
-                        filter === tab.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted/50 text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {tab.label}
-                      {tab.count !== undefined ? ` · ${tab.count}` : ''}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
+          <div className="dashboard-pane-toolbar py-2">
+            <div className="flex items-center gap-2">
+              <label htmlFor="ticket-filter" className="sr-only">
+                Filter tickets
+              </label>
+              <select
+                id="ticket-filter"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as FilterTab)}
+                className="h-9 flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {filterTabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label}
+                    {tab.count !== undefined ? ` (${tab.count})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="chat-list-scroll flex-1 overflow-y-auto overscroll-y-contain min-h-0">
             {filtered.length === 0 && (
-              <p className="p-4 text-sm text-muted-foreground">
+              <p className="p-4 text-sm text-muted-foreground leading-relaxed">
                 {filter === 'noise'
-                  ? 'No auto-resolved after-hours tickets.'
-                  : 'No support tickets yet. They appear when customers report an issue, leave a complaint, or get a low rating.'}
+                  ? 'No auto-closed noise tickets.'
+                  : 'No support tickets yet. They appear when a customer uses Support in WhatsApp, reports an issue, uses upset language, or asks for a person.'}
               </p>
             )}
             {filtered.map((ticket) => (
@@ -272,7 +265,7 @@ export function TicketsClient({ token }: Props) {
               <div className="min-w-0 flex-1">
                 <h2 className="font-semibold truncate text-[15px]">{selected.subject ?? '(no subject)'}</h2>
                 <p className="text-xs text-muted-foreground truncate">
-                  {customerLabel(selected.customer)} · {selected.customer.waId}
+                  {customerSubtitle(selected.customer)}
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
@@ -334,7 +327,7 @@ export function TicketsClient({ token }: Props) {
             />
           </div>
         ) : (
-          <div className="dashboard-inbox-pane dashboard-inbox-pane--thread flex-1 hidden md:flex">
+          <div className="dashboard-inbox-pane dashboard-inbox-pane--thread flex-1 hidden md:flex flex-col overflow-hidden min-h-0 min-w-0">
             <ChatEmptyState
               title="Select a ticket"
               hint="Pick a ticket from the queue to view messages and reply on WhatsApp."

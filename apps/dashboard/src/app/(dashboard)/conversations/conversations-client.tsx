@@ -448,7 +448,7 @@ export function ConversationsClient({ token, staffName }: Props) {
       <div className="dashboard-inbox-frame dashboard-inbox-frame--chat flex-col md:flex-row">
         <div
           className={cn(
-            'dashboard-inbox-pane dashboard-inbox-pane--list w-full md:w-[22rem] lg:w-96 shrink-0',
+            'dashboard-inbox-pane dashboard-inbox-pane--list w-full md:w-[22rem] lg:w-96 shrink-0 overflow-hidden',
             showThreadOnMobile && 'hidden md:flex',
           )}
         >
@@ -538,7 +538,7 @@ export function ConversationsClient({ token, staffName }: Props) {
 
         <div
           className={cn(
-            'dashboard-inbox-pane dashboard-inbox-pane--thread flex-1 min-w-0',
+            'dashboard-inbox-pane dashboard-inbox-pane--thread flex-1 flex flex-col overflow-hidden min-h-0 min-w-0',
             !showThreadOnMobile && 'hidden md:flex',
           )}
         >

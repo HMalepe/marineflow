@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  AlertTriangle,
   CheckCircle2,
   GitMerge,
   Loader2,
@@ -293,7 +292,7 @@ export function CustomersClient({ token }: Props) {
         },
         token,
       );
-      showToast('Records merged successfully', 'success');
+      showToast('Profiles combined successfully', 'success');
       await load(search);
       await loadSegments();
     } catch (e) {
@@ -434,15 +433,19 @@ export function CustomersClient({ token }: Props) {
       )}
 
       {!loading && duplicateCount > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 flex gap-3 items-start">
-          <AlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <span className="font-medium text-amber-800 dark:text-amber-300">
-              {duplicateCount} phone number{duplicateCount === 1 ? '' : 's'} matched to multiple records.
-            </span>{' '}
-            <span className="text-muted-foreground">
-              Use the Merge button on each duplicate pair to consolidate history into one profile.
-            </span>
+        <div className="rounded-xl border border-amber-500/25 bg-gradient-to-r from-amber-500/[0.07] to-transparent px-4 py-3.5 flex gap-3 items-start">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15">
+            <GitMerge className="size-4 text-amber-700 dark:text-amber-300" />
+          </div>
+          <div className="text-sm space-y-1">
+            <p className="font-medium text-foreground">
+              {duplicateCount} phone number{duplicateCount === 1 ? '' : 's'} have more than one profile
+            </p>
+            <p className="text-muted-foreground leading-relaxed">
+              This usually happens when WhatsApp saved the number with and without a{' '}
+              <span className="font-mono text-xs">+</span>. Combine extras into the main profile
+              below — nothing is deleted except the duplicate entry.
+            </p>
           </div>
         </div>
       )}
@@ -497,6 +500,7 @@ export function CustomersClient({ token }: Props) {
                           waId={dup.waId}
                           bookingCount={dup.bookingCount}
                           createdAt={dup.createdAt}
+                          primaryName={name}
                           formatPhone={formatPhone}
                           merging={mergingId === dup.id}
                           onMerge={() =>
@@ -520,30 +524,51 @@ export function CustomersClient({ token }: Props) {
 
       {mergeConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="bg-background rounded-2xl border shadow-2xl max-w-sm w-full p-6 space-y-4">
+          <div className="bg-background rounded-2xl border shadow-2xl max-w-md w-full p-6 space-y-5">
             <div className="flex items-start gap-3">
-              <div className="flex size-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40 shrink-0">
-                <GitMerge className="size-5 text-amber-600 dark:text-amber-400" />
+              <div className="flex size-10 items-center justify-center rounded-full bg-amber-500/15 shrink-0">
+                <GitMerge className="size-5 text-amber-700 dark:text-amber-300" />
               </div>
               <div>
-                <h3 className="font-semibold">Merge records?</h3>
-                <p className="text-sm text-muted-foreground mt-1">This cannot be undone.</p>
+                <h3 className="font-semibold text-lg">Combine duplicate profiles?</h3>
+                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                  One customer, one history. The extra profile is removed after its data is moved
+                  over.
+                </p>
               </div>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-3 text-sm space-y-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="size-4 text-green-500 shrink-0" />
-                <span className="font-medium">Keep: {mergeConfirm.primaryName}</span>
+
+            <div className="rounded-xl border bg-muted/20 p-4 text-sm space-y-3">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  Keeping
+                </p>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                  <span className="font-semibold">{mergeConfirm.primaryName}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <XCircle className="size-4 text-destructive shrink-0" />
-                <span className="text-muted-foreground">
-                  Remove: {mergeConfirm.dupName}
-                  {mergeConfirm.dupBookings > 0 &&
-                    ` (${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} will transfer)`}
-                </span>
+              <div className="border-t border-border/60 pt-3">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  Removing
+                </p>
+                <div className="flex items-center gap-2">
+                  <XCircle className="size-4 text-muted-foreground shrink-0" />
+                  <span>{mergeConfirm.dupName}</span>
+                </div>
               </div>
             </div>
+
+            <ul className="text-xs text-muted-foreground space-y-1.5 px-1">
+              <li>WhatsApp chat history is merged into one thread</li>
+              <li>
+                {mergeConfirm.dupBookings > 0
+                  ? `${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} transfer to the kept profile`
+                  : 'Bookings and loyalty stay on the kept profile'}
+              </li>
+              <li>This cannot be undone</li>
+            </ul>
+
             <div className="flex gap-2 pt-1">
               <Button variant="outline" className="flex-1" onClick={() => setMergeConfirm(null)}>
                 Cancel
@@ -553,7 +578,7 @@ export function CustomersClient({ token }: Props) {
                 onClick={() => void handleMerge()}
               >
                 <GitMerge className="size-4 mr-1.5" />
-                Merge
+                Combine profiles
               </Button>
             </div>
           </div>

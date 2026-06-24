@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Solupair Dashboard",
-  description: "Business management dashboard",
+  title: 'Solupair Dashboard',
+  description: 'Business management dashboard',
+  applicationName: 'Solupair',
 };
 
 export const viewport: Viewport = {

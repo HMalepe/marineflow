@@ -165,6 +165,7 @@ import {
   cancelGoogleReviewForAppointment,
 } from '../lib/googleReviewSchedule.js';
 import { incrementCustomerBookingCount } from './noShowRisk.js';
+import { recordSupportTicketMessage, tryRecordSupportTicket } from './supportTickets.js';
 import {
   deleteCustomerData,
   exportCustomerData,
@@ -1217,54 +1218,6 @@ export async function handleInboundWhatsApp(input: {
   }
 }
 
-/**
- * Track after-hours inbound as queue noise — first message keeps inboundCount at 0;
- * follow-ups increment so the auto-resolve job only closes silent threads.
- */
-async function trackAfterHoursTicket(input: {
-  salonId: string;
-  customerId: string;
-  text: string;
-}): Promise<void> {
-  const db = getTenantDb();
-  const existing = await db.ticket.findFirst({
-    where: {
-      salonId: input.salonId,
-      customerId: input.customerId,
-      type: 'AFTER_HOURS_MESSAGE',
-      status: { in: ['OPEN', 'WAITING_CUSTOMER'] },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (existing) {
-    await db.ticket.update({
-      where: { id: existing.id },
-      data: {
-        inboundCount: { increment: 1 },
-        updatedAt: new Date(),
-        messages: {
-          create: { direction: 'in', body: input.text },
-        },
-      },
-    });
-    return;
-  }
-
-  await db.ticket.create({
-    data: {
-      salonId: input.salonId,
-      customerId: input.customerId,
-      type: 'AFTER_HOURS_MESSAGE',
-      status: 'OPEN',
-      inboundCount: 0,
-      subject: 'After-hours message',
-      messages: {
-        create: { direction: 'in', body: input.text },
-      },
-    },
-  });
-}
 
 async function processInboundWhatsApp(
   tenant: ResolvedTenant,
@@ -1374,15 +1327,16 @@ async function processInboundWhatsApp(
 
   if (
     (salon.status === 'ACTIVE' || salon.status === 'TRIAL') &&
-    !isWithinBusinessHours(salon) &&
-    !WHATSAPP_BOOKING_STEPS.includes(conv.step) &&
     conv.step !== ConversationStep.HANDOFF
   ) {
-    trackAfterHoursTicket({
+    tryRecordSupportTicket({
       salonId: salon.id,
       customerId: customer.id,
       text,
-    }).catch((err) => logger.warn({ err }, 'after_hours_ticket_track_failed'));
+      step: conv.step,
+      context: conv.context,
+      bookingFlowSteps: WHATSAPP_BOOKING_STEPS,
+    }).catch((err) => logger.warn({ err }, 'support_ticket_record_failed'));
   }
 
   const isFirstEverMessage = conv.messageCount === 0;
@@ -1604,20 +1558,12 @@ async function processInboundWhatsApp(
       return;
     }
 
-    // Within hours — open a ticket and hand off
-    await getTenantDb().ticket.create({
-      data: {
-        salonId: salon.id,
-        customerId: customer.id,
-        status: 'OPEN',
-        subject: 'Human handoff requested',
-        messages: {
-          create: {
-            direction: MessageDirection.INBOUND,
-            body: `Customer requested human support.\nLast message: ${text}`,
-          },
-        },
-      },
+    // Within hours — open a support ticket and hand off
+    await recordSupportTicketMessage({
+      salonId: salon.id,
+      customerId: customer.id,
+      text: `Customer requested human support.\nLast message: ${text}`,
+      subject: 'Human handoff requested',
     });
 
     // Notify owner — best-effort, never blocks handoff
@@ -1799,8 +1745,8 @@ async function escalateNegativeSentiment(
       subject: 'Negative sentiment detected — customer may need urgent help',
       messages: {
         create: {
-          direction: MessageDirection.INBOUND,
-          body: `AI flagged negative sentiment.\nCustomer message: "${text.slice(0, 300)}"`,
+          direction: 'in',
+          body: `Upset language detected.\nCustomer message: "${text.slice(0, 300)}"`,
         },
       },
     },
@@ -3508,6 +3454,12 @@ async function handleSubMenuChoice(
         return;
       }
       if (choice === 4) {
+        await recordSupportTicketMessage({
+          salonId: conv.salonId,
+          customerId: conv.customerId,
+          text: 'Customer opened Speak to Reception from the Support menu.',
+          subject: 'Support — speak to reception',
+        });
         await saveCtx(conv.id, { otherQueryAnswered: false, ...PENDING_PROFILE_CLEAR }, ConversationStep.OTHER_QUERY);
         await reply(conv, 'You\'re through to reception — how can we help you today?');
         return;
@@ -5562,20 +5514,17 @@ async function handleComplaint(
     return;
   }
 
-  const ticket = await getTenantDb().ticket.create({
-    data: {
-      salonId: conv.salonId,
-      customerId: conv.customerId,
-      status: 'OPEN',
-      subject: 'Complaint',
-      messages: { create: { direction: MessageDirection.INBOUND, body: text } },
-    },
+  await recordSupportTicketMessage({
+    salonId: conv.salonId,
+    customerId: conv.customerId,
+    text,
+    subject: 'Support — reported issue',
   });
-  await saveCtx(conv.id, {}, ConversationStep.MENU);
-  const refId = ticket.id.slice(0, 8).toUpperCase();
+  await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+  const refHint = conv.customer.waId.slice(-4);
   await replyWithMenu(
     conv,
-    `✅ Your complaint has been logged (ref: *#${refId}*). A member of our team will follow up with you soon — thank you for letting us know. 🙏`,
+    `✅ Thanks — we've logged your issue (ref ending *${refHint}*). A team member will follow up soon. 🙏`,
   );
 }
 
@@ -5607,19 +5556,11 @@ async function handleOtherQuery(
     if (upper === 'NO' || upper === 'N') {
       // Escalate to human
       const isOpen = isWithinBusinessHours(conv.salon);
-      await getTenantDb().ticket.create({
-        data: {
-          salonId: conv.salonId,
-          customerId: conv.customerId,
-          status: 'OPEN',
-          subject: 'Customer needs human help',
-          messages: {
-            create: {
-              direction: MessageDirection.INBOUND,
-              body: `Customer was not satisfied with AI answer.\nOriginal query: ${(c.otherQueryText as string | undefined) ?? text}`,
-            },
-          },
-        },
+      await recordSupportTicketMessage({
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        text: `Customer was not satisfied with AI answer.\nOriginal query: ${(c.otherQueryText as string | undefined) ?? text}`,
+        subject: 'Customer needs human help',
       });
       await saveCtx(conv.id, { otherQueryAnswered: undefined, otherQueryText: undefined }, ConversationStep.IDLE);
       if (isOpen) {
@@ -5641,6 +5582,12 @@ async function handleOtherQuery(
       return;
     }
     if (aiResult.handled && aiResult.reply) {
+      await recordSupportTicketMessage({
+        salonId: conv.salonId,
+        customerId: conv.customerId,
+        text,
+        subject: 'Support — speak to reception',
+      });
       await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });
       await reply(conv, aiResult.reply);
       await reply(conv, 'Did that answer your question? Reply YES or NO.');
@@ -5649,6 +5596,13 @@ async function handleOtherQuery(
   } catch {
     // AI unavailable — fall through to escalation prompt
   }
+
+  await recordSupportTicketMessage({
+    salonId: conv.salonId,
+    customerId: conv.customerId,
+    text,
+    subject: 'Support — speak to reception',
+  });
 
   // AI couldn't answer — offer human
   await saveCtx(conv.id, { otherQueryAnswered: true, otherQueryText: text });

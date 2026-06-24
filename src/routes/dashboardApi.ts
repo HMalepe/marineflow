@@ -7,6 +7,7 @@ import { getTenantDb, type PrismaTx } from '../lib/db/tenantSession.js';
 import { earnStampForCompletedVisit } from '../services/loyalty.js';
 import { refundPaymentStaff } from '../services/payments.js';
 import { fuzzySearchCustomers } from '../services/customerSearch.js';
+import { mergeCustomers } from '../services/customerMerge.js';
 import { sendWithFallback } from '../services/channelRouter.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import { emitMessageReceived } from '../lib/eventBus.js';
@@ -2704,8 +2705,12 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         const db = getTenantDb();
         const [primary, secondary] = await Promise.all([
-          db.customer.findFirst({ where: { id, salonId: user.salonId, deletedAt: null } }),
-          db.customer.findFirst({ where: { id: secondaryId, salonId: user.salonId, deletedAt: null } }),
+          db.customer.findFirst({
+            where: { id, salonId: user.salonId, deletedAt: null },
+          }),
+          db.customer.findFirst({
+            where: { id: secondaryId, salonId: user.salonId, deletedAt: null },
+          }),
         ]);
 
         if (!primary || !secondary) {
@@ -2713,44 +2718,29 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'One or both customers not found.' };
         }
 
-        const mergedWaId = (() => {
-          const raw = primary.waId ?? secondary.waId ?? null;
-          if (!raw) return null;
-          return raw.startsWith('+') ? raw : `+${raw}`;
-        })();
+        try {
+          const { primaryId } = await mergeCustomers(db, primary, secondary);
 
-        await db.conversation.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
-        await db.appointment.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
-        await db.loyaltyLedger.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
-        await db.analyticsEvent.updateMany({ where: { customerId: secondaryId }, data: { customerId: id } });
+          await db.auditLog.create({
+            data: {
+              salonId: user.salonId,
+              actorUserId: user.sub,
+              action: 'customer_merge',
+              entity: 'Customer',
+              entityId: primaryId,
+              payload: { secondaryId } as unknown as Record<string, string>,
+            },
+          });
 
-        await db.customer.update({
-          where: { id },
-          data: {
-            firstName: primary.firstName || secondary.firstName || null,
-            lastName: primary.lastName || secondary.lastName || null,
-            displayName: primary.displayName || secondary.displayName || null,
-            email: primary.email || secondary.email || null,
-            waId: mergedWaId ?? undefined,
-            noShowCount: primary.noShowCount + secondary.noShowCount,
-            bookingCount: primary.bookingCount + secondary.bookingCount,
-          },
-        });
-
-        await db.customer.update({ where: { id: secondaryId }, data: { deletedAt: new Date() } });
-
-        await db.auditLog.create({
-          data: {
-            salonId: user.salonId,
-            actorUserId: user.sub,
-            action: 'customer_merge',
-            entity: 'Customer',
-            entityId: id,
-            payload: { secondaryId } as unknown as Record<string, string>,
-          },
-        });
-
-        return { ok: true, primaryId: id };
+          return { ok: true, primaryId };
+        } catch (err) {
+          request.log.error({ err, primaryId: id, secondaryId }, 'customer_merge_failed');
+          reply.code(500);
+          return {
+            error: 'merge_failed',
+            message: 'Could not merge these profiles. Try again or contact support if it keeps failing.',
+          };
+        }
       });
     },
   );

@@ -11,7 +11,7 @@ export const BRANCHES_LABEL = 'Branches';
 export const CONVERSATIONS_TAGLINE =
   'Live WhatsApp inbox — reply in real time and take over when the bot hands off.';
 export const TICKETS_TAGLINE =
-  'Tracked issues from report-a-problem, complaints, and low ratings — resolve and close when done.';
+  'Issues from Support menu, upset language, complaints, and handoffs — not casual after-hours chats.';
 
 export type NavItem = {
   href: string;

@@ -591,13 +591,19 @@
   }
 
   /* ── Modern chat (WhatsApp / WeChat style) ─────────────────────── */
+  .dashboard-comms-page.dashboard-workspace {
+    overflow: hidden;
+  }
+
   .dashboard-comms-page .dashboard-inbox-frame--chat {
-    min-height: min(32rem, calc(100dvh - var(--dashboard-mobile-chrome) - 8rem));
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: calc(100dvh - var(--dashboard-mobile-chrome) - 9rem);
   }
 
   @media (min-width: 768px) {
     .dashboard-comms-page .dashboard-inbox-frame--chat {
-      min-height: min(36rem, calc(100dvh - var(--dashboard-sticky-offset, 3.5rem) - 7rem));
+      max-height: calc(100dvh - var(--dashboard-sticky-offset, 3.5rem) - 11rem);
     }
   }
 

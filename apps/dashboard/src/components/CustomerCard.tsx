@@ -126,10 +126,10 @@ export function CustomerCard({
             {hasDuplicates && (
               <Badge
                 variant="outline"
-                className="text-[10px] border-amber-400/50 text-amber-700 dark:text-amber-300 gap-1 shrink-0"
+                className="text-[10px] border-amber-500/40 text-amber-800 dark:text-amber-300 gap-1 shrink-0"
               >
                 <AlertTriangle className="size-2.5" />
-                {duplicateCount} records
+                Same number · {duplicateCount} profiles
               </Badge>
             )}
             {stats?.ltvBadge && (
@@ -194,6 +194,7 @@ interface CustomerDuplicateRowProps {
   waId: string | null;
   bookingCount: number;
   createdAt: string;
+  primaryName: string;
   formatPhone: (raw: string) => string;
   merging: boolean;
   onMerge: () => void;
@@ -204,46 +205,49 @@ export function CustomerDuplicateRow({
   waId,
   bookingCount,
   createdAt,
+  primaryName,
   formatPhone,
   merging,
   onMerge,
 }: CustomerDuplicateRowProps) {
   return (
-    <div className="flex items-center gap-4 px-4 pb-3 pt-0 border-t border-amber-400/20">
-      <div className="size-11 shrink-0 flex items-center justify-center">
-        <div className="size-7 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-          <GitMerge className="size-3.5 text-amber-600 dark:text-amber-400" />
+    <div className="mx-3 mb-3 mt-1 rounded-lg border border-dashed border-amber-500/35 bg-amber-500/[0.04] px-3 py-2.5">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500/10">
+          <GitMerge className="size-3.5 text-amber-700 dark:text-amber-300" />
         </div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-muted-foreground">{dupName}</p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {waId && (
-            <span className="font-mono text-[11px] text-muted-foreground/70">{formatPhone(waId)}</span>
-          )}
-          <span className="text-[11px] text-muted-foreground/70">
-            · {bookingCount} booking{bookingCount === 1 ? '' : 's'}
-          </span>
-          <span className="text-[11px] text-muted-foreground/70">
-            · since{' '}
-            {new Date(createdAt).toLocaleDateString('en-ZA', {
-              day: 'numeric',
-              month: 'short',
-              year: '2-digit',
-            })}
-          </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-foreground">Extra profile for the same number</p>
+          <p className="mt-0.5 text-sm font-semibold truncate">{dupName}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+            {waId && <span className="font-mono">{formatPhone(waId)}</span>}
+            <span>
+              {bookingCount} booking{bookingCount === 1 ? '' : 's'}
+            </span>
+            <span>
+              Added{' '}
+              {new Date(createdAt).toLocaleDateString('en-ZA', {
+                day: 'numeric',
+                month: 'short',
+                year: '2-digit',
+              })}
+            </span>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            Combine into <span className="font-medium text-foreground">{primaryName}</span> — chat
+            history, bookings, and loyalty move across.
+          </p>
         </div>
+        <Button
+          size="sm"
+          className="shrink-0 h-8 gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+          onClick={onMerge}
+          disabled={merging}
+        >
+          {merging ? <Loader2 className="size-3.5 animate-spin" /> : <GitMerge className="size-3.5" />}
+          {merging ? 'Combining…' : 'Combine'}
+        </Button>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="shrink-0 border-amber-400/50 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-900/20 gap-1.5 text-xs h-7"
-        onClick={onMerge}
-        disabled={merging}
-      >
-        {merging ? <Loader2 className="size-3 animate-spin" /> : <GitMerge className="size-3" />}
-        {merging ? 'Merging…' : 'Merge into above'}
-      </Button>
     </div>
   );
 }
