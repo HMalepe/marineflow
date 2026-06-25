@@ -299,6 +299,7 @@ const BOOKING_CTX_CLEAR: Partial<BotContext> = {
   manageList: undefined,
   managePastList: undefined,
   addonPhase: undefined,
+  pendingExtraBookings: undefined,
   ...PENDING_PROFILE_CLEAR,
 };
 

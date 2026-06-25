@@ -232,12 +232,17 @@ export function parsePartyCount(text: string): number {
     if (n >= 1 && n <= 20) return n;
   }
 
-  if (/\b(myself|me)\b/.test(t)) {
-    const andCount = (t.match(/\band\b/g) ?? []).length;
-    if (andCount > 0) return Math.min(1 + andCount, 10);
-  }
+  // Require "myself/me and" as a unit — a bare "me" (e.g. "remind me") or a
+  // service conjunction ("cut and colour") must never trigger this; only an
+  // explicit "myself/me and <someone>" phrase does.
+  const selfAndMatch = t.match(/\b(?:myself|me)\s+and\b/);
+  if (!selfAndMatch) return 1;
 
-  return 1;
+  // Count further "and <person>" clauses after that point to support 3+
+  // people ("myself and my son and my wife"). Each one adds another booking.
+  const afterFirst = t.slice(selfAndMatch.index! + selfAndMatch[0].length);
+  const extraAnds = (afterFirst.match(/\band\b/g) ?? []).length;
+  return Math.min(2 + extraAnds, 10);
 }
 
 /** True when the customer typed a menu number (1–10), not a natural date phrase. */

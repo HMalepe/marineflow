@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isDateMenuNumber, parseNaturalDateTime } from './naturalDateTime.js';
+import { isDateMenuNumber, parseNaturalDateTime, parsePartyCount } from './naturalDateTime.js';
 
 describe('isDateMenuNumber', () => {
   it('accepts pure menu numbers only', () => {
@@ -28,5 +28,27 @@ describe('parseNaturalDateTime — deterministic', () => {
     const result = await parseNaturalDateTime('Saturday 15:00', tz);
     expect(result?.localDateStr).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(result?.hour).toBe(15);
+  });
+});
+
+describe('parsePartyCount', () => {
+  it('detects "myself and my X" as 2', () => {
+    expect(parsePartyCount('High top fade next Friday at 3pm for myself and my 9 year old')).toBe(2);
+    expect(parsePartyCount('me and my son want a cut')).toBe(2);
+  });
+
+  it('counts extra "and" clauses for 3+ people', () => {
+    expect(parsePartyCount('myself and my son and my wife')).toBe(3);
+  });
+
+  it('parses explicit headcount phrases', () => {
+    expect(parsePartyCount('book a table for 4 people')).toBe(4);
+    expect(parsePartyCount('for 3 of us please')).toBe(3);
+  });
+
+  it('never fires on a bare "me" or a service conjunction', () => {
+    expect(parsePartyCount('remind me tomorrow at 3pm')).toBe(1);
+    expect(parsePartyCount('cut and colour please')).toBe(1);
+    expect(parsePartyCount('high top fade and a beard trim')).toBe(1);
   });
 });
