@@ -1,4 +1,5 @@
 import type { ConversationStep, TicketType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import {
   DEFAULT_SUPPORT_TICKET_KEYWORDS,
@@ -42,7 +43,7 @@ export async function loadSupportTicketKeywords(salonId: string): Promise<string
   await db.salon.update({
     where: { id: salonId },
     data: {
-      metadata: mergeSupportTicketKeywordsIntoMetadata(salon?.metadata, defaults),
+      metadata: mergeSupportTicketKeywordsIntoMetadata(salon?.metadata, defaults) as Prisma.InputJsonValue,
     },
   });
   return defaults;
