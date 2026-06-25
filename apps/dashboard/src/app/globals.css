@@ -513,6 +513,38 @@
     color: var(--muted-foreground);
   }
 
+  .dashboard-section-hidden-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: color-mix(in oklch, var(--solupair-violet) 70%, var(--foreground));
+    background: color-mix(in oklch, var(--solupair-violet) 14%, var(--card));
+    border: 1px solid color-mix(in oklch, var(--solupair-violet) 30%, transparent);
+    white-space: nowrap;
+  }
+
+  .dashboard-section-toggle-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--muted-foreground);
+    white-space: nowrap;
+  }
+
+  .dashboard-section-collapsed {
+    border-color: color-mix(in oklch, var(--solupair-violet) 35%, var(--border));
+  }
+
+  .dashboard-section-collapsed .dashboard-section-header {
+    background: color-mix(in oklch, var(--solupair-violet) 8%, var(--card));
+  }
+
+  .dark .dashboard-section-collapsed .dashboard-section-header {
+    background: color-mix(in oklch, var(--solupair-violet) 16%, var(--card));
+  }
+
   .dashboard-section-body {
     padding: 1rem;
   }

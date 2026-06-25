@@ -81,8 +81,17 @@ export function CollapsibleSection({
 
   const hiddenClass = manualToggle ? 'hidden' : 'hidden md:block';
 
+  const showCollapsedBadge = manualToggle && !open;
+
   return (
-    <section id={id} className={cn('dashboard-section dashboard-section-collapsible', className)}>
+    <section
+      id={id}
+      className={cn(
+        'dashboard-section dashboard-section-collapsible',
+        showCollapsedBadge && 'dashboard-section-collapsed',
+        className,
+      )}
+    >
       <button
         type="button"
         onClick={toggle}
@@ -97,6 +106,11 @@ export function CollapsibleSection({
             {count !== undefined && (
               <span className="dashboard-section-count">{count}</span>
             )}
+            {showCollapsedBadge && (
+              <span className="dashboard-section-hidden-badge">
+                Hidden{count !== undefined ? ` — ${count} item${count === 1 ? '' : 's'}` : ' — your data is still here'}
+              </span>
+            )}
           </div>
           {subtitle && (
             <p className={cn('dashboard-section-subtitle', !open && hiddenClass)}>
@@ -105,6 +119,9 @@ export function CollapsibleSection({
           )}
         </div>
         {headerExtra}
+        <span className={cn('dashboard-section-toggle-label', manualToggle ? '' : 'md:hidden')}>
+          {open ? 'Hide' : 'Show'}
+        </span>
         <ChevronDown
           className={cn(
             'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
