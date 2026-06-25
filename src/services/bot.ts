@@ -50,6 +50,7 @@ import {
   matchServiceInText,
   tryAiAssist,
   tryDirectDateTimeBooking,
+  tryStructuredStepSideAnswer,
   isBrowseServicesRequest,
   type QuickPickOption,
 } from './botAssistant.js';
@@ -3772,6 +3773,21 @@ async function beginAllServicesPicker(
   );
 }
 
+/**
+ * Prepends an AI-answered tangent (e.g. "what's the price?" typed mid-flow)
+ * to a structured booking step's "didn't recognise that" hint, so the
+ * customer gets answered without the booking step itself changing. Returns
+ * the hint unchanged when there's no genuine side question to answer.
+ */
+async function withSideAnswer(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  text: string,
+  hint: string,
+): Promise<string> {
+  const sideAnswer = await tryStructuredStepSideAnswer(conv, text);
+  return sideAnswer ? `${sideAnswer}\n\n${hint}` : hint;
+}
+
 async function handlePickServiceCategory(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
@@ -3808,7 +3824,11 @@ async function handlePickServiceCategory(
     if (uncategorised.length > 0) lines.push(`${catList.length + 1}. Other / Uncategorised`);
     await replyMaybeInteractive(
       conv,
-      [`Please reply with a number (1–${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'),
+      await withSideAnswer(
+        conv,
+        text,
+        [`Please reply with a number (1–${totalOptions}):`, ...lines, '', 'Reply BACK for menu.'].join('\n'),
+      ),
       buildServiceCategoryPickerInteractive(
         catList.map((c) => ({ name: c.name })),
         uncategorised.length > 0,
@@ -3923,7 +3943,7 @@ async function handlePickService(
       const pageText = `Please reply with a number (1–${services.length}).\n\n${buildServicePage(services, page)}`;
       await replyMaybeInteractive(
         conv,
-        pageText,
+        await withSideAnswer(conv, text, pageText),
         buildServicePickerInteractive(services, page, SVC_PAGE_SIZE, conv.salon),
       );
     }
@@ -4041,7 +4061,7 @@ async function handlePickStaff(
   const n = parseInt(text, 10);
   const anyIdx = renderedIds.length + 1;
   if (!Number.isFinite(n) || n < 1 || n > anyIdx) {
-    await rerenderMenu(`Invalid choice. Pick a number (1–${staffList.length + 1}):`);
+    await rerenderMenu(await withSideAnswer(conv, text, `Invalid choice. Pick a number (1–${staffList.length + 1}):`));
     return;
   }
 
@@ -4252,7 +4272,7 @@ async function handlePickDate(
         availableDates: suggestions,
       });
       if (!parsed) {
-        await showDateList(APPOINTMENT_DATE_MISPARSE);
+        await showDateList(await withSideAnswer(conv, text, APPOINTMENT_DATE_MISPARSE));
         return;
       }
       if (await tryConfirmExactTime(parsed)) return;
@@ -4282,7 +4302,7 @@ async function handlePickDate(
 
   if (!localDateStr) {
     const prefix = text.trim()
-      ? APPOINTMENT_DATE_MISPARSE
+      ? await withSideAnswer(conv, text, APPOINTMENT_DATE_MISPARSE)
       : `📅 When would you like to come in? Pick a date:`;
     await showDateList(prefix);
     return;
@@ -4467,12 +4487,16 @@ async function handlePickSlot(
   if (hasQuickPick) {
     await replyMaybeInteractive(
       conv,
-      [
-        "I didn't catch that. Reply with *A*, *B*, or *C* for one of these times:",
-        ...quickOptions!.map((o) => o.label),
-        '',
-        'Or ask to *see all services*, or reply *BACK* for the main menu.',
-      ].join('\n'),
+      await withSideAnswer(
+        conv,
+        text,
+        [
+          "I didn't catch that. Reply with *A*, *B*, or *C* for one of these times:",
+          ...quickOptions!.map((o) => o.label),
+          '',
+          'Or ask to *see all services*, or reply *BACK* for the main menu.',
+        ].join('\n'),
+      ),
       buildQuickPickInteractive(quickOptions!, conv.salon),
     );
     return;
@@ -4512,7 +4536,7 @@ async function handlePickSlot(
   ].join('\n');
   await replyMaybeInteractive(
     conv,
-    invalidBody,
+    await withSideAnswer(conv, text, invalidBody),
     buildSlotPickerInteractive(
       slots,
       conv.salon.timezone,
@@ -4568,7 +4592,7 @@ async function handleConfirm(
   // EC-03: accept natural affirmations, not just exact "yes"/"y"
   if (!/^(yes|y|yep|yeah|confirm|ok|sure|absolutely)\b/i.test(trimmed)) {
     const confirmBody = await buildConfirmBookingBodyForService(conv, service, staff, new Date(slotIso));
-    await sendConfirmBookingPrompt(conv, confirmBody);
+    await sendConfirmBookingPrompt(conv, await withSideAnswer(conv, trimmed, confirmBody));
     return;
   }
 
@@ -5910,7 +5934,7 @@ async function handlePickBranch(
     });
     await replyMaybeInteractive(
       conv,
-      `Please reply with a number (1-${branchOptions.length}) or BACK.`,
+      await withSideAnswer(conv, text, `Please reply with a number (1-${branchOptions.length}) or BACK.`),
       buildBranchPickerInteractive(branches, conv.salon),
     );
     return;

@@ -218,6 +218,40 @@ export async function synthesizeFaqAnswer(
   });
 }
 
+/**
+ * Mid-booking side-question handler. When a structured booking step (pick
+ * service/staff/date/slot, confirm) can't parse the customer's reply as a
+ * valid menu choice, this answers a genuine tangent (price, hours, policy,
+ * small talk) in one short line — the caller prepends it to the existing
+ * "didn't recognise that, pick again" hint so the booking step itself is
+ * never skipped or altered. Returns null for noise/typos or when unconfigured.
+ */
+export async function tryStructuredStepSideAnswer(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  inboundText: string,
+): Promise<string | null> {
+  if (!isAnthropicConfigured()) return null;
+  const trimmed = inboundText.trim();
+  if (!trimmed || trimmed.length > 300) return null;
+
+  const salonName = conv.salon.tradingName ?? conv.salon.name;
+  const raw = await claudeText({
+    system: [
+      `You assist customers mid-booking on WhatsApp for ${salonName}.`,
+      "They just sent a message that didn't match the option the bot asked for.",
+      'If their message is a genuine question or comment (price, hours, policy, concern, greeting, small talk),',
+      'answer it warmly in one short sentence, under 160 characters, with no markdown.',
+      'If it is noise, a typo, or just a failed attempt at the expected reply, respond with exactly: NONE',
+    ].join(' '),
+    user: trimmed,
+    maxTokens: 80,
+  });
+  if (!raw) return null;
+  const cleaned = raw.trim();
+  if (!cleaned || /^none$/i.test(cleaned)) return null;
+  return sanitize(cleaned).slice(0, 300);
+}
+
 export function isBrowseServicesRequest(text: string): boolean {
   const t = text.trim().toLowerCase();
   if (!t) return false;
