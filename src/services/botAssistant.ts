@@ -6,7 +6,7 @@ import { formatCentsZar } from '../lib/formatPrice.js';
 import { isAnthropicConfigured, orchestrateConversation, semanticSearch, claudeText } from '../lib/integrations/ai/index.js';
 import { loadSalonServiceCatalog, sanitizeAiBookReply, filterBookableCatalogServices, isAddonCatalogService } from './serviceCatalogDisplay.js';
 import { getAvailableSlots, getStaffForService, suggestBookingDates } from './slots.js';
-import { parseNaturalDateTime } from './naturalDateTime.js';
+import { parseNaturalDateTime, parsePartyCount } from './naturalDateTime.js';
 import { pickCompliment } from './personalization.js';
 import { logger } from '../lib/logger.js';
 
@@ -262,7 +262,7 @@ async function pickLeastBusyStaff<T extends { id: string }>(staffList: T[]): Pro
  * customer can bypass staff-pick, date-pick, and slot-pick in one message.
  * Falls back to the generic quick-pick flow by returning null.
  */
-async function tryDirectDateTimeBooking(
+export async function tryDirectDateTimeBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
   trimmed: string,
   serviceId: string,
@@ -270,6 +270,9 @@ async function tryDirectDateTimeBooking(
 ): Promise<AiAssistResult | null> {
   const parsed = await parseNaturalDateTime(trimmed, conv.salon.timezone);
   if (!parsed) return null;
+
+  const partyCount = parsePartyCount(trimmed);
+  const extraBookingsPatch = partyCount > 1 ? { pendingExtraBookings: partyCount - 1 } : {};
 
   const service = await getTenantDb().service.findUnique({
     where: { id: serviceId },
@@ -318,9 +321,10 @@ async function tryDirectDateTimeBooking(
         opener,
         `${sanitize(service.name)} with ${sanitize(staff.name)}`,
         dt.toFormat('cccc, dd LLL yyyy HH:mm'),
+        partyCount > 1 ? `\n_I'll book this ${partyCount}x — once confirmed, I'll line up the next one._` : '',
         '',
         'Reply YES to confirm, or BACK to choose another time.',
-      ].join('\n'),
+      ].filter(Boolean).join('\n'),
       step: ConversationStep.CONFIRM_BOOKING,
       contextPatch: {
         selectedServiceId: service.id,
@@ -329,6 +333,7 @@ async function tryDirectDateTimeBooking(
         localDateStr: parsed.localDateStr,
         slotStartIso: matched.start.toISOString(),
         quickPickOptions: undefined,
+        ...extraBookingsPatch,
       },
     };
   }
@@ -368,6 +373,7 @@ async function tryDirectDateTimeBooking(
       selectedStaffId: staff.id,
       localDateStr: parsed.localDateStr,
       quickPickOptions: dayOptions,
+      ...extraBookingsPatch,
     },
   };
 }
@@ -505,6 +511,7 @@ export async function tryAiAssist(
             slotStartIso: undefined,
             flatSlotOptions: undefined,
             quickPickOptions,
+            ...(parsePartyCount(trimmed) > 1 ? { pendingExtraBookings: parsePartyCount(trimmed) - 1 } : {}),
           },
         };
       }

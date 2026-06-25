@@ -11,6 +11,7 @@ import { scheduleGoogleReviewForAppointment } from '../lib/googleReviewSchedule.
 import { notifyAppointmentChangedLater } from './rosterSync.js';
 import { scheduleBookingRatingPrompt } from '../lib/inngest/functions/bookingRatingPrompt.js';
 import { parseAutomationsFromMetadata } from '../lib/automationSettings.js';
+import { startNextChainedBooking } from './chainedBooking.js';
 import { MessageDirection, ConversationStep } from '@prisma/client';
 import type { Service } from '@prisma/client';
 import { DateTime } from 'luxon';
@@ -212,11 +213,34 @@ export async function confirmAppointmentPaid(
       data: { conversationId: conv.id, customerId: appt.customerId, direction: MessageDirection.OUTBOUND, body: confirmMsg, providerSid: confirmSid },
     });
 
-    return { conversationId: conv.id, salonId: appt.salonId, customerId: appt.customerId, waId, appointmentId };
+    return {
+      conversationId: conv.id,
+      salonId: appt.salonId,
+      customerId: appt.customerId,
+      waId,
+      appointmentId,
+      serviceId: appt.serviceId,
+      staffId: appt.staffId,
+      end: appt.end,
+      pendingExtraBookings: (currentCtx.pendingExtraBookings as number | undefined) ?? 0,
+    };
   });
 
   if (ratingSchedule) {
     await scheduleBookingRatingPrompt(ratingSchedule);
+  }
+
+  if (ratingSchedule && ratingSchedule.pendingExtraBookings > 0) {
+    await startNextChainedBooking({
+      salonId: ratingSchedule.salonId,
+      customerId: ratingSchedule.customerId,
+      serviceId: ratingSchedule.serviceId,
+      staffId: ratingSchedule.staffId,
+      afterStart: ratingSchedule.end,
+      remaining: ratingSchedule.pendingExtraBookings,
+    }).catch((err) =>
+      logger.warn({ err, appointmentId: ratingSchedule.appointmentId }, 'chained_booking_start_failed'),
+    );
   }
 
   const paidAppt = await prisma.appointment.findUnique({

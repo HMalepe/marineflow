@@ -44,10 +44,12 @@ import {
   redeemForNextBookingTx,
 } from './loyalty.js';
 import { createPaymentCheckoutSession, resolvePostConfirmPayment, salonRequiresPostConfirmPayment } from './payments.js';
+import { startNextChainedBooking } from './chainedBooking.js';
 import {
   matchQuickPick,
   matchServiceInText,
   tryAiAssist,
+  tryDirectDateTimeBooking,
   isBrowseServicesRequest,
   type QuickPickOption,
 } from './botAssistant.js';
@@ -3878,6 +3880,7 @@ async function handlePickService(
   const pageStart = page * SVC_PAGE_SIZE;
   const pageEnd = Math.min(pageStart + SVC_PAGE_SIZE, services.length);
   let service: (typeof services)[number] | undefined;
+  let matchedByFreeText = false;
   if (Number.isFinite(n) && n >= pageStart + 1 && n <= pageEnd) {
     service = services[n - 1];
   } else {
@@ -3887,8 +3890,23 @@ async function handlePickService(
     );
     if (byName) {
       service = services.find((s) => s.id === byName);
+      matchedByFreeText = true;
     }
   }
+
+  // Free-text request named the service and a date/time in the same message
+  // (e.g. "High top fade next Friday at 3 o'clock") — skip straight to a
+  // confirm prompt instead of re-running the staff/date/slot picker steps.
+  if (service && matchedByFreeText) {
+    const direct = await tryDirectDateTimeBooking(conv, text, service.id, null);
+    if (direct) {
+      await saveCtx(conv.id, direct.contextPatch ?? {}, direct.step);
+      syncConvContext(conv, direct.contextPatch ?? {}, direct.step);
+      if (direct.reply) await reply(conv, direct.reply);
+      return;
+    }
+  }
+
   if (!service) {
     if (clearedStaleFilter) {
       await saveCtx(conv.id, { servicePage: 0 }, ConversationStep.PICK_SERVICE);
@@ -4878,6 +4896,21 @@ async function handleConfirm(
 
   await saveCtx(conv.id, { pendingAppointmentId: appointment.id }, ConversationStep.BOOKING_RATING);
   await promptBookingRating(conv);
+
+  // Chained multi-person request (e.g. "myself and my son") and no post-confirm
+  // payment gate — line up the next person's booking now. When a payment step
+  // ran instead, chaining happens once that payment succeeds (payments.ts).
+  const pendingExtraBookings = (c.pendingExtraBookings as number | undefined) ?? 0;
+  if (!paymentPlan && pendingExtraBookings > 0) {
+    await startNextChainedBooking({
+      salonId: conv.salonId,
+      customerId: conv.customerId,
+      serviceId: service.id,
+      staffId: staff.id,
+      afterStart: end,
+      remaining: pendingExtraBookings,
+    }).catch((err) => logger.warn({ err, appointmentId: appointment.id }, 'chained_booking_start_failed'));
+  }
 }
 
 async function promptBookingRating(conv: Conversation & { customer: Customer; salon: Salon }) {

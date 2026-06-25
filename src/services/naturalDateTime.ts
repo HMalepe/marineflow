@@ -217,6 +217,29 @@ export async function parseNaturalDateTime(
   return parseWithClaude(trimmed, timezone, options);
 }
 
+/**
+ * How many separate bookings a free-text request implies, e.g. "for myself and
+ * my 9 year old" or "me and my son" → 2, "for 3 people" → 3. Defaults to 1.
+ * Heuristic only — used to chain extra booking confirmations, never to block
+ * the primary booking if it's wrong.
+ */
+export function parsePartyCount(text: string): number {
+  const t = text.toLowerCase();
+
+  const explicit = t.match(/\bfor\s+(\d{1,2})\s*(?:people|persons|of us)\b/);
+  if (explicit) {
+    const n = parseInt(explicit[1]!, 10);
+    if (n >= 1 && n <= 20) return n;
+  }
+
+  if (/\b(myself|me)\b/.test(t)) {
+    const andCount = (t.match(/\band\b/g) ?? []).length;
+    if (andCount > 0) return Math.min(1 + andCount, 10);
+  }
+
+  return 1;
+}
+
 /** True when the customer typed a menu number (1–10), not a natural date phrase. */
 export function isDateMenuNumber(text: string, maxOption: number): number | null {
   const trimmed = text.trim();
