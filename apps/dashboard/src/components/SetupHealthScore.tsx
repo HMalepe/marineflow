@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CollapsibleSection } from '@/components/collapsible-section';
 
 export type SetupHealthCheckId =
   | 'staff_no_services'
@@ -53,13 +54,13 @@ function isDismissed(salonId: string, checkId: string): boolean {
 
 function scoreBarClass(score: number): string {
   if (score > 70) return 'bg-emerald-500';
-  if (score >= 40) return 'bg-amber-500';
+  if (score >= 40) return 'bg-cyan-400';
   return 'bg-red-500';
 }
 
 function scoreTextClass(score: number): string {
   if (score > 70) return 'text-emerald-700 dark:text-emerald-300';
-  if (score >= 40) return 'text-amber-700 dark:text-amber-300';
+  if (score >= 40) return 'text-cyan-700 dark:text-cyan-300';
   return 'text-red-700 dark:text-red-300';
 }
 
@@ -126,61 +127,62 @@ export function SetupHealthScore({ data }: Props) {
   }
 
   return (
-    <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-4 space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Setup health</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Fix these to improve bookings and bot quality
+    <div className="rounded-xl overflow-hidden border border-cyan-400/25 bg-cyan-400/5">
+      <CollapsibleSection
+        id="setup-health-checks"
+        title="Setup health"
+        subtitle="Fix these to improve bookings and bot quality"
+        manualToggle
+        headerExtra={
+          <p className={cn('text-lg font-bold tabular-nums', scoreTextClass(data.score))}>
+            {data.score}/100
           </p>
+        }
+        className="border-0 bg-transparent shadow-none"
+      >
+        <div className="h-2.5 rounded-full bg-muted overflow-hidden mb-3">
+          <div
+            className={cn('h-full rounded-full transition-all duration-500', scoreBarClass(data.score))}
+            style={{ width: `${data.score}%` }}
+            role="progressbar"
+            aria-valuenow={data.score}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Setup health score"
+          />
         </div>
-        <p className={cn('text-lg font-bold tabular-nums', scoreTextClass(data.score))}>
-          {data.score}/100
-        </p>
-      </div>
 
-      <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-        <div
-          className={cn('h-full rounded-full transition-all duration-500', scoreBarClass(data.score))}
-          style={{ width: `${data.score}%` }}
-          role="progressbar"
-          aria-valuenow={data.score}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label="Setup health score"
-        />
-      </div>
-
-      <ul className="space-y-2">
-        {visibleChecks.map((check) => (
-          <li
-            key={check.id}
-            className="flex items-start gap-2 rounded-lg border bg-background/80 px-3 py-2 text-sm"
-          >
-            <span className="shrink-0 mt-0.5" aria-hidden>
-              ⚠
-            </span>
-            <div className="min-w-0 flex-1">
-              <span>{check.label}</span>
-              <span className="text-muted-foreground"> → </span>
-              <Link
-                href={check.fixHref}
-                className="font-medium text-primary hover:underline underline-offset-2"
-              >
-                {check.fixLabel}
-              </Link>
-            </div>
-            <button
-              type="button"
-              onClick={() => dismiss(check.id)}
-              className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              aria-label={`Dismiss ${check.label}`}
+        <ul className="space-y-2">
+          {visibleChecks.map((check) => (
+            <li
+              key={check.id}
+              className="flex items-start gap-2 rounded-lg border bg-background/80 px-3 py-2 text-sm"
             >
-              <X className="size-4" />
-            </button>
-          </li>
-        ))}
-      </ul>
+              <span className="shrink-0 mt-0.5" aria-hidden>
+                ⚠
+              </span>
+              <div className="min-w-0 flex-1">
+                <span>{check.label}</span>
+                <span className="text-muted-foreground"> → </span>
+                <Link
+                  href={check.fixHref}
+                  className="font-medium text-primary hover:underline underline-offset-2"
+                >
+                  {check.fixLabel}
+                </Link>
+              </div>
+              <button
+                type="button"
+                onClick={() => dismiss(check.id)}
+                className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                aria-label={`Dismiss ${check.label}`}
+              >
+                <X className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleSection>
     </div>
   );
 }

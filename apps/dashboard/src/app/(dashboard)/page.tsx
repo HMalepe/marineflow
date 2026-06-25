@@ -1,6 +1,5 @@
 import type React from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
@@ -15,6 +14,7 @@ import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard';
 import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
 import { SetupHealthScore, type SetupHealthData } from '@/components/SetupHealthScore';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { BusinessCoachCard } from '@/components/BusinessCoachCard';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
@@ -335,19 +335,27 @@ async function AppointmentView({ token }: { token: string | null }) {
       </div>
 
       {overviewKpis && (
-        <div id="overview-kpis" data-section-label="Key metrics" className="dashboard-section-anchor space-y-6 lg:space-y-8">
-          <KPIStrip data={overviewKpis} />
-          {Array.isArray(overviewKpis.revenueLast7Days) && overviewKpis.revenueLast7Days.length > 0 && (
-            <div id="overview-revenue" data-section-label="Revenue chart" className="dashboard-section-anchor">
-              <MiniBarChart data={overviewKpis.revenueLast7Days} />
+        <div id="overview-kpis" data-section-label="Key metrics" className="dashboard-section-anchor">
+          <CollapsibleSection id="overview-kpis-toggle" title="Key metrics" manualToggle className="border-0 bg-transparent shadow-none">
+            <div className="space-y-6 lg:space-y-8">
+              <KPIStrip data={overviewKpis} />
+              {Array.isArray(overviewKpis.revenueLast7Days) && overviewKpis.revenueLast7Days.length > 0 && (
+                <div id="overview-revenue" data-section-label="Revenue chart" className="dashboard-section-anchor">
+                  <CollapsibleSection id="overview-revenue-toggle" title="Revenue chart" manualToggle className="border-0 bg-transparent shadow-none">
+                    <MiniBarChart data={overviewKpis.revenueLast7Days} />
+                  </CollapsibleSection>
+                </div>
+              )}
             </div>
-          )}
+          </CollapsibleSection>
         </div>
       )}
 
       {token && (
         <div id="overview-coach" data-section-label="AI coach" className="dashboard-section-anchor">
-          <BusinessCoachCard token={token} />
+          <CollapsibleSection id="overview-coach-toggle" title="AI coach" manualToggle className="border-0 bg-transparent shadow-none">
+            <BusinessCoachCard token={token} />
+          </CollapsibleSection>
         </div>
       )}
 
@@ -377,40 +385,41 @@ async function AppointmentView({ token }: { token: string | null }) {
       <div
         id="overview-shortcuts"
         data-section-label="Quick links"
-        className="dashboard-section-anchor hidden lg:grid grid-cols-3 gap-4"
+        className="dashboard-section-anchor hidden lg:block"
       >
-        {[
-          { href: '/customers', icon: <Users className="w-5 h-5" />, label: 'Customers', desc: 'View & search customer records' },
-          { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: 'Conversations', desc: 'WhatsApp inbox & handoffs' },
-          { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: 'Analytics', desc: 'Revenue, bookings & trends' },
-        ].map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="group rounded-xl border bg-card px-5 py-4 flex items-start gap-3.5 hover:border-primary/40 hover:shadow-sm transition-all"
-          >
-            <div className="mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
-              {item.icon}
-            </div>
-            <div>
-              <p className="font-semibold text-sm">{item.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
-            </div>
-          </Link>
-        ))}
+        <CollapsibleSection id="overview-shortcuts-toggle" title="Quick links" manualToggle className="border-0 bg-transparent shadow-none">
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { href: '/customers', icon: <Users className="w-5 h-5" />, label: 'Customers', desc: 'View & search customer records' },
+              { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: 'Conversations', desc: 'WhatsApp inbox & handoffs' },
+              { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: 'Analytics', desc: 'Revenue, bookings & trends' },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="group rounded-xl border bg-card px-5 py-4 flex items-start gap-3.5 hover:border-primary/40 hover:shadow-sm transition-all"
+              >
+                <div className="mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
+                  {item.icon}
+                </div>
+                <div>
+                  <p className="font-semibold text-sm">{item.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </CollapsibleSection>
       </div>
 
       {/* Today's schedule */}
-      <Card id="overview-today" data-section-label="Today's schedule" className="dashboard-section-anchor">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Today&apos;s Schedule</CardTitle>
-            {appointments.length > 0 && (
-              <span className="text-xs text-muted-foreground">{appointments.length} booking{appointments.length === 1 ? '' : 's'}</span>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
+      <div id="overview-today" data-section-label="Today's schedule" className="dashboard-section-anchor">
+        <CollapsibleSection
+          id="overview-today-toggle"
+          title="Today's Schedule"
+          count={appointments.length > 0 ? appointments.length : undefined}
+          manualToggle
+        >
           {error && <p className="text-sm text-destructive">{error}</p>}
           {!error && appointments.length === 0 && (
             <div className="text-center py-8">
@@ -447,8 +456,8 @@ async function AppointmentView({ token }: { token: string | null }) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </CollapsibleSection>
+      </div>
     </div>
   );
 }

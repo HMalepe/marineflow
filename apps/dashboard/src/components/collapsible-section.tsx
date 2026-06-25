@@ -8,36 +8,84 @@ interface CollapsibleSectionProps {
   title: string;
   subtitle?: string;
   count?: number | string;
+  /** Extra content rendered in the header, left of the toggle (e.g. a score badge). */
+  headerExtra?: ReactNode;
   children: ReactNode;
   id?: string;
   className?: string;
   collapseOnMobile?: boolean;
   defaultOpen?: boolean;
+  /**
+   * When true, the toggle is shown and works on every screen size (not just
+   * mobile), and the collapsed state is remembered per section in
+   * localStorage. Use this for the "ON THIS PAGE" sections that should be
+   * collapsible on desktop too.
+   */
+  manualToggle?: boolean;
+}
+
+function collapseKey(id: string): string {
+  return `dashboard-section-collapsed:${id}`;
+}
+
+function readPersistedOpen(id: string | undefined, fallback: boolean): boolean {
+  if (!id || typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(collapseKey(id));
+    if (raw === null) return fallback;
+    return raw !== '1';
+  } catch {
+    return fallback;
+  }
 }
 
 export function CollapsibleSection({
   title,
   subtitle,
   count,
+  headerExtra,
   children,
   id,
   className,
   collapseOnMobile = false,
   defaultOpen = true,
+  manualToggle = false,
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
+    if (manualToggle) {
+      setOpen(readPersistedOpen(id, defaultOpen));
+      return;
+    }
     if (collapseOnMobile && window.matchMedia('(max-width: 767px)').matches) {
       setOpen(false);
     }
-  }, [collapseOnMobile]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collapseOnMobile, manualToggle]);
+
+  const toggle = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      if (manualToggle && id) {
+        try {
+          if (next) localStorage.removeItem(collapseKey(id));
+          else localStorage.setItem(collapseKey(id), '1');
+        } catch {
+          // ignore quota / private mode
+        }
+      }
+      return next;
+    });
+  };
+
+  const hiddenClass = manualToggle ? 'hidden' : 'hidden md:block';
 
   return (
     <section id={id} className={cn('dashboard-section dashboard-section-collapsible', className)}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         className="dashboard-section-header dashboard-section-header-toggle w-full text-left touch-manipulation"
         aria-expanded={open}
         aria-controls={id ? `${id}-panel` : undefined}
@@ -51,14 +99,16 @@ export function CollapsibleSection({
             )}
           </div>
           {subtitle && (
-            <p className={cn('dashboard-section-subtitle', !open && 'hidden md:block')}>
+            <p className={cn('dashboard-section-subtitle', !open && hiddenClass)}>
               {subtitle}
             </p>
           )}
         </div>
+        {headerExtra}
         <ChevronDown
           className={cn(
-            'size-4 shrink-0 text-muted-foreground transition-transform duration-200 md:hidden',
+            'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+            manualToggle ? '' : 'md:hidden',
             open && 'rotate-180',
           )}
         />
@@ -67,7 +117,7 @@ export function CollapsibleSection({
         id={id ? `${id}-panel` : undefined}
         className={cn(
           'dashboard-section-body',
-          !open && 'hidden md:block',
+          !open && hiddenClass,
         )}
       >
         {children}
