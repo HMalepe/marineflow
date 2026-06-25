@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CONVERSATIONS_LABEL, CONVERSATIONS_TAGLINE, TICKETS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import Link from 'next/link';
 import {
   ConversationListItem,
@@ -406,38 +407,40 @@ export function ConversationsClient({ token, staffName }: Props) {
 
   return (
     <div className="dashboard-workspace dashboard-comms-page">
-      <div className={cn('shrink-0 dashboard-page-header', showThreadOnMobile && 'hidden md:block')}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xl md:text-2xl font-bold tracking-tight">{CONVERSATIONS_LABEL}</h1>
+      <DashboardPageHeader
+        title={CONVERSATIONS_LABEL}
+        variant="cyan"
+        className={cn('shrink-0 dashboard-neon-block', showThreadOnMobile && 'hidden md:block')}
+        subtitle={
+          <>
+            <span
+              className="inline-flex items-center gap-1.5 text-[10px] mr-2"
+              title={connected ? 'Live updates connected' : 'Connecting…'}
+            >
               <span
-                className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground"
-                title={connected ? 'Live updates connected' : 'Connecting…'}
-              >
-                <span
-                  className={cn(
-                    'size-2 rounded-full',
-                    connected ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40',
-                  )}
-                />
-                {connected ? 'Live' : 'Connecting…'}
-              </span>
-            </div>
-            <PremiumDisclosure label="Conversations vs tickets" desktopOpen={false} className="mt-1">
+                className={cn(
+                  'size-2 rounded-full',
+                  connected ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground/40',
+                )}
+              />
+              {connected ? 'Live' : 'Connecting…'}
+            </span>
+            <PremiumDisclosure label="Conversations vs tickets" desktopOpen={false} className="inline">
               {CONVERSATIONS_TAGLINE} For complaints, open{' '}
               <Link href="/tickets" className="text-primary underline-offset-4 hover:underline">
                 {TICKETS_LABEL}
               </Link>
               .
             </PremiumDisclosure>
-          </div>
+          </>
+        }
+        actions={
           <Button variant="outline" size="sm" onClick={refreshAll} className="shrink-0 touch-manipulation hidden md:inline-flex">
             <RefreshCw className="size-4 mr-1.5" />
             Refresh
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/8 px-4 py-2.5 text-sm text-destructive shrink-0">

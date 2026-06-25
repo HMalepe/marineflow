@@ -42,6 +42,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { CampaignMediaUpload, type CampaignMediaType } from './campaign-media-upload';
 import { CampaignSchedulePicker } from './campaign-schedule-picker';
 import {
@@ -874,41 +875,43 @@ export function CampaignsClient({ token }: Props) {
             : 'Save draft';
 
   return (
-    <div className="space-y-8 max-w-5xl">
-      {/* Hero */}
-      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-[#128c7e]">
-            Customer retention
-          </p>
-          <div className="flex items-center gap-3">
-            <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#25d366]/20 to-[#128c7e]/10 ring-1 ring-[#25d366]/20">
+    <div className="dashboard-page-flow space-y-8 max-w-5xl">
+      <DashboardPageHeader
+        variant="fuchsia"
+        title={
+          <span className="flex items-center gap-3">
+            <span className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#25d366]/20 to-[#128c7e]/10 ring-1 ring-[#25d366]/20">
               <Megaphone className="size-5 text-[#128c7e]" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">WhatsApp Newsletter</h1>
-              <p className="text-muted-foreground text-sm mt-1 max-w-xl leading-relaxed">
-                Rich marketing to opted-in customers — text, emojis, photos, and videos to fill
-                chairs and bring clients back.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2 shrink-0 sm:pt-8">
-          <Button variant="outline" size="sm" onClick={() => void loadAll(true)} disabled={refreshing}>
-            <RefreshCw className={cn('size-4 mr-1.5', refreshing && 'animate-spin')} />
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            onClick={openCreate}
-            className="bg-[#128c7e] hover:bg-[#0d6b5f] text-white shadow-sm"
-          >
-            <Plus className="size-4 mr-1.5" />
-            New newsletter
-          </Button>
-        </div>
-      </div>
+            </span>
+            <span>WhatsApp Newsletter</span>
+          </span>
+        }
+        subtitle={
+          <>
+            <span className="block text-[11px] font-semibold uppercase tracking-widest text-[#128c7e] mb-1.5">
+              Customer retention
+            </span>
+            Rich marketing to opted-in customers — text, emojis, photos, and videos to fill
+            chairs and bring clients back.
+          </>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => void loadAll(true)} disabled={refreshing}>
+              <RefreshCw className={cn('size-4 mr-1.5', refreshing && 'animate-spin')} />
+              Refresh
+            </Button>
+            <Button
+              size="sm"
+              onClick={openCreate}
+              className="bg-[#128c7e] hover:bg-[#0d6b5f] text-white shadow-sm"
+            >
+              <Plus className="size-4 mr-1.5" />
+              New newsletter
+            </Button>
+          </>
+        }
+      />
 
       {/* Grow audience CTA */}
       {!loading && optedInCount < 10 && (

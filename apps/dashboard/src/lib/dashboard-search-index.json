@@ -1,18 +1,18 @@
 [
   {
     "id": "overview",
-    "label": "Overview",
+    "label": "Today at a glance",
     "href": "/",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Dashboard home — today's snapshot and quick links",
     "keywords": ["home", "dashboard", "summary", "today"],
     "aliases": ["main", "start"]
   },
   {
     "id": "appointments",
-    "label": "Appointments",
+    "label": "Bookings",
     "href": "/appointments",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "View and manage bookings, check-ins, and cancellations",
     "keywords": ["bookings", "calendar", "schedule", "appointments", "clients"],
     "aliases": ["booking", "apointment", "apointments"]
@@ -21,34 +21,34 @@
     "id": "pulse",
     "label": "Live Pulse",
     "href": "/pulse",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Real-time floor view — chairs, arrivals, payments, and active bot conversations",
     "keywords": ["live", "operations", "floor", "stations", "chairs", "real-time", "pulse", "air traffic"],
     "aliases": ["live pulse", "live view", "operations"]
   },
   {
     "id": "conversations",
-    "label": "Conversations",
+    "label": "Inbox",
     "href": "/conversations",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Live WhatsApp inbox — reply when the bot hands off to your team",
     "keywords": ["whatsapp", "chat", "inbox", "messages", "handoff", "live chat"],
     "aliases": ["conversation", "convos", "msgs"]
   },
   {
     "id": "customers",
-    "label": "Customers",
+    "label": "Clients",
     "href": "/customers",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Customer list, profiles, loyalty, and marketing consent",
     "keywords": ["clients", "crm", "contacts", "loyalty", "members"],
     "aliases": ["customer", "client list"]
   },
   {
     "id": "tickets",
-    "label": "Support tickets",
+    "label": "Help requests",
     "href": "/tickets",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Issues from complaints, report-a-problem, and low ratings",
     "keywords": ["support", "complaints", "issues", "problems", "help desk"],
     "aliases": ["ticket", "complaint", "support ticket"]
@@ -57,7 +57,7 @@
     "id": "services",
     "label": "Services",
     "href": "/services",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Services, prices, durations, categories, and add-ons",
     "keywords": ["menu", "pricing", "treatments", "offerings", "addons", "add-ons"],
     "aliases": ["service", "price list", "catalog"]
@@ -66,7 +66,7 @@
     "id": "roster",
     "label": "Staff Roster",
     "href": "/roster",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Staff schedules, shifts, time off, and roster management",
     "keywords": ["staff", "roster", "schedule", "shifts", "stylists", "team", "working hours"],
     "aliases": ["rota", "scheduling", "employees", "workers"]
@@ -75,7 +75,7 @@
     "id": "add-staff",
     "label": "Add staff member",
     "href": "/roster?addStaff=1",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Create a new stylist or team member on the roster",
     "keywords": ["new staff", "hire", "add stylist", "create staff", "invite team"],
     "aliases": ["add employee", "new team member"]
@@ -84,7 +84,7 @@
     "id": "branches",
     "label": "Branches",
     "href": "/branches",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Multiple locations — branches, addresses, and per-branch settings",
     "keywords": ["locations", "stores", "sites", "multi-branch", "outlets"],
     "aliases": ["branch", "location", "shop"]
@@ -93,7 +93,7 @@
     "id": "faqs",
     "label": "Bot FAQs",
     "href": "/faqs",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Questions and answers your WhatsApp bot uses for customer support",
     "keywords": ["faq", "faqs", "questions", "answers", "bot knowledge", "help articles"],
     "aliases": ["frequently asked", "q and a", "bot faq"]
@@ -127,7 +127,7 @@
   },
   {
     "id": "analytics",
-    "label": "Analytics",
+    "label": "Insights",
     "href": "/analytics",
     "group": "Marketing & insights",
     "description": "Reports, trends, and business insights",

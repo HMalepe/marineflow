@@ -6,6 +6,7 @@ import { AdminPlatformInbox } from './admin-platform-inbox';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { StatCard } from '@/components/StatCard';
 import { BusinessTypeBreakdown, type BusinessTypeCount } from '@/components/BusinessTypeBreakdown';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -68,13 +69,12 @@ export default async function AdminPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Platform</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Platform-wide management — click any business for stats, team, and alerts.
-        </p>
-      </div>
+    <div className="dashboard-page-flow space-y-8">
+      <DashboardPageHeader
+        title="Platform"
+        variant="violet"
+        subtitle="Platform-wide management — click any business for stats, team, and alerts."
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">

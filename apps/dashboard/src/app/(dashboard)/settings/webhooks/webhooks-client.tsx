@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 import { resolveApiUrl } from '@/lib/api-config';
 
@@ -80,18 +81,17 @@ export function WebhooksClient({ token }: Props) {
   if (loading) return <p className="p-6 text-muted-foreground">Loading...</p>;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold">Webhooks</h1>
-          <p className="text-sm text-muted-foreground">
-            Send real-time events to external services (Zapier, Make, custom).
-          </p>
-        </div>
-        <Button onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? 'Cancel' : '+ Add Webhook'}
-        </Button>
-      </div>
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        title="Webhooks"
+        variant="violet"
+        subtitle="Send real-time events to external services (Zapier, Make, custom)."
+        actions={
+          <Button onClick={() => setShowCreate(!showCreate)}>
+            {showCreate ? 'Cancel' : '+ Add Webhook'}
+          </Button>
+        }
+      />
 
       {showCreate && (
         <form onSubmit={handleCreate} className="border rounded-lg p-4 space-y-4 bg-card">

@@ -16,6 +16,7 @@ import {
 import { getApiBaseUrl } from '@/lib/api-config';
 import type { BillingPlan } from '@/lib/billing';
 import { adminBillingIssueLabel } from '@/lib/billing';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 const API_URL = getApiBaseUrl();
 
@@ -88,7 +89,7 @@ function SubStatusBadge({ status }: { status: string }) {
 
 function KpiCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="border rounded-lg p-4">
+    <div className="dashboard-kpi-tile p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-2xl font-bold mt-1">{value}</p>
     </div>
@@ -122,13 +123,12 @@ async function AdminBillingPage({ token }: { token: string }) {
   const statusEntries = Object.entries(data.byStatus) as [string, number][];
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Billing &amp; Subscriptions</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Platform-wide subscription and revenue overview.
-        </p>
-      </div>
+    <div className="dashboard-page-flow space-y-8">
+      <DashboardPageHeader
+        title="Billing & Subscriptions"
+        variant="emerald"
+        subtitle="Platform-wide subscription and revenue overview."
+      />
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KpiCard label="MRR" value={formatZAR(data.mrr)} />
@@ -363,7 +363,7 @@ export default async function BillingPage({
   }
 
   return (
-    <div className="space-y-8 max-w-5xl">
+    <div className="dashboard-page-flow space-y-8 max-w-5xl">
       <BillingPageHeader />
 
       <BillingClient
@@ -378,11 +378,10 @@ export default async function BillingPage({
 
 function BillingPageHeader() {
   return (
-    <div>
-      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Billing</h1>
-      <p className="text-muted-foreground text-sm mt-1">
-        One simple plan — WhatsApp bookings, dashboard, and onboarding included.
-      </p>
-    </div>
+    <DashboardPageHeader
+      title="Billing"
+      variant="emerald"
+      subtitle="One simple plan — WhatsApp bookings, dashboard, and onboarding included."
+    />
   );
 }

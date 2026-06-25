@@ -5,6 +5,7 @@ import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 interface AgencyMetrics {
   totalSalons: number;
@@ -62,13 +63,12 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold">Agency Portal</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Manage your businesses and monitor performance.
-        </p>
-      </div>
+    <div className="dashboard-page-flow space-y-8">
+      <DashboardPageHeader
+        title="Agency Portal"
+        variant="violet"
+        subtitle="Manage your businesses and monitor performance."
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

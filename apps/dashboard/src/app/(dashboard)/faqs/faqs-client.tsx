@@ -39,6 +39,7 @@ import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { BOT_FAQS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
 import { FAQCard, faqCardClassName, type FaqCardData } from '@/components/FAQCard';
@@ -543,32 +544,31 @@ export function FaqsClient({ token }: Props) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{BOT_FAQS_LABEL}</h1>
-          <p className="text-muted-foreground text-sm mt-1 max-w-xl">
-            Manage answers your WhatsApp bot shares. Only approved FAQs appear in the menu and semantic search.
-          </p>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => loadFaqs(true)} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </Button>
-          {stats.pending > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleSmartScan()}
-              disabled={smartScanning}
-              className="border-yellow-600/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20"
-            >
-              {smartScanning ? '✨ Scanning…' : `✨ Smart approve (${stats.pending} pending)`}
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        title={BOT_FAQS_LABEL}
+        variant="violet"
+        subtitle="Manage answers your WhatsApp bot shares. Only approved FAQs appear in the menu and semantic search."
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => loadFaqs(true)} disabled={refreshing}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
             </Button>
-          )}
-          <Button onClick={openCreate}>Add FAQ</Button>
-        </div>
-      </div>
+            {stats.pending > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleSmartScan()}
+                disabled={smartScanning}
+                className="border-yellow-600/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-50 dark:hover:bg-yellow-950/20"
+              >
+                {smartScanning ? '✨ Scanning…' : `✨ Smart approve (${stats.pending} pending)`}
+              </Button>
+            )}
+            <Button onClick={openCreate}>Add FAQ</Button>
+          </>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total FAQs" value={stats.total} />

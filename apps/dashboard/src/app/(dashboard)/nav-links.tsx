@@ -20,10 +20,8 @@ interface NavLinksProps {
 
 function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-0.5">
-      <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50 select-none">
-        {label}
-      </p>
+    <div className="space-y-1">
+      <p className="nav-section-label select-none">{label}</p>
       {children}
     </div>
   );
@@ -45,15 +43,13 @@ function NavItemLink({
     <Link
       href={href}
       className={cn(
-        'flex items-center justify-between px-3 py-2.5 min-h-[2.75rem] rounded-lg text-sm font-medium transition-all duration-200 touch-manipulation',
-        isActive
-          ? 'nav-link-active'
-          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground hover:shadow-[inset_0_0_0_1px_oklch(0.52_0.24_288_/_0.08)]',
+        'flex items-center justify-between px-3 py-2.5 min-h-[2.75rem] rounded-xl text-sm font-medium transition-all duration-200 touch-manipulation',
+        isActive ? 'nav-link-active' : 'nav-link-idle text-muted-foreground hover:text-foreground',
       )}
     >
       <span>{children}</span>
       {badge != null && badge > 0 && (
-        <span className="ml-auto shrink-0 min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1 leading-none">
+        <span className="ml-auto shrink-0 min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1 leading-none border-2 border-destructive/30">
           {badge > 99 ? '99+' : badge}
         </span>
       )}

@@ -353,7 +353,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
   ];
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="dashboard-page-flow space-y-6 max-w-3xl">
       {/* Back */}
       <Link
         href="/customers"
@@ -364,7 +364,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       </Link>
 
       {/* Hero card */}
-      <div className="rounded-2xl border bg-card overflow-hidden">
+      <div className="dashboard-list-card rounded-2xl overflow-hidden">
         <div className={cn('h-20 bg-gradient-to-r opacity-50', gradient)} />
         <div className="px-6 pb-6">
           <div className="-mt-10 flex items-end gap-4 mb-4">

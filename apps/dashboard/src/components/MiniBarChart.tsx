@@ -1,6 +1,8 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { OverviewSectionLabel } from '@/components/overview/OverviewSectionLabel';
+import { overviewNeonBox, overviewSection } from '@/components/overview/overviewNeon';
 
 export type BarChartPoint = {
   date: string;
@@ -23,63 +25,89 @@ type Props = {
   className?: string;
 };
 
-export function MiniBarChart({ title = "Today's revenue — last 7 days", data, className }: Props) {
+export function MiniBarChart({ title = 'Revenue — last 7 days', data, className }: Props) {
   const points = Array.isArray(data) ? data : [];
   if (points.length === 0) return null;
 
   const max = Math.max(...points.map((d) => d.revenueCents), 1);
-  const chartH = 88;
-  const barGap = 6;
-  const barW = 28;
+  const total = points.reduce((sum, p) => sum + p.revenueCents, 0);
+  const avg = Math.round(total / points.length);
+  const chartH = 100;
+  const barGap = 8;
+  const barW = 32;
   const width = points.length * (barW + barGap) + barGap;
 
   return (
-    <div className={cn('rounded-xl border bg-card p-4 shadow-sm', className)}>
-      <p className="text-sm font-semibold mb-3">{title}</p>
-      <svg
-        viewBox={`0 0 ${width} ${chartH + 36}`}
-        className="w-full max-w-md h-auto text-primary"
-        role="img"
-        aria-label="Revenue bar chart for the last seven days"
-      >
-        {points.map((point, i) => {
-          const h = Math.max(4, (point.revenueCents / max) * chartH);
-          const x = barGap + i * (barW + barGap);
-          const y = chartH - h;
-          const isToday = i === points.length - 1;
-          return (
-            <g key={point.date}>
-              <rect
-                x={x}
-                y={y}
-                width={barW}
-                height={h}
-                rx={4}
-                className={cn('fill-primary/80', isToday && 'fill-primary')}
-              />
-              <text
-                x={x + barW / 2}
-                y={chartH + 14}
-                textAnchor="middle"
-                className="fill-muted-foreground text-[9px]"
-              >
-                {formatDayLabel(point.date)}
-              </text>
-              {point.revenueCents > 0 && (
+    <section
+      id="overview-revenue"
+      data-section-label="Trends"
+      className={cn(overviewSection('space-y-3'), className)}
+    >
+      <div className="overview-section-heading flex items-end justify-between gap-3">
+        <div>
+          <OverviewSectionLabel>Trends</OverviewSectionLabel>
+          <p className="text-lg font-bold tracking-tight mt-1">{title}</p>
+        </div>
+        <span className="text-xs font-bold text-muted-foreground tabular-nums shrink-0 px-2.5 py-1 rounded-md border-2 border-violet-500/30 bg-violet-500/10">
+          7-day avg {formatZarShort(avg)}
+        </span>
+      </div>
+      <div className={overviewNeonBox('cyan', 'p-4 sm:p-5')}>
+        <svg
+          viewBox={`0 0 ${width} ${chartH + 40}`}
+          className="w-full h-auto"
+          role="img"
+          aria-label="Revenue bar chart for the last seven days"
+        >
+          <defs>
+            <linearGradient id="overview-bar-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.95" />
+              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0.45" />
+            </linearGradient>
+            <linearGradient id="overview-bar-today" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="hsl(262 83% 58%)" stopOpacity="1" />
+              <stop offset="100%" stopColor="hsl(292 84% 61%)" stopOpacity="0.7" />
+            </linearGradient>
+          </defs>
+          {points.map((point, i) => {
+            const h = Math.max(6, (point.revenueCents / max) * chartH);
+            const x = barGap + i * (barW + barGap);
+            const y = chartH - h;
+            const isToday = i === points.length - 1;
+            return (
+              <g key={point.date}>
+                <rect
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={h}
+                  rx={6}
+                  fill={isToday ? 'url(#overview-bar-today)' : 'url(#overview-bar-fill)'}
+                />
                 <text
                   x={x + barW / 2}
-                  y={y - 4}
+                  y={chartH + 16}
                   textAnchor="middle"
-                  className="fill-foreground text-[8px] font-medium"
+                  className="fill-muted-foreground text-[10px]"
                 >
-                  {formatZarShort(point.revenueCents)}
+                  {formatDayLabel(point.date)}
                 </text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-    </div>
+                {point.revenueCents > 0 && (
+                  <text
+                    x={x + barW / 2}
+                    y={y - 6}
+                    textAnchor="middle"
+                    className="fill-foreground text-[9px] font-medium"
+                  >
+                    {formatZarShort(point.revenueCents)}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </section>
   );
 }
 

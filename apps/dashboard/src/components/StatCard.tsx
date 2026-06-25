@@ -20,7 +20,7 @@ export function StatCard({ label, value, href, className, badge }: Props) {
   );
 
   const classes = cn(
-    'stat-card-premium relative rounded-xl p-4',
+    'stat-card-premium dashboard-kpi-tile relative rounded-xl p-4',
     href && 'hover:border-primary/40 block',
     className,
   );

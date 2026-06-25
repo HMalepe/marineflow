@@ -18,6 +18,7 @@ import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { cn } from '@/lib/utils';
 import { resolveApiUrl } from '@/lib/api-config';
 
@@ -163,43 +164,49 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
   const maxFunnel = Math.max(...funnel.funnel.map((f) => f.count), 1);
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <Link
-          href="/admin"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="size-4" />
-          All businesses
-        </Link>
-
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">{business.name}</h1>
+    <div className="dashboard-page-flow space-y-8">
+      <DashboardPageHeader
+        variant="violet"
+        title={
+          <>
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              <ArrowLeft className="size-4" />
+              All businesses
+            </Link>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="truncate">{business.name}</span>
               <BusinessTypeBadge type={business.businessType} />
               <StatusBadge status={business.status} />
               <Badge variant="outline" className="capitalize">{business.tier}</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
+            </span>
+          </>
+        }
+        subtitle={
+          <>
+            <span className="block">
               {business.industryLabel} · <span className="font-mono text-xs">{business.slug}</span>
               · Assistant: {business.botName?.trim() || PLATFORM_BOT_NAME}
-            </p>
-            <p className="text-xs text-muted-foreground">
+            </span>
+            <span className="block text-xs mt-1">
               Joined {new Date(business.createdAt).toLocaleDateString()} · {business.timezone}
               {business.subscription?.plan && (
                 <> · Plan: {business.subscription.plan.name}</>
               )}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2 shrink-0">
+            </span>
+          </>
+        }
+        actions={
+          <>
             <OpenClientDashboardButton businessId={business.id} businessName={business.name} />
             <Link href={`/analytics?business=${business.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
               Analytics
             </Link>
-          </div>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">

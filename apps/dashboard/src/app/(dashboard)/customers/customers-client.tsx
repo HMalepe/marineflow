@@ -21,6 +21,8 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { CUSTOMERS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { DashboardToast } from '@/components/dashboard-toast';
 
 interface Customer extends CustomerListItem {
@@ -343,48 +345,64 @@ export function CustomersClient({ token }: Props) {
   );
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Customers</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {loading ? '—' : `${groups.length} customer${groups.length === 1 ? '' : 's'}`}
-            {!loading && duplicateCount > 0 && (
-              <span className="ml-2 text-amber-600 font-medium">
-                · {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} found
-              </span>
-            )}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="relative flex-1 sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Name, email, or phone…"
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="pl-9"
-            />
-            {loading && search && (
-              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-4 animate-spin text-muted-foreground" />
-            )}
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => {
-              const a = document.createElement('a');
-              a.href = `/api/proxy/customers/export-csv`;
-              a.download = 'customers.csv';
-              a.click();
-            }}
-            title="Download all customers as CSV"
-          >
-            Export CSV
-          </Button>
-        </div>
-      </div>
+    <div className="dashboard-page-flow space-y-6 max-w-4xl">
+      <DashboardPageHeader
+        title={CUSTOMERS_LABEL}
+        variant="fuchsia"
+        subtitle={
+          loading ? (
+            '—'
+          ) : (
+            <>
+              {`${groups.length} customer${groups.length === 1 ? '' : 's'}`}
+              {!loading && duplicateCount > 0 && (
+                <span className="ml-2 text-amber-600 font-semibold">
+                  · {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} found
+                </span>
+              )}
+            </>
+          )
+        }
+        actions={
+          <>
+            <div className="relative flex-1 sm:w-72 min-w-[12rem]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+              <Input
+                placeholder="Name, email, or phone…"
+                value={search}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="pl-9"
+              />
+              {loading && search && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 size-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load(search)}
+              disabled={loading}
+              className="shrink-0"
+            >
+              {loading ? <Loader2 className="size-4 animate-spin" /> : 'Refresh'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                const a = document.createElement('a');
+                a.href = `/api/proxy/customers/export-csv`;
+                a.download = 'customers.csv';
+                a.click();
+              }}
+              title="Download all customers as CSV"
+            >
+              Export CSV
+            </Button>
+          </>
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         {SEGMENT_PILLS.map(({ key, label }) => (

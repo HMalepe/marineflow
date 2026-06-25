@@ -13,6 +13,7 @@ import {
 import { apiFetch } from '@/lib/api';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { cn } from '@/lib/utils';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
@@ -165,15 +166,14 @@ export function PulseClient({ token, initialBranches }: Props) {
   const summary = data?.summary;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        title={
+          <span className="flex items-center gap-2 flex-wrap">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               <Radio className="size-4" />
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Live Pulse</h1>
+            </span>
+            Live Pulse
             <Badge
               variant="outline"
               className={cn(
@@ -191,39 +191,39 @@ export function PulseClient({ token, initialBranches }: Props) {
               />
               {liveConnected ? 'Live' : 'Polling'}
             </Badge>
-          </div>
-          <p className="text-muted-foreground text-sm max-w-xl">
-            Air-traffic control for your floor — chairs, arrivals, payments, and bot conversations right now.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {branches.length > 1 && (
-            <select
-              value={branchId}
-              onChange={(e) => setBranchId(e.target.value)}
-              className="rounded-lg border bg-background px-3 py-2 text-sm min-w-[160px]"
+          </span>
+        }
+        variant="cyan"
+        subtitle="Air-traffic control for your floor — chairs, arrivals, payments, and bot conversations right now."
+        actions={
+          <>
+            {branches.length > 1 && (
+              <select
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="rounded-lg border bg-background px-3 py-2 text-sm min-w-[160px]"
+              >
+                <option value="">All branches</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void load()}
+              disabled={refreshing}
+              className="gap-1.5"
             >
-              <option value="">All branches</option>
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void load()}
-            disabled={refreshing}
-            className="gap-1.5"
-          >
-            <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
-            Refresh
-          </Button>
-        </div>
-      </div>
+              <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

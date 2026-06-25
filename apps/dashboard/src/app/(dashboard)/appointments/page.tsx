@@ -1,9 +1,24 @@
+import { Suspense } from 'react';
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { AppointmentsClient, type AppointmentData } from './appointments-client';
 
-export default async function AppointmentsPage() {
+function AppointmentsFallback() {
+  return (
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        title={APPOINTMENTS_LABEL}
+        variant="violet"
+        subtitle="View and manage all bookings."
+      />
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    </div>
+  );
+}
+
+async function AppointmentsPageContent() {
   const token = await getToken();
   let appointments: AppointmentData[] = [];
   let error: string | null = null;
@@ -27,11 +42,12 @@ export default async function AppointmentsPage() {
 
   if (error) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
-          <p className="text-muted-foreground text-sm mt-1">View and manage all bookings.</p>
-        </div>
+      <div className="dashboard-page-flow space-y-6">
+        <DashboardPageHeader
+          title={APPOINTMENTS_LABEL}
+          variant="violet"
+          subtitle="View and manage all bookings."
+        />
         <p className="text-sm text-destructive">{error}</p>
       </div>
     );
@@ -43,5 +59,13 @@ export default async function AppointmentsPage() {
       past={past}
       token={token ?? ''}
     />
+  );
+}
+
+export default function AppointmentsPage() {
+  return (
+    <Suspense fallback={<AppointmentsFallback />}>
+      <AppointmentsPageContent />
+    </Suspense>
   );
 }

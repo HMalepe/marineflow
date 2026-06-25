@@ -7,6 +7,7 @@ import { SalonSettingsForm, type SalonSettings } from './salon-settings-form';
 import { ChangePasswordForm } from './change-password-form';
 import { LogoUpload } from './logo-upload';
 import { ContactMarineFlow } from './contact-marineflow';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 interface MeResponse {
   user: {
@@ -50,15 +51,17 @@ export default async function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div id="settings-intro" data-section-label="Summary" className="dashboard-section-anchor">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          {canEditSalon
+    <div className="dashboard-page-flow space-y-6 max-w-3xl">
+      <DashboardPageHeader
+        id="settings-intro"
+        title="Settings"
+        variant="violet"
+        subtitle={
+          canEditSalon
             ? 'Manage your account, salon hours, and WhatsApp bot'
-            : 'Manage your profile and login password'}
-        </p>
-      </div>
+            : 'Manage your profile and login password'
+        }
+      />
 
       <Card id="settings-profile" data-section-label="Profile" className="dashboard-section-anchor">
         <CardHeader>

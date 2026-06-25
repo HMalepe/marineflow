@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -179,31 +180,36 @@ export function AutomationsClient({ token }: Props) {
   }
 
   return (
-    <div className="space-y-8 max-w-4xl">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+    <div className="dashboard-page-flow space-y-8 max-w-4xl">
+      <DashboardPageHeader
+        variant="violet"
+        title={
+          <span className="flex items-center gap-2">
             <Zap className="size-7 text-amber-500" />
             Power Features
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1 max-w-xl">
+          </span>
+        }
+        subtitle={
+          <>
             Single place for reminders, win-back, reviews, booking rules, and campaign copy. Paste your{' '}
             <Link href="/settings" className="text-primary underline-offset-4 hover:underline">
               Google review URL in Settings
             </Link>
             .
-          </p>
-        </div>
-        <div className="flex flex-col gap-2 items-start sm:items-end">
-          <Button onClick={() => void handleSave()} disabled={saving || !dirty} size="sm">
-            {saving ? 'Saving…' : 'Save all changes'}
-          </Button>
-          {dirty && (
-            <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
-          )}
-          <SectionSaveFeedback feedback={getSection('automations')} />
-        </div>
-      </div>
+          </>
+        }
+        actions={
+          <div className="flex flex-col gap-2 items-start sm:items-end">
+            <Button onClick={() => void handleSave()} disabled={saving || !dirty} size="sm">
+              {saving ? 'Saving…' : 'Save all changes'}
+            </Button>
+            {dirty && (
+              <span className="text-xs text-yellow-700 dark:text-yellow-400">Unsaved changes</span>
+            )}
+            <SectionSaveFeedback feedback={getSection('automations')} />
+          </div>
+        }
+      />
 
       <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
         <CardHeader className="pb-3">

@@ -24,6 +24,7 @@ import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { ServiceRow, type ServiceRowData } from '@/components/ServiceRow';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 interface Service extends ServiceRowData {}
 
@@ -686,11 +687,12 @@ export function ServicesClient({ token }: Props) {
   }, [filtered, categories]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Services</h1>
-          <p className="text-muted-foreground text-sm mt-1 flex items-center gap-2 flex-wrap">
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        title="Services"
+        variant="violet"
+        subtitle={
+          <span className="flex items-center gap-2 flex-wrap">
             Manage what customers can book via WhatsApp.
             {liveConnected && (
               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
@@ -698,15 +700,17 @@ export function ServicesClient({ token }: Props) {
                 Live sync
               </span>
             )}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => loadServices(true)} disabled={refreshing}>
-            {refreshing ? 'Refreshing…' : 'Refresh'}
-          </Button>
-          <Button onClick={() => openCreate()}>Add Service</Button>
-        </div>
-      </div>
+          </span>
+        }
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => loadServices(true)} disabled={refreshing}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+            <Button onClick={() => openCreate()}>Add Service</Button>
+          </>
+        }
+      />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total services" value={services.length} />

@@ -163,7 +163,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
       </header>
 
       {/* Bottom tab bar */}
-      <nav className="mobile-tab-bar md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-border/60 bg-card/90 backdrop-blur-xl supports-[backdrop-filter]:bg-card/75 shadow-[0_-1px_0_oklch(0.78_0.14_192_/_0.08),0_-12px_32px_-16px_oklch(0.52_0.24_288_/_0.2)] flex items-stretch touch-manipulation">
+      <nav className="mobile-tab-bar md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/90 backdrop-blur-xl supports-[backdrop-filter]:bg-card/75 flex items-stretch touch-manipulation">
         {tabs.map((tab) => {
           const active = isActive(tab.href);
           const showBadge = tab.href === '/conversations' && liveHandoffCount > 0;
@@ -186,7 +186,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
               </div>
               <span className={cn('transition-all', active && 'font-semibold')}>{tab.label}</span>
               {active && (
-                <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full solupair-brand-pulse shadow-[var(--solupair-glow)]" />
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 mobile-tab-active-indicator" />
               )}
             </Link>
           );
@@ -204,7 +204,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
           <MoreIcon className={cn('size-5', moreActive && 'stroke-primary')} />
           More
           {moreActive && (
-            <span className="absolute bottom-0 h-0.5 w-8 rounded-full solupair-brand-pulse shadow-[var(--solupair-glow)]" />
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 mobile-tab-active-indicator" />
           )}
         </button>
       </nav>
@@ -269,9 +269,7 @@ function MoreNavItem({
       onClick={onClick}
       className={cn(
         'flex items-center gap-2.5 px-4 py-3.5 min-h-[2.75rem] rounded-xl transition-all duration-200 text-sm font-medium touch-manipulation',
-        active
-          ? 'nav-link-active'
-          : 'bg-muted/40 hover:bg-accent/50 hover:shadow-[inset_0_0_0_1px_oklch(0.52_0.24_288_/_0.08)] text-foreground',
+        active ? 'nav-link-active' : 'nav-link-idle text-foreground',
       )}
     >
       {icon}

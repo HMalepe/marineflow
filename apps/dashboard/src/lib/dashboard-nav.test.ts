@@ -14,7 +14,7 @@ import {
 
 describe('dashboard-nav', () => {
   it('puts conversations in daily operations near the top', () => {
-    const daily = SALON_NAV_GROUPS.find((g) => g.title === 'Daily operations');
+    const daily = SALON_NAV_GROUPS.find((g) => g.title === 'Run the day');
     expect(daily?.items[0]?.href).toBe('/appointments');
     expect(daily?.items[1]?.href).toBe('/pulse');
     expect(daily?.items[2]?.href).toBe('/conversations');

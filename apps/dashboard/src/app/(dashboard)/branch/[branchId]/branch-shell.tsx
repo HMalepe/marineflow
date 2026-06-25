@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { ArrowLeft, Calendar, LayoutGrid, Settings, Users } from 'lucide-react';
 import { branchPath } from '@/lib/branch-path';
 import { cn } from '@/lib/utils';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import type { BranchRow } from '@/app/(dashboard)/branches/branches-client';
 
 const NAV = [
@@ -25,36 +26,36 @@ export function BranchShell({
   const base = branchPath(branch.id);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="p-4 sm:p-5 space-y-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1 min-w-0">
-              <Link
-                href="/branches"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ArrowLeft className="size-3.5" />
-                All branches
-              </Link>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">{branch.name}</h1>
-              <p className="text-sm text-muted-foreground max-w-2xl">
-                This location has its own roster and staff. Services, prices, and the WhatsApp bot are shared across all branches.
-              </p>
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        variant="violet"
+        className="overflow-hidden pb-0"
+        title={
+          <>
+            <Link
+              href="/branches"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              <ArrowLeft className="size-3.5" />
+              All branches
+            </Link>
+            {branch.name}
+          </>
+        }
+        subtitle="This location has its own roster and staff. Services, prices, and the WhatsApp bot are shared across all branches."
+        actions={
+          branch._count ? (
+            <div className="flex gap-4 text-sm text-muted-foreground shrink-0">
+              <span>{branch._count.staff} staff</span>
+              <span>{branch._count.appointments} appointments</span>
             </div>
-            {branch._count && (
-              <div className="flex gap-4 text-sm text-muted-foreground shrink-0">
-                <span>{branch._count.staff} staff</span>
-                <span>{branch._count.appointments} appointments</span>
-              </div>
-            )}
-          </div>
-        </div>
-
+          ) : undefined
+        }
+      >
         <nav
           className={cn(
-            'sticky z-30 flex gap-1.5 overflow-x-auto overscroll-x-contain px-4 sm:px-5 py-2.5',
-            'border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85',
+            'branch-tab-nav sticky z-30 flex gap-1.5 overflow-x-auto overscroll-x-contain -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5 mt-4',
+            'bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85',
             'top-[var(--dashboard-sticky-offset,0px)]',
             '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           )}
@@ -68,9 +69,7 @@ export function BranchShell({
                 href={href}
                 className={cn(
                   'inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap',
-                  active
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                  active ? 'branch-tab-link-active text-primary' : 'branch-tab-link-idle text-muted-foreground hover:text-accent-foreground',
                 )}
               >
                 <Icon className="size-4 shrink-0" />
@@ -79,7 +78,7 @@ export function BranchShell({
             );
           })}
         </nav>
-      </div>
+      </DashboardPageHeader>
 
       {children}
     </div>

@@ -18,6 +18,7 @@ import {
 import { BranchCard, type BranchStats } from '@/components/BranchCard';
 import { apiFetch, ApiError } from '@/lib/api';
 import { BRANCHES_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 export interface BranchRow {
   id: string;
@@ -176,11 +177,12 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{BRANCHES_LABEL}</h1>
-          <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
+    <div className="dashboard-page-flow space-y-6 max-w-5xl">
+      <DashboardPageHeader
+        title={BRANCHES_LABEL}
+        variant="violet"
+        subtitle={
+          <>
             Multi-location salons show a branch picker on WhatsApp when you have more than one.
             Click a branch to manage its roster and staff — services, prices, and the bot are shared.
             Your main salon address lives under{' '}
@@ -188,15 +190,17 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
               Settings
             </Link>
             .
-          </p>
-        </div>
-        {canAdd && (
-          <Button size="sm" onClick={() => { setAddOpen(true); resetForm(); }}>
-            <Plus className="size-4 mr-1.5" />
-            Add branch
-          </Button>
-        )}
-      </div>
+          </>
+        }
+        actions={
+          canAdd ? (
+            <Button size="sm" onClick={() => { setAddOpen(true); resetForm(); }}>
+              <Plus className="size-4 mr-1.5" />
+              Add branch
+            </Button>
+          ) : undefined
+        }
+      />
 
       {branches.length === 0 && (
         <Card>

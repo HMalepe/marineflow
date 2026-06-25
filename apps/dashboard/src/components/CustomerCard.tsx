@@ -102,7 +102,7 @@ export function CustomerCard({
   return (
     <div
       className={cn(
-        'rounded-xl border bg-card transition-shadow',
+        'dashboard-list-card rounded-xl transition-shadow',
         hasDuplicates && 'ring-2 ring-amber-400/40 border-amber-400/30',
       )}
     >

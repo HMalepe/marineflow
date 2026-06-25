@@ -22,6 +22,7 @@ import {
   type TicketCardData,
 } from '@/components/TicketCard';
 import { TICKETS_LABEL, TICKETS_TAGLINE, CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import {
   isActiveQueueTicket,
   isNoiseTicket,
@@ -177,16 +178,20 @@ export function TicketsClient({ token }: Props) {
 
   return (
     <div className="dashboard-workspace dashboard-comms-page">
-      <div className={cn('shrink-0 dashboard-page-header', showDetailOnMobile && 'hidden md:block')}>
-        <h1 className="text-xl md:text-2xl font-bold tracking-tight">{TICKETS_LABEL}</h1>
-        <PremiumDisclosure label="Tickets vs conversations" desktopOpen={false} className="mt-1">
-          {TICKETS_TAGLINE} For live chat, open{' '}
-          <Link href="/conversations" className="text-primary underline-offset-4 hover:underline">
-            {CONVERSATIONS_LABEL}
-          </Link>
-          .
-        </PremiumDisclosure>
-      </div>
+      <DashboardPageHeader
+        title={TICKETS_LABEL}
+        variant="cyan"
+        className={cn(showDetailOnMobile && 'hidden md:block')}
+        subtitle={
+          <PremiumDisclosure label="Tickets vs conversations" desktopOpen={false}>
+            {TICKETS_TAGLINE} For live chat, open{' '}
+            <Link href="/conversations" className="text-primary underline-offset-4 hover:underline">
+              {CONVERSATIONS_LABEL}
+            </Link>
+            .
+          </PremiumDisclosure>
+        }
+      />
 
       <div className="dashboard-inbox-frame dashboard-inbox-frame--chat flex-col md:flex-row">
         <div

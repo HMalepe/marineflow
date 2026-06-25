@@ -105,7 +105,7 @@ async function DashboardLayoutInner({
       <aside className="dashboard-sidebar-shell w-64 shrink-0 hidden md:flex md:flex-col md:sticky md:top-0 md:h-dvh md:overflow-hidden">
 
         {/* Business identity */}
-        <div className="shrink-0 px-4 py-4 border-b flex items-center gap-3">
+        <div className="shrink-0 px-4 py-4 border-b-2 border-violet-500/30 flex items-center gap-3">
           {/* Logo / initials avatar — white bg keeps dark logos visible */}
           <div className={`shrink-0 size-10 rounded-xl overflow-hidden flex items-center justify-center border border-border/70 shadow-[var(--solupair-glass-highlight-subtle)] ${logoUrl ? 'bg-white' : 'bg-muted/80'}`}>
             {logoUrl ? (
@@ -146,7 +146,7 @@ async function DashboardLayoutInner({
         </nav>
 
         {/* Product watermark */}
-        <div className="shrink-0 px-5 py-3 border-t border-b">
+        <div className="shrink-0 px-5 py-3 border-t-2 border-b-2 border-violet-500/25">
           <div className="flex items-center gap-2">
             {/* WhatsApp-green pulse dot */}
             <span className="relative flex h-2 w-2 shrink-0">
@@ -173,7 +173,7 @@ async function DashboardLayoutInner({
       {/* Main */}
       <main className="dashboard-main-shell flex-1 min-w-0 min-h-dvh flex flex-col">
         <DashboardStickyHeader isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
-        <div className="flex-1 p-5 pb-mobile-main md:p-8 min-w-0 min-h-0 overflow-x-clip flex flex-col">
+        <div className="flex-1 p-5 pb-mobile-main md:p-8 min-w-0 min-h-0 overflow-x-clip flex flex-col dashboard-page-shell">
           {children}
         </div>
       </main>

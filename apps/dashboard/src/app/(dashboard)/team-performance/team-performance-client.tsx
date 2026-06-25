@@ -6,6 +6,7 @@ import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { cn } from '@/lib/utils';
 
 interface LeaderboardEntry {
@@ -70,21 +71,22 @@ export function TeamPerformanceClient({ token }: Props) {
   const top = data?.leaderboard[0];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-2">
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        variant="fuchsia"
+        title={
+          <span className="flex items-center gap-2">
             <Crown className="size-7 text-amber-500" />
             Team Performance
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Leaderboard, ratings, rebooking, and configurable incentives — gamified for your stylists.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-          Refresh
-        </Button>
-      </div>
+          </span>
+        }
+        subtitle="Leaderboard, ratings, rebooking, and configurable incentives — gamified for your stylists."
+        actions={
+          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+            Refresh
+          </Button>
+        }
+      />
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 

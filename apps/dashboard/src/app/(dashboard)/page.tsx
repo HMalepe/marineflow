@@ -1,10 +1,8 @@
 import type React from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
-import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { APPOINTMENTS_LABEL, CUSTOMERS_LABEL, CONVERSATIONS_LABEL, OVERVIEW_LABEL, ANALYTICS_LABEL } from '@/lib/dashboard-nav';
 import { KPIStrip, type OverviewKpiData } from '@/components/KPIStrip';
 import { MiniBarChart } from '@/components/MiniBarChart';
 import { StatCard } from '@/components/StatCard';
@@ -16,9 +14,13 @@ import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard
 import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
 import { SetupHealthScore, type SetupHealthData } from '@/components/SetupHealthScore';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
-import { BusinessCoachCard } from '@/components/BusinessCoachCard';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
-import { Calendar, Users, MessageSquare, BarChart2 } from 'lucide-react';
+import { NeedsYouPanel } from '@/components/overview/NeedsYouPanel';
+import { OverviewCoachNudges } from '@/components/overview/OverviewCoachNudges';
+import { TodayBookingsPanel, type TodayAppointment } from '@/components/overview/TodayBookingsPanel';
+import { overviewNeonBox, overviewSection } from '@/components/overview/overviewNeon';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
+import { MessageSquare, Users, BarChart2 } from 'lucide-react';
 import { withDashboardDebugCatch } from '@/lib/with-dashboard-debug-catch';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
@@ -27,15 +29,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 // Appointment view types & helpers
 // ---------------------------------------------------------------------------
 
-interface Appointment {
-  id: string;
-  start: string;
-  end: string;
-  status: string;
-  service: { name: string };
-  staff: { name: string };
-  customer: { displayName: string | null; waId: string };
-}
+type Appointment = TodayAppointment;
 
 // ---------------------------------------------------------------------------
 // Admin view types & helpers
@@ -125,29 +119,27 @@ async function SuperAdminView({ token }: { token: string | null }) {
     ((alerts.pastDue?.length ?? 0) > 0 || (alerts.trialExpiring?.length ?? 0) > 0);
 
   return (
-    <div className="space-y-6">
+    <div className="dashboard-page-flow space-y-6">
       {systemHealth?.postgres?.status && systemHealth.redis?.status && systemHealth.twilio?.status && (
         <div id="platform-health" data-section-label="System health" className="dashboard-section-anchor">
           <SystemHealthBar data={systemHealth} />
         </div>
       )}
 
-      <div
+      <DashboardPageHeader
         id="platform-intro"
-        data-section-label="Summary"
-        className="dashboard-section-anchor flex items-start justify-between"
-      >
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Platform Overview</h1>
-          <p className="text-muted-foreground text-sm mt-1">Platform-wide stats and alerts.</p>
-        </div>
-        <Link
-          href="/admin"
-          className="inline-flex items-center text-sm font-medium text-primary hover:underline"
-        >
-          Manage businesses &rarr;
-        </Link>
-      </div>
+        title="Platform Overview"
+        variant="violet"
+        subtitle="Platform-wide stats and alerts."
+        actions={
+          <Link
+            href="/admin"
+            className="inline-flex items-center text-sm font-medium text-primary hover:underline"
+          >
+            Manage businesses &rarr;
+          </Link>
+        }
+      />
 
       {token && (
         <div id="platform-quick-access" data-section-label="Quick access" className="dashboard-section-anchor">
@@ -303,7 +295,7 @@ async function AppointmentView({ token }: { token: string | null }) {
   const today = new Date().toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="space-y-6 lg:space-y-8">
+    <div className="overview-page dashboard-page-flow space-y-6 lg:space-y-8">
       {token && <SalonLiveRouterRefresh token={token} />}
 
       {setupHealth && Array.isArray(setupHealth.checks) && setupHealth.checks.length > 0 && (
@@ -312,51 +304,53 @@ async function AppointmentView({ token }: { token: string | null }) {
         </div>
       )}
 
-      {/* Header */}
-      <div
+      <DashboardPageHeader
         id="overview-intro"
-        data-section-label="Summary"
-        className="dashboard-section-anchor flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3"
-      >
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Overview</h1>
-          <p className="text-muted-foreground text-sm mt-1">{today}</p>
-          <p className="text-xs text-muted-foreground/80 mt-1 max-w-xl">
-            Today&apos;s bookings, revenue, and bot activity at a glance.
-          </p>
-        </div>
-        <Link
-          href="/appointments"
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline shrink-0"
-        >
-          <Calendar className="w-4 h-4" />
-          View all {APPOINTMENTS_LABEL.toLowerCase()} →
-        </Link>
-      </div>
+        title={OVERVIEW_LABEL}
+        variant="violet"
+        subtitle={
+          <>
+            <span className="block">{today}</span>
+            <span className="block text-xs text-muted-foreground/80 mt-1 max-w-xl font-normal">
+              Bookings, revenue, and bot activity for today — plus what needs your attention.
+            </span>
+          </>
+        }
+        actions={
+          <Link
+            href="/appointments"
+            className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline shrink-0"
+          >
+            Open {APPOINTMENTS_LABEL.toLowerCase()} →
+          </Link>
+        }
+      />
 
       {overviewKpis && (
-        <div id="overview-kpis" data-section-label="Key metrics" className="dashboard-section-anchor space-y-6 lg:space-y-8">
+        <>
+          <NeedsYouPanel data={overviewKpis} />
           <KPIStrip data={overviewKpis} />
           {Array.isArray(overviewKpis.revenueLast7Days) && overviewKpis.revenueLast7Days.length > 0 && (
-            <div id="overview-revenue" data-section-label="Revenue chart" className="dashboard-section-anchor">
-              <MiniBarChart data={overviewKpis.revenueLast7Days} />
-            </div>
+            <MiniBarChart data={overviewKpis.revenueLast7Days} />
           )}
-        </div>
+        </>
       )}
 
-      {token && (
-        <div id="overview-coach" data-section-label="AI coach" className="dashboard-section-anchor">
-          <BusinessCoachCard token={token} />
-        </div>
-      )}
+      <TodayBookingsPanel appointments={appointments} error={error} />
+
+      {overviewKpis && <OverviewCoachNudges data={overviewKpis} />}
 
       {/* Onboarding banner */}
       {!onboardingDone && (
         <div
           id="overview-onboarding"
           data-section-label="Finish setup"
-          className="dashboard-section-anchor rounded-xl border border-primary/30 bg-primary/5 px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3"
+          className={overviewSection(
+            overviewNeonBox(
+              'cyan',
+              'px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3',
+            ),
+          )}
         >
           <div className="flex-1">
             <p className="font-semibold text-sm">Finish setting up your account</p>
@@ -373,82 +367,34 @@ async function AppointmentView({ token }: { token: string | null }) {
         </div>
       )}
 
-      {/* Quick links — desktop only bonus */}
+      {/* Quick links — desktop only */}
       <div
         id="overview-shortcuts"
         data-section-label="Quick links"
-        className="dashboard-section-anchor hidden lg:grid grid-cols-3 gap-4"
+        className={overviewSection('hidden lg:grid grid-cols-3 gap-4')}
       >
         {[
-          { href: '/customers', icon: <Users className="w-5 h-5" />, label: 'Customers', desc: 'View & search customer records' },
-          { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: 'Conversations', desc: 'WhatsApp inbox & handoffs' },
-          { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: 'Analytics', desc: 'Revenue, bookings & trends' },
+          { href: '/customers', icon: <Users className="w-5 h-5" />, label: CUSTOMERS_LABEL, desc: 'Profiles, loyalty & consent', neon: 'violet' as const },
+          { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: CONVERSATIONS_LABEL, desc: 'WhatsApp inbox & handoffs', neon: 'cyan' as const },
+          { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: ANALYTICS_LABEL, desc: 'Revenue, bookings & trends', neon: 'fuchsia' as const },
         ].map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className="group rounded-xl border bg-card px-5 py-4 flex items-start gap-3.5 hover:border-primary/40 hover:shadow-sm transition-all"
+            className="group block h-full"
           >
-            <div className="mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary transition-colors">
-              {item.icon}
-            </div>
-            <div>
-              <p className="font-semibold text-sm">{item.label}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+            <div className={overviewNeonBox(item.neon, 'px-5 py-4 flex items-start gap-3.5 h-full')}>
+              <div className="mt-0.5 shrink-0 text-foreground group-hover:text-primary transition-colors p-2 rounded-lg border-2 border-current/20">
+                {item.icon}
+              </div>
+              <div className="border-l-2 border-current/20 pl-3.5 min-w-0">
+                <p className="font-bold text-sm">{item.label}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-1 pt-1 border-t border-current/15">{item.desc}</p>
+              </div>
             </div>
           </Link>
         ))}
       </div>
-
-      {/* Today's schedule */}
-      <Card id="overview-today" data-section-label="Today's schedule" className="dashboard-section-anchor">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Today&apos;s Schedule</CardTitle>
-            {appointments.length > 0 && (
-              <span className="text-xs text-muted-foreground">{appointments.length} booking{appointments.length === 1 ? '' : 's'}</span>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {!error && appointments.length === 0 && (
-            <div className="text-center py-8">
-              <Calendar className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-              <p className="text-sm font-medium">No appointments today</p>
-              <p className="text-xs text-muted-foreground mt-1">Enjoy the quiet — or share your booking link to fill the day.</p>
-            </div>
-          )}
-          {appointments.length > 0 && (
-            <div className="space-y-2">
-              {appointments.map((appt) => (
-                <div
-                  key={appt.id}
-                  className="flex items-center gap-3 p-3 rounded-xl border hover:bg-muted/30 transition-colors"
-                >
-                  <div className="text-right shrink-0 w-12">
-                    <p className="text-sm font-semibold tabular-nums">
-                      {new Date(appt.start).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                  </div>
-                  <div className="w-px h-8 bg-border shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {appt.customer.displayName ?? appt.customer.waId}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {appt.service?.name ?? 'Service'} · {appt.staff?.name ?? 'Staff'}
-                    </p>
-                  </div>
-                  <Badge variant={appt.status === 'CONFIRMED' || appt.status === 'CONFIRMED_PAID' ? 'default' : 'secondary'} className="shrink-0 text-[10px]">
-                    {appt.status.replace('_', ' ').toLowerCase()}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

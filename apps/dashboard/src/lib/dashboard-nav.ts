@@ -1,9 +1,13 @@
 /** Shared dashboard navigation — desktop sidebar and mobile nav stay in sync. */
 
 /** Canonical salon nav labels — desktop, mobile, and page titles must match. */
-export const APPOINTMENTS_LABEL = 'Appointments';
-export const CONVERSATIONS_LABEL = 'Conversations';
-export const TICKETS_LABEL = 'Support tickets';
+export const OVERVIEW_LABEL = 'Today at a glance';
+export const OVERVIEW_MOBILE_TAB_LABEL = 'Today';
+export const APPOINTMENTS_LABEL = 'Bookings';
+export const CONVERSATIONS_LABEL = 'Inbox';
+export const TICKETS_LABEL = 'Help requests';
+export const CUSTOMERS_LABEL = 'Clients';
+export const ANALYTICS_LABEL = 'Insights';
 export const BOT_FAQS_LABEL = 'Bot FAQs';
 export const BRANCHES_LABEL = 'Branches';
 
@@ -25,22 +29,22 @@ export type NavGroup = {
   items: NavItem[];
 };
 
-export const SALON_OVERVIEW_ITEM: NavItem = { href: '/', label: 'Overview' };
+export const SALON_OVERVIEW_ITEM: NavItem = { href: '/', label: OVERVIEW_LABEL };
 
 /** Salon nav grouped by how owners use the product day to day. */
 export const SALON_NAV_GROUPS: NavGroup[] = [
   {
-    title: 'Daily operations',
+    title: 'Run the day',
     items: [
       { href: '/appointments', label: APPOINTMENTS_LABEL },
       { href: '/pulse', label: 'Live Pulse' },
       { href: '/conversations', label: CONVERSATIONS_LABEL },
-      { href: '/customers', label: 'Customers' },
+      { href: '/customers', label: CUSTOMERS_LABEL },
       { href: '/tickets', label: TICKETS_LABEL },
     ],
   },
   {
-    title: 'Business setup',
+    title: 'Set up your salon',
     items: [
       { href: '/services', label: 'Services' },
       { href: '/roster', label: 'Staff Roster' },
@@ -54,7 +58,7 @@ export const SALON_NAV_GROUPS: NavGroup[] = [
       { href: '/campaigns', label: 'Newsletter' },
       { href: '/automations', label: 'Power Features' },
       { href: '/team-performance', label: 'Team Performance' },
-      { href: '/analytics', label: 'Analytics' },
+      { href: '/analytics', label: ANALYTICS_LABEL },
     ],
   },
   {
@@ -103,7 +107,7 @@ export function visibleSalonNavGroups(isOwner: boolean): NavGroup[] {
 
 /** Bottom tab bar on mobile — high-frequency destinations. */
 export const MOBILE_BOTTOM_TAB_ITEMS: NavItem[] = [
-  { href: '/', label: 'Overview' },
+  { href: '/', label: OVERVIEW_MOBILE_TAB_LABEL },
   { href: '/appointments', label: APPOINTMENTS_LABEL },
   { href: '/conversations', label: CONVERSATIONS_LABEL },
   { href: '/roster', label: 'Roster' },
@@ -137,14 +141,14 @@ export function adminMobileMoreItems(): NavItem[] {
 
 /** Human-readable title for the sticky in-page nav (not duplicated in the sidebar). */
 export function pageTitleForPath(pathname: string, isAdmin: boolean): string {
-  if (pathname === '/') return isAdmin ? 'Platform overview' : 'Overview';
+  if (pathname === '/') return isAdmin ? 'Platform overview' : OVERVIEW_LABEL;
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'Businesses';
   if (pathname.startsWith('/appointments') || (pathname.includes('/branch/') && pathname.includes('/appointments'))) {
     return APPOINTMENTS_LABEL;
   }
   if (pathname.startsWith('/pulse')) return 'Live Pulse';
   if (pathname.startsWith('/conversations')) return CONVERSATIONS_LABEL;
-  if (pathname.startsWith('/customers')) return 'Customers';
+  if (pathname.startsWith('/customers')) return CUSTOMERS_LABEL;
   if (pathname.startsWith('/tickets')) return TICKETS_LABEL;
   if (pathname.startsWith('/services')) return 'Services';
   if (pathname.startsWith('/roster') || pathname.startsWith('/staff')) return 'Staff Roster';
@@ -153,7 +157,7 @@ export function pageTitleForPath(pathname: string, isAdmin: boolean): string {
   if (pathname.startsWith('/campaigns')) return 'Newsletter';
   if (pathname.startsWith('/automations')) return 'Power Features';
   if (pathname.startsWith('/team-performance')) return 'Team Performance';
-  if (pathname.startsWith('/analytics')) return 'Analytics';
+  if (pathname.startsWith('/analytics')) return ANALYTICS_LABEL;
   if (pathname.startsWith('/billing')) return 'Billing';
   if (pathname.startsWith('/settings')) return 'Settings';
   if (pathname.startsWith('/agency')) return 'Agency';
@@ -174,7 +178,7 @@ export function stickyHeaderNavGroups(input: { isAdmin: boolean; isOwner: boolea
   if (input.isAdmin) {
     return [{ title: 'Platform', items: ADMIN_NAV_ITEMS }];
   }
-  return [{ title: 'Overview', items: [SALON_OVERVIEW_ITEM] }, ...visibleSalonNavGroups(input.isOwner)];
+  return [{ title: OVERVIEW_LABEL, items: [SALON_OVERVIEW_ITEM] }, ...visibleSalonNavGroups(input.isOwner)];
 }
 
 export type SettingsSectionLink = { id: string; label: string };

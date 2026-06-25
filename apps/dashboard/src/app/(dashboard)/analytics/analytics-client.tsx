@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { ANALYTICS_LABEL, APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { apiFetch, ApiError } from '@/lib/api';
 import { resolveApiUrl } from '@/lib/api-config';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
@@ -292,70 +293,70 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Analytics</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {isAdmin
-              ? isPlatformView
-                ? 'Platform-wide performance across all MarineFlow businesses.'
-                : `Performance for ${selectedBusinessName ?? 'selected business'}.`
-              : 'Business performance at a glance.'}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && selectedBusinessId && selectedBusinessName && (
-            <OpenClientDashboardButton
-              businessId={selectedBusinessId}
-              businessName={selectedBusinessName}
-              variant="default"
-              size="sm"
-            />
-          )}
-          {isAdmin && (
-            <select
-              value={selectedBusinessId}
-              onChange={(e) => handleBusinessChange(e.target.value)}
-              className="h-9 min-w-[200px] max-w-[280px] rounded-lg border bg-card px-3 text-sm shadow-sm"
-              aria-label="Filter by business"
-            >
-              <option value="">All businesses (platform)</option>
-              {businesses.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
-          )}
-          {/* Month navigator */}
-          <div className="flex items-center gap-1 rounded-xl border bg-card px-1 py-1 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setSelectedMonth(offsetMonth(selectedMonth, -1))}
-              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold"
-              aria-label="Previous month"
-            >
-              ‹
-            </button>
-            <span className="px-2 text-sm font-semibold tabular-nums min-w-[140px] text-center">
-              {formatMonthLabel(selectedMonth)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedMonth(offsetMonth(selectedMonth, 1))}
-              disabled={isCurrentMonth}
-              className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
-              aria-label="Next month"
-            >
-              ›
-            </button>
-          </div>
-          {!loading && (
-            <Button variant="outline" size="sm" onClick={load}>
-              Refresh
-            </Button>
-          )}
-        </div>
-      </div>
+    <div className="dashboard-page-flow space-y-6">
+      <DashboardPageHeader
+        title={ANALYTICS_LABEL}
+        variant="fuchsia"
+        subtitle={
+          isAdmin
+            ? isPlatformView
+              ? 'Platform-wide performance across all MarineFlow businesses.'
+              : `Performance for ${selectedBusinessName ?? 'selected business'}.`
+            : 'Business performance at a glance.'
+        }
+        actions={
+          <>
+            {isAdmin && selectedBusinessId && selectedBusinessName && (
+              <OpenClientDashboardButton
+                businessId={selectedBusinessId}
+                businessName={selectedBusinessName}
+                variant="default"
+                size="sm"
+              />
+            )}
+            {isAdmin && (
+              <select
+                value={selectedBusinessId}
+                onChange={(e) => handleBusinessChange(e.target.value)}
+                className="h-9 min-w-[200px] max-w-[280px] rounded-lg border bg-card px-3 text-sm shadow-sm"
+                aria-label="Filter by business"
+              >
+                <option value="">All businesses (platform)</option>
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            )}
+            <div className="flex items-center gap-1 rounded-xl border bg-card px-1 py-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(offsetMonth(selectedMonth, -1))}
+                className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold"
+                aria-label="Previous month"
+              >
+                ‹
+              </button>
+              <span className="px-2 text-sm font-semibold tabular-nums min-w-[140px] text-center">
+                {formatMonthLabel(selectedMonth)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedMonth(offsetMonth(selectedMonth, 1))}
+                disabled={isCurrentMonth}
+                className="size-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors text-sm font-bold disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Next month"
+              >
+                ›
+              </button>
+            </div>
+            {!loading && (
+              <Button variant="outline" size="sm" onClick={load}>
+                Refresh
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {/* Loading skeleton */}
       {loading && (

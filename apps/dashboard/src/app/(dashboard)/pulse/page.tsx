@@ -1,5 +1,6 @@
 import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { PulseClient } from './pulse-client';
 
 interface BranchRow {
@@ -21,9 +22,8 @@ export default async function PulsePage() {
 
   if (error && !token) {
     return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold tracking-tight">Live Pulse</h1>
-        <p className="text-sm text-destructive">{error}</p>
+      <div className="dashboard-page-flow space-y-6">
+        <DashboardPageHeader title="Live Pulse" variant="cyan" subtitle={error} />
       </div>
     );
   }

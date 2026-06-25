@@ -1,17 +1,21 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AppointmentCard, type AppointmentData } from '@/components/AppointmentCard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { apiFetch, ApiError } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { AlertTriangle, Calendar, CheckSquare, Loader2, Search, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { MobileFilterBar } from '@/components/mobile-filter-bar';
 import { DataList, DataRow, SectionPanel } from '@/components/section-panel';
+import { dashboardNeonBox } from '@/components/overview/overviewNeon';
+import { cn } from '@/lib/utils';
 
 interface WaitlistEntry {
   id: string;
@@ -49,6 +53,7 @@ export function AppointmentsClient({
   branchId?: string;
   hidePageHeader?: boolean;
 }) {
+  const searchParams = useSearchParams();
   const [upcoming, setUpcoming] = useState(initialUpcoming);
   const [past, setPast] = useState(initialPast);
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
@@ -71,6 +76,16 @@ export function AppointmentsClient({
   }, [token]);
 
   useEffect(() => { void loadWaitlist(); }, [loadWaitlist]);
+
+  useEffect(() => {
+    const status = searchParams.get('status');
+    const payment = searchParams.get('payment');
+    if (status === 'PENDING_PAYMENT' || payment === 'pending') {
+      setPaymentFilter('pending');
+    } else if (payment === 'paid') {
+      setPaymentFilter('paid');
+    }
+  }, [searchParams]);
 
   async function handleRemoveWaitlist(id: string) {
     setRemovingWaitlistId(id);
@@ -218,24 +233,22 @@ export function AppointmentsClient({
       )}
 
       {!hidePageHeader && (
-        <div id="appointments-intro" data-section-label="Summary" className="dashboard-section-anchor dashboard-page-header">
-          <h1 className="text-xl md:text-3xl font-bold tracking-tight">{APPOINTMENTS_LABEL}</h1>
-          <p className="text-muted-foreground text-sm mt-1.5 hidden md:flex items-center gap-2 flex-wrap">
-            View and manage all bookings.
-            {liveConnected && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-                Live sync
-              </span>
-            )}
-          </p>
-          {liveConnected && (
-            <span className="md:hidden inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 mt-1">
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-              Live
-            </span>
-          )}
-        </div>
+        <DashboardPageHeader
+          id="appointments-intro"
+          title={APPOINTMENTS_LABEL}
+          variant="violet"
+          subtitle={
+            <>
+              View and manage all bookings.
+              {liveConnected && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 ml-2">
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                  Live sync
+                </span>
+              )}
+            </>
+          }
+        />
       )}
       {hidePageHeader && liveConnected && (
         <p className="text-sm text-muted-foreground flex items-center gap-2 dashboard-section-anchor" id="appointments-intro" data-section-label="Summary">
@@ -470,24 +483,21 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
             return (
               <div
                 key={a.id}
-                className={`shrink-0 snap-start rounded-lg border border-border/70 p-3.5 min-w-[170px] max-w-[220px] space-y-2 transition-colors bg-card ${
-                  isNow
-                    ? 'border-primary/40 bg-primary/[0.06] shadow-sm ring-1 ring-primary/20'
-                    : isPast
-                    ? 'opacity-50 bg-muted/30'
-                    : 'bg-card hover:border-primary/30 hover:shadow-sm'
-                }`}
+                className={cn(
+                  dashboardNeonBox(isNow ? 'fuchsia' : 'violet', 'shrink-0 snap-start p-3.5 min-w-[170px] max-w-[220px] space-y-2'),
+                  isPast && 'opacity-55',
+                )}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pb-2 border-b-2 border-current/15">
                   <p className="text-xs font-bold tabular-nums">{startTime} – {endTime}</p>
                   {isNow && <span className="text-[9px] font-semibold text-primary uppercase tracking-wide">Now</span>}
                 </div>
-                <p className="text-sm font-semibold truncate leading-tight">{a.service.name}</p>
-                <div className="space-y-0.5">
+                <p className="text-sm font-bold truncate leading-tight pt-1">{a.service.name}</p>
+                <div className="space-y-0.5 pt-2 border-t-2 border-current/12">
                   <p className="text-xs text-muted-foreground truncate">{a.customer.displayName ?? a.customer.waId}</p>
                   <p className="text-[11px] text-muted-foreground/70 truncate">{a.staff.displayName ?? a.staff.name}</p>
                 </div>
-                <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                <span className={`inline-block text-[10px] px-2 py-0.5 rounded-full font-bold border-2 ${
                   a.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' :
                   a.status === 'CANCELLED' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' :
                   a.status === 'NO_SHOW' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300' :

@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Copy, Check, X, ClipboardPaste, Plus } from 'lucide-react';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { PremiumDisclosure } from '@/components/premium-disclosure';
+import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { SectionPanel } from '@/components/section-panel';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { StaffAvatar } from '@/components/staff-avatar';
@@ -214,9 +215,10 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
 
       {/* Header */}
       {!hidePageHeader && (
-      <div className="flex items-start justify-between gap-4 flex-wrap dashboard-page-header">
-        <div>
-          <h1 className="text-xl md:text-3xl font-bold tracking-tight">Roster</h1>
+      <DashboardPageHeader
+        title="Roster"
+        variant="violet"
+        subtitle={
           <PremiumDisclosure label="How roster works">
             Tap any future date to manage shifts and time off.
             {liveConnected && (
@@ -229,24 +231,25 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
               </>
             )}
           </PremiumDisclosure>
-        </div>
-
-        <Button size="sm" onClick={() => setAddStaffOpen(true)} className="shrink-0">
-          <Plus className="w-4 h-4 mr-1" />
-          Add staff
-        </Button>
-
-        {/* Copied shift chip — desktop only inline; mobile shows below when set */}
-        {copiedShift && (
-          <div className="hidden md:flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary rounded-full px-4 py-1.5 text-sm font-medium">
-            <ClipboardPaste className="w-3.5 h-3.5" />
-            {copiedShift.startTime}–{copiedShift.endTime} ready to paste
-            <button onClick={() => setCopiedShift(null)} className="ml-1 opacity-60 hover:opacity-100">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
+        }
+        actions={
+          <>
+            {copiedShift && (
+              <div className="hidden md:flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary rounded-full px-4 py-1.5 text-sm font-medium">
+                <ClipboardPaste className="w-3.5 h-3.5" />
+                {copiedShift.startTime}–{copiedShift.endTime} ready to paste
+                <button onClick={() => setCopiedShift(null)} className="ml-1 opacity-60 hover:opacity-100">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+            <Button size="sm" onClick={() => setAddStaffOpen(true)} className="shrink-0">
+              <Plus className="w-4 h-4 mr-1" />
+              Add staff
+            </Button>
+          </>
+        }
+      />
       )}
 
       {hidePageHeader && (
