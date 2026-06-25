@@ -314,10 +314,11 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
 
       {!loading && staff.length > 0 && (
         <CollapsibleSection
+          id="roster-team"
           title="Your team"
           count={staff.length}
           subtitle="Tap a member to edit"
-          collapseOnMobile
+          manualToggle
         >
           <div className="roster-staff-strip">
             {staff.map((s) => (
@@ -338,9 +339,10 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
 
       {!loading && staff.length > 0 && (
         <CollapsibleSection
+          id="roster-capacity"
           title="Today's capacity"
           subtitle="Booked slots vs availability"
-          collapseOnMobile
+          manualToggle
         >
           <StaffUtilisationRow staff={staff} utilisation={utilisation} embedded />
         </CollapsibleSection>

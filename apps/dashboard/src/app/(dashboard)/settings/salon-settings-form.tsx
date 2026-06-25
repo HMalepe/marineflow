@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { SectionSaveFeedback } from '@/components/save-feedback';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
@@ -576,15 +577,20 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   return (
     <div className="space-y-8">
       {/* WhatsApp business name */}
-      <section id="settings-business-name" data-section-label="Business name" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">WhatsApp business name</h3>
-          <p className="text-sm text-muted-foreground mt-1">
+      <section id="settings-business-name" data-section-label="Business name" className="dashboard-section-anchor">
+      <CollapsibleSection
+        id="settings-business-name-toggle"
+        title="WhatsApp business name"
+        subtitle={
+          <>
             The name customers see in WhatsApp messages and greetings (e.g. &quot;Welcome to{' '}
             <strong>{businessName || salon.name}</strong>!&quot;). Your booking assistant is always{' '}
             <strong>{salon.botName || PLATFORM_BOT_NAME}</strong> — that name is part of MarineFlow branding.
-          </p>
-        </div>
+          </>
+        }
+        manualToggle
+        className="border-0 bg-transparent shadow-none"
+      >
         <form onSubmit={(e) => void handleSaveBusinessName(e)} className="space-y-4 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="businessName">Business name</Label>
@@ -602,6 +608,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
           </Button>
           <SectionSaveFeedback feedback={getSection('businessName')} />
         </form>
+      </CollapsibleSection>
       </section>
 
       <Separator />
@@ -734,14 +741,14 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* WhatsApp Bot Messages */}
-      <section id="settings-messages" data-section-label="Bot messages" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">WhatsApp bot messages</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Customise automated replies. Leave blank to use smart defaults.
-          </p>
-        </div>
-
+      <section id="settings-messages" data-section-label="Bot messages" className="dashboard-section-anchor">
+      <CollapsibleSection
+        id="settings-messages-toggle"
+        title="WhatsApp bot messages"
+        subtitle="Customise automated replies. Leave blank to use smart defaults."
+        manualToggle
+        className="border-0 bg-transparent shadow-none"
+      >
         <form onSubmit={(e) => void handleSaveMessages(e)} className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-4">
             <div className="space-y-2">
@@ -832,6 +839,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             </p>
           </div>
         </form>
+      </CollapsibleSection>
       </section>
 
       <Separator />
@@ -881,13 +889,14 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* Location & Contact */}
-      <section id="settings-location" data-section-label="Location" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Location &amp; Contact</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Shown to customers when they select &quot;Find us&quot; or &quot;Contact us&quot; on WhatsApp.
-          </p>
-        </div>
+      <section id="settings-location" data-section-label="Location" className="dashboard-section-anchor">
+      <CollapsibleSection
+        id="settings-location-toggle"
+        title="Location & Contact"
+        subtitle='Shown to customers when they select "Find us" or "Contact us" on WhatsApp.'
+        manualToggle
+        className="border-0 bg-transparent shadow-none"
+      >
         <form onSubmit={(e) => void handleSaveLocation(e)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="address-line">Street address</Label>
@@ -955,19 +964,20 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <SectionSaveFeedback feedback={getSection('location')} />
           </div>
         </form>
+      </CollapsibleSection>
       </section>
 
       <Separator />
 
       {/* Bot Behaviour */}
-      <section id="settings-bot-behaviour" data-section-label="Bot behaviour" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Bot behaviour</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Pause automation during holidays or when you want every message handled manually.
-          </p>
-        </div>
-
+      <section id="settings-bot-behaviour" data-section-label="Bot behaviour" className="dashboard-section-anchor">
+      <CollapsibleSection
+        id="settings-bot-behaviour-toggle"
+        title="Bot behaviour"
+        subtitle="Pause automation during holidays or when you want every message handled manually."
+        manualToggle
+        className="border-0 bg-transparent shadow-none"
+      >
         <form onSubmit={(e) => void handleSaveBot(e)} className="space-y-4">
           <div
             className={cn(
@@ -1015,6 +1025,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <SectionSaveFeedback feedback={getSection('botActive')} />
           </div>
         </form>
+      </CollapsibleSection>
       </section>
 
       <Separator />

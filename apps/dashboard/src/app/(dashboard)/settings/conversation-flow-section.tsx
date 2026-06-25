@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SectionSaveFeedback } from '@/components/save-feedback';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import {
   BUILTIN_FLOW_DEFS,
@@ -338,15 +339,14 @@ export function ConversationFlowSection({ initialSettings, onSaved }: Props) {
   }
 
   return (
-    <section id="settings-conversation-flow" data-section-label="Conversation flow" className="dashboard-section-anchor space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">Conversation flow</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Drag steps into the order customers experience them. Toggle steps on or off, or add your
-          own custom prompts.
-        </p>
-      </div>
-
+    <section id="settings-conversation-flow" data-section-label="Conversation flow" className="dashboard-section-anchor">
+      <CollapsibleSection
+        id="settings-conversation-flow-toggle"
+        title="Conversation flow"
+        subtitle="Drag steps into the order customers experience them. Toggle steps on or off, or add your own custom prompts."
+        manualToggle
+        className="border-0 bg-transparent shadow-none"
+      >
       {LOCKED_FLOW_KEYS.length > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-800/40 dark:bg-yellow-900/20 dark:text-yellow-300">
           <Lock className="mt-0.5 size-4 shrink-0" />
@@ -431,6 +431,7 @@ export function ConversationFlowSection({ initialSettings, onSaved }: Props) {
           <SectionSaveFeedback feedback={getSection('botBehaviour')} />
         </div>
       </form>
+      </CollapsibleSection>
     </section>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SectionSaveFeedback } from '@/components/save-feedback';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { fetchBusinessHours, saveBusinessHours, type BusinessHoursSettings } from './actions';
@@ -109,15 +110,14 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
   }
 
   return (
-    <section id="settings-hours" data-section-label="Business hours" className="dashboard-section-anchor space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">Business hours</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Default business hours for WhatsApp, booking, and the staff roster. Saving updates all team
-          shifts to match.
-        </p>
-      </div>
-
+    <section id="settings-hours" data-section-label="Business hours" className="dashboard-section-anchor">
+      <CollapsibleSection
+        id="settings-hours-toggle"
+        title="Business hours"
+        subtitle="Default business hours for WhatsApp, booking, and the staff roster. Saving updates all team shifts to match."
+        manualToggle
+        className="border-0 bg-transparent shadow-none"
+      >
       <div className="rounded-lg bg-muted/40 border px-4 py-3 text-sm">
         <span className="text-muted-foreground">Mon–Fri </span>
         <span className="font-medium">
@@ -334,6 +334,7 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
           <SectionSaveFeedback feedback={getSection('hours')} />
         </div>
       </form>
+      </CollapsibleSection>
     </section>
   );
 }

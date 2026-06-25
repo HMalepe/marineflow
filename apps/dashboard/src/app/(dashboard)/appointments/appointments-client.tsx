@@ -383,7 +383,7 @@ export function AppointmentsClient({
           title="Past bookings"
           count={filteredPast.length}
           subtitle="Last 20 shown"
-          collapseOnMobile
+          manualToggle
           className="dashboard-section-anchor"
         >
           <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">
@@ -407,7 +407,7 @@ export function AppointmentsClient({
           title="Waitlist"
           count={waitlist.length}
           subtitle="Notified when a slot opens"
-          collapseOnMobile
+          manualToggle
           className="dashboard-section-anchor"
         >
           <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">

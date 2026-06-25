@@ -5,8 +5,8 @@ import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface CollapsibleSectionProps {
-  title: string;
-  subtitle?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
   count?: number | string;
   /** Extra content rendered in the header, left of the toggle (e.g. a score badge). */
   headerExtra?: ReactNode;
