@@ -21,6 +21,12 @@ describe('conversationWake', () => {
       expect(isConversationWakeMessage('book a haircut tomorrow')).toBe(false);
       expect(isConversationWakeMessage('')).toBe(false);
     });
+
+    it('rejects a greeting followed by real content, so it reaches AI assist instead of resetting', () => {
+      expect(isConversationWakeMessage('Hi how are you ?')).toBe(false);
+      expect(isConversationWakeMessage('hi, what are your prices?')).toBe(false);
+      expect(isConversationWakeMessage("hello, I'd like to book")).toBe(false);
+    });
   });
 
   describe('shouldResetConversationOnWake', () => {
