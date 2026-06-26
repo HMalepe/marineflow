@@ -157,10 +157,12 @@
     font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
   }
 
   html {
     transition: background-color 300ms ease, color 300ms ease;
+    overflow-x: clip;
   }
 }
 

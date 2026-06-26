@@ -269,6 +269,11 @@ export const DistortionProjectSlider = forwardRef<
         );
         material.uniforms.imageScale.value.set(cover.x, cover.y);
 
+        const dpr = Math.min(
+          window.devicePixelRatio,
+          next.width < 640 ? 1.5 : 2,
+        );
+        renderer?.setPixelRatio(dpr);
         renderer?.setSize(next.width, next.height, false);
         camera.left = next.width / -2;
         camera.right = next.width / 2;
@@ -281,14 +286,24 @@ export const DistortionProjectSlider = forwardRef<
         renderScene();
       };
 
-      resizeObserver = new ResizeObserver(resize);
+      resizeObserver = new ResizeObserver(() => {
+        resize();
+      });
       resizeObserver.observe(container);
+
+      const onViewportChange = () => resize();
+      window.addEventListener("orientationchange", onViewportChange);
+      window.visualViewport?.addEventListener("resize", onViewportChange);
+      window.visualViewport?.addEventListener("scroll", onViewportChange);
       setIsReady(true);
       renderScene();
 
       return () => {
         transitionRef.current = null;
         resizeObserver?.disconnect();
+        window.removeEventListener("orientationchange", onViewportChange);
+        window.visualViewport?.removeEventListener("resize", onViewportChange);
+        window.visualViewport?.removeEventListener("scroll", onViewportChange);
         cancelAnimationFrame(transitionFrame);
         mesh.geometry.dispose();
         material.dispose();
@@ -313,7 +328,7 @@ export const DistortionProjectSlider = forwardRef<
   }, [images]);
 
   return (
-    <div ref={containerRef} className={className}>
+    <div ref={containerRef} className={className} style={{ touchAction: "pan-y" }}>
       <img
         src={images[activeIndexRef.current] ?? images[0]}
         alt=""

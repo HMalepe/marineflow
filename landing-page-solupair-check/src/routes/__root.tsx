@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import solupairLogo from "@/assets/solupair-logo.png";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -77,21 +78,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "NØVA — We Design The Future" },
-      { name: "description", content: "Digital experiences crafted with precision, motion & purpose." },
-      { name: "author", content: "NØVA Studio" },
-      { property: "og:title", content: "NØVA — We Design The Future" },
-      { property: "og:description", content: "Digital experiences crafted with precision, motion & purpose." },
+      { title: "Solupair — We Design The Future" },
+      {
+        name: "description",
+        content:
+          "Web applications, dashboards, WhatsApp booking agents, and plenty more business solutions.",
+      },
+      { name: "author", content: "Solupair Pty Ltd" },
+      { property: "og:title", content: "Solupair — We Design The Future" },
+      {
+        property: "og:description",
+        content:
+          "Web applications, dashboards, WhatsApp booking agents, and plenty more business solutions.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "NØVA — We Design The Future" },
-      { name: "twitter:description", content: "Digital experiences crafted with precision, motion & purpose." },
+      { name: "twitter:title", content: "Solupair — We Design The Future" },
+      {
+        name: "twitter:description",
+        content:
+          "Web applications, dashboards, WhatsApp booking agents, and plenty more business solutions.",
+      },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        href: solupairLogo,
       },
     ],
   }),

@@ -9,7 +9,7 @@ import {
   type MotionValue,
 } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import project1 from "@/assets/project1.jpg";
 import project2 from "@/assets/project2.jpg";
 import project3 from "@/assets/project3.jpg";
@@ -37,7 +37,7 @@ function SolupairLogo() {
       <img
         src={solupairLogo}
         alt="Solupair"
-        className="h-10 w-10 object-contain sm:h-12 sm:w-12"
+        className="h-11 w-11 object-contain sm:h-14 sm:w-14"
       />
     </a>
   );
@@ -154,7 +154,7 @@ function Hero() {
 
       <div className="relative flex min-h-[calc(100vh-6rem)] flex-col items-center justify-center px-2">
         <div className="relative z-0 mb-4 text-center text-xs font-medium tracking-[0.3em] text-primary sm:text-sm">
-          WEB DESIGN AGENCY
+          AUTOMATION &amp; WEB DESIGN
         </div>
 
         <div className="relative w-full">
@@ -187,27 +187,52 @@ function Hero() {
   );
 }
 
+function useIsNarrowViewport() {
+  const [narrow, setNarrow] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  return narrow;
+}
+
 function Projects() {
   const sectionRef = useRef<HTMLElement>(null);
   const sliderRef = useRef<DistortionSliderHandle>(null);
   const scrollIndexRef = useRef(0);
   const [activeIndex, setActiveIndex] = useState(0);
+  const isNarrow = useIsNarrowViewport();
+
+  // More scroll runway per project on phones so slide changes don't feel jumpy.
+  const stepVh = isNarrow ? 92 : 55;
+  const sectionHeightVh = (projects.length - 1) * stepVh + (isNarrow ? 130 : 100);
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ["start start", "end end"],
   });
 
+  const goToProject = useCallback((index: number) => {
+    scrollIndexRef.current = index;
+    setActiveIndex(index);
+    sliderRef.current?.transitionTo(index);
+  }, []);
+
   useMotionValueEvent(scrollYProgress, "change", (progress) => {
+    const segments = projects.length - 1;
+    const scaled = progress * segments;
     const targetIndex = Math.min(
       projects.length - 1,
-      Math.max(0, Math.round(progress * (projects.length - 1))),
+      Math.max(0, Math.round(scaled)),
     );
 
     if (targetIndex === scrollIndexRef.current) return;
-    scrollIndexRef.current = targetIndex;
-    setActiveIndex(targetIndex);
-    sliderRef.current?.transitionTo(targetIndex);
+    goToProject(targetIndex);
   });
 
   const project = projects[activeIndex];
@@ -218,41 +243,41 @@ function Projects() {
       ref={sectionRef}
       id="work"
       className="relative"
-      style={{ height: `${(projects.length - 1) * 55 + 100}vh` }}
+      style={{ height: `${sectionHeightVh}vh` }}
     >
       <div
-        className="sticky top-0 flex h-screen flex-col justify-center px-6 py-16 sm:px-10 lg:px-14"
+        className="sticky top-0 grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden px-4 py-6 sm:px-10 sm:py-10 lg:px-14 lg:py-12"
         style={{ background: "var(--section-dark)" }}
       >
-        <div className="mx-auto flex w-full max-w-7xl flex-col items-start justify-between gap-6 sm:flex-row sm:items-end">
+        <div className="mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
           <div>
             <h2
               className="font-display font-black uppercase leading-[0.9] tracking-tighter text-foreground"
-              style={{ fontSize: "clamp(3rem, 9vw, 9rem)" }}
+              style={{ fontSize: "clamp(2.25rem, 11vw, 9rem)" }}
             >
               Projects
             </h2>
-            <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.28em] text-foreground/45">
+            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.28em] text-foreground/45 sm:mt-3 sm:text-[11px]">
               Scroll to explore
             </p>
           </div>
-          <p className="max-w-sm text-right text-xs tracking-[0.2em] text-foreground/70 sm:text-sm">
+          <p className="hidden max-w-sm text-right text-xs tracking-[0.2em] text-foreground/70 sm:block sm:text-sm">
             WE CRAFT IMMERSIVE DIGITAL EXPERIENCES THAT PUSH THE BOUNDARIES OF WEB DESIGN &amp; MOTION.
           </p>
         </div>
 
-        <div className="relative mx-auto mt-10 w-full max-w-7xl flex-1 sm:mt-12">
-          <div className="relative h-full min-h-[320px] overflow-hidden rounded-3xl border border-white/10 bg-black/40 shadow-[0_40px_120px_oklch(0_0_0_/_0.45)] sm:min-h-[420px] lg:min-h-[520px]">
+        <div className="relative mx-auto mt-4 flex min-h-0 w-full max-w-7xl flex-col sm:mt-6">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_24px_80px_oklch(0_0_0_/_0.45)] sm:rounded-3xl sm:shadow-[0_40px_120px_oklch(0_0_0_/_0.45)]">
             <DistortionProjectSlider
               ref={sliderRef}
               images={imageSources}
-              className="absolute inset-0 overflow-hidden rounded-3xl"
+              className="absolute inset-0 overflow-hidden rounded-[inherit]"
             />
 
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/35" />
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-black/30" />
 
-            <div className="absolute inset-0 flex flex-col justify-between p-6 sm:p-8 lg:p-10">
-              <div className="flex items-start justify-between gap-4">
+            <div className="absolute inset-0 flex flex-col justify-between p-4 sm:p-8 lg:p-10">
+              <div className="flex items-start justify-between gap-3 sm:gap-4">
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.div
                     key={`counter-${activeIndex}`}
@@ -260,7 +285,7 @@ function Projects() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                    className="font-mono text-xs tracking-[0.2em] text-white/70 sm:text-sm"
+                    className="font-mono text-[11px] tracking-[0.2em] text-white/70 sm:text-sm"
                   >
                     {String(activeIndex + 1).padStart(2, "0")} /{" "}
                     {String(projects.length).padStart(2, "0")}
@@ -274,14 +299,14 @@ function Projects() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 6 }}
                     transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                    className="rounded-full border border-white/15 bg-black/35 px-3 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-white/90 backdrop-blur sm:text-xs"
+                    className="max-w-[52%] truncate rounded-full border border-white/15 bg-black/35 px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/90 backdrop-blur sm:max-w-none sm:px-3 sm:text-xs sm:tracking-[0.18em]"
                   >
                     {project.tag}
                   </motion.span>
                 </AnimatePresence>
               </div>
 
-              <div className="flex items-end justify-between gap-4">
+              <div className="flex items-end justify-between gap-3 sm:gap-4">
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.h3
                     key={`title-${activeIndex}`}
@@ -289,15 +314,33 @@ function Projects() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="font-display text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl"
+                    className="min-w-0 font-display text-2xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl"
                   >
                     {project.name}
                   </motion.h3>
                 </AnimatePresence>
 
-                <ArrowUpRight className="h-8 w-8 shrink-0 text-primary" />
+                <ArrowUpRight className="hidden h-7 w-7 shrink-0 text-primary sm:block sm:h-8 sm:w-8" />
               </div>
             </div>
+          </div>
+
+          {/* Mobile + tablet: tap targets (side rail is desktop-only) */}
+          <div className="mt-4 flex items-center justify-center gap-3 sm:gap-4 lg:hidden">
+            {projects.map((item, index) => (
+              <button
+                key={item.name}
+                type="button"
+                aria-label={`View ${item.name}`}
+                aria-current={index === activeIndex ? "true" : undefined}
+                onClick={() => goToProject(index)}
+                className={`relative h-2.5 w-2.5 rounded-full border border-white/25 transition sm:h-3 sm:w-3 ${
+                  index === activeIndex
+                    ? "scale-110 bg-white opacity-100"
+                    : "scale-100 bg-white/30 opacity-40 hover:opacity-70"
+                }`}
+              />
+            ))}
           </div>
 
           <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 flex-col gap-4 lg:flex">
@@ -306,11 +349,7 @@ function Projects() {
                 key={item.name}
                 type="button"
                 aria-label={`View ${item.name}`}
-                onClick={() => {
-                  scrollIndexRef.current = index;
-                  setActiveIndex(index);
-                  sliderRef.current?.transitionTo(index);
-                }}
+                onClick={() => goToProject(index)}
                 className={`relative h-3.5 w-3.5 rounded-full border border-white/20 transition ${
                   index === activeIndex
                     ? "scale-100 bg-white opacity-100"
@@ -376,18 +415,20 @@ function Contact() {
             <div className="space-y-6">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-foreground/60">Email</div>
-                <div className="mt-1 text-base text-foreground">hello@nova.studio</div>
+                <div className="mt-1 text-base text-foreground">info@solupair.co.za</div>
               </div>
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-foreground/60">Location</div>
-                <div className="mt-1 text-base text-foreground">Paris, France</div>
+                <div className="mt-1 text-base text-foreground">
+                  South Africa · Johannesburg &amp; Cape Town · Remote-first
+                </div>
               </div>
             </div>
           </div>
         </div>
 
         <div className="mt-20 flex flex-wrap items-center justify-between gap-4 border-t border-white/10 pt-6 text-[11px] uppercase tracking-[0.2em] text-foreground/60">
-          <div>© 2026 NØVA Studio. All rights reserved.</div>
+          <div>© 2026 Solupair Pty Ltd. All rights reserved.</div>
           <div className="flex gap-6">
             <a href="#" className="hover:text-primary">Privacy</a>
             <a href="#" className="hover:text-primary">Terms</a>
