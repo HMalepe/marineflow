@@ -217,10 +217,22 @@ function Projects() {
     offset: ["start start", "end end"],
   });
 
-  const goToProject = useCallback((index: number) => {
+  const goToProject = useCallback((index: number, options?: { syncScroll?: boolean }) => {
     scrollIndexRef.current = index;
     setActiveIndex(index);
     sliderRef.current?.transitionTo(index);
+
+    if (options?.syncScroll && sectionRef.current) {
+      const el = sectionRef.current;
+      const sectionTop = window.scrollY + el.getBoundingClientRect().top;
+      const scrollable = Math.max(0, el.offsetHeight - window.innerHeight);
+      const segments = Math.max(1, projects.length - 1);
+      const progress = index / segments;
+      window.scrollTo({
+        top: sectionTop + scrollable * progress,
+        behavior: "smooth",
+      });
+    }
   }, []);
 
   useMotionValueEvent(scrollYProgress, "change", (progress) => {
@@ -333,7 +345,7 @@ function Projects() {
                 type="button"
                 aria-label={`View ${item.name}`}
                 aria-current={index === activeIndex ? "true" : undefined}
-                onClick={() => goToProject(index)}
+                onClick={() => goToProject(index, { syncScroll: true })}
                 className={`relative h-2.5 w-2.5 rounded-full border border-white/25 transition sm:h-3 sm:w-3 ${
                   index === activeIndex
                     ? "scale-110 bg-white opacity-100"
@@ -349,7 +361,7 @@ function Projects() {
                 key={item.name}
                 type="button"
                 aria-label={`View ${item.name}`}
-                onClick={() => goToProject(index)}
+                onClick={() => goToProject(index, { syncScroll: true })}
                 className={`relative h-3.5 w-3.5 rounded-full border border-white/20 transition ${
                   index === activeIndex
                     ? "scale-100 bg-white opacity-100"
