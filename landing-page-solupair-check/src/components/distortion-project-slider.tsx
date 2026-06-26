@@ -20,6 +20,7 @@ const FRAGMENT_SHADER = `
   uniform sampler2D nextImage;
   uniform float dispFactor;
   uniform vec2 imageScale;
+  uniform float dispIntensity;
 
   vec2 coverUv(vec2 uv) {
     return (uv - 0.5) * imageScale + 0.5;
@@ -27,18 +28,17 @@ const FRAGMENT_SHADER = `
 
   void main() {
     vec2 uv = coverUv(vUv);
-    float intensity = 0.3;
 
     vec4 orig1 = texture2D(currentImage, uv);
     vec4 orig2 = texture2D(nextImage, uv);
 
     vec4 current = texture2D(
       currentImage,
-      vec2(uv.x, uv.y + dispFactor * (orig2 * intensity))
+      vec2(uv.x, uv.y + dispFactor * (orig2 * dispIntensity))
     );
     vec4 next = texture2D(
       nextImage,
-      vec2(uv.x, uv.y + (1.0 - dispFactor) * (orig1 * intensity))
+      vec2(uv.x, uv.y + (1.0 - dispFactor) * (orig1 * dispIntensity))
     );
 
     gl_FragColor = mix(current, next, dispFactor);
@@ -55,16 +55,10 @@ function getCoverScale(
   const imageAspect = imageWidth / imageHeight;
 
   if (containerAspect > imageAspect) {
-    return {
-      x: 1,
-      y: containerAspect / imageAspect,
-    };
+    return { x: 1, y: containerAspect / imageAspect };
   }
 
-  return {
-    x: imageAspect / containerAspect,
-    y: 1,
-  };
+  return { x: imageAspect / containerAspect, y: 1 };
 }
 
 function easeOutCubic(t: number) {
@@ -81,12 +75,50 @@ export type DistortionSliderHandle = {
 type DistortionProjectSliderProps = {
   images: string[];
   className?: string;
+  /** CSS crossfade instead of WebGL — phones & reduced-motion. */
+  simpleMode?: boolean;
 };
 
-export const DistortionProjectSlider = forwardRef<
+const SimpleImageCrossfade = forwardRef<
   DistortionSliderHandle,
-  DistortionProjectSliderProps
->(function DistortionProjectSlider({ images, className }, ref) {
+  Pick<DistortionProjectSliderProps, "images" | "className">
+>(function SimpleImageCrossfade({ images, className }, ref) {
+  const activeIndexRef = useRef(0);
+  const [displayIndex, setDisplayIndex] = useState(0);
+
+  useImperativeHandle(ref, () => ({
+    getActiveIndex: () => activeIndexRef.current,
+    transitionTo: (index: number) => {
+      if (index < 0 || index >= images.length) return;
+      if (index === activeIndexRef.current) return;
+      activeIndexRef.current = index;
+      setDisplayIndex(index);
+    },
+  }));
+
+  return (
+    <div className={className} style={{ touchAction: "pan-y" }}>
+      {images.map((src, index) => (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          aria-hidden={index !== displayIndex}
+          className={`absolute inset-0 h-full w-full rounded-[inherit] object-cover transition-opacity duration-300 ${
+            index === displayIndex ? "opacity-100" : "opacity-0"
+          }`}
+          loading={index === 0 ? "eager" : "lazy"}
+          decoding="async"
+        />
+      ))}
+    </div>
+  );
+});
+
+const WebGLDistortionSlider = forwardRef<
+  DistortionSliderHandle,
+  Pick<DistortionProjectSliderProps, "images" | "className">
+>(function WebGLDistortionSlider({ images, className }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const transitionRef = useRef<((index: number) => void) | null>(null);
   const activeIndexRef = useRef(0);
@@ -147,13 +179,14 @@ export const DistortionProjectSlider = forwardRef<
       });
 
       const { width, height } = getSize();
+      const isNarrow = width < 640;
 
       renderer = new THREE.WebGLRenderer({
         antialias: false,
         alpha: true,
         powerPreference: "high-performance",
       });
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, isNarrow ? 1.25 : 2));
       renderer.setSize(width, height, false);
       renderer.domElement.className =
         "absolute inset-0 h-full w-full rounded-[inherit]";
@@ -175,9 +208,8 @@ export const DistortionProjectSlider = forwardRef<
           dispFactor: { value: 0 },
           currentImage: { value: textures[0] },
           nextImage: { value: textures[Math.min(1, textures.length - 1)] },
-          imageScale: {
-            value: new THREE.Vector2(1, 1),
-          },
+          imageScale: { value: new THREE.Vector2(1, 1) },
+          dispIntensity: { value: isNarrow ? 0.18 : 0.3 },
         },
         vertexShader: VERTEX_SHADER,
         fragmentShader: FRAGMENT_SHADER,
@@ -222,10 +254,7 @@ export const DistortionProjectSlider = forwardRef<
 
         cancelAnimationFrame(transitionFrame);
 
-        if (isAnimating) {
-          commitPartialTransition();
-        }
-
+        if (isAnimating) commitPartialTransition();
         if (targetIndex === activeIndex) {
           isAnimating = false;
           renderScene();
@@ -239,18 +268,15 @@ export const DistortionProjectSlider = forwardRef<
 
         const tick = (now: number) => {
           if (disposed) return;
-
           const progress = Math.min(1, (now - transitionStart) / TRANSITION_MS);
           const eased = easeOutCubic(progress);
           material.uniforms.dispFactor.value =
             transitionFromFactor + (1 - transitionFromFactor) * eased;
           renderScene();
-
           if (progress < 1) {
             transitionFrame = requestAnimationFrame(tick);
             return;
           }
-
           finishTransition(targetIndex);
         };
 
@@ -261,6 +287,7 @@ export const DistortionProjectSlider = forwardRef<
 
       const resize = () => {
         const next = getSize();
+        const narrow = next.width < 640;
         const cover = getCoverScale(
           next.width,
           next.height,
@@ -268,11 +295,9 @@ export const DistortionProjectSlider = forwardRef<
           imageHeight,
         );
         material.uniforms.imageScale.value.set(cover.x, cover.y);
+        material.uniforms.dispIntensity.value = narrow ? 0.18 : 0.3;
 
-        const dpr = Math.min(
-          window.devicePixelRatio,
-          next.width < 640 ? 1.5 : 2,
-        );
+        const dpr = Math.min(window.devicePixelRatio, narrow ? 1.25 : 2);
         renderer?.setPixelRatio(dpr);
         renderer?.setSize(next.width, next.height, false);
         camera.left = next.width / -2;
@@ -280,15 +305,13 @@ export const DistortionProjectSlider = forwardRef<
         camera.top = next.height / 2;
         camera.bottom = next.height / -2;
         camera.updateProjectionMatrix();
-
         mesh.geometry.dispose();
         mesh.geometry = new THREE.PlaneGeometry(next.width, next.height);
         renderScene();
       };
 
-      resizeObserver = new ResizeObserver(() => {
-        resize();
-      });
+      resize();
+      resizeObserver = new ResizeObserver(resize);
       resizeObserver.observe(container);
 
       const onViewportChange = () => resize();
@@ -336,7 +359,23 @@ export const DistortionProjectSlider = forwardRef<
         className={`absolute inset-0 h-full w-full rounded-[inherit] object-cover transition-opacity duration-150 ${
           isReady ? "opacity-0" : "opacity-100"
         }`}
+        loading="eager"
+        decoding="async"
       />
     </div>
+  );
+});
+
+export const DistortionProjectSlider = forwardRef<
+  DistortionSliderHandle,
+  DistortionProjectSliderProps
+>(function DistortionProjectSlider({ images, className, simpleMode }, ref) {
+  if (simpleMode) {
+    return (
+      <SimpleImageCrossfade ref={ref} images={images} className={className} />
+    );
+  }
+  return (
+    <WebGLDistortionSlider ref={ref} images={images} className={className} />
   );
 });
