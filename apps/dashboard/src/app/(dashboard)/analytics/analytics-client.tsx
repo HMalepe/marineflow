@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ANALYTICS_LABEL, APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { apiFetch, ApiError } from '@/lib/api';
 import { resolveApiUrl } from '@/lib/api-config';
@@ -423,14 +424,13 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
 
       {/* Monthly Report Card */}
       {!loading && report && (
-        <section className="border rounded-lg p-5 space-y-4 bg-muted/20">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h2 className="text-base font-semibold">
-                Monthly report — {formatMonth(report.month)}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">6 key metrics at a glance</p>
-            </div>
+        <CollapsibleSection
+          id="analytics-monthly-report"
+          title={`Monthly report — ${formatMonth(report.month)}`}
+          subtitle="6 key metrics at a glance"
+          defaultOpen
+        >
+          <div className="flex items-center justify-end gap-3 flex-wrap mb-4">
             <div className="flex items-center gap-2 flex-wrap">
               {sendStatus && (
                 <span className={`text-xs ${sendStatus.includes('sent') ? 'text-green-700 dark:text-green-400' : 'text-destructive'}`}>
@@ -460,12 +460,13 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             />
             <KpiCard label="Busiest day" value={report.bestDay ?? '—'} />
           </div>
-        </section>
+        </CollapsibleSection>
       )}
 
       {/* Data */}
       {!loading && !error && data && hasAnyData && (
         <>
+          <CollapsibleSection id="analytics-snapshot" title="Key metrics" defaultOpen>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard
               label="This month revenue"
@@ -480,17 +481,21 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             <KpiCard label="Retention rate"   value={retentionRate(data.retention)} />
             <KpiCard label="Active customers" value={data.retention.at(-1)?.unique_customers ?? 0} />
           </div>
+          </CollapsibleSection>
 
           {/* Daily bar chart */}
-          <section>
-            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <h2 className="text-base font-semibold">Daily bookings — last 30 days</h2>
+          <CollapsibleSection
+            id="analytics-daily-bookings"
+            title="Daily bookings — last 30 days"
+            defaultOpen
+            action={
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-emerald-500 inline-block" />Completed</span>
                 <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-rose-400 inline-block" />Cancelled</span>
                 <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-amber-400 inline-block" />No-show</span>
               </div>
-            </div>
+            }
+          >
             {data.dailyBookings.length === 0 ? <EmptySection label="No booking data yet." /> : (
               <div className="border rounded-xl p-4 bg-card">
                 <div className="flex items-end gap-0.5 h-40">
@@ -530,11 +535,10 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 </div>
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Revenue */}
-          <section>
-            <h2 className="text-base font-semibold mb-3">Monthly revenue — last 6 months</h2>
+          <CollapsibleSection id="analytics-monthly-revenue" title="Monthly revenue — last 6 months" defaultOpen>
             {data.revenue.length === 0 ? <EmptySection label="No revenue data yet." /> : (
               <div className="border rounded-xl bg-card overflow-hidden">
                 {/* Bar chart */}
@@ -586,11 +590,10 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 </div>
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Staff */}
-          <section>
-            <h2 className="text-base font-semibold mb-3">Staff performance — this month</h2>
+          <CollapsibleSection id="analytics-staff-month" title="Staff performance — this month" defaultOpen>
             {data.staffPerformance.length === 0 ? <EmptySection label="No staff data yet this month." /> : (
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm min-w-[480px]">
@@ -617,11 +620,10 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 </table>
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Staff ratings */}
-          <section>
-            <h2 className="text-base font-semibold mb-3">Staff ratings — last 3 months</h2>
+          <CollapsibleSection id="analytics-staff-ratings" title="Staff ratings — last 3 months" defaultOpen>
             {!data.staffRatings || data.staffRatings.length === 0 ? (
               <EmptySection label="No ratings yet — they'll appear after customers complete the post-visit survey." />
             ) : (
@@ -649,11 +651,10 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 </table>
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Retention */}
-          <section>
-            <h2 className="text-base font-semibold mb-3">Customer retention</h2>
+          <CollapsibleSection id="analytics-retention" title="Customer retention" defaultOpen>
             {data.retention.length === 0 ? <EmptySection label="No retention data yet." /> : (
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm min-w-[400px]">
@@ -687,11 +688,10 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 </table>
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Recent reviews */}
-          <section>
-            <h2 className="text-base font-semibold mb-3">Recent reviews</h2>
+          <CollapsibleSection id="analytics-reviews" title="Recent reviews" defaultOpen>
             {!data.recentRatings || data.recentRatings.length === 0 ? (
               <EmptySection label="No reviews yet." />
             ) : (
@@ -712,12 +712,11 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 })}
               </div>
             )}
-          </section>
+          </CollapsibleSection>
 
           {/* Loyalty KPIs */}
           {loyalty && (
-            <section>
-              <h2 className="text-base font-semibold mb-3">Loyalty programme — last 30 days</h2>
+            <CollapsibleSection id="analytics-loyalty" title="Loyalty programme — last 30 days" defaultOpen>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <KpiCard label="Stamps earned" value={loyalty.stampsEarned} />
                 <KpiCard label="Stamps redeemed" value={loyalty.stampsRedeemed} />
@@ -727,13 +726,12 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   value={loyalty.stampsEarned > 0 ? `${loyalty.redemptionRate}%` : '—'}
                 />
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
           {/* No-show patterns */}
           {(noShowByStaff.length > 0 || noShowByService.length > 0) && (
-            <section>
-              <h2 className="text-base font-semibold mb-3">No-show patterns — last 90 days</h2>
+            <CollapsibleSection id="analytics-no-show" title="No-show patterns — last 90 days" defaultOpen>
               <p className="text-xs text-muted-foreground mb-3">Rows with ≥ 3 appointments only.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {noShowByStaff.length > 0 && (
@@ -793,13 +791,12 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   </div>
                 )}
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
           {/* Booking funnel */}
           {funnel.length > 0 && (
-            <section>
-              <h2 className="text-base font-semibold mb-3">Booking funnel — last 30 days</h2>
+            <CollapsibleSection id="analytics-funnel" title="Booking funnel — last 30 days" defaultOpen>
               <div className="border rounded-lg divide-y">
                 {funnel.map((step, i) => {
                   const prev = i > 0 ? funnel[i - 1]!.count : null;
@@ -820,13 +817,12 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   );
                 })}
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
           {/* Marketing opt-outs */}
           {optOuts && (
-            <section>
-              <h2 className="text-base font-semibold mb-3">Marketing opt-outs</h2>
+            <CollapsibleSection id="analytics-opt-outs" title="Marketing opt-outs" defaultOpen>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <KpiCard label="Total opted out" value={optOuts.totalOptedOut} />
                 {optOuts.byMonth.length > 0 && (
@@ -855,13 +851,12 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   </div>
                 )}
               </div>
-            </section>
+            </CollapsibleSection>
           )}
 
           {/* Staff revenue — last 30 days */}
           {staffRevenue.length > 0 && (
-            <section>
-              <h2 className="text-base font-semibold mb-3">Staff performance — last 30 days</h2>
+            <CollapsibleSection id="analytics-staff-30d" title="Staff performance — last 30 days" defaultOpen>
               <div className="overflow-x-auto rounded-lg border">
                 <table className="w-full text-sm">
                   <thead>
@@ -890,12 +885,11 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   </tbody>
                 </table>
               </div>
-            </section>
+            </CollapsibleSection>
           )}
           {/* Campaign history */}
           {campaigns.length > 0 && (
-            <section>
-              <h2 className="text-base font-semibold mb-3">Recent campaigns</h2>
+            <CollapsibleSection id="analytics-campaigns" title="Recent campaigns" defaultOpen>
               <div className="overflow-x-auto rounded-lg border">
                 <table className="w-full text-sm">
                   <thead>
@@ -944,7 +938,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   </tbody>
                 </table>
               </div>
-            </section>
+            </CollapsibleSection>
           )}
         </>
       )}

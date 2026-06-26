@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/sheet';
 import { apiFetch, ApiError } from '@/lib/api';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
+import { CollapsibleCard } from '@/components/collapsible-card';
 import { CustomerJourneyTimeline } from '@/components/CustomerJourneyTimeline';
 import { cn } from '@/lib/utils';
 
@@ -463,6 +465,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       </div>
 
       {/* Stats row */}
+      <CollapsibleSection id="customer-stats" title="Client snapshot" defaultOpen>
       <div className="flex flex-wrap gap-3">
         <StatPill icon={CheckCircle2} label="Visits" value={completedVisits} />
         <StatPill
@@ -509,7 +512,9 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
           />
         )}
       </div>
+      </CollapsibleSection>
 
+      <CollapsibleSection id="customer-tabs-nav" title="Profile sections" defaultOpen>
       {/* Tabs */}
       <div className="border-b flex gap-0">
         {tabs.map(({ key, label, count }) => (
@@ -542,10 +547,12 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       {/* Tab: Overview */}
       {tab === 'overview' && (
         <div className="grid sm:grid-cols-2 gap-4">
-          <div className="rounded-xl border bg-card p-4 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Marketing consent
-            </p>
+          <CollapsibleCard
+            id="customer-marketing-consent"
+            title="Marketing consent"
+            titleClassName="text-xs font-semibold uppercase tracking-wide"
+            defaultOpen
+          >
             <div className="flex items-center gap-2">
               <span
                 className={cn(
@@ -560,20 +567,22 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               <p className="text-sm font-medium">{consentBadge.text}</p>
             </div>
             {customer.marketingConsentAt && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-2">
                 Updated {new Date(customer.marketingConsentAt).toLocaleDateString('en-ZA')}
               </p>
             )}
-          </div>
+          </CollapsibleCard>
 
-          <div className="rounded-xl border bg-card p-4 space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Most recent appointment
-            </p>
+          <CollapsibleCard
+            id="customer-recent-appointment"
+            title="Most recent appointment"
+            titleClassName="text-xs font-semibold uppercase tracking-wide"
+            defaultOpen
+          >
             {customer.appointments.length > 0 ? (
               <>
                 <p className="text-sm font-medium">{customer.appointments[0].serviceName}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mt-1">
                   {new Date(customer.appointments[0].start).toLocaleDateString('en-ZA', {
                     day: 'numeric',
                     month: 'long',
@@ -584,11 +593,14 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
             ) : (
               <p className="text-sm text-muted-foreground">No appointments yet</p>
             )}
-          </div>
+          </CollapsibleCard>
 
-          {/* Date of birth */}
-          <div className="rounded-xl border bg-card p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Birthday</p>
+          <CollapsibleCard
+            id="customer-birthday"
+            title="Birthday"
+            titleClassName="text-xs font-semibold uppercase tracking-wide"
+            defaultOpen
+          >
             <form onSubmit={(e) => void handleSaveDob(e)} className="flex items-center gap-2">
               <input
                 type="date"
@@ -601,18 +613,24 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               </Button>
             </form>
             {dob && (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-2">
                 {new Date(dob).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long' })}
               </p>
             )}
-          </div>
+          </CollapsibleCard>
 
-          {/* Tags */}
-          <div className="rounded-xl border bg-card p-4 space-y-3 sm:col-span-2">
-            <div className="flex items-center gap-2">
-              <Tag className="size-3.5 text-muted-foreground" />
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</p>
-            </div>
+          <CollapsibleCard
+            id="customer-tags"
+            title={
+              <span className="inline-flex items-center gap-2">
+                <Tag className="size-3.5 text-muted-foreground" />
+                Tags
+              </span>
+            }
+            titleClassName="text-xs font-semibold uppercase tracking-wide"
+            className="sm:col-span-2"
+            defaultOpen
+          >
             <div className="flex flex-wrap gap-2">
               {tags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-muted border px-2.5 py-0.5 text-xs font-medium">
@@ -629,7 +647,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               ))}
               {tags.length === 0 && <p className="text-xs text-muted-foreground">No tags yet</p>}
             </div>
-            <form onSubmit={handleAddTag} className="flex gap-2 max-w-xs">
+            <form onSubmit={handleAddTag} className="flex gap-2 max-w-xs mt-3">
               <Input
                 placeholder="Add tag…"
                 value={tagInput}
@@ -641,14 +659,19 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
                 Add
               </Button>
             </form>
-            {tagError && <p className="text-xs text-destructive">{tagError}</p>}
-          </div>
+            {tagError && <p className="text-xs text-destructive mt-2">{tagError}</p>}
+          </CollapsibleCard>
         </div>
       )}
 
       {/* Tab: Appointments */}
       {tab === 'appointments' && (
-        <div>
+        <CollapsibleSection
+          id="customer-appointments-list"
+          title={APPOINTMENTS_LABEL}
+          count={customer.appointments.length || undefined}
+          defaultOpen
+        >
           {customer.appointments.length === 0 ? (
             <div className="py-12 text-center">
               <Calendar className="size-8 text-muted-foreground mx-auto mb-3" />
@@ -661,22 +684,29 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               ))}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* Tab: Journey */}
       {tab === 'journey' && (
-        <div className="rounded-xl border bg-card p-4 sm:p-6">
-          <p className="text-xs text-muted-foreground mb-4">
-            Every WhatsApp touchpoint, booking, payment, and campaign — in one chronological thread.
-          </p>
+        <CollapsibleSection
+          id="customer-journey"
+          title="Customer journey"
+          subtitle="Every WhatsApp touchpoint, booking, payment, and campaign — in one chronological thread."
+          defaultOpen
+        >
           <CustomerJourneyTimeline token={token} customerId={customer.id} />
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* Tab: Messages */}
       {tab === 'messages' && (
-        <div>
+        <CollapsibleSection
+          id="customer-messages"
+          title="Messages"
+          count={customer.messages.length || undefined}
+          defaultOpen
+        >
           {customer.messages.length === 0 ? (
             <div className="py-12 text-center">
               <MessageSquare className="size-8 text-muted-foreground mx-auto mb-3" />
@@ -689,8 +719,9 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
               ))}
             </div>
           )}
-        </div>
+        </CollapsibleSection>
       )}
+      </CollapsibleSection>
 
       {/* Manual booking sheet */}
       <Sheet open={bookingOpen} onOpenChange={setBookingOpen}>

@@ -1,5 +1,8 @@
+'use client';
+
+import { useState, type ReactNode } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ReactNode } from 'react';
 
 interface SectionPanelProps {
   id?: string;
@@ -12,9 +15,10 @@ interface SectionPanelProps {
   bodyClassName?: string;
   /** Tighter padding for dense lists (inbox, tables) */
   compact?: boolean;
+  defaultOpen?: boolean;
 }
 
-/** Contained dashboard section — border, header rule, accent bar. */
+/** Contained dashboard section — border, header rule, accent bar, collapsible toggle. */
 export function SectionPanel({
   id,
   title,
@@ -25,11 +29,24 @@ export function SectionPanel({
   className,
   bodyClassName,
   compact = false,
+  defaultOpen = true,
 }: SectionPanelProps) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
-    <section id={id} className={cn('dashboard-section', className)}>
-      <div className="dashboard-section-header">
-        <div className="dashboard-section-accent" aria-hidden />
+    <section
+      id={id}
+      data-section-label={title}
+      className={cn('dashboard-section dashboard-section-collapsible dashboard-section-anchor', className)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="dashboard-section-header dashboard-section-header-toggle w-full text-left touch-manipulation"
+        aria-expanded={open}
+        aria-controls={id ? `${id}-panel` : undefined}
+      >
+        <span className="dashboard-section-accent" aria-hidden />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="dashboard-section-title">{title}</h2>
@@ -37,11 +54,38 @@ export function SectionPanel({
               <span className="dashboard-section-count">{count}</span>
             )}
           </div>
-          {subtitle && <p className="dashboard-section-subtitle">{subtitle}</p>}
+          {subtitle && (
+            <p className={cn('dashboard-section-subtitle', !open && 'hidden')}>
+              {subtitle}
+            </p>
+          )}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
-      <div className={cn('dashboard-section-body', compact && 'dashboard-section-body-compact', bodyClassName)}>
+        {action && (
+          <div
+            className="shrink-0"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {action}
+          </div>
+        )}
+        <ChevronDown
+          className={cn(
+            'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
+            open && 'rotate-180',
+          )}
+          aria-hidden
+        />
+      </button>
+      <div
+        id={id ? `${id}-panel` : undefined}
+        className={cn(
+          'dashboard-section-body',
+          compact && 'dashboard-section-body-compact',
+          bodyClassName,
+          !open && 'hidden',
+        )}
+      >
         {children}
       </div>
     </section>

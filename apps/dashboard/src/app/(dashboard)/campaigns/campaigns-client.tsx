@@ -42,6 +42,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { CampaignMediaUpload, type CampaignMediaType } from './campaign-media-upload';
 import { CampaignSchedulePicker } from './campaign-schedule-picker';
@@ -915,6 +916,7 @@ export function CampaignsClient({ token }: Props) {
 
       {/* Grow audience CTA */}
       {!loading && optedInCount < 10 && (
+        <CollapsibleSection id="campaigns-grow-audience" title="Grow your audience" defaultOpen>
         <Card className="border-blue-500/30 bg-blue-500/5">
           <CardContent className="py-4 space-y-4">
             <div>
@@ -955,9 +957,10 @@ export function CampaignsClient({ token }: Props) {
             </div>
           </CardContent>
         </Card>
+        </CollapsibleSection>
       )}
 
-      {/* Stats */}
+      <CollapsibleSection id="campaigns-stats" title="Newsletter stats" defaultOpen>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           icon={Users}
@@ -985,14 +988,17 @@ export function CampaignsClient({ token }: Props) {
           accent="neutral"
         />
       </div>
+      </CollapsibleSection>
 
-      {/* List section */}
+      <CollapsibleSection
+        id="campaigns-list"
+        title="Your newsletters"
+        subtitle="Drafts, scheduled sends, and delivery history"
+        count={filtered.length}
+        defaultOpen
+      >
       <div className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <SectionHeading
-            title="Your newsletters"
-            description="Drafts, scheduled sends, and delivery history"
-          />
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-end">
           {hasSending && (
             <Badge variant="outline" className="w-fit border-amber-500/40 text-amber-800 dark:text-amber-300 gap-1.5">
               <Loader2 className="size-3 animate-spin" />
@@ -1195,6 +1201,7 @@ export function CampaignsClient({ token }: Props) {
           </div>
         )}
       </div>
+      </CollapsibleSection>
 
       {/* Composer sheet */}
       <Sheet open={sheetOpen} onOpenChange={(o) => !o && closeSheet()}>

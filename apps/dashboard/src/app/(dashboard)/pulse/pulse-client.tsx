@@ -13,6 +13,7 @@ import {
 import { apiFetch } from '@/lib/api';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { cn } from '@/lib/utils';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -229,7 +230,8 @@ export function PulseClient({ token, initialBranches }: Props) {
 
       {/* Summary strip */}
       {summary && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <CollapsibleSection id="pulse-summary" title="Live summary" subtitle="Real-time salon floor counts">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             { label: 'In chair', value: summary.occupied, color: 'text-green-600' },
             { label: 'Idle', value: summary.idle, color: 'text-muted-foreground' },
@@ -242,16 +244,16 @@ export function PulseClient({ token, initialBranches }: Props) {
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide mt-0.5">{label}</p>
             </div>
           ))}
-        </div>
+          </div>
+        </CollapsibleSection>
       )}
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Station floor plan */}
-        <section className="lg:col-span-2 space-y-3">
-          <h2 className="text-sm font-semibold flex items-center gap-2">
-            <Activity className="size-4 text-muted-foreground" />
-            Stations
-          </h2>
+        <CollapsibleSection
+          id="pulse-stations"
+          title="Stations"
+          className="lg:col-span-2"
+        >
           {loading && !data ? (
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -325,14 +327,9 @@ export function PulseClient({ token, initialBranches }: Props) {
               })}
             </div>
           )}
-        </section>
+        </CollapsibleSection>
 
-        {/* Active bot conversations */}
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold flex items-center gap-2">
-            <MessageCircle className="size-4 text-muted-foreground" />
-            Bot conversations now
-          </h2>
+        <CollapsibleSection id="pulse-conversations" title="Bot conversations now">
           <div className="rounded-xl border bg-card divide-y max-h-[480px] overflow-y-auto">
             {!data?.conversations.length ? (
               <p className="text-sm text-muted-foreground p-6 text-center">No active WhatsApp flows</p>
@@ -362,7 +359,7 @@ export function PulseClient({ token, initialBranches }: Props) {
           >
             Open inbox →
           </Link>
-        </section>
+        </CollapsibleSection>
       </div>
 
       {/* Live ticker */}

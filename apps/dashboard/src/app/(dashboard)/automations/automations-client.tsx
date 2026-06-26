@@ -18,8 +18,8 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
+import { CollapsibleFeatureCard } from '@/components/collapsible-feature-card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -211,14 +211,7 @@ export function AutomationsClient({ token }: Props) {
         }
       />
 
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Bell className="size-4" /> Appointment reminders
-          </CardTitle>
-          <CardDescription>Automatic WhatsApp reminders 24 hours and 2 hours before — proven to cut no-shows.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <CollapsibleFeatureCard id="automations-appointment-reminders" icon={Bell} title="Appointment reminders" description="Automatic WhatsApp reminders 24 hours and 2 hours before — proven to cut no-shows." className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent"><div className="space-y-3">
           <Toggle
             icon={Bell}
             checked={draft.reminders.enabled}
@@ -303,17 +296,9 @@ export function AutomationsClient({ token }: Props) {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CalendarX className="size-4" /> Cancellation &amp; reschedule rules
-          </CardTitle>
-          <CardDescription>Self-service with clear deadlines. Use the emergency waive button on appointments when life happens.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-cancellation-amp-reschedule-rules" icon={CalendarX} title="Cancellation &amp; reschedule rules" description="Self-service with clear deadlines. Use the emergency waive button on appointments when life happens."><div className="space-y-4">
           <Toggle
             icon={CalendarX}
             checked={draft.cancellation.allowSelfServiceReschedule}
@@ -364,16 +349,9 @@ export function AutomationsClient({ token }: Props) {
             label={`No refund on late cancellation (< ${draft.cancellation.cancelHoursBefore}h notice)`}
             description="If a customer cancels after the deadline above, their online payment is not refunded. Use the 'Waive penalty' button on the appointment if you want to make an exception."
           />
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="size-4" /> Waitlist — fill empty slots
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <CollapsibleFeatureCard id="automations-waitlist-fill-empty-slots" icon={Users} title="Waitlist — fill empty slots"><div>
           <Toggle
             icon={Users}
             checked={draft.waitlist.enabled && draft.waitlist.autoFillOnCancel}
@@ -381,16 +359,9 @@ export function AutomationsClient({ token }: Props) {
             label="Auto-fill cancelled appointments"
             description="When a slot opens, the next waitlisted customer gets: Reply YES to claim."
           />
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Star className="size-4" /> Google review requests
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-google-review-requests" icon={Star} title="Google review requests"><div className="space-y-4">
           <Toggle
             icon={Star}
             checked={draft.googleReview.enabled}
@@ -424,16 +395,9 @@ export function AutomationsClient({ token }: Props) {
           <p className="text-xs text-muted-foreground max-w-lg">
             Timing is automatic: review goes out 45 minutes after the confirmed appointment time, or 15 minutes after you mark the client as departed on the Appointments page.
           </p>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Heart className="size-4" /> New customer welcome journey
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-new-customer-welcome-journey" icon={Heart} title="New customer welcome journey"><div className="space-y-4">
           <Toggle
             icon={Heart}
             checked={draft.welcomeJourney.enabled}
@@ -458,16 +422,9 @@ export function AutomationsClient({ token }: Props) {
             label="Show popular services"
             description="Lists top services with prices in the welcome message."
           />
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Gift className="size-4" /> Referral programme
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-referral-programme" icon={Gift} title="Referral programme"><div className="space-y-4">
           <Toggle
             icon={Gift}
             checked={draft.referral.enabled}
@@ -484,16 +441,9 @@ export function AutomationsClient({ token }: Props) {
               onChange={(e) => patch('referral', { rewardCents: parseInt(e.target.value, 10) || 5000 })}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Crown className="size-4" /> VIP membership club
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <CollapsibleFeatureCard id="automations-vip-membership-club" icon={Crown} title="VIP membership club"><div>
           <Toggle
             icon={Crown}
             checked={draft.membership.enabled}
@@ -506,16 +456,9 @@ export function AutomationsClient({ token }: Props) {
             label="Membership subscriptions"
             description="Monthly VIP via PayFast (R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month."
           />
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Megaphone className="size-4" /> Seasonal campaigns
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-seasonal-campaigns" icon={Megaphone} title="Seasonal campaigns"><div className="space-y-4">
           <Toggle
             icon={Megaphone}
             checked={draft.seasonalCampaigns.enabled}
@@ -533,16 +476,9 @@ export function AutomationsClient({ token }: Props) {
               onChange={(e) => patch('seasonalCampaigns', { maxScheduled: parseInt(e.target.value, 10) || 50 })}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <RefreshCw className="size-4" /> Reactivate lost customers
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-reactivate-lost-customers" icon={RefreshCw} title="Reactivate lost customers"><div className="space-y-4">
           <Toggle
             icon={RefreshCw}
             checked={draft.reactivation.enabled}
@@ -589,16 +525,9 @@ export function AutomationsClient({ token }: Props) {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Star className="size-4 text-amber-500" /> Stylist performance
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-stylist-performance" icon={Star} title="Stylist performance"><div className="space-y-4">
           <Toggle
             icon={Star}
             checked={draft.stylistPerformance.enabled}
@@ -627,17 +556,9 @@ export function AutomationsClient({ token }: Props) {
               }
             />
           </div>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calendar className="size-4" /> Booking slot interval
-          </CardTitle>
-          <CardDescription>How granular the WhatsApp time picker is, and when unpaid holds expire.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-booking-slot-interval" icon={Calendar} title="Booking slot interval" description="How granular the WhatsApp time picker is, and when unpaid holds expire."><div className="space-y-4">
           <div className="space-y-2">
             <Label className="text-xs">Slot interval</Label>
             <div className="flex flex-wrap gap-2">
@@ -674,19 +595,9 @@ export function AutomationsClient({ token }: Props) {
             />
             <p className="text-xs text-muted-foreground">0 = no auto-release for unpaid holds.</p>
           </div>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MessageSquare className="size-4" /> Campaign message templates
-          </CardTitle>
-          <CardDescription>
-            Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <CollapsibleFeatureCard id="automations-campaign-message-templates" icon={MessageSquare} title="Campaign message templates" description="Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults."><div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Win-back message</Label>
             <textarea
@@ -726,8 +637,7 @@ export function AutomationsClient({ token }: Props) {
               placeholder="Cancellations within 24 hours may incur a fee…"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div></CollapsibleFeatureCard>
 
       <Separator />
 

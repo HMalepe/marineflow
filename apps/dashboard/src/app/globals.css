@@ -307,6 +307,17 @@
     color: oklch(0.45 0.18 288);
   }
 
+  .nav-section-label-toggle {
+    cursor: pointer;
+    border-radius: 0.5rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .nav-section-label-toggle:hover {
+    color: oklch(0.38 0.2 288);
+    background: color-mix(in oklch, var(--muted) 40%, transparent);
+  }
+
   .dark .nav-section-label {
     color: oklch(0.78 0.14 300);
     border-bottom-color: oklch(0.62 0.26 330 / 0.4);
@@ -1387,11 +1398,6 @@
   @media (min-width: 768px) {
     .dashboard-page-flow {
       gap: 1.5rem;
-    }
-
-    .dashboard-section-collapsible .dashboard-section-header-toggle {
-      pointer-events: none;
-      cursor: default;
     }
   }
 

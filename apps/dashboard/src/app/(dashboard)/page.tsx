@@ -18,8 +18,10 @@ import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { NeedsYouPanel } from '@/components/overview/NeedsYouPanel';
 import { OverviewCoachNudges } from '@/components/overview/OverviewCoachNudges';
 import { TodayBookingsPanel, type TodayAppointment } from '@/components/overview/TodayBookingsPanel';
-import { overviewNeonBox, overviewSection } from '@/components/overview/overviewNeon';
+import { overviewNeonBox } from '@/components/overview/overviewNeon';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
+import { CollapsibleSection } from '@/components/collapsible-section';
+import { OverviewCollapsibleSection } from '@/components/overview/OverviewCollapsibleSection';
 import { MessageSquare, Users, BarChart2 } from 'lucide-react';
 import { withDashboardDebugCatch } from '@/lib/with-dashboard-debug-catch';
 
@@ -121,9 +123,9 @@ async function SuperAdminView({ token }: { token: string | null }) {
   return (
     <div className="dashboard-page-flow space-y-6">
       {systemHealth?.postgres?.status && systemHealth.redis?.status && systemHealth.twilio?.status && (
-        <div id="platform-health" data-section-label="System health" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-health" title="System health">
           <SystemHealthBar data={systemHealth} />
-        </div>
+        </CollapsibleSection>
       )}
 
       <DashboardPageHeader
@@ -142,15 +144,16 @@ async function SuperAdminView({ token }: { token: string | null }) {
       />
 
       {token && (
-        <div id="platform-quick-access" data-section-label="Quick access" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-quick-access" title="Quick access" subtitle="Open any client dashboard">
           <AdminQuickAccess token={token} title="Quick access — open any client dashboard" />
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* KPI cards */}
       {stats ? (
-        <div id="platform-stats" data-section-label="Platform stats" className="dashboard-section-anchor space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <CollapsibleSection id="platform-stats" title="Platform stats">
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <StatCard
               label="Total Businesses"
               value={stats.totalBusinesses ?? stats.totalSalons ?? 0}
@@ -171,37 +174,38 @@ async function SuperAdminView({ token }: { token: string | null }) {
           {stats.byBusinessType && stats.byBusinessType.length > 0 && (
             <BusinessTypeBreakdown counts={stats.byBusinessType} />
           )}
-        </div>
+          </div>
+        </CollapsibleSection>
       ) : (
         <p className="text-sm text-destructive">Failed to load platform stats.</p>
       )}
 
       {revenue && (
-        <div id="platform-revenue" data-section-label="Revenue" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-revenue" title="Revenue">
           <RevenueRow data={revenue} />
-        </div>
+        </CollapsibleSection>
       )}
 
       {leaderboard && (
-        <div id="platform-leaderboard" data-section-label="Leaderboard" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-leaderboard" title="Leaderboard">
           <Leaderboard data={leaderboard} />
-        </div>
+        </CollapsibleSection>
       )}
 
       {botHealth && (
-        <div id="platform-bot-health" data-section-label="Bot health" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-bot-health" title="Bot health">
           <BotHealthPanel data={botHealth} />
-        </div>
+        </CollapsibleSection>
       )}
 
       {token && (
-        <div id="platform-activity" data-section-label="Activity feed" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-activity" title="Activity feed">
           <ActivityFeed token={token} />
-        </div>
+        </CollapsibleSection>
       )}
 
       {tenantHealth && tenantHealth.atRiskCount > 0 && (
-        <div id="platform-at-risk" data-section-label="At-risk tenants" className="dashboard-section-anchor">
+        <CollapsibleSection id="platform-at-risk" title="At-risk tenants">
         <Link
           href="/admin?health=AT_RISK"
           className="block rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 hover:border-amber-500/60 transition-colors"
@@ -213,18 +217,13 @@ async function SuperAdminView({ token }: { token: string | null }) {
             No recent bookings or bot activity — review before they churn silently.
           </p>
         </Link>
-        </div>
+        </CollapsibleSection>
       )}
 
       {/* Alerts */}
       {hasAlerts && alerts && (
-        <section
-          id="platform-alerts"
-          data-section-label="Alerts"
-          className="dashboard-section-anchor border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3"
-        >
-          <h2 className="text-sm font-bold text-amber-800">Alerts</h2>
-
+        <CollapsibleSection id="platform-alerts" title="Alerts">
+          <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
           {alerts.pastDue.length > 0 && (
             <div>
               <p className="text-xs font-medium text-amber-700">
@@ -258,7 +257,8 @@ async function SuperAdminView({ token }: { token: string | null }) {
             </div>
           )}
 
-        </section>
+          </div>
+        </CollapsibleSection>
       )}
     </div>
   );
@@ -299,9 +299,9 @@ async function AppointmentView({ token }: { token: string | null }) {
       {token && <SalonLiveRouterRefresh token={token} />}
 
       {setupHealth && Array.isArray(setupHealth.checks) && setupHealth.checks.length > 0 && (
-        <div id="overview-setup-health" data-section-label="Setup health" className="dashboard-section-anchor">
+        <CollapsibleSection id="overview-setup-health" title="Setup health">
           <SetupHealthScore data={setupHealth} />
-        </div>
+        </CollapsibleSection>
       )}
 
       <DashboardPageHeader
@@ -342,37 +342,36 @@ async function AppointmentView({ token }: { token: string | null }) {
 
       {/* Onboarding banner */}
       {!onboardingDone && (
-        <div
-          id="overview-onboarding"
-          data-section-label="Finish setup"
-          className={overviewSection(
-            overviewNeonBox(
+        <OverviewCollapsibleSection id="overview-onboarding" label="Finish setup" title="Finish setting up your account">
+          <div
+            className={overviewNeonBox(
               'cyan',
               'px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3',
-            ),
-          )}
-        >
-          <div className="flex-1">
-            <p className="font-semibold text-sm">Finish setting up your account</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Connect WhatsApp, add services and staff to start taking bookings.
-            </p>
-          </div>
-          <Link
-            href="/onboarding"
-            className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+            )}
           >
-            Resume setup →
-          </Link>
-        </div>
+            <div className="flex-1">
+              <p className="font-semibold text-sm">Finish setting up your account</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Connect WhatsApp, add services and staff to start taking bookings.
+              </p>
+            </div>
+            <Link
+              href="/onboarding"
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+            >
+              Resume setup →
+            </Link>
+          </div>
+        </OverviewCollapsibleSection>
       )}
 
       {/* Quick links — desktop only */}
-      <div
+      <OverviewCollapsibleSection
         id="overview-shortcuts"
-        data-section-label="Quick links"
-        className={overviewSection('hidden lg:grid grid-cols-3 gap-4')}
+        label="Quick links"
+        className="hidden lg:block"
       >
+        <div className="grid grid-cols-3 gap-4">
         {[
           { href: '/customers', icon: <Users className="w-5 h-5" />, label: CUSTOMERS_LABEL, desc: 'Profiles, loyalty & consent', neon: 'violet' as const },
           { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: CONVERSATIONS_LABEL, desc: 'WhatsApp inbox & handoffs', neon: 'cyan' as const },
@@ -394,7 +393,8 @@ async function AppointmentView({ token }: { token: string | null }) {
             </div>
           </Link>
         ))}
-      </div>
+        </div>
+      </OverviewCollapsibleSection>
     </div>
   );
 }

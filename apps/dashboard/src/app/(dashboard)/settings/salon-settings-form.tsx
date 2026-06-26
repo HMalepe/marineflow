@@ -8,6 +8,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
@@ -576,15 +577,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   return (
     <div className="space-y-8">
       {/* WhatsApp business name */}
-      <section id="settings-business-name" data-section-label="Business name" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">WhatsApp business name</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            The name customers see in WhatsApp messages and greetings (e.g. &quot;Welcome to{' '}
-            <strong>{businessName || salon.name}</strong>!&quot;). Your booking assistant is always{' '}
-            <strong>{salon.botName || PLATFORM_BOT_NAME}</strong> — that name is part of MarineFlow branding.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-business-name" title="Business name" subtitle="The name customers see in WhatsApp messages and greetings. Your booking assistant branding stays MarineFlow.">
         <form onSubmit={(e) => void handleSaveBusinessName(e)} className="space-y-4 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="businessName">Business name</Label>
@@ -602,19 +595,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
           </Button>
           <SectionSaveFeedback feedback={getSection('businessName')} />
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Dashboard display name */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Dashboard display name</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Optional label shown in your dashboard sidebar only. Does not change WhatsApp messages — use the business
-            name above for customer-facing copy.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-display-name" title="Dashboard display name" subtitle="Optional label shown in your dashboard sidebar only. Does not change WhatsApp messages.">
         <form onSubmit={(e) => void handleSaveDisplayName(e)} className="space-y-4 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="tradingName">Display name</Label>
@@ -632,27 +618,24 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
           </Button>
           <SectionSaveFeedback feedback={getSection('displayName')} />
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Booking link */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Booking link</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Share this link with customers to let them start a WhatsApp booking conversation.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-booking-link" title="Booking link" subtitle="Share this link with customers to start a WhatsApp booking conversation.">
         <BookingLinkCopy slug={salon.slug} phoneDisplay={salon.phoneDisplay ?? null} />
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* WhatsApp Cloud API Phone Number ID */}
-      <section className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-base font-semibold">WhatsApp Cloud API — Phone Number ID</h3>
+      <CollapsibleSection
+        id="settings-whatsapp-phone"
+        title="WhatsApp Cloud API — Phone Number ID"
+        subtitle="Found in Meta Business Manager → WhatsApp → API Setup. Required for the bot to receive and send messages."
+      >
+        <div className="flex flex-wrap items-center gap-2 mb-1">
           {savedWhatsappPhoneId.trim() ? (
             <Badge variant="outline" className="border-green-600 text-green-700 dark:text-green-400">
               Configured
@@ -722,7 +705,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             ⚠️ Phone Number ID is not set — the bot cannot receive WhatsApp messages until this is configured.
           </p>
         )}
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
@@ -734,13 +717,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* WhatsApp Bot Messages */}
-      <section id="settings-messages" data-section-label="Bot messages" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">WhatsApp bot messages</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Customise automated replies. Leave blank to use smart defaults.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-messages" title="WhatsApp bot messages" subtitle="Customise automated replies. Leave blank to use smart defaults.">
 
         <form onSubmit={(e) => void handleSaveMessages(e)} className="grid gap-6 lg:grid-cols-2">
           <div className="space-y-4">
@@ -832,18 +809,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             </p>
           </div>
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Current Special */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Current Special</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Shown at the bottom of the WhatsApp welcome menu. Clear it to remove. Max 160 characters.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-current-special" title="Current Special" subtitle="Shown at the bottom of the WhatsApp welcome menu. Clear it to remove. Max 160 characters.">
         <form onSubmit={(e) => void handleSaveCurrentSpecial(e)} className="space-y-3">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -876,18 +847,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             </Button>
           </div>
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Location & Contact */}
-      <section id="settings-location" data-section-label="Location" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Location &amp; Contact</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Shown to customers when they select &quot;Find us&quot; or &quot;Contact us&quot; on WhatsApp.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-location" title="Location & Contact" subtitle="Shown to customers when they select &quot;Find us&quot; or &quot;Contact us&quot; on WhatsApp.">
         <form onSubmit={(e) => void handleSaveLocation(e)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="address-line">Street address</Label>
@@ -955,18 +920,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <SectionSaveFeedback feedback={getSection('location')} />
           </div>
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Bot Behaviour */}
-      <section id="settings-bot-behaviour" data-section-label="Bot behaviour" className="dashboard-section-anchor space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Bot behaviour</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Pause automation during holidays or when you want every message handled manually.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-bot-behaviour" title="Bot behaviour" subtitle="Pause automation during holidays or when you want every message handled manually.">
 
         <form onSubmit={(e) => void handleSaveBot(e)} className="space-y-4">
           <div
@@ -1015,7 +974,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <SectionSaveFeedback feedback={getSection('botActive')} />
           </div>
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
@@ -1023,32 +982,16 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
 
       <Separator />
 
-      <section className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-        <div>
-          <h3 className="text-base font-semibold">Power Features</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Reminders, win-back, review incentives, booking rules, and campaign templates live in one place — not here.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-power-features" title="Power Features" subtitle="Reminders, win-back, review incentives, booking rules, and campaign templates live in one place — not here.">
         <Link href="/automations" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
           Open Power Features
         </Link>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Google Reviews — URL only; toggles live under Power Features */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Google Reviews</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Paste your Google Business review link here. Enable review requests and incentives under{' '}
-            <Link href="/automations" className="text-primary underline-offset-4 hover:underline">
-              Power Features
-            </Link>
-            .
-          </p>
-        </div>
+      <CollapsibleSection id="settings-google-reviews" title="Google Reviews" subtitle="Paste your Google Business review link here. Enable review requests and incentives under{' '} Power Features .">
         <form onSubmit={(e) => void handleSaveGoogleReviewUrl(e)} className="space-y-4 max-w-lg">
           <div className="space-y-2">
             <Label htmlFor="google-review-url">Google Review URL</Label>
@@ -1076,18 +1019,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <SectionSaveFeedback feedback={getSection('googleReview')} />
           </div>
         </form>
-      </section>
+      </CollapsibleSection>
 
       <Separator />
 
       {/* Inactivity & closing messages */}
-      <section className="space-y-4">
-        <div>
-          <h3 className="text-base font-semibold">Follow-up &amp; closing messages</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Automatically re-engage customers who go quiet, and leave them with a warm sign-off when the conversation closes.
-          </p>
-        </div>
+      <CollapsibleSection id="settings-follow-up-closing-messages" title="Follow-up & closing messages" subtitle="Automatically re-engage customers who go quiet, and leave them with a warm sign-off when the conversation closes.">
         <form onSubmit={(e) => void handleSaveInactivity(e)} className="space-y-6 max-w-lg">
           <div className="space-y-2 rounded-lg border border-dashed p-4 bg-muted/30">
             <p className="text-sm font-medium">Quick apply all three</p>
@@ -1229,18 +1166,12 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <SectionSaveFeedback feedback={getSection('inactivity')} />
           </div>
         </form>
-      </section>
+      </CollapsibleSection>
 
       {loyaltyProgram !== undefined && (
         <>
           <Separator />
-          <section className="space-y-4">
-            <div>
-              <h3 className="text-base font-semibold">Loyalty programme</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                Configure how many stamps customers need to earn a reward and what they receive.
-              </p>
-            </div>
+          <CollapsibleSection id="settings-loyalty-programme" title="Loyalty programme" subtitle="Configure how many stamps customers need to earn a reward and what they receive.">
             <form onSubmit={(e) => void handleSaveLoyalty(e)} className="space-y-4 max-w-sm">
               <div className="space-y-2">
                 <Label htmlFor="stamps-per-reward">Stamps needed for a reward</Label>
@@ -1278,7 +1209,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 <SectionSaveFeedback feedback={getSection('loyalty')} />
               </div>
             </form>
-          </section>
+          </CollapsibleSection>
         </>
       )}
     </div>

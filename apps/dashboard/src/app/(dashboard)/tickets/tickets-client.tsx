@@ -22,6 +22,7 @@ import {
   type TicketCardData,
 } from '@/components/TicketCard';
 import { TICKETS_LABEL, TICKETS_TAGLINE, CONVERSATIONS_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import {
   isActiveQueueTicket,
@@ -210,6 +211,12 @@ export function TicketsClient({ token }: Props) {
               ) : undefined
             }
           />
+          <CollapsibleSection
+            id="tickets-filter"
+            title="Filter queue"
+            defaultOpen
+            className="border-0 shadow-none rounded-none [&_.dashboard-section-body]:p-0"
+          >
           <div className="dashboard-pane-toolbar py-2">
             <div className="flex items-center gap-2">
               <label htmlFor="ticket-filter" className="sr-only">
@@ -230,7 +237,15 @@ export function TicketsClient({ token }: Props) {
               </select>
             </div>
           </div>
+          </CollapsibleSection>
 
+          <CollapsibleSection
+            id="tickets-queue"
+            title="Ticket queue"
+            count={filtered.length}
+            defaultOpen
+            className="border-0 shadow-none rounded-none flex-1 flex flex-col min-h-0 [&_.dashboard-section-body]:flex-1 [&_.dashboard-section-body]:flex [&_.dashboard-section-body]:flex-col [&_.dashboard-section-body]:min-h-0 [&_.dashboard-section-body]:p-0"
+          >
           <div className="chat-list-scroll flex-1 overflow-y-auto overscroll-y-contain min-h-0">
             {filtered.length === 0 && (
               <p className="p-4 text-sm text-muted-foreground leading-relaxed">
@@ -252,6 +267,7 @@ export function TicketsClient({ token }: Props) {
               />
             ))}
           </div>
+          </CollapsibleSection>
         </div>
 
         {selected ? (

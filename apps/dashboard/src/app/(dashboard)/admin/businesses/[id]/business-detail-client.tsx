@@ -7,7 +7,6 @@ import {
   Bot,
   Calendar,
   MessageSquare,
-  User,
   Users,
 } from 'lucide-react';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
@@ -17,7 +16,7 @@ import { ApiError } from '@/lib/api';
 import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
 import { Badge } from '@/components/ui/badge';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { cn } from '@/lib/utils';
 import { resolveApiUrl } from '@/lib/api-config';
@@ -208,7 +207,7 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
         }
       />
 
-      {/* KPIs */}
+      <CollapsibleSection id="admin-business-kpis" title="Business metrics" defaultOpen>
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <Kpi icon={Users} label="Customers" value={business._count.customers} />
         <Kpi icon={Calendar} label="Appointments" value={business._count.appointments} />
@@ -217,14 +216,11 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
         <Kpi icon={MessageSquare} label="WhatsApp msgs (7d)" value={stats.messages7d} />
         <Kpi icon={Bot} label="Unread alerts" value={stats.unreadAlerts} highlight={stats.unreadAlerts > 0} />
       </div>
+      </CollapsibleSection>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Bot funnel */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Booking funnel (live conversations)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <CollapsibleSection id="admin-business-funnel" title="Booking funnel (live conversations)" defaultOpen>
+          <div className="space-y-3">
             {funnel.funnel.map((step) => (
               <div key={step.step} className="space-y-1">
                 <div className="flex justify-between text-xs">
@@ -242,15 +238,10 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
             <p className="text-xs text-muted-foreground pt-1">
               {funnel.completedBookings7d} completed booking{funnel.completedBookings7d !== 1 ? 's' : ''} in the last 7 days
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleSection>
 
-        {/* Business snapshot */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Business snapshot</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <CollapsibleSection id="admin-business-snapshot" title="Business snapshot" defaultOpen>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <Stat label="Staff (roster)" value={business._count.staff} />
               <Stat label="Dashboard users" value={business._count.staffUsers} />
@@ -261,19 +252,10 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
               <Stat label="Campaigns" value={business._count.campaigns} />
               <Stat label="Bookings (30d)" value={stats.appointments30d} />
             </dl>
-          </CardContent>
-        </Card>
+        </CollapsibleSection>
       </div>
 
-      {/* Team */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <User className="size-4" />
-            Team &amp; owners
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <CollapsibleSection id="admin-business-team" title="Team & owners" defaultOpen>
           {staffUsers.length === 0 ? (
             <p className="text-sm text-muted-foreground">No dashboard users yet.</p>
           ) : (
@@ -292,20 +274,14 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
+      </CollapsibleSection>
 
-      {/* Inbox alerts for this business */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-2">
-            <CardTitle className="text-base">Inbox &amp; bot alerts</CardTitle>
-            {stats.unreadAlerts > 0 && (
-              <Badge className="bg-destructive text-destructive-foreground">{stats.unreadAlerts} unread</Badge>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <CollapsibleSection
+        id="admin-business-alerts"
+        title="Inbox & bot alerts"
+        count={stats.unreadAlerts > 0 ? stats.unreadAlerts : undefined}
+        defaultOpen
+      >
           {alerts.length === 0 ? (
             <p className="text-sm text-muted-foreground py-4 text-center border border-dashed rounded-lg">
               No messages or bot errors for this business yet.
@@ -340,8 +316,7 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
+      </CollapsibleSection>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CONVERSATIONS_LABEL, CONVERSATIONS_TAGLINE, TICKETS_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import Link from 'next/link';
 import {
@@ -469,6 +470,12 @@ export function ConversationsClient({ token, staffName }: Props) {
               )
             }
           />
+          <CollapsibleSection
+            id="conversations-filters"
+            title="Search & filters"
+            defaultOpen
+            className="border-0 shadow-none rounded-none [&_.dashboard-section-body]:p-0"
+          >
           <div className="dashboard-pane-toolbar">
             <MobileFilterBar
               activeCount={filterActiveCount}
@@ -509,8 +516,16 @@ export function ConversationsClient({ token, staffName }: Props) {
               }
             />
           </div>
+          </CollapsibleSection>
 
           {alerts.length > 0 && !showThreadOnMobile && (
+            <CollapsibleSection
+              id="conversations-alerts"
+              title="Handoff alerts"
+              count={alerts.length}
+              defaultOpen
+              className="border-0 shadow-none rounded-none mx-0 [&_.dashboard-section-header]:px-3 [&_.dashboard-section-body]:p-0"
+            >
             <div className="px-3 py-2 border-b border-destructive/20 bg-destructive/5 space-y-2">
               {alerts.map((alert) => (
                 <div key={alert.id} className="flex items-center justify-between gap-2 text-xs text-destructive">
@@ -532,11 +547,20 @@ export function ConversationsClient({ token, staffName }: Props) {
                 </div>
               ))}
             </div>
+            </CollapsibleSection>
           )}
 
+          <CollapsibleSection
+            id="conversations-list"
+            title="Conversations"
+            count={visibleConversations.length}
+            defaultOpen
+            className="border-0 shadow-none rounded-none flex-1 flex flex-col min-h-0 [&_.dashboard-section-body]:flex-1 [&_.dashboard-section-body]:flex [&_.dashboard-section-body]:flex-col [&_.dashboard-section-body]:min-h-0 [&_.dashboard-section-body]:p-0"
+          >
           <div className="chat-list-scroll flex-1 overflow-y-auto overscroll-y-contain min-h-0">
             {renderConversationList()}
           </div>
+          </CollapsibleSection>
         </div>
 
         <div

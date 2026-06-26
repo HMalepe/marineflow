@@ -24,6 +24,7 @@ import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { ServiceRow, type ServiceRowData } from '@/components/ServiceRow';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 interface Service extends ServiceRowData {}
@@ -712,11 +713,13 @@ export function ServicesClient({ token }: Props) {
         }
       />
 
+      <CollapsibleSection id="services-stats" title="Overview" defaultOpen>
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard label="Total services" value={services.length} />
         <StatCard label="Active (bookable)" value={activeCount} highlight />
         <StatCard label="Inactive" value={inactiveCount} />
       </div>
+      </CollapsibleSection>
 
       {showUncategorisedBanner && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
@@ -725,11 +728,14 @@ export function ServicesClient({ token }: Props) {
         </div>
       )}
 
-      {/* Service catalog */}
-      <Card>
-        <CardHeader className="pb-3">
+      <CollapsibleSection
+        id="services-catalog"
+        title="Service catalog"
+        count={filtered.length}
+        defaultOpen
+      >
+        <div className="space-y-3 pb-1">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <CardTitle className="text-base">Service catalog</CardTitle>
             <div className="flex flex-wrap gap-2">
               {(['all', 'active', 'inactive'] as const).map((f) => (
                 <Button
@@ -747,9 +753,9 @@ export function ServicesClient({ token }: Props) {
             placeholder="Search services…"
             value={search}
             onChange={(e: { target: { value: string } }) => setSearch(e.target.value)}
-            className="max-w-sm mt-2"
+            className="max-w-sm"
           />
-          <div className="flex flex-wrap items-center gap-2 mt-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               size="sm"
@@ -793,8 +799,8 @@ export function ServicesClient({ token }: Props) {
               </div>
             )}
           </div>
-        </CardHeader>
-        <CardContent className="space-y-3 pb-4">
+        </div>
+        <div className="space-y-3 pb-4">
           {loading && (
             <p className="text-center text-muted-foreground py-10 text-sm">Loading services…</p>
           )}
@@ -985,8 +991,8 @@ export function ServicesClient({ token }: Props) {
               </button>
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleSection>
 
       <Sheet open={sheetOpen} onOpenChange={(open: boolean) => !open && closeSheet(false)}>
         <SheetContent side="right" className="sm:max-w-md flex flex-col p-0 gap-0">

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '@/lib/api';
 import { resolveApiUrl } from '@/lib/api-config';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface BusinessRow {
   id: string;
@@ -46,29 +45,16 @@ export function AdminQuickAccess({ token, title = 'Quick access — client dashb
   }, [load]);
 
   if (loading) {
-    return (
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">{title}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Loading businesses…</p>
-        </CardContent>
-      </Card>
-    );
+    return <p className="text-sm text-muted-foreground">Loading businesses…</p>;
   }
 
   if (businesses.length === 0) return null;
 
   return (
-    <Card className="border-primary/15">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
+    <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Jump straight into any client&apos;s WhatsApp bot dashboard to fix settings, conversations, or roster.
         </p>
-      </CardHeader>
-      <CardContent>
         <div className="flex flex-wrap gap-2">
           {businesses.map((b) => (
             <div
@@ -88,7 +74,6 @@ export function AdminQuickAccess({ token, title = 'Quick access — client dashb
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }

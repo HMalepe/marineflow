@@ -1,9 +1,11 @@
+'use client';
+
 import Link from 'next/link';
 import { ArrowUpRight, Brain, Sparkles, Wallet, LifeBuoy } from 'lucide-react';
 import type { OverviewKpiData } from '@/components/KPIStrip';
 import { cn } from '@/lib/utils';
-import { OverviewSectionLabel } from './OverviewSectionLabel';
-import { overviewDivider, overviewNeonBox, overviewSection } from './overviewNeon';
+import { OverviewCollapsibleSection } from './OverviewCollapsibleSection';
+import { overviewDivider, overviewNeonBox } from './overviewNeon';
 
 export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
   const nudges = [
@@ -40,10 +42,7 @@ export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
   }>;
 
   return (
-    <section id="overview-coach" data-section-label="AI coach" className={overviewSection('space-y-3')}>
-      <div className="overview-section-heading">
-        <OverviewSectionLabel>AI coach</OverviewSectionLabel>
-      </div>
+    <OverviewCollapsibleSection id="overview-coach" label="AI coach">
       <div className={overviewNeonBox('fuchsia', 'p-4 sm:p-5')}>
         <div className="flex gap-3 pb-4 border-b-2 border-fuchsia-500/30">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border-2 border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-200 shadow-[0_0_18px_-4px_oklch(0.62_0.26_330/0.5)]">
@@ -111,6 +110,6 @@ export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
           </div>
         )}
       </div>
-    </section>
+    </OverviewCollapsibleSection>
   );
 }

@@ -18,6 +18,7 @@ import {
 import { BranchCard, type BranchStats } from '@/components/BranchCard';
 import { apiFetch, ApiError } from '@/lib/api';
 import { BRANCHES_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 export interface BranchRow {
@@ -203,6 +204,7 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
       />
 
       {branches.length === 0 && (
+        <CollapsibleSection id="branches-empty" title="Getting started" defaultOpen>
         <Card>
           <CardContent className="py-10 text-center space-y-2">
             <p className="text-muted-foreground text-sm">
@@ -213,8 +215,16 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
             </p>
           </CardContent>
         </Card>
+        </CollapsibleSection>
       )}
 
+      {branches.length > 0 && (
+      <CollapsibleSection
+        id="branches-list"
+        title="Your branches"
+        count={branches.length}
+        defaultOpen
+      >
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {branches.map((branch) => (
           <BranchCard
@@ -228,6 +238,8 @@ export function BranchesClient({ token, initialBranches, canAdd, canEdit }: Prop
           />
         ))}
       </div>
+      </CollapsibleSection>
+      )}
 
       <Sheet open={addOpen} onOpenChange={setAddOpen}>
         <SheetContent side="right" className="sm:max-w-md">

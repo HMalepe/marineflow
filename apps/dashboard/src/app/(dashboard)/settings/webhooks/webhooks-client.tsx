@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 import { resolveApiUrl } from '@/lib/api-config';
@@ -94,6 +95,7 @@ export function WebhooksClient({ token }: Props) {
       />
 
       {showCreate && (
+        <CollapsibleSection id="webhooks-create" title="Add webhook" defaultOpen>
         <form onSubmit={handleCreate} className="border rounded-lg p-4 space-y-4 bg-card">
           <div className="space-y-1">
             <Label className="text-xs">Endpoint URL</Label>
@@ -136,8 +138,15 @@ export function WebhooksClient({ token }: Props) {
             Create Webhook
           </Button>
         </form>
+        </CollapsibleSection>
       )}
 
+      <CollapsibleSection
+        id="webhooks-list"
+        title="Active webhooks"
+        count={webhooks.length}
+        defaultOpen
+      >
       <div className="space-y-3">
         {webhooks.length === 0 && (
           <p className="text-sm text-muted-foreground py-8 text-center">
@@ -169,6 +178,7 @@ export function WebhooksClient({ token }: Props) {
           </div>
         ))}
       </div>
+      </CollapsibleSection>
     </div>
   );
 }

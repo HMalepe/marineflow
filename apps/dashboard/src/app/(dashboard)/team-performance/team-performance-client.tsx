@@ -5,7 +5,8 @@ import { Crown, Medal, Star, TrendingUp } from 'lucide-react';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CollapsibleFeatureCard } from '@/components/collapsible-feature-card';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { cn } from '@/lib/utils';
 
@@ -101,33 +102,36 @@ export function TeamPerformanceClient({ token }: Props) {
       {!loading && data && (
         <>
           {top && (
-            <Card className="border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Medal className="size-5 text-amber-500" />
-                  Top performer this month
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold">{top.staffName}</p>
-                <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
-                  <span>{top.completed} completed</span>
-                  <span>R{(top.revenueCents / 100).toFixed(0)} revenue</span>
-                  {top.avgRating != null && (
-                    <span className="flex items-center gap-1">
-                      <Stars count={top.stars} /> {top.avgRating.toFixed(1)} ({top.ratingCount})
-                    </span>
-                  )}
-                  {data.incentiveEnabled && top.incentiveCents > 0 && (
-                    <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                      Incentive: R{(top.incentiveCents / 100).toFixed(0)}
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+            <CollapsibleFeatureCard
+              id="team-top-performer"
+              icon={Medal}
+              title="Top performer this month"
+              className="border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-transparent"
+            >
+              <p className="text-2xl font-bold">{top.staffName}</p>
+              <div className="flex flex-wrap gap-4 mt-2 text-sm text-muted-foreground">
+                <span>{top.completed} completed</span>
+                <span>R{(top.revenueCents / 100).toFixed(0)} revenue</span>
+                {top.avgRating != null && (
+                  <span className="flex items-center gap-1">
+                    <Stars count={top.stars} /> {top.avgRating.toFixed(1)} ({top.ratingCount})
+                  </span>
+                )}
+                {data.incentiveEnabled && top.incentiveCents > 0 && (
+                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                    Incentive: R{(top.incentiveCents / 100).toFixed(0)}
+                  </span>
+                )}
+              </div>
+            </CollapsibleFeatureCard>
           )}
 
+          <CollapsibleSection
+            id="team-leaderboard"
+            title="Leaderboard"
+            count={data.leaderboard.length}
+            defaultOpen
+          >
           <div className="rounded-xl border overflow-x-auto">
             <table className="w-full text-sm min-w-[640px]">
               <thead>
@@ -192,6 +196,7 @@ export function TeamPerformanceClient({ token }: Props) {
               </tbody>
             </table>
           </div>
+          </CollapsibleSection>
 
           {!data.enabled && (
             <p className="text-xs text-muted-foreground flex items-center gap-1">

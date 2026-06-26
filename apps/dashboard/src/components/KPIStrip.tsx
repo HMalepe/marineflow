@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { Calendar, MessageSquare, TrendingUp, Wallet } from 'lucide-react';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
-import { OverviewSectionLabel } from '@/components/overview/OverviewSectionLabel';
-import { overviewNeonBox, overviewSection, type OverviewNeonVariant } from '@/components/overview/overviewNeon';
+import { OverviewCollapsibleSection } from '@/components/overview/OverviewCollapsibleSection';
+import { overviewNeonBox, type OverviewNeonVariant } from '@/components/overview/overviewNeon';
 
 export type OverviewKpiData = {
   bookingsToday: number;
@@ -76,10 +76,7 @@ export function KPIStrip({ data }: { data: OverviewKpiData }) {
       : 'Same as yesterday';
 
   return (
-    <section id="overview-kpis" data-section-label="Snapshot" className={overviewSection('space-y-3')}>
-      <div className="overview-section-heading">
-        <OverviewSectionLabel>Snapshot</OverviewSectionLabel>
-      </div>
+    <OverviewCollapsibleSection id="overview-kpis" label="Snapshot">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiTile
           label={`${APPOINTMENTS_LABEL} today`}
@@ -116,6 +113,6 @@ export function KPIStrip({ data }: { data: OverviewKpiData }) {
           iconClassName="text-cyan-700 dark:text-cyan-300"
         />
       </div>
-    </section>
+    </OverviewCollapsibleSection>
   );
 }

@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { CUSTOMERS_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { DashboardToast } from '@/components/dashboard-toast';
 
@@ -404,6 +405,7 @@ export function CustomersClient({ token }: Props) {
         }
       />
 
+      <CollapsibleSection id="customers-segments" title="Segment filters" defaultOpen>
       <div className="flex flex-wrap items-center gap-2">
         {SEGMENT_PILLS.map(({ key, label }) => (
           <Button
@@ -427,6 +429,7 @@ export function CustomersClient({ token }: Props) {
           </Button>
         ))}
       </div>
+      </CollapsibleSection>
 
       {segmentFilter === 'at_risk' && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
@@ -468,6 +471,13 @@ export function CustomersClient({ token }: Props) {
         </div>
       )}
 
+      <CollapsibleSection
+        id="customers-directory"
+        title="Customer directory"
+        count={groups.length}
+        subtitle={search ? `Showing results for “${search}”` : undefined}
+        defaultOpen
+      >
       {loading && customers.length === 0 ? (
         <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((i) => (
@@ -539,6 +549,7 @@ export function CustomersClient({ token }: Props) {
           })}
         </div>
       )}
+      </CollapsibleSection>
 
       {mergeConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">

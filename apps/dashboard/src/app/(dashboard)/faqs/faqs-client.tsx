@@ -39,6 +39,7 @@ import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { BOT_FAQS_LABEL } from '@/lib/dashboard-nav';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templates';
 import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
@@ -570,12 +571,14 @@ export function FaqsClient({ token }: Props) {
         }
       />
 
+      <CollapsibleSection id="faqs-stats" title="Overview" defaultOpen>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total FAQs" value={stats.total} />
         <StatCard label="Approved (live)" value={stats.approved} highlight />
         <StatCard label="Pending review" value={stats.pending} warn={stats.pending > 0} />
         <StatCard label="Rejected" value={stats.rejected} />
       </div>
+      </CollapsibleSection>
 
       {stats.pending > 3 && (
         <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -594,40 +597,38 @@ export function FaqsClient({ token }: Props) {
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">FAQ library</CardTitle>
-              {reordering ? (
-                <p className="text-xs text-primary mt-1 animate-pulse">Saving order…</p>
-              ) : reorderEnabled ? (
-                <p className="text-xs text-muted-foreground mt-1">Drag cards to set the order customers see on WhatsApp.</p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1">Clear search and show all FAQs to reorder.</p>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
-                <Button
-                  key={f}
-                  size="sm"
-                  variant={statusFilter === f ? 'default' : 'outline'}
-                  onClick={() => setStatusFilter(f)}
-                >
-                  {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
-                </Button>
-              ))}
-            </div>
+      <CollapsibleSection
+        id="faqs-library"
+        title="FAQ library"
+        count={filtered.length}
+        subtitle={
+          reordering
+            ? 'Saving order…'
+            : reorderEnabled
+              ? 'Drag cards to set the order customers see on WhatsApp.'
+              : 'Clear search and show all FAQs to reorder.'
+        }
+        defaultOpen
+      >
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {(['all', 'pending', 'approved', 'rejected'] as const).map((f) => (
+              <Button
+                key={f}
+                size="sm"
+                variant={statusFilter === f ? 'default' : 'outline'}
+                onClick={() => setStatusFilter(f)}
+              >
+                {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+              </Button>
+            ))}
           </div>
           <Input
             placeholder="Search questions or answers…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="max-w-sm mt-2"
+            className="max-w-sm"
           />
-        </CardHeader>
-        <CardContent className="space-y-3">
           {loading && (
             <p className="text-center text-muted-foreground py-10 text-sm">Loading FAQs…</p>
           )}
@@ -669,8 +670,8 @@ export function FaqsClient({ token }: Props) {
               </SortableContext>
             </DndContext>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </CollapsibleSection>
 
       <Sheet open={sheetOpen} onOpenChange={(open) => !open && closeSheet()}>
         <SheetContent className="sm:max-w-lg overflow-y-auto">

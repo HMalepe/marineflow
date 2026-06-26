@@ -5,6 +5,7 @@ import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 interface AgencyMetrics {
@@ -70,22 +71,25 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
         subtitle="Manage your businesses and monitor performance."
       />
 
-      {/* KPIs */}
+      <CollapsibleSection id="agency-metrics" title="Agency metrics" defaultOpen>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Businesses" value={metrics.totalSalons} />
         <KpiCard label="Active" value={metrics.activeSalons} />
         <KpiCard label="Customers" value={metrics.totalCustomers.toLocaleString()} />
         <KpiCard label={APPOINTMENTS_LABEL} value={metrics.totalAppointments.toLocaleString()} />
       </div>
+      </CollapsibleSection>
 
-      {/* Create business */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Your Businesses ({salons.length})</h2>
-        <Button onClick={() => setShowCreate(!showCreate)}>
-          {showCreate ? 'Cancel' : '+ New Business'}
-        </Button>
-      </div>
-
+      <CollapsibleSection
+        id="agency-businesses"
+        title={`Your businesses (${salons.length})`}
+        action={
+          <Button onClick={() => setShowCreate(!showCreate)}>
+            {showCreate ? 'Cancel' : '+ New Business'}
+          </Button>
+        }
+        defaultOpen
+      >
       {showCreate && (
         <form onSubmit={handleCreate} className="border rounded-lg p-4 space-y-3 bg-card">
           <div className="grid grid-cols-2 gap-3">
@@ -159,6 +163,7 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
           </tbody>
         </table>
       </div>
+      </CollapsibleSection>
     </div>
   );
 }

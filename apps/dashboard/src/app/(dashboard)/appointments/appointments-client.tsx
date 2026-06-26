@@ -260,10 +260,11 @@ export function AppointmentsClient({
         </p>
       )}
 
-      <div
-        className="dashboard-section-anchor dashboard-filter-section"
+      <CollapsibleSection
         id="appointments-filters"
-        data-section-label="Search & filters"
+        title="Search & filters"
+        defaultOpen
+        className="dashboard-filter-section"
       >
         <MobileFilterBar
           activeCount={filterActiveCount}
@@ -327,12 +328,10 @@ export function AppointmentsClient({
             </>
           }
         />
-      </div>
+      </CollapsibleSection>
 
       {hasTodayAppointments && (
-        <div id="appointments-today" data-section-label="Today" className="dashboard-section-anchor">
-          <TodaySchedule appointments={[...upcoming, ...past]} />
-        </div>
+        <TodaySchedule appointments={[...upcoming, ...past]} />
       )}
 
       <SectionPanel
@@ -341,7 +340,6 @@ export function AppointmentsClient({
         count={filteredUpcoming.length}
         subtitle="Confirmed and pending appointments"
         compact
-        className="dashboard-section-anchor"
       >
         {filteredUpcoming.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -396,8 +394,6 @@ export function AppointmentsClient({
           title="Past bookings"
           count={filteredPast.length}
           subtitle="Last 20 shown"
-          collapseOnMobile
-          className="dashboard-section-anchor"
         >
           <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">
             {filteredPast.slice(0, 20).map((appt) => (
@@ -420,8 +416,6 @@ export function AppointmentsClient({
           title="Waitlist"
           count={waitlist.length}
           subtitle="Notified when a slot opens"
-          collapseOnMobile
-          className="dashboard-section-anchor"
         >
           <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">
             {waitlist.map((entry) => (
@@ -469,6 +463,7 @@ function TodaySchedule({ appointments }: { appointments: AppointmentData[] }) {
 
   return (
     <SectionPanel
+      id="appointments-today"
       title="Today"
       count={todayAppts.length}
       subtitle={today.toLocaleDateString('en-ZA', { weekday: 'long', day: 'numeric', month: 'long' })}

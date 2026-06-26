@@ -3,8 +3,8 @@ import { Calendar } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
-import { OverviewSectionLabel } from './OverviewSectionLabel';
-import { overviewNeonBox, overviewSection } from './overviewNeon';
+import { OverviewCollapsibleSection } from './OverviewCollapsibleSection';
+import { overviewNeonBox } from './overviewNeon';
 
 export interface TodayAppointment {
   id: string;
@@ -69,20 +69,17 @@ export function TodayBookingsPanel({
   });
 
   return (
-    <section id="overview-today" data-section-label="Schedule" className={overviewSection('space-y-3')}>
-      <div className="overview-section-heading flex items-end justify-between gap-3">
-        <div>
-          <OverviewSectionLabel>Schedule</OverviewSectionLabel>
-          <h2 className="text-lg font-bold tracking-tight mt-1">Today&apos;s bookings</h2>
-          <p className="text-xs font-medium text-muted-foreground mt-0.5">
-            {appointments.length} on the calendar · {todayHeading}
-          </p>
-        </div>
+    <OverviewCollapsibleSection
+      id="overview-today"
+      label="Schedule"
+      title="Today's bookings"
+      subtitle={`${appointments.length} on the calendar · ${todayHeading}`}
+      trailing={
         <Link href="/appointments" className="text-sm font-bold text-primary hover:underline shrink-0">
           Open bookings →
         </Link>
-      </div>
-
+      }
+    >
       {error && <p className="text-sm text-destructive font-medium">{error}</p>}
 
       {!error && appointments.length === 0 && (
@@ -119,6 +116,6 @@ export function TodayBookingsPanel({
           })}
         </div>
       )}
-    </section>
+    </OverviewCollapsibleSection>
   );
 }

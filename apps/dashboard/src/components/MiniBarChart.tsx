@@ -1,8 +1,8 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { OverviewSectionLabel } from '@/components/overview/OverviewSectionLabel';
-import { overviewNeonBox, overviewSection } from '@/components/overview/overviewNeon';
+import { OverviewCollapsibleSection } from '@/components/overview/OverviewCollapsibleSection';
+import { overviewNeonBox } from '@/components/overview/overviewNeon';
 
 export type BarChartPoint = {
   date: string;
@@ -38,20 +38,17 @@ export function MiniBarChart({ title = 'Revenue — last 7 days', data, classNam
   const width = points.length * (barW + barGap) + barGap;
 
   return (
-    <section
+    <OverviewCollapsibleSection
       id="overview-revenue"
-      data-section-label="Trends"
-      className={cn(overviewSection('space-y-3'), className)}
-    >
-      <div className="overview-section-heading flex items-end justify-between gap-3">
-        <div>
-          <OverviewSectionLabel>Trends</OverviewSectionLabel>
-          <p className="text-lg font-bold tracking-tight mt-1">{title}</p>
-        </div>
+      label="Trends"
+      title={title}
+      className={className}
+      trailing={
         <span className="text-xs font-bold text-muted-foreground tabular-nums shrink-0 px-2.5 py-1 rounded-md border-2 border-violet-500/30 bg-violet-500/10">
           7-day avg {formatZarShort(avg)}
         </span>
-      </div>
+      }
+    >
       <div className={overviewNeonBox('cyan', 'p-4 sm:p-5')}>
         <svg
           viewBox={`0 0 ${width} ${chartH + 40}`}
@@ -107,7 +104,7 @@ export function MiniBarChart({ title = 'Revenue — last 7 days', data, classNam
           })}
         </svg>
       </div>
-    </section>
+    </OverviewCollapsibleSection>
   );
 }
 

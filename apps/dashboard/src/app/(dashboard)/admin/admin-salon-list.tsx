@@ -11,8 +11,8 @@ import {
 import { formatSaPhone, isValidSaPhoneLocal, formatSaPhoneDisplay } from '@/lib/phone';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
+import { CollapsibleCard } from '@/components/collapsible-card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
@@ -449,12 +449,8 @@ export function AdminSalonList({ token }: Props) {
       />
 
       {credentials && (
-        <Card className="border-green-600/30 bg-green-600/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Share these with your client</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">
+        <CollapsibleCard id="admin-credentials" title="Share these with your client" defaultOpen>
+            <p className="text-sm text-muted-foreground">
               First-time login for <span className="font-medium text-foreground">{credentials.salonName}</span>
               {' '}(shown once — copy now):
             </p>
@@ -465,8 +461,7 @@ export function AdminSalonList({ token }: Props) {
               <div className="flex gap-2"><dt className="text-muted-foreground shrink-0">Email fallback:</dt><dd>{credentials.ownerEmail}</dd></div>
             </dl>
             <Button variant="outline" size="sm" onClick={() => setCredentials(null)}>Dismiss</Button>
-          </CardContent>
-        </Card>
+        </CollapsibleCard>
       )}
 
       {/* Create Salon Sheet */}

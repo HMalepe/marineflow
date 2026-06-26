@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Bell, Bot, ChevronDown, ChevronRight, MessageSquare, User } from 'lucide-react';
+import { AlertTriangle, Bot, ChevronDown, ChevronRight, MessageSquare, User } from 'lucide-react';
 import { OpenClientDashboardButton } from '@/components/open-client-dashboard-button';
 import { ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { resolveApiUrl } from '@/lib/api-config';
 
@@ -121,27 +120,15 @@ export function AdminPlatformInbox({ token }: { token: string }) {
   }
 
   return (
-    <Card className="border-primary/20">
-      <CardHeader className="pb-3">
+    <div className="space-y-4 rounded-lg border border-primary/20 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Bell className="size-5 text-primary" />
-            <CardTitle className="text-lg">Platform inbox</CardTitle>
-            {(summary?.totalUnread ?? 0) > 0 && (
-              <Badge className="bg-destructive text-destructive-foreground">
-                {summary!.totalUnread} unread
-              </Badge>
-            )}
-          </div>
+          <p className="text-sm text-muted-foreground">
+            Owner messages and bot errors — grouped by business category (spa, restaurant, salon, etc.).
+          </p>
           <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             Refresh
           </Button>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Owner messages and bot errors — grouped by business category (spa, restaurant, salon, etc.).
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         {loading && !summary && (
@@ -277,7 +264,6 @@ export function AdminPlatformInbox({ token }: { token: string }) {
             All clear — no pending owner messages or bot errors.
           </div>
         )}
-      </CardContent>
-    </Card>
+    </div>
   );
 }

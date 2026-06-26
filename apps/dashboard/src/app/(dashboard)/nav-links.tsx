@@ -9,6 +9,7 @@ import {
   visibleSalonNavGroups,
 } from '@/lib/dashboard-nav';
 import { useHandoffCount } from '@/components/Sidebar';
+import { CollapsibleNavSection } from '@/components/collapsible-nav-section';
 import { cn } from '@/lib/utils';
 import type React from 'react';
 
@@ -18,12 +19,19 @@ interface NavLinksProps {
   handoffCount?: number;
 }
 
-function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
+function NavSection({
+  label,
+  defaultExpanded,
+  children,
+}: {
+  label: string;
+  defaultExpanded?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="space-y-1">
-      <p className="nav-section-label select-none">{label}</p>
+    <CollapsibleNavSection label={label} defaultExpanded={defaultExpanded}>
       {children}
-    </div>
+    </CollapsibleNavSection>
   );
 }
 
@@ -58,11 +66,17 @@ function NavItemLink({
 }
 
 export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) {
+  const pathname = usePathname();
   const liveHandoffCount = useHandoffCount(handoffCount);
+
+  function groupHasActiveItem(items: { href: string }[]) {
+    return items.some((item) => isNavItemActive(pathname, item.href));
+  }
+
   if (isAdmin) {
     return (
       <div className="space-y-4">
-        <NavSection label="Platform">
+        <NavSection label="Platform" defaultExpanded={groupHasActiveItem(ADMIN_NAV_ITEMS)}>
           {ADMIN_NAV_ITEMS.map((item) => (
             <NavItemLink key={item.href} href={item.href}>
               {item.label}
@@ -80,7 +94,11 @@ export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) 
       <NavItemLink href={SALON_OVERVIEW_ITEM.href}>{SALON_OVERVIEW_ITEM.label}</NavItemLink>
 
       {groups.map((group) => (
-        <NavSection key={group.title} label={group.title}>
+        <NavSection
+          key={group.title}
+          label={group.title}
+          defaultExpanded={groupHasActiveItem(group.items)}
+        >
           {group.items.map((item) => (
             <NavItemLink
               key={item.href}

@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { LifeBuoy, Wallet } from 'lucide-react';
 import type { OverviewKpiData } from '@/components/KPIStrip';
-import { OverviewSectionLabel } from './OverviewSectionLabel';
-import { overviewNeonBox, overviewSection } from './overviewNeon';
+import { OverviewCollapsibleSection } from './OverviewCollapsibleSection';
+import { overviewNeonBox } from './overviewNeon';
 
 export function NeedsYouPanel({ data }: { data: OverviewKpiData }) {
   const showPayments = data.pendingPayments > 0;
@@ -10,10 +10,7 @@ export function NeedsYouPanel({ data }: { data: OverviewKpiData }) {
   if (!showPayments && !showTickets) return null;
 
   return (
-    <section id="overview-needs-you" data-section-label="Needs you" className={overviewSection('space-y-3')}>
-      <div className="overview-section-heading">
-        <OverviewSectionLabel>Needs you</OverviewSectionLabel>
-      </div>
+    <OverviewCollapsibleSection id="overview-needs-you" label="Needs you">
       <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
         {showPayments && (
           <Link href="/appointments?status=PENDING_PAYMENT" className="block group">
@@ -62,6 +59,6 @@ export function NeedsYouPanel({ data }: { data: OverviewKpiData }) {
           </Link>
         )}
       </div>
-    </section>
+    </OverviewCollapsibleSection>
   );
 }

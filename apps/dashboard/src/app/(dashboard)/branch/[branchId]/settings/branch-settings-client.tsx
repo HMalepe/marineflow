@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { CollapsibleCard } from '@/components/collapsible-card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -59,14 +59,13 @@ export function BranchSettingsClient({ token, initialBranch, canEdit }: Props) {
   }
 
   return (
-    <Card className="max-w-xl">
-      <CardHeader>
-        <CardTitle>Branch settings</CardTitle>
-        <CardDescription>
-          Location details for this branch. Service prices, FAQs, and the WhatsApp bot are configured once for the whole salon under main Settings.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <CollapsibleCard
+      id="branch-settings-form"
+      title="Branch details"
+      description="Location details for this branch. Service prices, FAQs, and the WhatsApp bot are configured once for the whole salon under main Settings."
+      className="max-w-xl"
+      defaultOpen
+    >
         <form onSubmit={(e) => void handleSave(e)} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="branch-settings-name">Branch name</Label>
@@ -112,7 +111,6 @@ export function BranchSettingsClient({ token, initialBranch, canEdit }: Props) {
             </Button>
           )}
         </form>
-      </CardContent>
-    </Card>
+    </CollapsibleCard>
   );
 }

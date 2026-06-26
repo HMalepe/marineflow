@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { ArrowLeft, Calendar, LayoutGrid, Settings, Users } from 'lucide-react';
 import { branchPath } from '@/lib/branch-path';
 import { cn } from '@/lib/utils';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import type { BranchRow } from '@/app/(dashboard)/branches/branches-client';
 
@@ -52,9 +53,15 @@ export function BranchShell({
           ) : undefined
         }
       >
+        <CollapsibleSection
+          id="branch-navigation"
+          title="Branch pages"
+          defaultOpen
+          className="mt-4 border-0 shadow-none rounded-none [&_.dashboard-section-header]:px-0 [&_.dashboard-section-body]:px-0 [&_.dashboard-section-body]:pt-2"
+        >
         <nav
           className={cn(
-            'branch-tab-nav sticky z-30 flex gap-1.5 overflow-x-auto overscroll-x-contain -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5 mt-4',
+            'branch-tab-nav sticky z-30 flex gap-1.5 overflow-x-auto overscroll-x-contain -mx-4 sm:-mx-5 px-4 sm:px-5 py-2.5',
             'bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/85',
             'top-[var(--dashboard-sticky-offset,0px)]',
             '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
@@ -78,6 +85,7 @@ export function BranchShell({
             );
           })}
         </nav>
+        </CollapsibleSection>
       </DashboardPageHeader>
 
       {children}

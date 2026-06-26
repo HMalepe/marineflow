@@ -16,6 +16,7 @@ import { LogoutButton, LogoutIconButton } from './logout-button';
 import { DashboardSearch } from '@/components/dashboard-search';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useHandoffCount } from '@/components/Sidebar';
+import { CollapsibleNavSection } from '@/components/collapsible-nav-section';
 
 // Icons as inline SVG to avoid adding a new dependency
 function HomeIcon({ className }: { className?: string }) {
@@ -217,10 +218,12 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
           </SheetHeader>
           <div className="space-y-4 py-2">
             {moreGroups.map((group) => (
-              <div key={group.title}>
-                <p className="px-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                  {group.title}
-                </p>
+              <CollapsibleNavSection
+                key={group.title}
+                label={group.title}
+                variant="sheet"
+                defaultExpanded={group.items.some((item) => isNavItemActive(pathname, item.href))}
+              >
                 <div className="grid grid-cols-2 gap-2">
                   {group.items.map((item) => (
                     <MoreNavItem
@@ -237,7 +240,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
                     />
                   ))}
                 </div>
-              </div>
+              </CollapsibleNavSection>
             ))}
           </div>
           <div className="pt-4 border-t mt-2">

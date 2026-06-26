@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { CollapsibleCard } from '@/components/collapsible-card';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import {
   Card,
   CardContent,
@@ -299,17 +301,17 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
       )}
 
       {subscription && statusMeta && (
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
-            <div className="space-y-1">
-              <CardTitle className="text-lg">Your subscription</CardTitle>
-              <CardDescription>{statusMeta.description}</CardDescription>
+        <CollapsibleCard
+          id="billing-subscription"
+          title="Your subscription"
+          description={statusMeta.description}
+        >
+          <div className="space-y-3">
+            <div className="flex justify-end -mt-1">
+              <Badge className={`border shrink-0 ${statusMeta.badgeClass}`}>
+                {statusMeta.label}
+              </Badge>
             </div>
-            <Badge className={`border shrink-0 ${statusMeta.badgeClass}`}>
-              {statusMeta.label}
-            </Badge>
-          </CardHeader>
-          <CardContent className="space-y-3">
             <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <div>
                 <span className="text-muted-foreground">Plan </span>
@@ -399,11 +401,12 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </CollapsibleCard>
       )}
 
       {canSubscribe && (
+        <CollapsibleSection id="billing-subscribe" title="Choose your plan" defaultOpen>
         <div id="subscribe-section" className="grid lg:grid-cols-5 gap-6 items-start">
           {subscription?.status === 'PAST_DUE' && (
             <div className="lg:col-span-5">
@@ -555,9 +558,11 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
             </p>
           </div>
         </div>
+        </CollapsibleSection>
       )}
 
       {active && (
+        <CollapsibleSection id="billing-active-note" title="Billing support" defaultOpen={false}>
         <Card className="border-dashed">
           <CardContent className="py-6 text-center text-sm text-muted-foreground">
             You&apos;re on the {selectedPlan.name} plan. Need to change billing cycle or have a billing
@@ -567,6 +572,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
             </a>
           </CardContent>
         </Card>
+        </CollapsibleSection>
       )}
     </div>
   );

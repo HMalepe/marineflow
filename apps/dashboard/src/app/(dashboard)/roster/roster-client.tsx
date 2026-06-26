@@ -282,15 +282,18 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
       )}
 
       {error && (
+        <CollapsibleSection id="roster-error" title="Could not load roster" defaultOpen>
         <div className="dashboard-section border-destructive/40 bg-destructive/5">
           <div className="dashboard-section-body flex items-center justify-between gap-3 text-sm text-destructive py-3">
             <span>{error}</span>
             <Button size="sm" variant="outline" onClick={() => fetchRoster(month, monthEnd)}>Retry</Button>
           </div>
         </div>
+        </CollapsibleSection>
       )}
 
       {!loading && staff.length === 0 && !error && (
+        <CollapsibleSection id="roster-empty" title="Get started" defaultOpen>
         <div className="dashboard-section border-dashed">
           <div className="dashboard-section-body px-6 py-14 text-center space-y-3">
             <p className="text-muted-foreground">No staff members yet.</p>
@@ -303,6 +306,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
             </Button>
           </div>
         </div>
+        </CollapsibleSection>
       )}
 
       {copiedShift && (
@@ -320,7 +324,6 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
           title="Your team"
           count={staff.length}
           subtitle="Tap a member to edit"
-          collapseOnMobile
         >
           <div className="roster-staff-strip">
             {staff.map((s) => (
@@ -343,7 +346,6 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
         <CollapsibleSection
           title="Today's capacity"
           subtitle="Booked slots vs availability"
-          collapseOnMobile
         >
           <StaffUtilisationRow staff={staff} utilisation={utilisation} embedded />
         </CollapsibleSection>

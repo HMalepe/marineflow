@@ -6,6 +6,7 @@ import { AdminPlatformInbox } from './admin-platform-inbox';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { StatCard } from '@/components/StatCard';
 import { BusinessTypeBreakdown, type BusinessTypeCount } from '@/components/BusinessTypeBreakdown';
+import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
@@ -76,7 +77,7 @@ export default async function AdminPage() {
         subtitle="Platform-wide management — click any business for stats, team, and alerts."
       />
 
-      {/* KPIs */}
+      <CollapsibleSection id="admin-kpis" title="Platform stats" defaultOpen>
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard label="Total Businesses" value={stats.totalBusinesses ?? stats.totalSalons ?? 0} />
         <StatCard label="Active Businesses" value={stats.activeBusinesses ?? stats.activeSalons ?? 0} />
@@ -84,15 +85,16 @@ export default async function AdminPage() {
         <StatCard label={`Total ${APPOINTMENTS_LABEL}`} value={stats.totalAppointments.toLocaleString()} />
         <StatCard label="New (7d)" value={stats.recentSignups} />
       </div>
-
       {stats.byBusinessType && stats.byBusinessType.length > 0 && (
-        <BusinessTypeBreakdown counts={stats.byBusinessType} />
+        <div className="mt-4">
+          <BusinessTypeBreakdown counts={stats.byBusinessType} />
+        </div>
       )}
+      </CollapsibleSection>
 
-      {/* Alerts */}
       {alerts && (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0) && (
-        <section className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
-          <h2 className="text-sm font-bold text-amber-800">Alerts</h2>
+        <CollapsibleSection id="admin-alerts" title="Alerts" defaultOpen>
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
           {alerts.pastDue.length > 0 && (
             <div>
               <p className="text-xs font-medium text-amber-700">Past Due ({alerts.pastDue.length})</p>
@@ -117,18 +119,23 @@ export default async function AdminPage() {
               </div>
             </div>
           )}
-        </section>
+        </div>
+        </CollapsibleSection>
       )}
 
-      <AdminQuickAccess token={token ?? ''} />
+      <CollapsibleSection id="admin-quick-access" title="Quick access" defaultOpen>
+        <AdminQuickAccess token={token ?? ''} />
+      </CollapsibleSection>
 
-      {/* Platform inbox — owner messages + bot errors */}
-      <AdminPlatformInbox token={token ?? ''} />
+      <CollapsibleSection id="admin-platform-inbox" title="Platform inbox" defaultOpen>
+        <AdminPlatformInbox token={token ?? ''} />
+      </CollapsibleSection>
 
-      {/* Tenant health table */}
+      <CollapsibleSection id="admin-businesses" title="All businesses" defaultOpen>
       <Suspense fallback={<p className="text-sm text-muted-foreground py-8 text-center">Loading businesses…</p>}>
         <AdminSalonList token={token ?? ''} />
       </Suspense>
+      </CollapsibleSection>
     </div>
   );
 }
