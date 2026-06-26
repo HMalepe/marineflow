@@ -199,6 +199,7 @@ function Projects() {
   const sliderRef = useRef<ShowcaseSliderHandle>(null);
   const scrollIndexRef = useRef(0);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const didSwipeRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const { isPhone, isTablet, prefersReducedMotion, coarsePointer } = useDeviceProfile();
 
@@ -229,6 +230,21 @@ function Projects() {
     }
   }, [prefersReducedMotion]);
 
+  const scrollToContact = useCallback(() => {
+    document.getElementById("contact")?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [prefersReducedMotion]);
+
+  const handleProjectClick = useCallback(() => {
+    if (didSwipeRef.current) {
+      didSwipeRef.current = false;
+      return;
+    }
+    scrollToContact();
+  }, [scrollToContact]);
+
   useMotionValueEvent(scrollYProgress, "change", (progress) => {
     const segments = projects.length - 1;
     const scaled = progress * segments;
@@ -256,6 +272,7 @@ function Projects() {
     const dy = clientY - start.y;
     if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
 
+    didSwipeRef.current = true;
     if (dx < 0) {
       goToProject(scrollIndexRef.current + 1, { syncScroll: true });
     } else {
@@ -283,7 +300,7 @@ function Projects() {
               Projects
             </h2>
             <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.28em] text-foreground/45 sm:mt-3 sm:text-[11px]">
-              Scroll to explore
+              Scroll to explore · Tap a project to contact us
             </p>
           </div>
           <p className="hidden max-w-sm text-right text-xs tracking-[0.2em] text-foreground/70 sm:block sm:text-sm">
@@ -293,7 +310,17 @@ function Projects() {
 
         <div className="relative mx-auto flex min-h-0 w-full max-w-7xl flex-col px-0 sm:px-0">
           <div
-            className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_24px_80px_oklch(0_0_0_/_0.45)] sm:rounded-3xl sm:shadow-[0_40px_120px_oklch(0_0_0_/_0.45)]"
+            role="button"
+            tabIndex={0}
+            aria-label={`Contact us about ${project.name}`}
+            onClick={handleProjectClick}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                scrollToContact();
+              }
+            }}
+            className="group relative min-h-0 flex-1 cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_24px_80px_oklch(0_0_0_/_0.45)] transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:rounded-3xl sm:shadow-[0_40px_120px_oklch(0_0_0_/_0.45)]"
             onTouchStart={(e) => {
               const t = e.touches[0];
               if (t) handleSwipeStart(t.clientX, t.clientY);
@@ -356,7 +383,12 @@ function Projects() {
                   </motion.h3>
                 </AnimatePresence>
 
-                <ArrowUpRight className="hidden h-7 w-7 shrink-0 text-primary sm:block sm:h-8 sm:w-8" />
+                <span className="flex shrink-0 flex-col items-center gap-1 text-primary transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                  <ArrowUpRight className="h-6 w-6 sm:h-8 sm:w-8" aria-hidden />
+                  <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-[9px]">
+                    Contact
+                  </span>
+                </span>
               </div>
             </div>
           </div>
@@ -369,7 +401,10 @@ function Projects() {
                 type="button"
                 aria-label={`View ${item.name}`}
                 aria-current={index === activeIndex ? "true" : undefined}
-                onClick={() => goToProject(index, { syncScroll: true })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToProject(index, { syncScroll: true });
+                }}
                 className="touch-target flex items-center justify-center"
               >
                 <span
@@ -395,7 +430,10 @@ function Projects() {
                 key={item.name}
                 type="button"
                 aria-label={`View ${item.name}`}
-                onClick={() => goToProject(index, { syncScroll: true })}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToProject(index, { syncScroll: true });
+                }}
                 className={`relative h-3.5 w-3.5 rounded-full border border-white/20 transition ${
                   index === activeIndex
                     ? "scale-100 bg-white opacity-100"
