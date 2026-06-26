@@ -4,6 +4,11 @@ import { join } from "node:path";
 const configPath = join(process.cwd(), ".output/server/wrangler.json");
 const config = JSON.parse(readFileSync(configPath, "utf8"));
 
+const today = new Date().toISOString().slice(0, 10);
+if (!config.compatibility_date || config.compatibility_date > today) {
+  config.compatibility_date = today;
+}
+
 config.name = "solupair-landing";
 config.workers_dev = true;
 config.assets = {
