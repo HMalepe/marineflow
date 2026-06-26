@@ -1,8 +1,9 @@
 import { type ReactNode, Fragment } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { BarChart3, Calendar, MessageCircle, TrendingUp, Users, Zap } from "lucide-react";
+import { BarChart3, Calendar, MessageCircle, TrendingUp, Zap } from "lucide-react";
 import {
   DEMO_SALON_NAME,
+  WHATSAPP_AGENT_NAME,
   demoBookingConfirmedBody,
   demoConfirmBookingBody,
   demoMainMenuBody,
@@ -181,165 +182,197 @@ function LineChartMock({ reduce }: { reduce: boolean | null }) {
   );
 }
 
-function BarChartMock({ reduce }: { reduce: boolean | null }) {
-  const bars = [62, 44, 78, 52, 88, 36];
+/** 02 — Owner dashboard for the WhatsApp Agent (same name as chatbot slide). */
+export function WhatsAppAgentDashboardPreview() {
+  const reduce = useReducedMotion();
+
   return (
-    <div className="flex h-full items-end justify-between gap-1 px-1">
+    <div className="flex h-full w-full flex-col bg-[oklch(0.11_0.015_270)] p-3 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.25em] text-primary">
+            {WHATSAPP_AGENT_NAME}
+          </p>
+          <h4 className="truncate font-display text-sm font-bold text-white sm:text-base">
+            {DEMO_SALON_NAME}
+          </h4>
+        </div>
+        <span className="shrink-0 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[8px] font-medium text-emerald-400">
+          Bot live
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <MiniKpi label="WA bookings" value="47" delta="+9 today" icon={MessageCircle} />
+        <MiniKpi label="Confirmed" value="128" delta="Sam · Thu 10:30" icon={Calendar} />
+        <MiniKpi label="Inbox" value="24" delta="6 handoff" icon={TrendingUp} />
+      </div>
+
+      <div className="mt-3 grid min-h-0 flex-1 grid-cols-5 gap-2">
+        <div className="col-span-3 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
+          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">
+            Ladies Cut · WhatsApp funnel
+          </p>
+          <div className="min-h-[72px] flex-1 sm:min-h-[88px]">
+            <LineChartMock reduce={reduce} />
+          </div>
+        </div>
+        <div className="col-span-2 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
+          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">Menu picks</p>
+          <div className="flex min-h-[72px] flex-1 flex-col justify-center gap-1.5 sm:min-h-[88px]">
+            {[
+              { label: "Ladies Cut", pct: 72 },
+              { label: "Full Colour", pct: 48 },
+              { label: "Treatment", pct: 31 },
+            ].map((row, i) => (
+              <div key={row.label} className="flex items-center gap-1.5">
+                <span className="w-14 shrink-0 truncate text-[7px] text-white/60 sm:text-[8px]">
+                  {row.label}
+                </span>
+                <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${row.pct}%` }}
+                    transition={{ delay: reduce ? 0 : i * 0.1, duration: 0.45 }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AreaChartMock({ reduce, color }: { reduce: boolean | null; color: string }) {
+  return (
+    <svg viewBox="0 0 120 40" className="h-full w-full" preserveAspectRatio="none">
+      <motion.path
+        fill={color}
+        fillOpacity="0.25"
+        d="M0,38 L20,28 L40,32 L60,18 L80,24 L100,12 L120,16 L120,40 L0,40 Z"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: reduce ? 0 : 0.8 }}
+      />
+      <motion.path
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        d="M0,38 L20,28 L40,32 L60,18 L80,24 L100,12 L120,16"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: reduce ? 0 : 1 }}
+      />
+    </svg>
+  );
+}
+
+function PieChartMock({ reduce }: { reduce: boolean | null }) {
+  const slices = [
+    { color: "oklch(0.93 0.24 122)", dash: "70 100" },
+    { color: "oklch(0.55 0.22 300)", dash: "45 100", offset: -70 },
+    { color: "oklch(0.72 0.18 200)", dash: "35 100", offset: -115 },
+  ];
+  return (
+    <svg viewBox="0 0 64 64" className="mx-auto h-16 w-16 sm:h-20 sm:w-20">
+      <circle cx="32" cy="32" r="22" fill="none" stroke="white" strokeOpacity="0.06" strokeWidth="12" />
+      {slices.map((s, i) => (
+        <motion.circle
+          key={i}
+          cx="32"
+          cy="32"
+          r="22"
+          fill="none"
+          stroke={s.color}
+          strokeWidth="12"
+          strokeLinecap="butt"
+          strokeDasharray={s.dash}
+          strokeDashoffset={s.offset ?? 0}
+          transform="rotate(-90 32 32)"
+          initial={{ strokeDasharray: "0 100" }}
+          animate={{ strokeDasharray: s.dash }}
+          transition={{ duration: reduce ? 0 : 0.7, delay: i * 0.12 }}
+        />
+      ))}
+    </svg>
+  );
+}
+
+function ScatterBarsMock({ reduce }: { reduce: boolean | null }) {
+  const bars = [35, 58, 42, 71, 49, 63, 38, 55];
+  const colors = [
+    "bg-primary",
+    "bg-[oklch(0.55_0.22_300)]",
+    "bg-primary/70",
+    "bg-[oklch(0.72_0.18_200)]",
+  ];
+  return (
+    <div className="flex h-full items-end justify-between gap-0.5">
       {bars.map((h, i) => (
         <motion.div
           key={i}
-          className="flex-1 rounded-t-sm bg-gradient-to-t from-primary/30 to-primary"
+          className={`w-full rounded-t-sm ${colors[i % colors.length]}`}
           initial={{ height: 0 }}
           animate={{ height: `${h}%` }}
-          transition={{ delay: reduce ? 0 : i * 0.08, duration: 0.5, ease: "easeOut" }}
+          transition={{ delay: reduce ? 0 : i * 0.05, duration: 0.4 }}
         />
       ))}
     </div>
   );
 }
 
-/** 02 — Live operations dashboard: bookings & revenue */
-export function OperationsDashboardPreview() {
+/** 04 — Generic analytics with varied chart types (not tied to the bot). */
+export function RandomChartsDashboardPreview() {
   const reduce = useReducedMotion();
 
   return (
-    <div className="flex h-full w-full flex-col bg-[oklch(0.11_0.015_270)] p-3 sm:p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <p className="text-[9px] font-semibold uppercase tracking-[0.25em] text-primary">Live Pulse</p>
-          <h4 className="font-display text-sm font-bold text-white sm:text-base">Operations dashboard</h4>
-        </div>
-        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[8px] font-medium text-emerald-400">
-          Live
-        </span>
-      </div>
-
-      <div className="grid grid-cols-3 gap-2">
-        <MiniKpi label="Bookings" value="128" delta="+18% wk" icon={Calendar} />
-        <MiniKpi label="Revenue" value="R84k" delta="+12% wk" icon={TrendingUp} />
-        <MiniKpi label="Inbox" value="24" delta="6 handoff" icon={MessageCircle} />
-      </div>
-
-      <div className="mt-3 grid min-h-0 flex-1 grid-cols-5 gap-2">
-        <div className="col-span-3 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
-          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">Bookings · 7 days</p>
-          <div className="min-h-[72px] flex-1 sm:min-h-[88px]">
-            <LineChartMock reduce={reduce} />
-          </div>
-        </div>
-        <div className="col-span-2 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
-          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">Top services</p>
-          <div className="min-h-[72px] flex-1 sm:min-h-[88px]">
-            <BarChartMock reduce={reduce} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DonutMock({ reduce }: { reduce: boolean | null }) {
-  return (
-    <svg viewBox="0 0 80 80" className="mx-auto h-20 w-20 sm:h-24 sm:w-24">
-      <circle cx="40" cy="40" r="28" fill="none" stroke="white" strokeOpacity="0.08" strokeWidth="10" />
-      <motion.circle
-        cx="40"
-        cy="40"
-        r="28"
-        fill="none"
-        stroke="oklch(0.93 0.24 122)"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeDasharray="120 176"
-        transform="rotate(-90 40 40)"
-        initial={{ strokeDasharray: "0 176" }}
-        animate={{ strokeDasharray: "120 176" }}
-        transition={{ duration: reduce ? 0 : 1, ease: "easeOut" }}
-      />
-      <motion.circle
-        cx="40"
-        cy="40"
-        r="28"
-        fill="none"
-        stroke="oklch(0.55 0.22 300)"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeDasharray="56 176"
-        strokeDashoffset="-120"
-        transform="rotate(-90 40 40)"
-        initial={{ strokeDasharray: "0 176" }}
-        animate={{ strokeDasharray: "56 176" }}
-        transition={{ duration: reduce ? 0 : 1, delay: 0.2, ease: "easeOut" }}
-      />
-      <text x="40" y="42" textAnchor="middle" className="fill-white text-[11px] font-bold">
-        68%
-      </text>
-    </svg>
-  );
-}
-
-/** 03 — Insights dashboard: retention, growth, team */
-export function AnalyticsDashboardPreview() {
-  const reduce = useReducedMotion();
-  const rows = [
-    { name: "Thandi", pct: 92 },
-    { name: "Lerato", pct: 78 },
-    { name: "James", pct: 65 },
-  ];
-
-  return (
-    <div className="flex h-full w-full flex-col bg-[oklch(0.1_0.012_265)] p-3 sm:p-4">
+    <div className="flex h-full w-full flex-col bg-[oklch(0.09_0.01_260)] p-3 sm:p-4">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-[0.25em] text-[oklch(0.72_0.22_300)]">
-            Insights
+            Custom analytics
           </p>
-          <h4 className="font-display text-sm font-bold text-white sm:text-base">Analytics &amp; performance</h4>
+          <h4 className="font-display text-sm font-bold text-white sm:text-base">Charts &amp; graphs</h4>
         </div>
-        <BarChart3 className="size-4 text-white/40" />
+        <BarChart3 className="size-4 text-white/40" aria-hidden />
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-2">
-        <div className="flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
-          <p className="text-[8px] uppercase tracking-wider text-white/45">Customer retention</p>
-          <DonutMock reduce={reduce} />
-          <p className="mt-auto text-center text-[8px] text-white/50">Returning vs new</p>
+      <div className="grid min-h-0 flex-1 grid-cols-6 grid-rows-2 gap-2">
+        <div className="col-span-3 row-span-1 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
+          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">Velocity index</p>
+          <div className="min-h-[48px] flex-1">
+            <AreaChartMock reduce={reduce} color="oklch(0.55 0.22 300)" />
+          </div>
         </div>
 
-        <div className="flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
-          <p className="mb-2 text-[8px] uppercase tracking-wider text-white/45">Growth trend</p>
-          <div className="flex flex-1 flex-col justify-end gap-1">
-            {[40, 55, 48, 72, 68, 90].map((w, i) => (
-              <motion.div
-                key={i}
-                className="h-1.5 rounded-full bg-gradient-to-r from-[oklch(0.55_0.22_300)] to-primary"
-                initial={{ width: 0 }}
-                animate={{ width: `${w}%` }}
-                transition={{ delay: reduce ? 0 : i * 0.06, duration: 0.4 }}
-              />
-            ))}
+        <div className="col-span-3 row-span-1 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
+          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">Channel mix</p>
+          <div className="flex flex-1 items-center justify-center">
+            <PieChartMock reduce={reduce} />
           </div>
-          <p className="mt-2 text-[9px] text-emerald-400">+34% quarter</p>
         </div>
 
-        <div className="col-span-2 rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
-          <div className="mb-2 flex items-center gap-1.5">
-            <Users className="size-3 text-primary" />
-            <p className="text-[8px] uppercase tracking-wider text-white/45">Team performance</p>
+        <div className="col-span-4 row-span-1 flex flex-col rounded-lg border border-white/10 bg-white/[0.03] p-2">
+          <p className="mb-1 text-[8px] uppercase tracking-wider text-white/45">Weekly signal</p>
+          <div className="min-h-[44px] flex-1">
+            <ScatterBarsMock reduce={reduce} />
           </div>
-          <div className="space-y-2">
-            {rows.map((row, i) => (
-              <div key={row.name} className="flex items-center gap-2">
-                <span className="w-12 shrink-0 text-[9px] text-white/70">{row.name}</span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
-                  <motion.div
-                    className="h-full rounded-full bg-primary"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${row.pct}%` }}
-                    transition={{ delay: reduce ? 0 : 0.3 + i * 0.1, duration: 0.5 }}
-                  />
-                </div>
-                <span className="w-8 text-right text-[9px] font-medium text-white/80">{row.pct}%</span>
+        </div>
+
+        <div className="col-span-2 row-span-1 flex flex-col justify-between rounded-lg border border-white/10 bg-white/[0.03] p-2">
+          <p className="text-[8px] uppercase tracking-wider text-white/45">KPI delta</p>
+          <div className="space-y-1.5">
+            {[
+              { label: "Conv.", val: "+12%" },
+              { label: "CAC", val: "-8%" },
+              { label: "LTV", val: "+24%" },
+            ].map((k) => (
+              <div key={k.label} className="flex justify-between text-[8px] sm:text-[9px]">
+                <span className="text-white/50">{k.label}</span>
+                <span className="font-semibold text-primary">{k.val}</span>
               </div>
             ))}
           </div>
@@ -385,7 +418,7 @@ function ChatBubble({
   );
 }
 
-/** 04 — MarineFlow WhatsApp booking agent (production bot copy) */
+/** 03 — MarineFlow WhatsApp booking agent (production bot copy) */
 export function WhatsAppChatbotPreview() {
   const reduce = useReducedMotion();
 
@@ -469,21 +502,21 @@ export const PROJECT_SHOWCASES = [
     Preview: AnimatedWebsitePreview,
   },
   {
-    id: "operations",
-    name: "Live Pulse",
-    tag: "Operations Dashboard",
-    Preview: OperationsDashboardPreview,
-  },
-  {
-    id: "analytics",
-    name: "Insights",
-    tag: "Analytics Dashboard",
-    Preview: AnalyticsDashboardPreview,
+    id: "whatsapp-dashboard",
+    name: WHATSAPP_AGENT_NAME,
+    tag: `${DEMO_SALON_NAME} · owner dashboard`,
+    Preview: WhatsAppAgentDashboardPreview,
   },
   {
     id: "whatsapp",
-    name: "WhatsApp Agent",
+    name: WHATSAPP_AGENT_NAME,
     tag: "MarineFlow booking bot",
     Preview: WhatsAppChatbotPreview,
+  },
+  {
+    id: "analytics",
+    name: "Custom Analytics",
+    tag: "Charts & graphs",
+    Preview: RandomChartsDashboardPreview,
   },
 ] as const;

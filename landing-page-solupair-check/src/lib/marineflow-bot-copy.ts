@@ -7,6 +7,9 @@
 
 export const DEMO_SALON_NAME = "Glow Beauty Studio";
 
+/** Landing page project slide title — paired with WhatsApp chatbot showcase. */
+export const WHATSAPP_AGENT_NAME = "WhatsApp Agent";
+
 /** buildMainMenuText() — salon industry template defaults (book an appointment). */
 export function demoMainMenuBody(): string {
   return [
