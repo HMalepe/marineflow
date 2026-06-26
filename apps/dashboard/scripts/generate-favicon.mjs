@@ -7,6 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const source = join(root, 'public', 'solupair-icon.png');
 const WORK_SIZE = 128;
+const MARK_SCALE = 0.68;
 
 function removeDarkBackground(data, channels) {
   for (let i = 0; i < data.length; i += channels) {
@@ -135,22 +136,39 @@ async function makeMarkIcon(size) {
 
   const trimmed = await sharp(transparentLogo).trim({ threshold: 1 }).png().toBuffer();
 
-  const filled = await sharp(trimmed)
-    .resize(WORK_SIZE, WORK_SIZE, {
-      fit: 'cover',
-      position: 'centre',
+  const maxDim = Math.round(WORK_SIZE * MARK_SCALE);
+
+  const scaled = await sharp(trimmed)
+    .resize(maxDim, maxDim, {
+      fit: 'inside',
       kernel: sharp.kernel.lanczos3,
     })
     .modulate({ brightness: 1.2, saturation: 1.45 })
     .png()
     .toBuffer();
 
-  const bold = await embolden(filled, 3);
+  const scaledMeta = await sharp(scaled).metadata();
+  const left = Math.round((WORK_SIZE - scaledMeta.width) / 2);
+  const top = Math.round((WORK_SIZE - scaledMeta.height) / 2);
+
+  const filled = await sharp({
+    create: {
+      width: WORK_SIZE,
+      height: WORK_SIZE,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: scaled, left, top }])
+    .png()
+    .toBuffer();
+
+  const bold = await embolden(filled, 2);
 
   const extracted = await sharp(bold)
     .extract({
-      left: 3,
-      top: 3,
+      left: 2,
+      top: 2,
       width: WORK_SIZE,
       height: WORK_SIZE,
     })
