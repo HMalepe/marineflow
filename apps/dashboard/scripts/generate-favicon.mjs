@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const source = join(root, 'public', 'solupair-icon.png');
 const WORK_SIZE = 128;
-const MARK_SCALE = 0.82;
+const MARK_SCALE = 0.9;
 
 function removeDarkBackground(data, channels) {
   for (let i = 0; i < data.length; i += channels) {
