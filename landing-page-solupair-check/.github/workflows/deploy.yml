@@ -1,25 +1,19 @@
-name: Deploy Landing Page
+name: Deploy to Cloudflare
 
 on:
   push:
     branches:
-      - master
-    paths:
-      - "landing-page-solupair-check/**"
-      - ".github/workflows/deploy-landing-page.yml"
+      - main
   workflow_dispatch:
 
 concurrency:
-  group: deploy-landing-page
+  group: deploy-production
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: landing-page-solupair-check
 
     steps:
       - name: Checkout
@@ -30,7 +24,6 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: landing-page-solupair-check/package-lock.json
 
       - name: Install dependencies
         run: npm install --no-fund --no-audit
@@ -49,5 +42,5 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: landing-page-solupair-check/.output/server
+          workingDirectory: .output/server
           command: deploy --config wrangler.json
