@@ -38,10 +38,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Clear Wrangler deploy metadata
+        run: rm -rf .wrangler
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: landing-page-solupair-check/.output/server
-          command: deploy
+          command: deploy --config wrangler.json
