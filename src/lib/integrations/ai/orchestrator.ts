@@ -26,6 +26,8 @@ export interface OrchestratorInput {
   faqSnippets: Array<{ question: string; answer: string }>;
   /** True when the customer has at least one succeeded payment at this salon. */
   hasPaymentHistory?: boolean;
+  /** Customer's first name, if already on file — lets the assistant address them by name. */
+  customerFirstName?: string | null;
 }
 
 export interface OrchestratorResult {
@@ -50,6 +52,7 @@ Rules:
 - Keep reply under 320 characters, WhatsApp-friendly, no markdown.
 - Set negativeSentiment: true if the customer is angry, threatening, abusive, extremely frustrated, or in distress. Do NOT set it for mild frustration or impatience — only genuine negative emotion.
 - If hasPaymentHistory is false, do NOT mention "the usual", past visits, "what you usually get", "last time", or imply they are a returning customer — offer to show services or the menu instead.
+- If customerFirstName is provided, you already know their name — use it naturally where it fits, and if they ask whether you know their name, confirm it. If customerFirstName is null, say truthfully that you don't have it yet (don't claim to remember a name you weren't given).
 - Output ONLY valid JSON matching the schema.`;
 
 export async function orchestrateConversation(input: OrchestratorInput): Promise<OrchestratorResult | null> {
@@ -77,6 +80,7 @@ export async function orchestrateConversation(input: OrchestratorInput): Promise
     staff: staffList || '(any available)',
     faqs: faqs || '(none)',
     hasPaymentHistory: input.hasPaymentHistory ?? false,
+    customerFirstName: input.customerFirstName ?? null,
     schema: {
       intent: 'book|faq|loyalty|manage_booking|hours|human|menu|spam|chat|unknown',
       reply: 'string — your WhatsApp reply',
