@@ -201,6 +201,7 @@ async function loadAssistContext(
     staff,
     faqSnippets: faqs,
     hasPaymentHistory: succeededPayments > 0,
+    customerFirstName: conv.customer.firstName,
   });
 }
 
