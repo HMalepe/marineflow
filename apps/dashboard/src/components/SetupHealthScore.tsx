@@ -63,11 +63,7 @@ function scoreTextClass(score: number): string {
   return 'text-red-700 dark:text-red-300';
 }
 
-type Props = {
-  data: SetupHealthData;
-};
-
-export function SetupHealthScore({ data }: Props) {
+export function useSetupHealthState(data: SetupHealthData) {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -83,6 +79,18 @@ export function SetupHealthScore({ data }: Props) {
     [data.checks, dismissedIds],
   );
 
+  const shouldShowSection = !(
+    data.score >= 100 &&
+    data.checks.length === 0
+  );
+
+  const attentionCount =
+    visibleChecks.length > 0
+      ? visibleChecks.length
+      : data.score < 100 && data.checks.length > 0
+        ? 1
+        : 0;
+
   const dismiss = useCallback(
     (checkId: SetupHealthCheckId) => {
       try {
@@ -95,6 +103,21 @@ export function SetupHealthScore({ data }: Props) {
     [data.salonId],
   );
 
+  return {
+    visibleChecks,
+    shouldShowSection,
+    attentionCount,
+    dismiss,
+  };
+}
+
+type PanelProps = {
+  data: SetupHealthData;
+  visibleChecks: SetupHealthCheck[];
+  onDismiss: (checkId: SetupHealthCheckId) => void;
+};
+
+export function SetupHealthScorePanel({ data, visibleChecks, onDismiss }: PanelProps) {
   if (data.score >= 100 && data.checks.length === 0) {
     return null;
   }
@@ -172,7 +195,7 @@ export function SetupHealthScore({ data }: Props) {
             </div>
             <button
               type="button"
-              onClick={() => dismiss(check.id)}
+              onClick={() => onDismiss(check.id)}
               className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               aria-label={`Dismiss ${check.label}`}
             >
@@ -182,5 +205,16 @@ export function SetupHealthScore({ data }: Props) {
         ))}
       </ul>
     </div>
+  );
+}
+
+type Props = {
+  data: SetupHealthData;
+};
+
+export function SetupHealthScore({ data }: Props) {
+  const { visibleChecks, dismiss } = useSetupHealthState(data);
+  return (
+    <SetupHealthScorePanel data={data} visibleChecks={visibleChecks} onDismiss={dismiss} />
   );
 }

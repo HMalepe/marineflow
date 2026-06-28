@@ -12,7 +12,8 @@ import { BotHealthPanel, type BotHealthData } from '@/components/BotHealthPanel'
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { Leaderboard, type AdminLeaderboardData } from '@/components/Leaderboard';
 import { SystemHealthBar, type SystemHealthData } from '@/components/SystemHealthBar';
-import { SetupHealthScore, type SetupHealthData } from '@/components/SetupHealthScore';
+import { SetupHealthSection } from '@/components/SetupHealthSection';
+import type { SetupHealthData } from '@/components/SetupHealthScore';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { NeedsYouPanel } from '@/components/overview/NeedsYouPanel';
@@ -298,11 +299,7 @@ async function AppointmentView({ token }: { token: string | null }) {
     <div className="overview-page dashboard-page-flow space-y-6 lg:space-y-8">
       {token && <SalonLiveRouterRefresh token={token} />}
 
-      {setupHealth && Array.isArray(setupHealth.checks) && setupHealth.checks.length > 0 && (
-        <CollapsibleSection id="overview-setup-health" title="Setup health">
-          <SetupHealthScore data={setupHealth} />
-        </CollapsibleSection>
-      )}
+      {setupHealth && <SetupHealthSection data={setupHealth} />}
 
       <DashboardPageHeader
         id="overview-intro"
