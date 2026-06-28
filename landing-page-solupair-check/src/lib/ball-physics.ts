@@ -52,14 +52,51 @@ export const HERO_PHYSICS: PhysicsConfig = {
 };
 
 export const BASKETBALL_PHYSICS: BasketballConfig = {
-  gravity: 2400,
-  restitution: 0.74,
-  wallRestitution: 0.62,
-  airFriction: 0.997,
-  floorFriction: 0.9,
-  maxSpeed: 4200,
-  sleepSpeed: 14,
+  gravity: 2600,
+  restitution: 0.72,
+  wallRestitution: 0.68,
+  airFriction: 0.9982,
+  floorFriction: 0.88,
+  maxSpeed: 5600,
+  sleepSpeed: 12,
 };
+
+export type PointerSample = { x: number; y: number; t: number };
+
+/** Flick velocity from recent pointer trail (section-local px/s). */
+export function computeThrowVelocity(
+  samples: PointerSample[],
+  maxSpeed: number,
+  throwBoost = 1.25,
+): { vx: number; vy: number } {
+  if (samples.length < 2) return { vx: 0, vy: 0 };
+
+  const windowMs = 140;
+  const last = samples[samples.length - 1];
+  const recent = samples.filter((s) => last.t - s.t <= windowMs);
+  const track = recent.length >= 2 ? recent : samples.slice(-2);
+
+  const first = track[0];
+  const end = track[track.length - 1];
+  const dt = Math.max((end.t - first.t) / 1000, 0.006);
+
+  let vx = ((end.x - first.x) / dt) * throwBoost;
+  let vy = ((end.y - first.y) / dt) * throwBoost;
+
+  const speed = Math.hypot(vx, vy);
+  if (speed > maxSpeed) {
+    vx = (vx / speed) * maxSpeed;
+    vy = (vy / speed) * maxSpeed;
+  }
+
+  return { vx, vy };
+}
+
+function clampSpeed(vx: number, vy: number, maxSpeed: number) {
+  const speed = Math.hypot(vx, vy);
+  if (speed <= maxSpeed) return { vx, vy };
+  return { vx: (vx / speed) * maxSpeed, vy: (vy / speed) * maxSpeed };
+}
 
 export const VIEWPORT_PHYSICS: PhysicsConfig = {
   gravity: 380,
@@ -169,7 +206,45 @@ export function stepBallPhysics(
 
 export type BasketballStepResult = PhysicsBallState & { sleeping: boolean };
 
-/** Viewport basketball — gravity, floor/wall bounce, friction, sleep on floor. */
+function resolveWallCollisions(
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  bounds: PhysicsBounds,
+  config: BasketballConfig,
+): { x: number; y: number; vx: number; vy: number; onFloor: boolean } {
+  let px = x;
+  let py = y;
+  let pvx = vx;
+  let pvy = vy;
+  let onFloor = false;
+
+  if (px < bounds.minX) {
+    px = bounds.minX;
+    pvx = Math.abs(pvx) * config.wallRestitution;
+  } else if (px > bounds.maxX) {
+    px = bounds.maxX;
+    pvx = -Math.abs(pvx) * config.wallRestitution;
+  }
+
+  if (py < bounds.minY) {
+    py = bounds.minY;
+    pvy = Math.abs(pvy) * config.wallRestitution;
+  } else if (py > bounds.maxY) {
+    py = bounds.maxY;
+    pvy = -Math.abs(pvy) * config.restitution;
+    pvx *= config.floorFriction;
+    onFloor = true;
+    if (Math.abs(pvy) < config.sleepSpeed * 1.5) {
+      pvy = 0;
+    }
+  }
+
+  return { x: px, y: py, vx: pvx, vy: pvy, onFloor };
+}
+
+/** Section basketball — gravity, four-wall bounce, friction, sleep on floor. */
 export function stepBasketballPhysics(
   state: PhysicsBallState,
   config: BasketballConfig,
@@ -185,36 +260,33 @@ export function stepBasketballPhysics(
     const prevY = y;
     x = clamp(options.dragX, bounds.minX, bounds.maxX);
     y = clamp(options.dragY, bounds.minY, bounds.maxY);
-    vx = (x - prevX) / dt;
-    vy = (y - prevY) / dt;
-    return { x, y, vx, vy, sleeping: false };
+    const dragVel = clampSpeed((x - prevX) / dt, (y - prevY) / dt, config.maxSpeed);
+    return { x, y, vx: dragVel.vx, vy: dragVel.vy, sleeping: false };
   }
 
-  vy += config.gravity * dt;
+  const travel = Math.hypot(vx, vy) * dt;
+  const substeps = Math.min(14, Math.max(1, Math.ceil(travel / 10)));
+  const subDt = dt / substeps;
+  let onFloor = false;
 
-  const friction = Math.pow(config.airFriction, dt * 60);
-  vx *= friction;
-  vy *= friction;
+  for (let i = 0; i < substeps; i += 1) {
+    vy += config.gravity * subDt;
 
-  const speed = Math.hypot(vx, vy);
-  if (speed > config.maxSpeed) {
-    vx = (vx / speed) * config.maxSpeed;
-    vy = (vy / speed) * config.maxSpeed;
-  }
+    const friction = Math.pow(config.airFriction, subDt * 60);
+    vx *= friction;
+    vy *= friction;
 
-  x += vx * dt;
-  y += vy * dt;
+    ({ vx, vy } = clampSpeed(vx, vy, config.maxSpeed));
 
-  [x, vx] = bounceAxis(x, vx, bounds.minX, bounds.maxX, config.wallRestitution);
-  [y, vy] = bounceAxis(y, vy, bounds.minY, bounds.maxY, config.restitution);
+    x += vx * subDt;
+    y += vy * subDt;
 
-  const onFloor = y >= bounds.maxY - 1;
-  if (onFloor) {
-    y = bounds.maxY;
-    vx *= config.floorFriction;
-    if (Math.abs(vy) < config.sleepSpeed * 1.5) {
-      vy = 0;
-    }
+    const resolved = resolveWallCollisions(x, y, vx, vy, bounds, config);
+    x = resolved.x;
+    y = resolved.y;
+    vx = resolved.vx;
+    vy = resolved.vy;
+    onFloor = onFloor || resolved.onFloor;
   }
 
   const sleeping =
@@ -251,15 +323,15 @@ export function getSectionBallBounds(
   width: number,
   height: number,
   radius: number,
-  topInset = 8,
+  topInset = 4,
 ): PhysicsBounds {
-  const pad = Math.max(6, radius * 0.08);
+  const pad = Math.max(4, radius * 0.05);
 
   return {
     minX: radius + pad,
     maxX: Math.max(radius + pad, width - radius - pad),
     minY: radius + topInset,
-    maxY: Math.max(radius + topInset, height - radius - pad),
+    maxY: Math.max(radius + topInset, height - radius - Math.max(4, pad * 0.5)),
   };
 }
 

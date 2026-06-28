@@ -1,13 +1,11 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const sourcePath = join(root, "src/assets/solupair-logo-source.png");
-const outPath = join(root, "src/assets/solupair-logo.png");
 
-/** Knock out black/near-black background; keep neon SP strokes. */
+/** Knock out black/near-black background; keep neon strokes and white type. */
 async function knockOutBackground(input, output, { threshold = 36 } = {}) {
   const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
 
@@ -31,12 +29,31 @@ async function knockOutBackground(input, output, { threshold = 36 } = {}) {
   const png = await sharp(data, {
     raw: { width: info.width, height: info.height, channels: 4 },
   })
+    .trim({ threshold: 12 })
     .png({ compressionLevel: 9, effort: 10 })
     .toBuffer();
 
   writeFileSync(output, png);
   const meta = await sharp(png).metadata();
-  console.log(`Wrote ${output} (${png.length} bytes, alpha: ${meta.hasAlpha})`);
+  console.log(`Wrote ${output} (${png.length} bytes, ${meta.width}x${meta.height}, alpha: ${meta.hasAlpha})`);
 }
 
-await knockOutBackground(sourcePath, outPath);
+const jobs = [
+  {
+    source: join(root, "src/assets/solupair-logo-source.png"),
+    output: join(root, "src/assets/solupair-logo.png"),
+  },
+  {
+    source: join(root, "src/assets/solupair-wordmark-source.png"),
+    output: join(root, "src/assets/solupair-wordmark.png"),
+    threshold: 32,
+  },
+];
+
+for (const job of jobs) {
+  if (!existsSync(job.source)) {
+    console.warn(`Skip missing source: ${job.source}`);
+    continue;
+  }
+  await knockOutBackground(job.source, job.output, { threshold: job.threshold ?? 36 });
+}

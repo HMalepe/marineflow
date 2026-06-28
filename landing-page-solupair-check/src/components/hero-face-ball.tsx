@@ -7,9 +7,11 @@ import {
   BALL_SURFACE,
   BASKETBALL_PHYSICS,
   clientToSectionLocal,
+  computeThrowVelocity,
   getSectionBallBounds,
   stepBasketballPhysics,
   type PhysicsBallState,
+  type PointerSample,
 } from "@/lib/ball-physics";
 
 type Phase = "idle" | "simulating" | "resting";
@@ -43,9 +45,11 @@ export function HeroFaceBall({
 
   const posX = useMotionValue(0);
   const posY = useMotionValue(0);
+  const rotate = useMotionValue(0);
   const stateRef = useRef<PhysicsBallState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const draggingRef = useRef(false);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  const pointerSamplesRef = useRef<PointerSample[]>([]);
   const radiusRef = useRef(diameter / 2);
 
   const readSectionBounds = useCallback(() => {
@@ -73,7 +77,7 @@ export function HeroFaceBall({
     if (width <= 0 || height <= 0) return;
 
     const cx = width / 2;
-    const cy = height * 0.44;
+    const cy = height * 0.36;
     stateRef.current = { x: cx, y: cy, vx: 0, vy: 0 };
     posX.set(cx);
     posY.set(cy);
@@ -109,17 +113,26 @@ export function HeroFaceBall({
       `${50 - v * 40}% ${50 - v * 40}% ${50 + v * 45}% ${50 + v * 45}% / ${50 - v * 35}% ${50 - v * 35}% ${50 + v * 55}% ${50 + v * 55}%`,
   );
 
+  const recordPointerSample = useCallback((localX: number, localY: number) => {
+    const now = performance.now();
+    pointerSamplesRef.current.push({ x: localX, y: localY, t: now });
+    if (pointerSamplesRef.current.length > 28) {
+      pointerSamplesRef.current = pointerSamplesRef.current.slice(-28);
+    }
+  }, []);
+
   const applyDragPosition = useCallback(
     (localX: number, localY: number) => {
       const { bounds } = readSectionBounds();
       const px = clamp(localX, bounds.minX, bounds.maxX);
       const py = clamp(localY, bounds.minY, bounds.maxY);
       pointerRef.current = { x: px, y: py };
+      recordPointerSample(px, py);
       stateRef.current = { ...stateRef.current, x: px, y: py };
       posX.set(px);
       posY.set(py);
     },
-    [posX, posY, readSectionBounds],
+    [posX, posY, readSectionBounds, recordPointerSample],
   );
 
   const applyClientDrag = useCallback(
@@ -191,6 +204,7 @@ export function HeroFaceBall({
       stateRef.current = result;
       posX.set(result.x);
       posY.set(result.y);
+      rotate.set(rotate.get() + result.vx * dt * 0.018);
 
       if (result.sleeping) {
         setPhaseSafe("resting");
@@ -199,7 +213,7 @@ export function HeroFaceBall({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [posX, posY, prefersReducedMotion, readSectionBounds, setPhaseSafe]);
+  }, [posX, posY, prefersReducedMotion, readSectionBounds, rotate, setPhaseSafe]);
 
   useEffect(() => {
     const el = ballRef.current;
@@ -261,6 +275,7 @@ export function HeroFaceBall({
     }
 
     draggingRef.current = true;
+    pointerSamplesRef.current = [];
     applyClientDrag(event.clientX, event.clientY);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -273,8 +288,22 @@ export function HeroFaceBall({
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current) return;
 
+    const throwVel = computeThrowVelocity(
+      pointerSamplesRef.current,
+      BASKETBALL_PHYSICS.maxSpeed,
+    );
+    const current = stateRef.current;
+    stateRef.current = {
+      x: current.x,
+      y: current.y,
+      vx: throwVel.vx,
+      vy: throwVel.vy,
+    };
+
     draggingRef.current = false;
     pointerRef.current = null;
+    pointerSamplesRef.current = [];
+    setPhaseSafe("simulating");
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -306,7 +335,7 @@ export function HeroFaceBall({
     return (
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[44%] z-10 -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-none absolute left-1/2 top-[36%] z-10 -translate-x-1/2 -translate-y-1/2"
         style={ballStyle}
       >
         <div
@@ -321,13 +350,14 @@ export function HeroFaceBall({
     <motion.div
       ref={ballRef}
       aria-hidden
-      className={`absolute left-0 top-0 z-10 cursor-grab touch-none active:cursor-grabbing ${
-        phase === "idle" ? "" : "z-20"
+      className={`absolute left-0 top-0 cursor-grab touch-none active:cursor-grabbing ${
+        phase === "idle" ? "z-10" : "z-30"
       }`}
       style={{
         ...ballStyle,
         x: posX,
         y: posY,
+        rotate,
         translateX: "-50%",
         translateY: "-50%",
         willChange: "transform",

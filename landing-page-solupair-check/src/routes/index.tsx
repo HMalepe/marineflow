@@ -8,9 +8,10 @@ import {
   useTransform,
 } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { getViewportHeight, useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
+import solupairWordmark from "@/assets/solupair-wordmark.png";
 import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
@@ -22,18 +23,37 @@ export const Route = createFileRoute("/")({
 
 const projects = PROJECT_SHOWCASES;
 
+/** Flip slides after ~18% of each segment's scroll (high sensitivity). */
+const SLIDE_SCROLL_BIAS = 0.82;
+
+function getProjectIndexFromProgress(progress: number, count: number) {
+  const segments = Math.max(1, count - 1);
+  const scaled = progress * segments;
+  return Math.min(count - 1, Math.max(0, Math.floor(scaled + SLIDE_SCROLL_BIAS)));
+}
+
+function getProjectScrollProgress(index: number, count: number) {
+  const segments = Math.max(1, count - 1);
+  return index / segments;
+}
+
 function SolupairLogo() {
   return (
     <a
       href="https://solupair.co.za"
-      className="inline-flex shrink-0 items-center"
-      aria-label="Solupair home"
+      className="inline-flex shrink-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3 lg:gap-5"
+      aria-label="Solupair — Digital solutions that push"
     >
       <img
         src={solupairLogo}
         alt=""
         aria-hidden
-        className="h-[10.5rem] w-auto max-w-[min(72vw,22rem)] object-contain object-left drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[12.75rem] sm:max-w-[min(68vw,26rem)] lg:h-[15rem] lg:max-w-none"
+        className="h-[4.5rem] w-auto shrink-0 object-contain drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[5.5rem] lg:h-[6.5rem]"
+      />
+      <img
+        src={solupairWordmark}
+        alt="Solupair — Digital solutions that push"
+        className="h-[3.25rem] w-auto max-w-[min(52vw,14rem)] object-contain object-left sm:h-[4rem] sm:max-w-[min(48vw,17rem)] lg:h-[4.75rem] lg:max-w-none"
       />
     </a>
   );
@@ -45,10 +65,10 @@ function Hero() {
   return (
     <section
       ref={heroGroundRef}
-      className="safe-area-x relative min-h-[100dvh] overflow-hidden bg-background text-foreground"
+      className="safe-area-x relative flex max-h-[100dvh] min-h-[min(100dvh,52rem)] flex-col overflow-hidden bg-background text-foreground sm:min-h-[min(100dvh,54rem)] lg:min-h-[min(100dvh,56rem)]"
     >
       <HeroFaceBall groundRef={heroGroundRef} />
-      <header className="safe-area-top relative z-20 flex items-start justify-between gap-3 px-4 py-3 sm:items-center sm:px-10 sm:py-5 lg:px-14">
+      <header className="safe-area-top relative z-20 flex shrink-0 items-start justify-between gap-3 px-4 py-2 sm:items-center sm:px-10 sm:py-3 lg:px-14">
         <SolupairLogo />
         <nav className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <a
@@ -68,18 +88,18 @@ function Hero() {
         </nav>
       </header>
 
-      <div className="relative flex min-h-[calc(100dvh-4.5rem)] flex-col items-center justify-center px-4 pb-8 pt-2 sm:min-h-[calc(100dvh-6rem)] sm:px-6">
-        <div className="relative z-0 mb-3 text-center text-[10px] font-medium tracking-[0.22em] text-primary sm:mb-4 sm:text-sm sm:tracking-[0.3em]">
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-start px-4 pb-6 pt-0 sm:px-6 sm:pb-8">
+        <div className="relative z-0 mb-1 text-center text-[10px] font-medium tracking-[0.22em] text-primary sm:mb-2 sm:text-sm sm:tracking-[0.3em]">
           AUTOMATION &amp; WEB DESIGN
         </div>
 
-        <div className="relative w-full max-w-[100vw]">
+        <div className="relative w-full max-w-[100vw] -mt-1 sm:-mt-0.5">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
-            className="relative z-0 w-full break-words px-1 text-center font-display font-black leading-[0.88] tracking-tighter text-foreground sm:whitespace-nowrap sm:leading-[0.85] sm:px-0"
-            style={{ fontSize: "clamp(2.75rem, 13.5vw, 18rem)" }}
+            className="relative z-0 w-full break-words px-1 text-center font-display font-black leading-[0.86] tracking-tighter text-foreground sm:whitespace-nowrap sm:leading-[0.84] sm:px-0"
+            style={{ fontSize: "clamp(2.5rem, 11vw, 14rem)" }}
           >
             WE DESIGN
           </motion.h1>
@@ -87,14 +107,14 @@ function Hero() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.15 }}
-            className="relative z-0 w-full break-words px-1 text-center font-display font-black leading-[0.88] tracking-tighter text-primary sm:whitespace-nowrap sm:leading-[0.85] sm:px-0"
-            style={{ fontSize: "clamp(2.75rem, 13.5vw, 18rem)" }}
+            className="relative z-0 w-full break-words px-1 text-center font-display font-black leading-[0.86] tracking-tighter text-primary sm:whitespace-nowrap sm:leading-[0.84] sm:px-0"
+            style={{ fontSize: "clamp(2.5rem, 11vw, 14rem)" }}
           >
             THE FUTURE
           </motion.h1>
         </div>
 
-        <p className="mt-6 max-w-xl px-2 text-center text-[10px] leading-relaxed tracking-[0.14em] text-foreground/70 sm:mt-10 sm:max-w-2xl sm:text-xs sm:tracking-[0.2em]">
+        <p className="mt-4 max-w-xl px-2 text-center text-[10px] leading-relaxed tracking-[0.14em] text-foreground/70 sm:mt-5 sm:max-w-2xl sm:text-xs sm:tracking-[0.2em]">
           WEB APPLICATIONS, DASHBOARDS, WHATSAPP BOOKING AGENTS — AND PLENTY MORE BUSINESS SOLUTIONS
         </p>
       </div>
@@ -111,8 +131,9 @@ function Projects() {
   const [activeIndex, setActiveIndex] = useState(0);
   const { isPhone, isTablet, prefersReducedMotion, coarsePointer } = useDeviceProfile();
 
-  const stepVh = isPhone ? 100 : isTablet ? 72 : 55;
-  const sectionHeightVh = (projects.length - 1) * stepVh + (isPhone ? 140 : isTablet ? 115 : 100);
+  // Short scroll runway per slide — less wheel travel between project cards.
+  const stepVh = isPhone ? 32 : isTablet ? 26 : 20;
+  const sectionHeightVh = (projects.length - 1) * stepVh + 100;
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -129,14 +150,50 @@ function Projects() {
       const sectionTop = window.scrollY + el.getBoundingClientRect().top;
       const viewportHeight = getViewportHeight();
       const scrollable = Math.max(0, el.offsetHeight - viewportHeight);
-      const segments = Math.max(1, projects.length - 1);
-      const progress = clamped / segments;
+      const progress = getProjectScrollProgress(clamped, projects.length);
       window.scrollTo({
         top: sectionTop + scrollable * progress,
         behavior: prefersReducedMotion ? "auto" : "smooth",
       });
     }
   }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    if (prefersReducedMotion) return;
+
+    let cooldown = false;
+    const COOLDOWN_MS = 220;
+
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaY) < 2) return;
+
+      const section = sectionRef.current;
+      if (!section) return;
+
+      const rect = section.getBoundingClientRect();
+      const viewportHeight = getViewportHeight();
+      const stuck = rect.top <= 2 && rect.bottom >= viewportHeight - 2;
+      if (!stuck) return;
+
+      const down = event.deltaY > 0;
+      const idx = scrollIndexRef.current;
+
+      if (down && idx >= projects.length - 1) return;
+      if (!down && idx <= 0) return;
+
+      event.preventDefault();
+      if (cooldown) return;
+
+      cooldown = true;
+      goToProject(idx + (down ? 1 : -1), { syncScroll: true });
+      window.setTimeout(() => {
+        cooldown = false;
+      }, COOLDOWN_MS);
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, [goToProject, prefersReducedMotion]);
 
   const scrollToContact = useCallback(() => {
     document.getElementById("contact")?.scrollIntoView({
@@ -154,13 +211,7 @@ function Projects() {
   }, [scrollToContact]);
 
   useMotionValueEvent(scrollYProgress, "change", (progress) => {
-    const segments = projects.length - 1;
-    const scaled = progress * segments;
-    const targetIndex = Math.min(
-      projects.length - 1,
-      Math.max(0, Math.round(scaled)),
-    );
-
+    const targetIndex = getProjectIndexFromProgress(progress, projects.length);
     if (targetIndex === scrollIndexRef.current) return;
     goToProject(targetIndex);
   });
