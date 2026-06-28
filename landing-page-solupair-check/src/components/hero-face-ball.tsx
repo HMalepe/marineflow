@@ -1,66 +1,58 @@
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent, type RefObject } from "react";
 import { motion, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
+import { BallSphere } from "@/components/ball-sphere";
+import { useBallPhysics } from "@/hooks/use-ball-physics";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
+import { BALL_SHADOW, BALL_SURFACE, HERO_PHYSICS } from "@/lib/ball-physics";
 
-type BallProps = {
-  lidScale: MotionValue<number>;
-  mouthRadius: MotionValue<string>;
-  mouthHeight: MotionValue<string>;
-  mouthWidth: MotionValue<string>;
-  bounceAmp: MotionValue<number>;
-};
-
-function Eye({ side, lidScale }: { side: "left" | "right"; lidScale: MotionValue<number> }) {
-  const posClass = side === "left" ? "left-[26%]" : "right-[26%]";
-  return (
-    <div
-      className={`absolute ${posClass} top-[38%] h-[60px] w-[60px] sm:h-[80px] sm:w-[80px] lg:h-[100px] lg:w-[100px]`}
-    >
-      <div className="absolute inset-0 flex items-center justify-center text-[60px] leading-none text-black sm:text-[80px] lg:text-[100px]">
-        ✻
-      </div>
-      <motion.div
-        className="absolute inset-0 origin-center rounded-full"
-        style={{
-          scaleY: lidScale,
-          background:
-            "radial-gradient(circle at 32% 28%, oklch(0.72 0.18 275) 0%, oklch(0.48 0.26 275) 55%, oklch(0.32 0.22 275) 100%)",
-        }}
-      />
-    </div>
-  );
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function BouncingBall({ lidScale, mouthRadius, mouthHeight, mouthWidth, bounceAmp }: BallProps) {
-  const ampPx = useTransform(bounceAmp, (v) => `${v}px`);
-  return (
-    <motion.div
-      className="h-full w-full animate-[novaBounce_2.8s_ease-in-out_infinite]"
-      style={{ ["--nova-amp" as string]: ampPx }}
-    >
-      <div
-        className="relative h-full w-full rounded-full"
-        style={{
-          background:
-            "radial-gradient(circle at 32% 28%, oklch(0.72 0.18 275) 0%, oklch(0.48 0.26 275) 55%, oklch(0.32 0.22 275) 100%)",
-          boxShadow:
-            "inset -40px -50px 80px oklch(0 0 0 / 0.35), 0 40px 80px oklch(0 0 0 / 0.25)",
-        }}
-      >
-        <Eye side="left" lidScale={lidScale} />
-        <Eye side="right" lidScale={lidScale} />
-        <motion.div
-          className="absolute left-1/2 top-[64%] -translate-x-1/2 bg-black"
-          style={{ width: mouthWidth, height: mouthHeight, borderRadius: mouthRadius }}
-        />
-      </div>
-    </motion.div>
-  );
-}
-
-/** Lovable commit 428e943 — Animated scroll reveal (canonical ball). */
-export function HeroFaceBall() {
+export function HeroFaceBall({
+  interactionRef,
+}: {
+  interactionRef: RefObject<HTMLElement | null>;
+}) {
   const { scrollY } = useScroll();
-  const { prefersReducedMotion } = useDeviceProfile();
+  const { prefersReducedMotion, isPhone } = useDeviceProfile();
+  const ballRef = useRef<HTMLDivElement>(null);
+  const pointerRef = useRef({ x: 0, y: 0, active: false });
+
+  const dragLimit = isPhone ? 88 : 132;
+  const bounds = useMemo(
+    () => ({
+      minX: -dragLimit,
+      maxX: dragLimit,
+      minY: -dragLimit,
+      maxY: dragLimit,
+    }),
+    [dragLimit],
+  );
+
+  const getHoverNudge = useCallback(() => {
+    if (pointerRef.current.active) return undefined;
+    const zone = interactionRef.current;
+    if (!zone) return undefined;
+    const rect = zone.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = pointerRef.current.x - cx;
+    const dy = pointerRef.current.y - cy;
+    const strength = isPhone ? 0.06 : 0.09;
+    const limit = isPhone ? 36 : 56;
+    return {
+      x: clamp(dx * strength, -limit, limit),
+      y: clamp(dy * strength, -limit, limit),
+    };
+  }, [interactionRef, isPhone]);
+
+  const { x, y, setDragTarget, setDragging } = useBallPhysics({
+    enabled: !prefersReducedMotion,
+    config: HERO_PHYSICS,
+    bounds,
+    getHoverNudge,
+  });
 
   const lidRaw = useTransform(scrollY, [0, 220], [1, 0]);
   const lidScale = useSpring(lidRaw, { stiffness: 140, damping: 22 });
@@ -73,31 +65,88 @@ export function HeroFaceBall() {
     (v: number) =>
       `${50 - v * 40}% ${50 - v * 40}% ${50 + v * 45}% ${50 + v * 45}% / ${50 - v * 35}% ${50 - v * 35}% ${50 + v * 55}% ${50 + v * 55}%`,
   );
-  const bounceAmp = useTransform(scrollY, [0, 600], [8, 34]);
+
+  const toLocalOffset = (clientX: number, clientY: number) => {
+    const zone = interactionRef.current;
+    if (!zone) return { x: 0, y: 0 };
+    const rect = zone.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    return {
+      x: clamp(clientX - cx, -dragLimit, dragLimit),
+      y: clamp(clientY - cy, -dragLimit, dragLimit),
+    };
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (prefersReducedMotion) return;
+    pointerRef.current.active = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+    const offset = toLocalOffset(event.clientX, event.clientY);
+    setDragTarget(offset.x, offset.y);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    pointerRef.current.x = event.clientX;
+    pointerRef.current.y = event.clientY;
+    if (!pointerRef.current.active) return;
+    const offset = toLocalOffset(event.clientX, event.clientY);
+    setDragTarget(offset.x, offset.y);
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    pointerRef.current.active = false;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setDragging(false);
+  };
+
+  useEffect(() => {
+    const zone = interactionRef.current;
+    if (!zone || prefersReducedMotion) return;
+
+    const onMove = (event: globalThis.PointerEvent) => {
+      pointerRef.current.x = event.clientX;
+      pointerRef.current.y = event.clientY;
+    };
+
+    zone.addEventListener("pointermove", onMove);
+    return () => zone.removeEventListener("pointermove", onMove);
+  }, [interactionRef, prefersReducedMotion]);
+
+  const sizeClass =
+    "h-[280px] w-[280px] sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]";
 
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-[280px] w-[280px] -translate-x-1/2 -translate-y-1/2 sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]"
+      className={`absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 ${sizeClass}`}
     >
       {prefersReducedMotion ? (
         <div
           className="relative h-full w-full rounded-full"
-          style={{
-            background:
-              "radial-gradient(circle at 32% 28%, oklch(0.72 0.18 275) 0%, oklch(0.48 0.26 275) 55%, oklch(0.32 0.22 275) 100%)",
-            boxShadow:
-              "inset -40px -50px 80px oklch(0 0 0 / 0.35), 0 40px 80px oklch(0 0 0 / 0.25)",
-          }}
+          style={{ background: BALL_SURFACE, boxShadow: BALL_SHADOW }}
         />
       ) : (
-        <BouncingBall
-          lidScale={lidScale}
-          mouthRadius={mouthRadius}
-          mouthHeight={mouthHeight}
-          mouthWidth={mouthWidth}
-          bounceAmp={bounceAmp}
-        />
+        <motion.div
+          ref={ballRef}
+          className="h-full w-full cursor-grab touch-none active:cursor-grabbing"
+          style={{ x, y, willChange: "transform" }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        >
+          <BallSphere
+            showFace
+            lidScale={lidScale}
+            mouthRadius={mouthRadius}
+            mouthHeight={mouthHeight}
+            mouthWidth={mouthWidth}
+          />
+        </motion.div>
       )}
     </div>
   );

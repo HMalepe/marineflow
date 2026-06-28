@@ -12,6 +12,7 @@ import { useRef, useState, useCallback } from "react";
 import { getViewportHeight, useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
 import { HeroFaceBall } from "@/components/hero-face-ball";
+import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
 
@@ -34,6 +35,8 @@ function SolupairLogo() {
 }
 
 function Hero() {
+  const heroInteractionRef = useRef<HTMLDivElement>(null);
+
   return (
     <section className="safe-area-x relative min-h-[100dvh] overflow-hidden bg-background text-foreground">
       <header className="safe-area-top relative z-20 flex items-center justify-between gap-3 px-4 py-4 sm:px-10 sm:py-6 lg:px-14">
@@ -61,8 +64,8 @@ function Hero() {
           AUTOMATION &amp; WEB DESIGN
         </div>
 
-        <div className="relative w-full max-w-[100vw]">
-          <HeroFaceBall />
+        <div ref={heroInteractionRef} className="relative w-full max-w-[100vw]">
+          <HeroFaceBall interactionRef={heroInteractionRef} />
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -188,6 +191,7 @@ function Projects() {
         className="safe-area-x sticky top-0 grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
         style={{ background: "var(--section-dark)" }}
       >
+        <ViewportPhysicsBalls variant="projects" />
         <div className="mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
           <div>
             <h2
@@ -349,9 +353,10 @@ function Contact() {
   return (
     <section
       id="contact"
-      className="safe-area-x px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
+      className="safe-area-x relative px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
       style={{ background: "var(--section-dark)" }}
     >
+      <ViewportPhysicsBalls variant="contact" />
       <div className="mx-auto max-w-7xl border-t border-white/10 pt-10 sm:pt-16">
         <div className="grid grid-cols-1 gap-10 sm:gap-12 lg:grid-cols-2">
           <div>
