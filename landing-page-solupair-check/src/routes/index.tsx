@@ -1,19 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AnimatePresence,
-  animate,
   motion,
-  useMotionValue,
   useMotionValueEvent,
   useScroll,
   useSpring,
   useTransform,
-  type MotionValue,
 } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
-import { useRef, useState, useCallback, useEffect, type RefObject } from "react";
+import { useRef, useState, useCallback } from "react";
 import { getViewportHeight, useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
+import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
 
@@ -32,193 +30,6 @@ function SolupairLogo() {
         className="h-11 w-11 object-contain sm:h-14 sm:w-14"
       />
     </a>
-  );
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function FaceBall({
-  compact,
-  interactionRef,
-}: {
-  compact?: boolean;
-  interactionRef: RefObject<HTMLElement | null>;
-}) {
-  const { scrollY } = useScroll();
-  const { prefersReducedMotion } = useDeviceProfile();
-  const [isDragging, setIsDragging] = useState(false);
-
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-
-  const pointerLimit = compact ? 32 : 64;
-  const dragLimit = compact ? 88 : 132;
-
-  const resetPosition = useCallback(() => {
-    animate(x, 0, { type: "spring", stiffness: 260, damping: 24 });
-    animate(y, 0, { type: "spring", stiffness: 260, damping: 24 });
-  }, [x, y]);
-
-  const handlePointerMove = useCallback(
-    (event: PointerEvent) => {
-      if (prefersReducedMotion || isDragging) return;
-      const rect = interactionRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-      const followStrength = compact ? 0.11 : 0.14;
-
-      x.set(
-        clamp((event.clientX - centerX) * followStrength, -pointerLimit, pointerLimit),
-      );
-      y.set(
-        clamp((event.clientY - centerY) * followStrength, -pointerLimit, pointerLimit),
-      );
-    },
-    [compact, interactionRef, isDragging, pointerLimit, prefersReducedMotion, x, y],
-  );
-
-  const handlePointerLeave = useCallback(() => {
-    if (!isDragging) resetPosition();
-  }, [isDragging, resetPosition]);
-
-  useEffect(() => {
-    const target = interactionRef.current;
-    if (!target || prefersReducedMotion) return;
-
-    target.addEventListener("pointermove", handlePointerMove);
-    target.addEventListener("pointerleave", handlePointerLeave);
-    return () => {
-      target.removeEventListener("pointermove", handlePointerMove);
-      target.removeEventListener("pointerleave", handlePointerLeave);
-    };
-  }, [handlePointerLeave, handlePointerMove, interactionRef, prefersReducedMotion]);
-
-  // Eyes: lids closed (scaleY 1) → open (0) as user begins to scroll
-  const lidRaw = useTransform(scrollY, [0, 220], [1, 0]);
-  const lidScale = useSpring(lidRaw, { stiffness: 140, damping: 22 });
-  // Smile: 0 (neutral dot) → 1 (full grin) as scroll continues
-  const smileRaw = useTransform(scrollY, [180, 520], [0, 1]);
-  const smile = useSpring(smileRaw, { stiffness: 140, damping: 22 });
-  const mouthWidth = useTransform(smile, (v: number) => `${22 + v * 70}px`);
-  const mouthHeight = useTransform(smile, (v: number) => `${36 + v * 12}px`);
-  const mouthRadius = useTransform(
-    smile,
-    (v: number) =>
-      `${50 - v * 40}% ${50 - v * 40}% ${50 + v * 45}% ${50 + v * 45}% / ${50 - v * 35}% ${50 - v * 35}% ${50 + v * 55}% ${50 + v * 55}%`,
-  );
-  // Bounce amplitude grows from 8 → 34 px with scroll
-  const bounceAmp = useTransform(scrollY, [0, 600], [8, 34]);
-
-  const sizeClass = compact
-    ? "h-[min(52vw,200px)] w-[min(52vw,200px)]"
-    : "h-[min(68vw,280px)] w-[min(68vw,280px)] sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]";
-
-  return (
-    <div
-      aria-hidden
-      className={`absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 ${sizeClass}`}
-    >
-      <motion.div
-        drag={prefersReducedMotion ? false : true}
-        dragConstraints={{
-          left: -dragLimit,
-          right: dragLimit,
-          top: -dragLimit,
-          bottom: dragLimit,
-        }}
-        dragElastic={0.2}
-        dragMomentum={false}
-        onDragStart={() => setIsDragging(true)}
-        onDragEnd={() => {
-          setIsDragging(false);
-          resetPosition();
-        }}
-        style={{ x, y }}
-        className={`h-full w-full ${
-          prefersReducedMotion ? "pointer-events-none" : "pointer-events-auto cursor-grab active:cursor-grabbing touch-none"
-        }`}
-      >
-        <BouncingBall
-          lidScale={lidScale}
-          mouthRadius={mouthRadius}
-          mouthHeight={mouthHeight}
-          mouthWidth={mouthWidth}
-          bounceAmp={bounceAmp}
-          reducedMotion={prefersReducedMotion}
-          isDragging={isDragging}
-        />
-      </motion.div>
-    </div>
-  );
-}
-
-type BallProps = {
-  lidScale: MotionValue<number>;
-  mouthRadius: MotionValue<string>;
-  mouthHeight: MotionValue<string>;
-  mouthWidth: MotionValue<string>;
-  bounceAmp: MotionValue<number>;
-  reducedMotion?: boolean;
-  isDragging?: boolean;
-};
-
-function BouncingBall({
-  lidScale,
-  mouthRadius,
-  mouthHeight,
-  mouthWidth,
-  bounceAmp,
-  reducedMotion,
-  isDragging,
-}: BallProps) {
-  const ampPx = useTransform(bounceAmp, (v) => `${v}px`);
-  return (
-    <div
-      className={`h-full w-full transform-gpu backface-hidden will-change-transform ${
-        reducedMotion || isDragging ? "" : "animate-[novaBounce_2.8s_ease-in-out_infinite]"
-      }`}
-      style={reducedMotion || isDragging ? undefined : { ["--nova-amp" as string]: ampPx }}
-    >
-      <div
-        className="relative isolate h-full w-full rounded-full"
-        style={{
-          background:
-            "radial-gradient(circle at 32% 28%, oklch(0.72 0.18 275) 0%, oklch(0.48 0.26 275) 55%, oklch(0.32 0.22 275) 100%)",
-          boxShadow:
-            "inset -40px -50px 80px oklch(0 0 0 / 0.35), 0 40px 80px oklch(0 0 0 / 0.25)",
-        }}
-      >
-        <Eye side="left" lidScale={lidScale} />
-        <Eye side="right" lidScale={lidScale} />
-        <motion.div
-          className="absolute left-1/2 top-[64%] -translate-x-1/2 bg-black"
-          style={{ width: mouthWidth, height: mouthHeight, borderRadius: mouthRadius }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function Eye({ side, lidScale }: { side: "left" | "right"; lidScale: MotionValue<number> }) {
-  const posClass = side === "left" ? "left-[26%]" : "right-[26%]";
-  return (
-    <div className={`absolute ${posClass} top-[38%] h-[60px] w-[60px] sm:h-[80px] sm:w-[80px] lg:h-[100px] lg:w-[100px]`}>
-      {/* open eye */}
-      <div className="absolute inset-0 flex items-center justify-center text-[60px] leading-none text-black sm:text-[80px] lg:text-[100px]">✻</div>
-      {/* lid that scales down to reveal eye */}
-      <motion.div
-        className="absolute inset-0 origin-center rounded-full"
-        style={{
-          scaleY: lidScale,
-          background:
-            "radial-gradient(circle at 32% 28%, oklch(0.72 0.18 275) 0%, oklch(0.48 0.26 275) 55%, oklch(0.32 0.22 275) 100%)",
-        }}
-      />
-    </div>
   );
 }
 
@@ -257,7 +68,7 @@ function Hero() {
           ref={heroInteractionRef}
           className="relative w-full max-w-[100vw]"
         >
-          <FaceBall compact={isPhone} interactionRef={heroInteractionRef} />
+          <HeroFaceBall compact={isPhone} interactionRef={heroInteractionRef} />
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
