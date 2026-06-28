@@ -5,14 +5,14 @@ import { useBallPhysics } from "@/hooks/use-ball-physics";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
 import { VIEWPORT_PHYSICS, type DriftConfig } from "@/lib/ball-physics";
 
-type ViewportBallProps = {
+type AmbientBallProps = {
   size: number;
   drift: DriftConfig;
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
   className?: string;
 };
 
-function ViewportBall({ size, drift, bounds, className }: ViewportBallProps) {
+function AmbientBlurBall({ size, drift, bounds, className }: AmbientBallProps) {
   const { prefersReducedMotion } = useDeviceProfile();
   const { x, y } = useBallPhysics({
     enabled: !prefersReducedMotion,
@@ -26,19 +26,21 @@ function ViewportBall({ size, drift, bounds, className }: ViewportBallProps) {
   return (
     <motion.div
       aria-hidden
-      className={`pointer-events-none absolute ${className ?? ""}`}
+      className={`pointer-events-none absolute z-0 ${className ?? ""}`}
       style={{ width: size, height: size, x, y, willChange: "transform" }}
     >
-      <BallSphere compact />
+      <div className="h-full w-full scale-110 blur-[40px] sm:blur-[56px] lg:blur-[72px]">
+        <BallSphere compact />
+      </div>
     </motion.div>
   );
 }
 
-/** Ambient physics balls — one pair per section (projects + contact). */
+/** One soft blue blur orb per dark section (Projects + Contact). */
 export function ViewportPhysicsBalls({ variant }: { variant: "projects" | "contact" }) {
   const { isPhone, isDesktop } = useDeviceProfile();
-  const size = isPhone ? 52 : isDesktop ? 88 : 68;
-  const travel = isPhone ? 22 : isDesktop ? 44 : 32;
+  const size = isPhone ? 140 : isDesktop ? 240 : 180;
+  const travel = isPhone ? 36 : isDesktop ? 72 : 52;
 
   const bounds = useMemo(
     () => ({
@@ -50,71 +52,35 @@ export function ViewportPhysicsBalls({ variant }: { variant: "projects" | "conta
     [travel],
   );
 
-  const configs = useMemo(() => {
+  const config = useMemo(() => {
     if (variant === "projects") {
-      return [
-        {
-          className: "left-[4%] top-[12%] opacity-70 sm:left-[6%] sm:top-[14%]",
-          drift: {
-            amplitudeX: travel * 0.85,
-            amplitudeY: travel * 0.65,
-            frequencyX: 0.42,
-            frequencyY: 0.36,
-            phaseX: 0.2,
-            phaseY: 1.1,
-          } satisfies DriftConfig,
-        },
-        {
-          className: "right-[5%] bottom-[18%] opacity-55 sm:right-[8%] sm:bottom-[20%]",
-          drift: {
-            amplitudeX: travel * 0.75,
-            amplitudeY: travel * 0.9,
-            frequencyX: 0.55,
-            frequencyY: 0.48,
-            phaseX: 2.4,
-            phaseY: 0.6,
-          } satisfies DriftConfig,
-        },
-      ];
-    }
-
-    return [
-      {
-        className: "left-[6%] top-[8%] opacity-60 sm:left-[10%]",
-        drift: {
-          amplitudeX: travel * 0.7,
-          amplitudeY: travel * 0.8,
-          frequencyX: 0.38,
-          frequencyY: 0.44,
-          phaseX: 1.8,
-          phaseY: 2.2,
-        } satisfies DriftConfig,
-      },
-      {
-        className: "right-[4%] top-[28%] opacity-50 sm:right-[12%] sm:top-[32%]",
+      return {
+        className: "left-[2%] top-[8%] opacity-50 sm:left-[4%] sm:top-[10%] sm:opacity-55",
         drift: {
           amplitudeX: travel * 0.9,
-          amplitudeY: travel * 0.55,
-          frequencyX: 0.5,
-          frequencyY: 0.33,
-          phaseX: 0.9,
-          phaseY: 3.1,
+          amplitudeY: travel * 0.75,
+          frequencyX: 0.42,
+          frequencyY: 0.36,
+          phaseX: 0.2,
+          phaseY: 1.1,
         } satisfies DriftConfig,
-      },
-    ];
+      };
+    }
+
+    return {
+      className: "right-[2%] top-[6%] opacity-45 sm:right-[6%] sm:top-[8%] sm:opacity-50",
+      drift: {
+        amplitudeX: travel * 0.85,
+        amplitudeY: travel * 0.7,
+        frequencyX: 0.38,
+        frequencyY: 0.44,
+        phaseX: 1.8,
+        phaseY: 2.2,
+      } satisfies DriftConfig,
+    };
   }, [travel, variant]);
 
   return (
-    <>
-      {configs.map((ball) => (
-        <ViewportBall
-          key={`${variant}-${ball.className}`}
-          size={size}
-          drift={ball.drift}
-          bounds={bounds}
-          className={ball.className}
-        />
-      ))}
-    </>
+    <AmbientBlurBall size={size} drift={config.drift} bounds={bounds} className={config.className} />
   );
 }

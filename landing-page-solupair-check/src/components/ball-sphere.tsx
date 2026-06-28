@@ -4,10 +4,8 @@ import { BALL_SHADOW, BALL_SURFACE } from "@/lib/ball-physics";
 function Eye({ side, lidScale }: { side: "left" | "right"; lidScale: MotionValue<number> }) {
   const posClass = side === "left" ? "left-[26%]" : "right-[26%]";
   return (
-    <div
-      className={`absolute ${posClass} top-[38%] h-[60px] w-[60px] sm:h-[80px] sm:w-[80px] lg:h-[100px] lg:w-[100px]`}
-    >
-      <div className="absolute inset-0 flex items-center justify-center text-[60px] leading-none text-black sm:text-[80px] lg:text-[100px]">
+    <div className={`absolute ${posClass} top-[38%] aspect-square w-[22cqmin]`}>
+      <div className="absolute inset-0 flex items-center justify-center text-[18cqmin] leading-none text-black">
         ✻
       </div>
       <motion.div
@@ -40,7 +38,7 @@ export function BallSphere({
 }: BallSphereProps) {
   return (
     <div
-      className="relative h-full w-full rounded-full"
+      className="@container relative h-full w-full rounded-full"
       style={{
         background: BALL_SURFACE,
         boxShadow: compact

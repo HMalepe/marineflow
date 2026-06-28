@@ -245,3 +245,31 @@ export function getViewportBallBounds(radius: number, topInset = 8): PhysicsBoun
     maxY: h - radius - pad,
   };
 }
+
+/** Hero / section-local bounds — floor is the bottom of the blue hero panel. */
+export function getSectionBallBounds(
+  width: number,
+  height: number,
+  radius: number,
+  topInset = 8,
+): PhysicsBounds {
+  const pad = Math.max(6, radius * 0.08);
+
+  return {
+    minX: radius + pad,
+    maxX: Math.max(radius + pad, width - radius - pad),
+    minY: radius + topInset,
+    maxY: Math.max(radius + topInset, height - radius - pad),
+  };
+}
+
+export function clientToSectionLocal(
+  clientX: number,
+  clientY: number,
+  sectionRect: DOMRect,
+): { x: number; y: number } {
+  return {
+    x: clientX - sectionRect.left,
+    y: clientY - sectionRect.top,
+  };
+}

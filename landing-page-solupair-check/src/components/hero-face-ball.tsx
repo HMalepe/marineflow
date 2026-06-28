@@ -6,34 +6,91 @@ import {
   BALL_SHADOW,
   BALL_SURFACE,
   BASKETBALL_PHYSICS,
-  getViewportBallBounds,
+  clientToSectionLocal,
+  getSectionBallBounds,
   stepBasketballPhysics,
   type PhysicsBallState,
 } from "@/lib/ball-physics";
 
 type Phase = "idle" | "simulating" | "resting";
 
+const MIN_DIAMETER = 120;
+const MAX_DIAMETER = 880;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function getDefaultDiameter() {
+  if (typeof window === "undefined") return 280;
+  if (window.matchMedia("(min-width: 1024px)").matches) return 440;
+  if (window.matchMedia("(min-width: 640px)").matches) return 360;
+  return 280;
+}
+
 export function HeroFaceBall({
-  interactionRef: _interactionRef,
+  groundRef,
 }: {
-  interactionRef: RefObject<HTMLElement | null>;
+  groundRef: RefObject<HTMLElement | null>;
 }) {
   const { scrollY } = useScroll();
   const { prefersReducedMotion } = useDeviceProfile();
   const ballRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const phaseRef = useRef<Phase>("idle");
+  const [diameter, setDiameter] = useState(getDefaultDiameter);
+  const isHoveringRef = useRef(false);
 
   const posX = useMotionValue(0);
   const posY = useMotionValue(0);
   const stateRef = useRef<PhysicsBallState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const draggingRef = useRef(false);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
-  const radiusRef = useRef(220);
+  const radiusRef = useRef(diameter / 2);
+
+  const readSectionBounds = useCallback(() => {
+    const ground = groundRef.current;
+    if (!ground) {
+      return { width: 0, height: 0, bounds: getSectionBallBounds(0, 0, radiusRef.current) };
+    }
+
+    const width = ground.clientWidth;
+    const height = ground.clientHeight;
+    return {
+      width,
+      height,
+      bounds: getSectionBallBounds(width, height, radiusRef.current),
+    };
+  }, [groundRef]);
+
+  useEffect(() => {
+    radiusRef.current = diameter / 2;
+  }, [diameter]);
+
+  useEffect(() => {
+    if (phase !== "idle") return;
+    const { width, height } = readSectionBounds();
+    if (width <= 0 || height <= 0) return;
+
+    const cx = width / 2;
+    const cy = height * 0.44;
+    stateRef.current = { x: cx, y: cy, vx: 0, vy: 0 };
+    posX.set(cx);
+    posY.set(cy);
+  }, [phase, readSectionBounds, posX, posY]);
+
+  useEffect(() => {
+    if (phase === "idle") return;
+    const { bounds } = readSectionBounds();
+    const s = stateRef.current;
+    const nx = clamp(s.x, bounds.minX, bounds.maxX);
+    const ny = clamp(s.y, bounds.minY, bounds.maxY);
+    if (nx !== s.x || ny !== s.y) {
+      stateRef.current = { ...s, x: nx, y: ny };
+      posX.set(nx);
+      posY.set(ny);
+    }
+  }, [diameter, phase, readSectionBounds, posX, posY]);
 
   const setPhaseSafe = useCallback((next: Phase) => {
     phaseRef.current = next;
@@ -53,32 +110,56 @@ export function HeroFaceBall({
   );
 
   const applyDragPosition = useCallback(
-    (clientX: number, clientY: number) => {
-      const bounds = getViewportBallBounds(radiusRef.current);
-      const px = clamp(clientX, bounds.minX, bounds.maxX);
-      const py = clamp(clientY, bounds.minY, bounds.maxY);
+    (localX: number, localY: number) => {
+      const { bounds } = readSectionBounds();
+      const px = clamp(localX, bounds.minX, bounds.maxX);
+      const py = clamp(localY, bounds.minY, bounds.maxY);
       pointerRef.current = { x: px, y: py };
       stateRef.current = { ...stateRef.current, x: px, y: py };
       posX.set(px);
       posY.set(py);
     },
-    [posX, posY],
+    [posX, posY, readSectionBounds],
   );
+
+  const applyClientDrag = useCallback(
+    (clientX: number, clientY: number) => {
+      const ground = groundRef.current;
+      if (!ground) return;
+      const local = clientToSectionLocal(clientX, clientY, ground.getBoundingClientRect());
+      applyDragPosition(local.x, local.y);
+    },
+    [applyDragPosition, groundRef],
+  );
+
+  const wakeBall = useCallback(() => {
+    if (phaseRef.current === "resting") {
+      setPhaseSafe("simulating");
+    }
+  }, [setPhaseSafe]);
 
   const activateFromIdle = useCallback(() => {
     const el = ballRef.current;
-    if (!el || phaseRef.current !== "idle") return;
+    const ground = groundRef.current;
+    if (!el || !ground || phaseRef.current !== "idle") return;
 
-    const rect = el.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    radiusRef.current = rect.width / 2;
+    const ballRect = el.getBoundingClientRect();
+    const groundRect = ground.getBoundingClientRect();
+    const local = clientToSectionLocal(
+      ballRect.left + ballRect.width / 2,
+      ballRect.top + ballRect.height / 2,
+      groundRect,
+    );
 
-    stateRef.current = { x: cx, y: cy, vx: 0, vy: 0 };
-    posX.set(cx);
-    posY.set(cy);
+    const nextDiameter = ballRect.width;
+    setDiameter(nextDiameter);
+    radiusRef.current = nextDiameter / 2;
+
+    stateRef.current = { x: local.x, y: local.y, vx: 0, vy: 0 };
+    posX.set(local.x);
+    posY.set(local.y);
     setPhaseSafe("simulating");
-  }, [posX, posY, setPhaseSafe]);
+  }, [groundRef, posX, posY, setPhaseSafe]);
 
   useEffect(() => {
     if (prefersReducedMotion) return;
@@ -94,7 +175,7 @@ export function HeroFaceBall({
       const dt = now - last;
       last = now;
 
-      const bounds = getViewportBallBounds(radiusRef.current);
+      const { bounds } = readSectionBounds();
       const drag = draggingRef.current ? pointerRef.current : null;
 
       const result = stepBasketballPhysics(
@@ -118,25 +199,75 @@ export function HeroFaceBall({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [posX, posY, prefersReducedMotion, setPhaseSafe]);
+  }, [posX, posY, prefersReducedMotion, readSectionBounds, setPhaseSafe]);
+
+  useEffect(() => {
+    const el = ballRef.current;
+    if (!el || prefersReducedMotion) return;
+
+    const onWheel = (event: WheelEvent) => {
+      if (!isHoveringRef.current) return;
+      event.preventDefault();
+
+      const { width, height } = readSectionBounds();
+      const max = Math.min(
+        MAX_DIAMETER,
+        Math.min(width, height) * 0.85 || MAX_DIAMETER,
+      );
+
+      setDiameter((prev) => {
+        const next = clamp(prev + -event.deltaY * 0.35, MIN_DIAMETER, max);
+        return next;
+      });
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [phase, prefersReducedMotion, readSectionBounds]);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (phaseRef.current === "idle") return;
+      const { bounds } = readSectionBounds();
+      const s = stateRef.current;
+      const nx = clamp(s.x, bounds.minX, bounds.maxX);
+      const ny = clamp(s.y, bounds.minY, bounds.maxY);
+      if (nx !== s.x || ny !== s.y) {
+        stateRef.current = { ...s, x: nx, y: ny };
+        posX.set(nx);
+        posY.set(ny);
+      }
+    };
+
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [posX, posY, readSectionBounds]);
+
+  const handlePointerEnter = () => {
+    isHoveringRef.current = true;
+  };
+
+  const handlePointerLeave = () => {
+    isHoveringRef.current = false;
+  };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    if (prefersReducedMotion || phaseRef.current === "resting") return;
+    if (prefersReducedMotion) return;
 
     if (phaseRef.current === "idle") {
       activateFromIdle();
+    } else {
+      wakeBall();
     }
 
     draggingRef.current = true;
-    applyDragPosition(event.clientX, event.clientY);
+    applyClientDrag(event.clientX, event.clientY);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current || phaseRef.current === "idle" || phaseRef.current === "resting") {
-      return;
-    }
-    applyDragPosition(event.clientX, event.clientY);
+    if (!draggingRef.current || phaseRef.current === "idle") return;
+    applyClientDrag(event.clientX, event.clientY);
   };
 
   const handlePointerUp = (event: PointerEvent<HTMLDivElement>) => {
@@ -150,8 +281,16 @@ export function HeroFaceBall({
     }
   };
 
-  const sizeClass =
-    "h-[280px] w-[280px] sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]";
+  const ballStyle = { width: diameter, height: diameter };
+
+  const pointerHandlers = {
+    onPointerDown: handlePointerDown,
+    onPointerMove: handlePointerMove,
+    onPointerUp: handlePointerUp,
+    onPointerCancel: handlePointerUp,
+    onPointerEnter: handlePointerEnter,
+    onPointerLeave: handlePointerLeave,
+  };
 
   const face = (
     <BallSphere
@@ -167,7 +306,8 @@ export function HeroFaceBall({
     return (
       <div
         aria-hidden
-        className={`absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 ${sizeClass}`}
+        className="pointer-events-none absolute left-1/2 top-[44%] z-10 -translate-x-1/2 -translate-y-1/2"
+        style={ballStyle}
       >
         <div
           className="relative h-full w-full rounded-full"
@@ -177,47 +317,33 @@ export function HeroFaceBall({
     );
   }
 
-  if (phase === "idle") {
-    return (
-      <div
-        aria-hidden
-        className={`absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 ${sizeClass}`}
-      >
-        <motion.div
-          ref={ballRef}
-          className="h-full w-full animate-[novaBounce_2.8s_ease-in-out_infinite] cursor-grab touch-none active:cursor-grabbing"
-          style={{ ["--nova-amp" as string]: "10px" }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        >
-          {face}
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <motion.div
       ref={ballRef}
       aria-hidden
-      className={`fixed left-0 top-0 z-50 ${sizeClass} ${
-        phase === "resting" ? "cursor-default" : "cursor-grab touch-none active:cursor-grabbing"
+      className={`absolute left-0 top-0 z-10 cursor-grab touch-none active:cursor-grabbing ${
+        phase === "idle" ? "" : "z-20"
       }`}
       style={{
+        ...ballStyle,
         x: posX,
         y: posY,
         translateX: "-50%",
         translateY: "-50%",
         willChange: "transform",
       }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      {...pointerHandlers}
     >
-      {face}
+      {phase === "idle" ? (
+        <div
+          className="h-full w-full animate-[novaBounce_2.8s_ease-in-out_infinite]"
+          style={{ ["--nova-amp" as string]: "10px" }}
+        >
+          {face}
+        </div>
+      ) : (
+        face
+      )}
     </motion.div>
   );
 }

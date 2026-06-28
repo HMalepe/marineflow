@@ -33,18 +33,22 @@ function SolupairLogo() {
         src={solupairLogo}
         alt=""
         aria-hidden
-        className="h-14 w-auto object-contain drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[4.25rem] lg:h-20"
+        className="h-[10.5rem] w-auto max-w-[min(72vw,22rem)] object-contain object-left drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[12.75rem] sm:max-w-[min(68vw,26rem)] lg:h-[15rem] lg:max-w-none"
       />
     </a>
   );
 }
 
 function Hero() {
-  const heroInteractionRef = useRef<HTMLDivElement>(null);
+  const heroGroundRef = useRef<HTMLElement>(null);
 
   return (
-    <section className="safe-area-x relative min-h-[100dvh] overflow-hidden bg-background text-foreground">
-      <header className="safe-area-top relative z-20 flex items-center justify-between gap-3 px-4 py-4 sm:px-10 sm:py-6 lg:px-14">
+    <section
+      ref={heroGroundRef}
+      className="safe-area-x relative min-h-[100dvh] overflow-hidden bg-background text-foreground"
+    >
+      <HeroFaceBall groundRef={heroGroundRef} />
+      <header className="safe-area-top relative z-20 flex items-start justify-between gap-3 px-4 py-3 sm:items-center sm:px-10 sm:py-5 lg:px-14">
         <SolupairLogo />
         <nav className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <a
@@ -69,8 +73,7 @@ function Hero() {
           AUTOMATION &amp; WEB DESIGN
         </div>
 
-        <div ref={heroInteractionRef} className="relative w-full max-w-[100vw]">
-          <HeroFaceBall interactionRef={heroInteractionRef} />
+        <div className="relative w-full max-w-[100vw]">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -193,11 +196,11 @@ function Projects() {
       style={{ height: `${sectionHeightVh}dvh` }}
     >
       <div
-        className="safe-area-x sticky top-0 grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
+        className="safe-area-x sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
         style={{ background: "var(--section-dark)" }}
       >
         <ViewportPhysicsBalls variant="projects" />
-        <div className="mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+        <div className="relative z-10 mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
           <div>
             <h2
               className="font-display font-black uppercase leading-[0.9] tracking-tighter text-foreground"
@@ -214,7 +217,7 @@ function Projects() {
           </p>
         </div>
 
-        <div className="relative mx-auto flex min-h-0 w-full max-w-7xl flex-col px-0 sm:px-0">
+        <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col px-0 sm:px-0">
           <div
             role="button"
             tabIndex={0}
@@ -358,11 +361,11 @@ function Contact() {
   return (
     <section
       id="contact"
-      className="safe-area-x relative px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
+      className="safe-area-x relative isolate px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
       style={{ background: "var(--section-dark)" }}
     >
       <ViewportPhysicsBalls variant="contact" />
-      <div className="mx-auto max-w-7xl border-t border-white/10 pt-10 sm:pt-16">
+      <div className="relative z-10 mx-auto max-w-7xl border-t border-white/10 pt-10 sm:pt-16">
         <div className="grid grid-cols-1 gap-10 sm:gap-12 lg:grid-cols-2">
           <div>
             <h2
