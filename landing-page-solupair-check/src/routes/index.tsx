@@ -34,9 +34,6 @@ function SolupairLogo() {
 }
 
 function Hero() {
-  const { isPhone } = useDeviceProfile();
-  const heroInteractionRef = useRef<HTMLDivElement>(null);
-
   return (
     <section className="safe-area-x relative min-h-[100dvh] overflow-hidden bg-background text-foreground">
       <header className="safe-area-top relative z-20 flex items-center justify-between gap-3 px-4 py-4 sm:px-10 sm:py-6 lg:px-14">
@@ -64,11 +61,8 @@ function Hero() {
           AUTOMATION &amp; WEB DESIGN
         </div>
 
-        <div
-          ref={heroInteractionRef}
-          className="relative w-full max-w-[100vw]"
-        >
-          <HeroFaceBall compact={isPhone} interactionRef={heroInteractionRef} />
+        <div className="relative w-full max-w-[100vw]">
+          <HeroFaceBall />
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}

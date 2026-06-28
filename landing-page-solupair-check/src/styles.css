@@ -258,24 +258,9 @@
 
 @keyframes novaBounce {
   0%, 100% {
-    transform: translate3d(0, 0, 0);
+    transform: translateY(0);
   }
   50% {
-    transform: translate3d(0, calc(var(--nova-amp, 8px) * -1), 0);
-  }
-}
-
-@keyframes novaSquash {
-  0%, 100% {
-    transform: scale3d(1, 1, 1);
-  }
-  48% {
-    transform: scale3d(1.03, 0.97, 1);
-  }
-  50% {
-    transform: scale3d(1.035, 0.955, 1);
-  }
-  52% {
-    transform: scale3d(1.025, 0.97, 1);
+    transform: translateY(calc(var(--nova-amp, 8px) * -1));
   }
 }

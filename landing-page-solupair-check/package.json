@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && node scripts/patch-wrangler-config.mjs",
+    "generate:favicon": "node scripts/generate-favicon.mjs",
+    "build": "node scripts/generate-favicon.mjs && vite build && node scripts/patch-wrangler-config.mjs",
     "build:dev": "vite build --mode development",
     "cf:build": "npm run build && node scripts/patch-wrangler-config.mjs",
     "cf:deploy": "wrangler deploy --config .output/server/wrangler.json",
@@ -87,6 +88,8 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^15.15.0",
     "nitro": "3.0.260603-beta",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
