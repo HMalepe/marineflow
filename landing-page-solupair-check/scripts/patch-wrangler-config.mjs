@@ -17,7 +17,11 @@ config.assets = {
   directory: "../public",
 };
 
-delete config.routes;
+// Keep both apex + www on the worker (wrangler creates DNS + SSL on deploy).
+config.routes = [
+  { pattern: "solupair.co.za", custom_domain: true },
+  { pattern: "www.solupair.co.za", custom_domain: true },
+];
 
 const serverConfig = `${JSON.stringify(config, null, 2)}\n`;
 writeFileSync(configPath, serverConfig);
