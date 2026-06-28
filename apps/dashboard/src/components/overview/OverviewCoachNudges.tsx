@@ -42,7 +42,17 @@ export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
   }>;
 
   return (
-    <OverviewCollapsibleSection id="overview-coach" label="AI coach">
+    <OverviewCollapsibleSection
+      id="overview-coach"
+      label="AI coach"
+      actionCount={nudges.length}
+      actionBadgeText="nudges"
+      actionLabel={
+        nudges.length > 0
+          ? `${nudges.length} proactive ${nudges.length === 1 ? 'nudge' : 'nudges'} ready`
+          : undefined
+      }
+    >
       <div className={overviewNeonBox('fuchsia', 'p-4 sm:p-5')}>
         <div className="flex gap-3 pb-4 border-b-2 border-fuchsia-500/30">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border-2 border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-800 dark:text-fuchsia-200 shadow-[0_0_18px_-4px_oklch(0.62_0.26_330/0.5)]">

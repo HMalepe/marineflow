@@ -185,6 +185,9 @@ export function AppointmentsClient({
 
   const filteredUpcoming = applyFilter(upcoming);
   const filteredPast = applyFilter(past);
+  const pendingPaymentUpcoming = filteredUpcoming.filter(
+    (appt) => appt.status === 'PENDING_PAYMENT' || appt.status === 'HELD',
+  ).length;
 
   const hasTodayAppointments = useMemo(() => {
     const todayStr = new Date().toDateString();
@@ -338,6 +341,9 @@ export function AppointmentsClient({
         id="appointments-upcoming"
         title="Upcoming bookings"
         count={filteredUpcoming.length}
+        actionCount={pendingPaymentUpcoming}
+        actionBadgeText="awaiting pay"
+        actionSeverity="warning"
         subtitle="Confirmed and pending appointments"
         compact
       >
@@ -415,6 +421,8 @@ export function AppointmentsClient({
           id="appointments-waitlist"
           title="Waitlist"
           count={waitlist.length}
+          actionCount={waitlist.length}
+          actionBadgeText="waiting"
           subtitle="Notified when a slot opens"
         >
           <DataList className="md:rounded-lg md:border md:border-border/60 md:overflow-hidden">

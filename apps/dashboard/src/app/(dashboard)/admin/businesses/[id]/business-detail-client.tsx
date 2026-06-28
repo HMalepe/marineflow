@@ -280,6 +280,9 @@ export function BusinessDetailClient({ businessId, token }: { businessId: string
         id="admin-business-alerts"
         title="Inbox & bot alerts"
         count={stats.unreadAlerts > 0 ? stats.unreadAlerts : undefined}
+        actionCount={stats.unreadAlerts > 0 ? stats.unreadAlerts : undefined}
+        actionBadgeText="unread"
+        actionSeverity="critical"
         defaultOpen
       >
           {alerts.length === 0 ? (

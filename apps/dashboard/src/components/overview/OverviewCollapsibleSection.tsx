@@ -1,7 +1,13 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
+import {
+  CollapsedAttentionBadge,
+  resolveCollapsedAttention,
+  type CollapsedAttention,
+} from '@/components/collapsed-attention';
+import { CollapsibleSectionAttentionProvider } from '@/components/collapsible-section-attention';
 import { cn } from '@/lib/utils';
 import { OverviewSectionLabel } from './OverviewSectionLabel';
 import { overviewSection } from './overviewNeon';
@@ -11,6 +17,11 @@ interface OverviewCollapsibleSectionProps {
   label: string;
   title?: string;
   subtitle?: string;
+  actionCount?: number;
+  actionLabel?: string;
+  actionBadgeText?: string;
+  actionSeverity?: CollapsedAttention['severity'];
+  collapsedAttention?: CollapsedAttention;
   children: ReactNode;
   className?: string;
   defaultOpen?: boolean;
@@ -23,12 +34,39 @@ export function OverviewCollapsibleSection({
   label,
   title,
   subtitle,
+  actionCount,
+  actionLabel,
+  actionBadgeText,
+  actionSeverity,
+  collapsedAttention,
   children,
   className,
   defaultOpen = true,
   trailing,
 }: OverviewCollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const [contextCount, setContextCount] = useState(0);
+  const [contextSeverity, setContextSeverity] =
+    useState<CollapsedAttention['severity']>('warning');
+
+  const handleAggregateChange = useCallback(
+    (total: number, severity: CollapsedAttention['severity']) => {
+      setContextCount(total);
+      setContextSeverity(severity);
+    },
+    [],
+  );
+
+  const resolvedAttention = resolveCollapsedAttention(
+    collapsedAttention,
+    actionCount,
+    contextCount,
+    {
+      label: actionLabel,
+      badgeText: actionBadgeText,
+      severity: collapsedAttention?.severity ?? actionSeverity ?? contextSeverity,
+    },
+  );
 
   return (
     <section
@@ -44,7 +82,12 @@ export function OverviewCollapsibleSection({
         aria-controls={`${id}-panel`}
       >
         <div className="min-w-0 flex-1">
-          <OverviewSectionLabel>{label}</OverviewSectionLabel>
+          <div className="flex items-center gap-2 flex-wrap">
+            <OverviewSectionLabel>{label}</OverviewSectionLabel>
+            {!open && resolvedAttention && resolvedAttention.count > 0 && (
+              <CollapsedAttentionBadge attention={resolvedAttention} />
+            )}
+          </div>
           {title && (
             <h2 className="text-lg font-bold tracking-tight mt-1">{title}</h2>
           )}
@@ -65,9 +108,11 @@ export function OverviewCollapsibleSection({
           />
         </div>
       </button>
-      <div id={`${id}-panel`} className={cn('space-y-3', !open && 'hidden')}>
-        {children}
-      </div>
+      <CollapsibleSectionAttentionProvider onAggregateChange={handleAggregateChange}>
+        <div id={`${id}-panel`} className={cn('space-y-3', !open && 'hidden')}>
+          {children}
+        </div>
+      </CollapsibleSectionAttentionProvider>
     </section>
   );
 }

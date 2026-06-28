@@ -282,7 +282,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
       )}
 
       {error && (
-        <CollapsibleSection id="roster-error" title="Could not load roster" defaultOpen>
+        <CollapsibleSection id="roster-error" title="Could not load roster" actionCount={1} actionSeverity="critical" defaultOpen>
         <div className="dashboard-section border-destructive/40 bg-destructive/5">
           <div className="dashboard-section-body flex items-center justify-between gap-3 text-sm text-destructive py-3">
             <span>{error}</span>
@@ -293,7 +293,7 @@ export function RosterClient({ token, openAddStaff = false, branchId, hidePageHe
       )}
 
       {!loading && staff.length === 0 && !error && (
-        <CollapsibleSection id="roster-empty" title="Get started" defaultOpen>
+        <CollapsibleSection id="roster-empty" title="Get started" actionCount={1} actionBadgeText="to add" defaultOpen>
         <div className="dashboard-section border-dashed">
           <div className="dashboard-section-body px-6 py-14 text-center space-y-3">
             <p className="text-muted-foreground">No staff members yet.</p>

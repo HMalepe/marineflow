@@ -93,7 +93,14 @@ export default async function AdminPage() {
       </CollapsibleSection>
 
       {alerts && (alerts.pastDue.length > 0 || alerts.trialExpiring.length > 0) && (
-        <CollapsibleSection id="admin-alerts" title="Alerts" defaultOpen>
+        <CollapsibleSection
+          id="admin-alerts"
+          title="Alerts"
+          actionCount={alerts.pastDue.length + alerts.trialExpiring.length}
+          actionBadgeText="alerts"
+          actionSeverity="critical"
+          defaultOpen
+        >
         <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
           {alerts.pastDue.length > 0 && (
             <div>

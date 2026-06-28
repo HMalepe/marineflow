@@ -24,6 +24,7 @@ export function SetupHealthSection({ data }: Props) {
     attentionCount > 0
       ? {
           count: attentionCount,
+          badgeText: 'to fix',
           label:
             visibleChecks.length > 0
               ? `${visibleChecks.length} setup ${visibleChecks.length === 1 ? 'item' : 'items'} need action`

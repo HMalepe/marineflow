@@ -9,8 +9,17 @@ export function NeedsYouPanel({ data }: { data: OverviewKpiData }) {
   const showTickets = data.openTickets > 0;
   if (!showPayments && !showTickets) return null;
 
+  const actionCount = (showPayments ? data.pendingPayments : 0) + (showTickets ? data.openTickets : 0);
+
   return (
-    <OverviewCollapsibleSection id="overview-needs-you" label="Needs you">
+    <OverviewCollapsibleSection
+      id="overview-needs-you"
+      label="Needs you"
+      actionCount={actionCount}
+      actionBadgeText="waiting"
+      actionSeverity={showTickets ? 'critical' : 'warning'}
+      actionLabel={`${actionCount} item${actionCount === 1 ? '' : 's'} need your attention`}
+    >
       <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
         {showPayments && (
           <Link href="/appointments?status=PENDING_PAYMENT" className="block group">

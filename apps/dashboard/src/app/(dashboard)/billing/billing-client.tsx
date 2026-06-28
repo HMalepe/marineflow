@@ -406,7 +406,14 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
       )}
 
       {canSubscribe && (
-        <CollapsibleSection id="billing-subscribe" title="Choose your plan" defaultOpen>
+        <CollapsibleSection
+          id="billing-subscribe"
+          title="Choose your plan"
+          actionCount={subscription?.status === 'PAST_DUE' ? 1 : 1}
+          actionBadgeText={subscription?.status === 'PAST_DUE' ? 'past due' : 'to choose'}
+          actionSeverity={subscription?.status === 'PAST_DUE' ? 'critical' : 'warning'}
+          defaultOpen
+        >
         <div id="subscribe-section" className="grid lg:grid-cols-5 gap-6 items-start">
           {subscription?.status === 'PAST_DUE' && (
             <div className="lg:col-span-5">

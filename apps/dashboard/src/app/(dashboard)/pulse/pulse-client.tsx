@@ -165,6 +165,9 @@ export function PulseClient({ token, initialBranches }: Props) {
   const { connected: liveConnected } = useSalonLiveUpdates(token, onLiveUpdate);
 
   const summary = data?.summary;
+  const floorAttention = (summary?.paymentPending ?? 0) + (summary?.arriving ?? 0);
+  const handoffCount = data?.conversations.filter((c) => c.isHandoff).length ?? 0;
+  const stationSetupNeeded = !loading && data && data.stations.length === 0 ? 1 : 0;
 
   return (
     <div className="dashboard-page-flow space-y-6">
@@ -230,7 +233,14 @@ export function PulseClient({ token, initialBranches }: Props) {
 
       {/* Summary strip */}
       {summary && (
-        <CollapsibleSection id="pulse-summary" title="Live summary" subtitle="Real-time salon floor counts">
+        <CollapsibleSection
+          id="pulse-summary"
+          title="Live summary"
+          subtitle="Real-time salon floor counts"
+          actionCount={floorAttention}
+          actionBadgeText="on floor"
+          actionSeverity={summary && summary.paymentPending > 0 ? 'critical' : 'warning'}
+        >
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             { label: 'In chair', value: summary.occupied, color: 'text-green-600' },
@@ -253,6 +263,8 @@ export function PulseClient({ token, initialBranches }: Props) {
           id="pulse-stations"
           title="Stations"
           className="lg:col-span-2"
+          actionCount={stationSetupNeeded}
+          actionBadgeText="to set up"
         >
           {loading && !data ? (
             <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -329,7 +341,13 @@ export function PulseClient({ token, initialBranches }: Props) {
           )}
         </CollapsibleSection>
 
-        <CollapsibleSection id="pulse-conversations" title="Bot conversations now">
+        <CollapsibleSection
+          id="pulse-conversations"
+          title="Bot conversations now"
+          actionCount={handoffCount}
+          actionBadgeText="handoffs"
+          actionSeverity="critical"
+        >
           <div className="rounded-xl border bg-card divide-y max-h-[480px] overflow-y-auto">
             {!data?.conversations.length ? (
               <p className="text-sm text-muted-foreground p-6 text-center">No active WhatsApp flows</p>

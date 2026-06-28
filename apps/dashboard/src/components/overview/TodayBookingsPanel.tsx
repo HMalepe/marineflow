@@ -68,12 +68,26 @@ export function TodayBookingsPanel({
     month: 'long',
   });
 
+  const pendingPaymentCount = appointments.filter(
+    (appt) => appt.status === 'PENDING_PAYMENT' || appt.status === 'HELD',
+  ).length;
+
   return (
     <OverviewCollapsibleSection
       id="overview-today"
       label="Schedule"
       title="Today's bookings"
       subtitle={`${appointments.length} on the calendar · ${todayHeading}`}
+      actionCount={error ? 1 : pendingPaymentCount}
+      actionBadgeText={error ? 'error' : 'awaiting pay'}
+      actionSeverity={error ? 'critical' : 'warning'}
+      actionLabel={
+        error
+          ? 'Could not load today’s bookings'
+          : pendingPaymentCount > 0
+            ? `${pendingPaymentCount} booking${pendingPaymentCount === 1 ? '' : 's'} awaiting payment`
+            : undefined
+      }
       trailing={
         <Link href="/appointments" className="text-sm font-bold text-primary hover:underline shrink-0">
           Open bookings →

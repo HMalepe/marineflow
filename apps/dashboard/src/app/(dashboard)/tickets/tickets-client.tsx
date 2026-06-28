@@ -243,6 +243,9 @@ export function TicketsClient({ token }: Props) {
             id="tickets-queue"
             title="Ticket queue"
             count={filtered.length}
+            actionCount={filter !== 'noise' ? openCount : 0}
+            actionBadgeText="open"
+            actionSeverity="critical"
             defaultOpen
             className="border-0 shadow-none rounded-none flex-1 flex flex-col min-h-0 [&_.dashboard-section-body]:flex-1 [&_.dashboard-section-body]:flex [&_.dashboard-section-body]:flex-col [&_.dashboard-section-body]:min-h-0 [&_.dashboard-section-body]:p-0"
           >

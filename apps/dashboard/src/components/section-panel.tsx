@@ -1,7 +1,13 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
+import {
+  CollapsedAttentionBadge,
+  resolveCollapsedAttention,
+  type CollapsedAttention,
+} from '@/components/collapsed-attention';
+import { CollapsibleSectionAttentionProvider } from '@/components/collapsible-section-attention';
 import { cn } from '@/lib/utils';
 
 interface SectionPanelProps {
@@ -9,11 +15,15 @@ interface SectionPanelProps {
   title: string;
   subtitle?: string;
   count?: number | string;
+  actionCount?: number;
+  actionLabel?: string;
+  actionBadgeText?: string;
+  actionSeverity?: CollapsedAttention['severity'];
+  collapsedAttention?: CollapsedAttention;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
-  /** Tighter padding for dense lists (inbox, tables) */
   compact?: boolean;
   defaultOpen?: boolean;
 }
@@ -24,6 +34,11 @@ export function SectionPanel({
   title,
   subtitle,
   count,
+  actionCount,
+  actionLabel,
+  actionBadgeText,
+  actionSeverity,
+  collapsedAttention,
   action,
   children,
   className,
@@ -32,6 +47,28 @@ export function SectionPanel({
   defaultOpen = true,
 }: SectionPanelProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const [contextCount, setContextCount] = useState(0);
+  const [contextSeverity, setContextSeverity] =
+    useState<CollapsedAttention['severity']>('warning');
+
+  const handleAggregateChange = useCallback(
+    (total: number, severity: CollapsedAttention['severity']) => {
+      setContextCount(total);
+      setContextSeverity(severity);
+    },
+    [],
+  );
+
+  const resolvedAttention = resolveCollapsedAttention(
+    collapsedAttention,
+    actionCount,
+    contextCount,
+    {
+      label: actionLabel,
+      badgeText: actionBadgeText,
+      severity: collapsedAttention?.severity ?? actionSeverity ?? contextSeverity,
+    },
+  );
 
   return (
     <section
@@ -50,8 +87,11 @@ export function SectionPanel({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="dashboard-section-title">{title}</h2>
-            {count !== undefined && (
+            {count !== undefined && open && (
               <span className="dashboard-section-count">{count}</span>
+            )}
+            {!open && resolvedAttention && resolvedAttention.count > 0 && (
+              <CollapsedAttentionBadge attention={resolvedAttention} />
             )}
           </div>
           {subtitle && (
@@ -77,17 +117,19 @@ export function SectionPanel({
           aria-hidden
         />
       </button>
-      <div
-        id={id ? `${id}-panel` : undefined}
-        className={cn(
-          'dashboard-section-body',
-          compact && 'dashboard-section-body-compact',
-          bodyClassName,
-          !open && 'hidden',
-        )}
-      >
-        {children}
-      </div>
+      <CollapsibleSectionAttentionProvider onAggregateChange={handleAggregateChange}>
+        <div
+          id={id ? `${id}-panel` : undefined}
+          className={cn(
+            'dashboard-section-body',
+            compact && 'dashboard-section-body-compact',
+            bodyClassName,
+            !open && 'hidden',
+          )}
+        >
+          {children}
+        </div>
+      </CollapsibleSectionAttentionProvider>
     </section>
   );
 }

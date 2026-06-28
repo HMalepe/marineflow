@@ -601,6 +601,9 @@ export function FaqsClient({ token }: Props) {
         id="faqs-library"
         title="FAQ library"
         count={filtered.length}
+        actionCount={stats.pending > 0 ? stats.pending : undefined}
+        actionBadgeText="to review"
+        actionSeverity={stats.pending > 3 ? 'critical' : 'warning'}
         subtitle={
           reordering
             ? 'Saving order…'

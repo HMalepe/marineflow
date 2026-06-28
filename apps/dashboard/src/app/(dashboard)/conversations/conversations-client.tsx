@@ -523,6 +523,9 @@ export function ConversationsClient({ token, staffName }: Props) {
               id="conversations-alerts"
               title="Handoff alerts"
               count={alerts.length}
+              actionCount={alerts.length}
+              actionBadgeText="handoffs"
+              actionSeverity="critical"
               defaultOpen
               className="border-0 shadow-none rounded-none mx-0 [&_.dashboard-section-header]:px-3 [&_.dashboard-section-body]:p-0"
             >
@@ -554,6 +557,9 @@ export function ConversationsClient({ token, staffName }: Props) {
             id="conversations-list"
             title="Conversations"
             count={visibleConversations.length}
+            actionCount={handoffCount}
+            actionBadgeText="need you"
+            actionSeverity="critical"
             defaultOpen
             className="border-0 shadow-none rounded-none flex-1 flex flex-col min-h-0 [&_.dashboard-section-body]:flex-1 [&_.dashboard-section-body]:flex [&_.dashboard-section-body]:flex-col [&_.dashboard-section-body]:min-h-0 [&_.dashboard-section-body]:p-0"
           >

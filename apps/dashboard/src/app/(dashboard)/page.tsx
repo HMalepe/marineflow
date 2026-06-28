@@ -206,7 +206,7 @@ async function SuperAdminView({ token }: { token: string | null }) {
       )}
 
       {tenantHealth && tenantHealth.atRiskCount > 0 && (
-        <CollapsibleSection id="platform-at-risk" title="At-risk tenants">
+        <CollapsibleSection id="platform-at-risk" title="At-risk tenants" actionCount={tenantHealth.atRiskCount} actionBadgeText="at risk" actionSeverity="warning">
         <Link
           href="/admin?health=AT_RISK"
           className="block rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 hover:border-amber-500/60 transition-colors"
@@ -223,7 +223,13 @@ async function SuperAdminView({ token }: { token: string | null }) {
 
       {/* Alerts */}
       {hasAlerts && alerts && (
-        <CollapsibleSection id="platform-alerts" title="Alerts">
+        <CollapsibleSection
+          id="platform-alerts"
+          title="Alerts"
+          actionCount={(alerts.pastDue?.length ?? 0) + (alerts.trialExpiring?.length ?? 0)}
+          actionBadgeText="alerts"
+          actionSeverity="critical"
+        >
           <div className="border border-amber-200 bg-amber-50 rounded-lg p-4 space-y-3">
           {alerts.pastDue.length > 0 && (
             <div>
@@ -339,7 +345,7 @@ async function AppointmentView({ token }: { token: string | null }) {
 
       {/* Onboarding banner */}
       {!onboardingDone && (
-        <OverviewCollapsibleSection id="overview-onboarding" label="Finish setup" title="Finish setting up your account">
+        <OverviewCollapsibleSection id="overview-onboarding" label="Finish setup" title="Finish setting up your account" actionCount={1} actionBadgeText="to finish">
           <div
             className={overviewNeonBox(
               'cyan',
