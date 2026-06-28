@@ -52,8 +52,6 @@ function FaceBall({
 
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const rotateY = useTransform(x, [-72, 72], [-10, 10]);
-  const rotateX = useTransform(y, [-72, 72], [10, -10]);
 
   const pointerLimit = compact ? 32 : 64;
   const dragLimit = compact ? 88 : 132;
@@ -115,50 +113,46 @@ function FaceBall({
   // Bounce amplitude grows from 8 → 34 px with scroll
   const bounceAmp = useTransform(scrollY, [0, 600], [8, 34]);
 
+  const sizeClass = compact
+    ? "h-[min(52vw,200px)] w-[min(52vw,200px)]"
+    : "h-[min(68vw,280px)] w-[min(68vw,280px)] sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]";
+
   return (
-    <motion.div
+    <div
       aria-hidden
-      drag={prefersReducedMotion ? false : true}
-      dragConstraints={{
-        left: -dragLimit,
-        right: dragLimit,
-        top: -dragLimit,
-        bottom: dragLimit,
-      }}
-      dragElastic={0.2}
-      dragMomentum={false}
-      onDragStart={() => setIsDragging(true)}
-      onDragEnd={() => {
-        setIsDragging(false);
-        resetPosition();
-      }}
-      style={{
-        x,
-        y,
-        rotateX,
-        rotateY,
-        transformPerspective: 900,
-      }}
-      whileDrag={{ scale: 1.05 }}
-      whileTap={{ scale: 0.98 }}
-      className={`absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 touch-none ${
-        prefersReducedMotion ? "pointer-events-none" : "cursor-grab active:cursor-grabbing"
-      } ${
-        compact
-          ? "h-[min(52vw,200px)] w-[min(52vw,200px)]"
-          : "h-[min(68vw,280px)] w-[min(68vw,280px)] sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]"
-      }`}
+      className={`absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 ${sizeClass}`}
     >
-      <BouncingBall
-        lidScale={lidScale}
-        mouthRadius={mouthRadius}
-        mouthHeight={mouthHeight}
-        mouthWidth={mouthWidth}
-        bounceAmp={bounceAmp}
-        reducedMotion={prefersReducedMotion}
-        isDragging={isDragging}
-      />
-    </motion.div>
+      <motion.div
+        drag={prefersReducedMotion ? false : true}
+        dragConstraints={{
+          left: -dragLimit,
+          right: dragLimit,
+          top: -dragLimit,
+          bottom: dragLimit,
+        }}
+        dragElastic={0.2}
+        dragMomentum={false}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => {
+          setIsDragging(false);
+          resetPosition();
+        }}
+        style={{ x, y }}
+        className={`h-full w-full ${
+          prefersReducedMotion ? "pointer-events-none" : "pointer-events-auto cursor-grab active:cursor-grabbing touch-none"
+        }`}
+      >
+        <BouncingBall
+          lidScale={lidScale}
+          mouthRadius={mouthRadius}
+          mouthHeight={mouthHeight}
+          mouthWidth={mouthWidth}
+          bounceAmp={bounceAmp}
+          reducedMotion={prefersReducedMotion}
+          isDragging={isDragging}
+        />
+      </motion.div>
+    </div>
   );
 }
 
@@ -183,16 +177,14 @@ function BouncingBall({
 }: BallProps) {
   const ampPx = useTransform(bounceAmp, (v) => `${v}px`);
   return (
-    <motion.div
-      className={`h-full w-full ${
-        reducedMotion || isDragging ? "" : "animate-[novaBounce_2.6s_ease-in-out_infinite]"
+    <div
+      className={`h-full w-full transform-gpu backface-hidden will-change-transform ${
+        reducedMotion || isDragging ? "" : "animate-[novaBounce_2.8s_ease-in-out_infinite]"
       }`}
       style={reducedMotion || isDragging ? undefined : { ["--nova-amp" as string]: ampPx }}
-      animate={isDragging ? { scale: [1, 1.02, 1] } : { scale: 1 }}
-      transition={isDragging ? { duration: 0.45, repeat: Infinity, ease: "easeInOut" } : undefined}
     >
       <div
-        className="relative h-full w-full rounded-full"
+        className="relative isolate h-full w-full rounded-full"
         style={{
           background:
             "radial-gradient(circle at 32% 28%, oklch(0.72 0.18 275) 0%, oklch(0.48 0.26 275) 55%, oklch(0.32 0.22 275) 100%)",
@@ -207,7 +199,7 @@ function BouncingBall({
           style={{ width: mouthWidth, height: mouthHeight, borderRadius: mouthRadius }}
         />
       </div>
-    </motion.div>
+    </div>
   );
 }
 
