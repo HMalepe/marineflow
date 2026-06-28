@@ -31,6 +31,16 @@ export type DriftConfig = {
   phaseY: number;
 };
 
+export type BasketballConfig = {
+  gravity: number;
+  restitution: number;
+  wallRestitution: number;
+  airFriction: number;
+  floorFriction: number;
+  maxSpeed: number;
+  sleepSpeed: number;
+};
+
 export const HERO_PHYSICS: PhysicsConfig = {
   gravity: 920,
   restitution: 0.64,
@@ -39,6 +49,16 @@ export const HERO_PHYSICS: PhysicsConfig = {
   springDamping: 0.74,
   maxSpeed: 2200,
   returnToCenter: true,
+};
+
+export const BASKETBALL_PHYSICS: BasketballConfig = {
+  gravity: 2400,
+  restitution: 0.74,
+  wallRestitution: 0.62,
+  airFriction: 0.997,
+  floorFriction: 0.9,
+  maxSpeed: 4200,
+  sleepSpeed: 14,
 };
 
 export const VIEWPORT_PHYSICS: PhysicsConfig = {
@@ -145,4 +165,83 @@ export function stepBallPhysics(
   }
 
   return { x, y, vx, vy };
+}
+
+export type BasketballStepResult = PhysicsBallState & { sleeping: boolean };
+
+/** Viewport basketball — gravity, floor/wall bounce, friction, sleep on floor. */
+export function stepBasketballPhysics(
+  state: PhysicsBallState,
+  config: BasketballConfig,
+  bounds: PhysicsBounds,
+  dtMs: number,
+  options: { isDragging?: boolean; dragX?: number; dragY?: number } = {},
+): BasketballStepResult {
+  const dt = clamp(dtMs / 1000, 0.001, 0.032);
+  let { x, y, vx, vy } = state;
+
+  if (options.isDragging && options.dragX !== undefined && options.dragY !== undefined) {
+    const prevX = x;
+    const prevY = y;
+    x = clamp(options.dragX, bounds.minX, bounds.maxX);
+    y = clamp(options.dragY, bounds.minY, bounds.maxY);
+    vx = (x - prevX) / dt;
+    vy = (y - prevY) / dt;
+    return { x, y, vx, vy, sleeping: false };
+  }
+
+  vy += config.gravity * dt;
+
+  const friction = Math.pow(config.airFriction, dt * 60);
+  vx *= friction;
+  vy *= friction;
+
+  const speed = Math.hypot(vx, vy);
+  if (speed > config.maxSpeed) {
+    vx = (vx / speed) * config.maxSpeed;
+    vy = (vy / speed) * config.maxSpeed;
+  }
+
+  x += vx * dt;
+  y += vy * dt;
+
+  [x, vx] = bounceAxis(x, vx, bounds.minX, bounds.maxX, config.wallRestitution);
+  [y, vy] = bounceAxis(y, vy, bounds.minY, bounds.maxY, config.restitution);
+
+  const onFloor = y >= bounds.maxY - 1;
+  if (onFloor) {
+    y = bounds.maxY;
+    vx *= config.floorFriction;
+    if (Math.abs(vy) < config.sleepSpeed * 1.5) {
+      vy = 0;
+    }
+  }
+
+  const sleeping =
+    onFloor &&
+    Math.abs(vx) < config.sleepSpeed &&
+    Math.abs(vy) < config.sleepSpeed;
+
+  if (sleeping) {
+    return { x, y: bounds.maxY, vx: 0, vy: 0, sleeping: true };
+  }
+
+  return { x, y, vx, vy, sleeping: false };
+}
+
+export function getViewportBallBounds(radius: number, topInset = 8): PhysicsBounds {
+  if (typeof window === "undefined") {
+    return { minX: radius, maxX: radius, minY: radius, maxY: radius };
+  }
+
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const pad = Math.max(6, radius * 0.08);
+
+  return {
+    minX: radius + pad,
+    maxX: w - radius - pad,
+    minY: radius + topInset,
+    maxY: h - radius - pad,
+  };
 }
