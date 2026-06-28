@@ -258,9 +258,9 @@
 
 @keyframes novaBounce {
   0%, 100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
   50% {
-    transform: translateY(calc(var(--nova-amp, 8px) * -1));
+    transform: translateY(calc(var(--nova-amp, 8px) * -1)) scale(1.015);
   }
 }

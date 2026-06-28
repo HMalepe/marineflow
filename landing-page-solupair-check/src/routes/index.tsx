@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AnimatePresence,
+  animate,
   motion,
+  useMotionValue,
   useMotionValueEvent,
   useScroll,
   useSpring,
@@ -9,7 +11,7 @@ import {
   type MotionValue,
 } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect, type RefObject } from "react";
 import { getViewportHeight, useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
@@ -33,9 +35,70 @@ function SolupairLogo() {
   );
 }
 
-function FaceBall({ compact }: { compact?: boolean }) {
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function FaceBall({
+  compact,
+  interactionRef,
+}: {
+  compact?: boolean;
+  interactionRef: RefObject<HTMLElement | null>;
+}) {
   const { scrollY } = useScroll();
   const { prefersReducedMotion } = useDeviceProfile();
+  const [isDragging, setIsDragging] = useState(false);
+
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const rotateY = useTransform(x, [-72, 72], [-10, 10]);
+  const rotateX = useTransform(y, [-72, 72], [10, -10]);
+
+  const pointerLimit = compact ? 32 : 64;
+  const dragLimit = compact ? 88 : 132;
+
+  const resetPosition = useCallback(() => {
+    animate(x, 0, { type: "spring", stiffness: 260, damping: 24 });
+    animate(y, 0, { type: "spring", stiffness: 260, damping: 24 });
+  }, [x, y]);
+
+  const handlePointerMove = useCallback(
+    (event: PointerEvent) => {
+      if (prefersReducedMotion || isDragging) return;
+      const rect = interactionRef.current?.getBoundingClientRect();
+      if (!rect) return;
+
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const followStrength = compact ? 0.11 : 0.14;
+
+      x.set(
+        clamp((event.clientX - centerX) * followStrength, -pointerLimit, pointerLimit),
+      );
+      y.set(
+        clamp((event.clientY - centerY) * followStrength, -pointerLimit, pointerLimit),
+      );
+    },
+    [compact, interactionRef, isDragging, pointerLimit, prefersReducedMotion, x, y],
+  );
+
+  const handlePointerLeave = useCallback(() => {
+    if (!isDragging) resetPosition();
+  }, [isDragging, resetPosition]);
+
+  useEffect(() => {
+    const target = interactionRef.current;
+    if (!target || prefersReducedMotion) return;
+
+    target.addEventListener("pointermove", handlePointerMove);
+    target.addEventListener("pointerleave", handlePointerLeave);
+    return () => {
+      target.removeEventListener("pointermove", handlePointerMove);
+      target.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, [handlePointerLeave, handlePointerMove, interactionRef, prefersReducedMotion]);
+
   // Eyes: lids closed (scaleY 1) → open (0) as user begins to scroll
   const lidRaw = useTransform(scrollY, [0, 220], [1, 0]);
   const lidScale = useSpring(lidRaw, { stiffness: 140, damping: 22 });
@@ -51,10 +114,36 @@ function FaceBall({ compact }: { compact?: boolean }) {
   );
   // Bounce amplitude grows from 8 → 34 px with scroll
   const bounceAmp = useTransform(scrollY, [0, 600], [8, 34]);
+
   return (
-    <div
+    <motion.div
       aria-hidden
-      className={`pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 ${
+      drag={prefersReducedMotion ? false : true}
+      dragConstraints={{
+        left: -dragLimit,
+        right: dragLimit,
+        top: -dragLimit,
+        bottom: dragLimit,
+      }}
+      dragElastic={0.2}
+      dragMomentum={false}
+      onDragStart={() => setIsDragging(true)}
+      onDragEnd={() => {
+        setIsDragging(false);
+        resetPosition();
+      }}
+      style={{
+        x,
+        y,
+        rotateX,
+        rotateY,
+        transformPerspective: 900,
+      }}
+      whileDrag={{ scale: 1.05 }}
+      whileTap={{ scale: 0.98 }}
+      className={`absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 touch-none ${
+        prefersReducedMotion ? "pointer-events-none" : "cursor-grab active:cursor-grabbing"
+      } ${
         compact
           ? "h-[min(52vw,200px)] w-[min(52vw,200px)]"
           : "h-[min(68vw,280px)] w-[min(68vw,280px)] sm:h-[360px] sm:w-[360px] lg:h-[440px] lg:w-[440px]"
@@ -67,8 +156,9 @@ function FaceBall({ compact }: { compact?: boolean }) {
         mouthWidth={mouthWidth}
         bounceAmp={bounceAmp}
         reducedMotion={prefersReducedMotion}
+        isDragging={isDragging}
       />
-    </div>
+    </motion.div>
   );
 }
 
@@ -79,6 +169,7 @@ type BallProps = {
   mouthWidth: MotionValue<string>;
   bounceAmp: MotionValue<number>;
   reducedMotion?: boolean;
+  isDragging?: boolean;
 };
 
 function BouncingBall({
@@ -88,12 +179,17 @@ function BouncingBall({
   mouthWidth,
   bounceAmp,
   reducedMotion,
+  isDragging,
 }: BallProps) {
   const ampPx = useTransform(bounceAmp, (v) => `${v}px`);
   return (
     <motion.div
-      className={`h-full w-full ${reducedMotion ? "" : "animate-[novaBounce_2.8s_ease-in-out_infinite]"}`}
-      style={reducedMotion ? undefined : { ["--nova-amp" as string]: ampPx }}
+      className={`h-full w-full ${
+        reducedMotion || isDragging ? "" : "animate-[novaBounce_2.6s_ease-in-out_infinite]"
+      }`}
+      style={reducedMotion || isDragging ? undefined : { ["--nova-amp" as string]: ampPx }}
+      animate={isDragging ? { scale: [1, 1.02, 1] } : { scale: 1 }}
+      transition={isDragging ? { duration: 0.45, repeat: Infinity, ease: "easeInOut" } : undefined}
     >
       <div
         className="relative h-full w-full rounded-full"
@@ -136,6 +232,7 @@ function Eye({ side, lidScale }: { side: "left" | "right"; lidScale: MotionValue
 
 function Hero() {
   const { isPhone } = useDeviceProfile();
+  const heroInteractionRef = useRef<HTMLDivElement>(null);
 
   return (
     <section className="safe-area-x relative min-h-[100dvh] overflow-hidden bg-background text-foreground">
@@ -164,8 +261,11 @@ function Hero() {
           AUTOMATION &amp; WEB DESIGN
         </div>
 
-        <div className="relative w-full max-w-[100vw]">
-          <FaceBall compact={isPhone} />
+        <div
+          ref={heroInteractionRef}
+          className="relative w-full max-w-[100vw]"
+        >
+          <FaceBall compact={isPhone} interactionRef={heroInteractionRef} />
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
