@@ -10,7 +10,6 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import solupairLogo from "@/assets/solupair-logo.png";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
@@ -107,12 +106,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       {
         rel: "icon",
-        type: "image/jpeg",
-        href: solupairLogo,
+        type: "image/png",
+        sizes: "32x32",
+        href: "/favicon-32.png",
+      },
+      {
+        rel: "icon",
+        type: "image/png",
+        sizes: "16x16",
+        href: "/favicon-16.png",
       },
       {
         rel: "apple-touch-icon",
-        href: solupairLogo,
+        sizes: "180x180",
+        href: "/apple-touch-icon.png",
       },
       {
         rel: "shortcut icon",
