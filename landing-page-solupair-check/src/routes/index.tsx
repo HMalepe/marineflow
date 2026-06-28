@@ -24,11 +24,16 @@ const projects = PROJECT_SHOWCASES;
 
 function SolupairLogo() {
   return (
-    <a href="https://solupair.co.za" className="inline-flex items-center">
+    <a
+      href="https://solupair.co.za"
+      className="inline-flex shrink-0 items-center"
+      aria-label="Solupair home"
+    >
       <img
         src={solupairLogo}
-        alt="Solupair"
-        className="h-11 w-11 object-contain sm:h-14 sm:w-14"
+        alt=""
+        aria-hidden
+        className="h-14 w-auto object-contain drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[4.25rem] lg:h-20"
       />
     </a>
   );

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
+    "process:logo": "node scripts/process-logo.mjs",
     "generate:favicon": "node scripts/generate-favicon.mjs",
-    "build": "node scripts/generate-favicon.mjs && vite build && node scripts/patch-wrangler-config.mjs",
+    "build": "node scripts/process-logo.mjs && node scripts/generate-favicon.mjs && vite build && node scripts/patch-wrangler-config.mjs",
     "build:dev": "vite build --mode development",
     "cf:build": "npm run build && node scripts/patch-wrangler-config.mjs",
     "cf:deploy": "wrangler deploy --config .output/server/wrangler.json",
