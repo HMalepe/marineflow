@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && node scripts/patch-wrangler-config.mjs",
     "build:dev": "vite build --mode development",
     "cf:build": "npm run build && node scripts/patch-wrangler-config.mjs",
     "cf:deploy": "wrangler deploy --config .output/server/wrangler.json",
