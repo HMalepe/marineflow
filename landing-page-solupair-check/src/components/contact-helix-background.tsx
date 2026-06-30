@@ -18,29 +18,35 @@ type HelixConfig = {
 function getHelixConfig(isPhone: boolean, isTablet: boolean): HelixConfig {
   if (isPhone) {
     return {
-      strandCount: 11,
-      pointsPerStrand: 58,
-      sphereRadius: 0.032,
+      strandCount: 13,
+      pointsPerStrand: 64,
+      sphereRadius: 0.034,
       sphereSegments: 8,
-      spanX: 14.5,
+      spanX: 18,
     };
   }
   if (isTablet) {
     return {
-      strandCount: 14,
-      pointsPerStrand: 70,
-      sphereRadius: 0.036,
+      strandCount: 17,
+      pointsPerStrand: 78,
+      sphereRadius: 0.042,
       sphereSegments: 9,
-      spanX: 16.5,
+      spanX: 24,
     };
   }
   return {
-    strandCount: 18,
-    pointsPerStrand: 84,
-    sphereRadius: 0.04,
+    strandCount: 22,
+    pointsPerStrand: 92,
+    sphereRadius: 0.048,
     sphereSegments: 10,
-    spanX: 19,
+    spanX: 28,
   };
+}
+
+function spanForViewport(baseSpan: number, width: number, height: number) {
+  const aspectBoost = Math.max(1.2, width / Math.max(height, 1));
+  const widthBoost = Math.max(1.15, width / 900);
+  return baseSpan * aspectBoost * widthBoost;
 }
 
 function lerpChannel(a: number, b: number, t: number) {
@@ -60,6 +66,7 @@ export function ContactHelixBackground() {
     let renderer: import("three").WebGLRenderer | null = null;
     let frameId = 0;
     let resizeObserver: ResizeObserver | null = null;
+    let activeSpanX = getHelixConfig(isPhone, isTablet).spanX;
 
     const boot = async () => {
       const THREE = await import("three");
@@ -74,6 +81,7 @@ export function ContactHelixBackground() {
       });
 
       const { width, height } = getSize();
+      activeSpanX = spanForViewport(config.spanX, width, height);
 
       renderer = new THREE.WebGLRenderer({
         antialias: true,
@@ -84,29 +92,29 @@ export function ContactHelixBackground() {
       renderer.setSize(width, height, false);
       renderer.setClearColor(0x000000, 0);
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.2;
+      renderer.toneMappingExposure = 1.45;
       renderer.domElement.className = "contact-helix-canvas__gl";
       container.appendChild(renderer.domElement);
 
       const scene = new THREE.Scene();
-      scene.fog = new THREE.FogExp2(0x07051c, 0.085);
+      scene.fog = new THREE.FogExp2(0x07051c, 0.062);
 
-      const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 45);
-      camera.position.set(0, 0.62, 7.4);
-      camera.lookAt(0, -0.42, 0);
+      const camera = new THREE.PerspectiveCamera(48, width / height, 0.1, 50);
+      camera.position.set(0, 0.48, 8.6);
+      camera.lookAt(0, -0.55, 0);
 
-      scene.add(new THREE.AmbientLight(0x1a1040, 0.45));
+      scene.add(new THREE.AmbientLight(0x241050, 0.55));
 
-      const cyanLight = new THREE.PointLight(BRAND.cyan, 5.5, 24, 1.8);
-      cyanLight.position.set(-6.2, 0.2, 4.2);
+      const cyanLight = new THREE.PointLight(BRAND.cyan, 7.2, 30, 1.6);
+      cyanLight.position.set(-9.5, 0.35, 4.8);
       scene.add(cyanLight);
 
-      const pinkLight = new THREE.PointLight(BRAND.pink, 4.8, 24, 1.8);
-      pinkLight.position.set(6.4, -0.1, 4);
+      const pinkLight = new THREE.PointLight(BRAND.pink, 6.4, 30, 1.6);
+      pinkLight.position.set(9.8, -0.05, 4.6);
       scene.add(pinkLight);
 
-      const purpleLight = new THREE.PointLight(BRAND.purple, 3.2, 20, 1.8);
-      purpleLight.position.set(0, -1.4, 3.2);
+      const purpleLight = new THREE.PointLight(BRAND.purple, 4.6, 26, 1.6);
+      purpleLight.position.set(0, -1.6, 3.8);
       scene.add(purpleLight);
 
       const geometry = new THREE.SphereGeometry(
@@ -117,14 +125,14 @@ export function ContactHelixBackground() {
 
       const material = new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
-        roughness: 0.18,
-        metalness: 0.62,
-        emissive: 0x0a0820,
-        emissiveIntensity: 0.65,
-        clearcoat: 0.85,
-        clearcoatRoughness: 0.18,
+        roughness: 0.12,
+        metalness: 0.72,
+        emissive: 0x12082e,
+        emissiveIntensity: 0.95,
+        clearcoat: 0.92,
+        clearcoatRoughness: 0.12,
         transparent: true,
-        opacity: 0.94,
+        opacity: 0.97,
         toneMapped: true,
       });
 
@@ -144,9 +152,9 @@ export function ContactHelixBackground() {
         const t = s / Math.max(1, config.strandCount - 1);
         strandMeta.push({
           phase: (s / config.strandCount) * Math.PI * 2,
-          amp: lerpChannel(0.48, 0.82, 0.5 + 0.5 * Math.sin(t * Math.PI * 2)),
-          freq: lerpChannel(3.4, 5.8, t),
-          twist: lerpChannel(1.8, 3.1, 1 - t),
+          amp: lerpChannel(0.58, 1.02, 0.5 + 0.5 * Math.sin(t * Math.PI * 2)),
+          freq: lerpChannel(3.6, 6.2, t),
+          twist: lerpChannel(2, 3.6, 1 - t),
         });
       }
 
@@ -179,7 +187,7 @@ export function ContactHelixBackground() {
       };
 
       const updateInstances = (time: number) => {
-        const flowOffset = time * 0.052;
+        const flowOffset = time * 0.068;
         let idx = 0;
 
         for (let s = 0; s < config.strandCount; s += 1) {
@@ -188,30 +196,33 @@ export function ContactHelixBackground() {
 
           for (let p = 0; p < config.pointsPerStrand; p += 1) {
             const u = p / Math.max(1, config.pointsPerStrand - 1);
-            const travel = ((u + flowOffset + s * 0.035) % 1) - 0.5;
-            const x = travel * config.spanX;
+            const travel = ((u + flowOffset + s * 0.028) % 1) - 0.5;
+            const x = travel * activeSpanX * 2.05;
 
             const wave =
               meta.amp *
-              Math.sin(u * Math.PI * meta.freq + meta.phase + time * 0.88 + flowOffset * 5.5);
+              Math.sin(u * Math.PI * meta.freq + meta.phase + time * 1.02 + flowOffset * 6.2);
             const y =
               wave +
-              0.22 * Math.sin(u * Math.PI * 9 + meta.phase + time * 0.65) -
-              1.18 +
-              strandT * 0.08;
+              0.28 * Math.sin(u * Math.PI * 10 + meta.phase + time * 0.78) -
+              1.05 +
+              strandT * 0.1;
 
             const z =
               meta.amp *
-              0.9 *
-              Math.cos(u * Math.PI * meta.twist + meta.phase + time * 0.5) *
-              Math.sin(u * Math.PI * 2.4 + flowOffset * 3.8);
+              1.05 *
+              Math.cos(u * Math.PI * meta.twist + meta.phase + time * 0.62) *
+              Math.sin(u * Math.PI * 2.8 + flowOffset * 4.2);
 
             const scale =
-              0.78 +
-              0.62 * Math.sin(u * Math.PI * 3.2 + meta.phase + time * 1.05 + flowOffset * 2.8);
+              0.86 +
+              0.72 * Math.sin(u * Math.PI * 3.4 + meta.phase + time * 1.18 + flowOffset * 3.1);
 
-            const mix = strandT * 0.42 + ((travel / config.spanX) + 0.5) * 0.58;
-            const glow = 1.55 + 0.55 * Math.sin(u * Math.PI * 4.2 + meta.phase + time * 0.8);
+            const edgeFade = 1 - Math.pow(Math.abs(travel) * 1.85, 2.4);
+            const mix = strandT * 0.38 + ((travel / 0.5) + 0.5) * 0.62;
+            const glow =
+              (1.75 + 0.65 * Math.sin(u * Math.PI * 4.6 + meta.phase + time * 0.92)) *
+              Math.max(0.35, edgeFade);
 
             writeInstance(idx, x, y, z, scale, Math.min(1, Math.max(0, mix)), glow);
             idx += 1;
@@ -227,8 +238,8 @@ export function ContactHelixBackground() {
 
       const group = new THREE.Group();
       group.add(mesh);
-      group.position.y = 0.12;
-      group.rotation.x = -0.18;
+      group.position.y = 0.08;
+      group.rotation.x = -0.14;
       scene.add(group);
 
       const render = () => {
@@ -236,11 +247,13 @@ export function ContactHelixBackground() {
         const elapsed = clock.getElapsedTime();
         updateInstances(elapsed);
 
-        group.rotation.y = Math.sin(elapsed * 0.14) * 0.06;
-        group.position.x = Math.sin(elapsed * 0.2) * 0.22;
+        group.rotation.y = Math.sin(elapsed * 0.18) * 0.08;
+        group.rotation.z = Math.sin(elapsed * 0.11) * 0.025;
+        group.position.y = 0.08 + Math.sin(elapsed * 0.32) * 0.06;
 
-        cyanLight.intensity = 5.5 + Math.sin(elapsed * 0.9) * 0.6;
-        pinkLight.intensity = 4.8 + Math.sin(elapsed * 1.1 + 1.2) * 0.5;
+        cyanLight.intensity = 7.2 + Math.sin(elapsed * 1.05) * 0.85;
+        pinkLight.intensity = 6.4 + Math.sin(elapsed * 1.22 + 1.2) * 0.75;
+        purpleLight.intensity = 4.6 + Math.sin(elapsed * 0.88 + 0.6) * 0.55;
 
         renderer?.render(scene, camera);
         frameId = window.requestAnimationFrame(render);
@@ -249,6 +262,7 @@ export function ContactHelixBackground() {
       const onResize = () => {
         if (!renderer || !container) return;
         const next = getSize();
+        activeSpanX = spanForViewport(config.spanX, next.width, next.height);
         camera.aspect = next.width / next.height;
         camera.updateProjectionMatrix();
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, isPhone ? 1.4 : 2));

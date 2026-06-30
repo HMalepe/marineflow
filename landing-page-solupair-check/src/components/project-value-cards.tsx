@@ -20,7 +20,7 @@ export function ProjectValueCards({ activeIndex, onSelect }: ProjectValueCardsPr
             aria-label={`Show ${project.cardTitle} project`}
             aria-current={index === activeIndex ? "true" : undefined}
             onClick={() => onSelect(index)}
-            className={`projects-value-card projects-reveal projects-reveal--value-card projects-value-card--${TAG_ACCENTS[index % TAG_ACCENTS.length]} ${
+            className={`projects-value-card touch-target projects-reveal projects-reveal--value-card projects-value-card--${TAG_ACCENTS[index % TAG_ACCENTS.length]} ${
               index === activeIndex ? "projects-value-card--active" : ""
             }`}
             style={{ animationDelay: `${0.28 + index * 0.1}s` }}

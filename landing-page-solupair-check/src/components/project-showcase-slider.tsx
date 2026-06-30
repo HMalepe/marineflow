@@ -49,7 +49,7 @@ export const ProjectShowcaseSlider = forwardRef<
 
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
-      loop: false,
+      loop: true,
       align: "start",
       containScroll: "trimSnaps",
       duration: prefersReducedMotion ? 0 : 32,

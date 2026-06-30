@@ -42,7 +42,7 @@ export function ProjectsSection() {
   const sliderRef = useRef<ShowcaseSliderHandle>(null);
   const [carousel, setCarousel] = useState<ShowcaseCarouselState>({
     index: 0,
-    canScrollPrev: false,
+    canScrollPrev: projects.length > 1,
     canScrollNext: projects.length > 1,
   });
   const { prefersReducedMotion } = useDeviceProfile();
@@ -117,7 +117,7 @@ export function ProjectsSection() {
               className="projects-hint"
               {...revealProps(reduceMotion, sectionInView, 0.1)}
             >
-              Swipe, click or tap through selected builds.
+              Swipe, use the arrows, dots or cards below to browse builds.
             </motion.p>
           </div>
           <motion.p
@@ -140,6 +140,23 @@ export function ProjectsSection() {
               onKeyDown={handleCarouselKeyDown}
             >
               <div className="project-showcase-card relative overflow-hidden rounded-2xl border sm:rounded-3xl">
+                <button
+                  type="button"
+                  className="projects-showcase-arrow projects-showcase-arrow--prev touch-target"
+                  aria-label="Previous project"
+                  onClick={scrollPrev}
+                >
+                  <ChevronLeft className="size-5 sm:size-6" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="projects-showcase-arrow projects-showcase-arrow--next touch-target"
+                  aria-label="Next project"
+                  onClick={scrollNext}
+                >
+                  <ChevronRight className="size-5 sm:size-6" aria-hidden />
+                </button>
+
                 <ProjectShowcaseSlider
                   ref={sliderRef}
                   slides={projects}
@@ -218,20 +235,10 @@ export function ProjectsSection() {
             </div>
           </div>
 
-          <div className="projects-carousel-controls safe-area-bottom mt-4 flex items-center justify-center gap-3 sm:mt-5">
-            <button
-              type="button"
-              className="projects-carousel-arrow touch-target"
-              aria-label="Previous project"
-              disabled={!carousel.canScrollPrev}
-              onClick={scrollPrev}
-            >
-              <ChevronLeft className="size-5" aria-hidden />
-            </button>
-
+          <div className="projects-carousel-controls safe-area-bottom mt-4 flex items-center justify-center sm:mt-5">
             <div
               id="projects-carousel-panel"
-              className="projects-dots flex items-center justify-center gap-1.5"
+              className="projects-dots flex items-center justify-center gap-2"
               role="tablist"
               aria-label="Project slides"
             >
@@ -243,26 +250,16 @@ export function ProjectsSection() {
                   aria-label={`Show ${item.cardTitle} project`}
                   aria-selected={index === carousel.index}
                   onClick={() => goToProject(index)}
-                  className="touch-target flex items-center justify-center"
+                  className={`projects-dot-button touch-target${index === carousel.index ? " projects-dot-button--active" : ""}`}
                 >
                   <span
-                    className={`projects-dot block rounded-full transition ${
-                      index === carousel.index ? "projects-dot--active" : ""
+                    className={`projects-dot block rounded-full${
+                      index === carousel.index ? " projects-dot--active" : ""
                     }`}
                   />
                 </button>
               ))}
             </div>
-
-            <button
-              type="button"
-              className="projects-carousel-arrow touch-target"
-              aria-label="Next project"
-              disabled={!carousel.canScrollNext}
-              onClick={scrollNext}
-            >
-              <ChevronRight className="size-5" aria-hidden />
-            </button>
           </div>
 
           <ProjectValueCards activeIndex={carousel.index} onSelect={goToProject} />

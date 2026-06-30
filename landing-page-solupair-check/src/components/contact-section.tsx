@@ -14,7 +14,7 @@ export function ContactSection() {
       id="contact"
       data-scroll-snap="contact"
       aria-labelledby="contact-heading"
-      className={`contact-section safe-area-x section-surface snap-section-compact relative isolate flex flex-col justify-start overflow-x-clip px-4 pt-10 pb-14 sm:px-10 sm:pt-12 sm:pb-20 lg:px-14 lg:pt-14 lg:pb-24${sectionInView ? " contact-in-view" : ""}`}
+      className={`contact-section safe-area-x section-surface snap-section-compact relative isolate flex flex-col justify-start overflow-x-visible px-4 pt-10 pb-14 sm:px-10 sm:pt-12 sm:pb-20 lg:px-14 lg:pt-14 lg:pb-24${sectionInView ? " contact-in-view" : ""}`}
     >
       <div className="contact-helix-anchor" aria-hidden>
         <ContactHelixBackground />
