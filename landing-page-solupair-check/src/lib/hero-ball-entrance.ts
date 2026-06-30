@@ -42,8 +42,8 @@ export function getEntranceInitialState(
   const spanY = bounds.maxY - bounds.minY;
 
   const vx =
-    width < 400 ? 1180 : width < 640 ? 1380 : width < 1024 ? 1680 : 1950;
-  const vy = -Math.min(210, spanY * 0.11);
+    width < 400 ? 980 : width < 640 ? 1150 : width < 1024 ? 1420 : 1680;
+  const vy = -Math.min(185, spanY * 0.1);
 
   return {
     x: bounds.minX + radius * 0.08,
