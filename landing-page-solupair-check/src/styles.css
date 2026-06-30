@@ -497,10 +497,16 @@
   }
 }
 
+.site-header--sticky {
+  position: sticky;
+  top: 0;
+  margin-bottom: 0;
+}
+
 .site-logo {
   min-width: 0;
   flex: 1 1 auto;
-  max-width: calc(100% - 9.5rem);
+  max-width: calc(100% - 11.5rem);
   transition: opacity var(--nav-duration) var(--nav-ease);
 }
 
@@ -654,6 +660,13 @@
   color: var(--text-main);
   border-color: color-mix(in srgb, var(--brand-cyan) 38%, transparent);
   box-shadow: 0 0 18px color-mix(in srgb, var(--glow-cyan) 45%, transparent);
+}
+
+.site-nav-link--active {
+  color: var(--text-main);
+  border-color: color-mix(in srgb, var(--brand-cyan) 42%, transparent);
+  background: color-mix(in srgb, var(--bg-deep) 62%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--glow-cyan) 35%, transparent);
 }
 
 .site-nav-link--primary {
@@ -2080,6 +2093,201 @@
   .pricing-direction-note {
     font-size: 0.8125rem;
   }
+}
+
+.pricing-page-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.pricing-page-eyebrow {
+  margin: 0 0 clamp(0.65rem, 1.5vh, 0.85rem);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--brand-cyan) 72%, var(--text-soft));
+}
+
+@media (min-width: 640px) {
+  .pricing-page-eyebrow {
+    font-size: 0.6875rem;
+  }
+}
+
+.pricing-estimate-banner {
+  margin-bottom: clamp(1.75rem, 4vh, 2.5rem);
+  padding: clamp(1rem, 2.5vh, 1.35rem) clamp(1.1rem, 2.5vw, 1.35rem);
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--brand-cyan) 18%, transparent);
+  background: color-mix(in srgb, var(--bg-deep) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-cyan) 6%, transparent);
+}
+
+.pricing-estimate-banner__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-main) 82%, transparent);
+}
+
+.pricing-estimate-banner__body {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: color-mix(in srgb, var(--text-soft) 88%, transparent);
+}
+
+.pricing-estimate-banner__body strong {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.pricing-card__estimate-label {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--text-dim) 90%, transparent);
+}
+
+.pricing-card__price-suffix {
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: color-mix(in srgb, var(--text-soft) 75%, transparent);
+}
+
+.pricing-card__footnote {
+  margin: 0;
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--text-dim) 86%, transparent);
+}
+
+.pricing-factors {
+  margin-top: clamp(2.5rem, 6vh, 4rem);
+}
+
+.pricing-factors__heading {
+  font-size: clamp(1.35rem, 4.5vw, 2.25rem);
+  line-height: 0.96;
+  max-width: 18ch;
+}
+
+.pricing-factors__intro {
+  margin: clamp(0.75rem, 2vh, 1rem) 0 clamp(1.25rem, 3vh, 1.75rem);
+  max-width: 40rem;
+  font-size: 0.875rem;
+  line-height: 1.62;
+  color: color-mix(in srgb, var(--text-soft) 82%, transparent);
+}
+
+.pricing-factors__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(0.75rem, 1.8vh, 1rem);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (min-width: 640px) {
+  .pricing-factors__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .pricing-factors__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.pricing-factor-card {
+  padding: clamp(1rem, 2.2vh, 1.2rem);
+  border-radius: 1rem;
+  border: 1px solid color-mix(in srgb, var(--text-main) 9%, transparent);
+  background: color-mix(in srgb, var(--bg-deep) 42%, transparent);
+}
+
+.pricing-factor-card__title {
+  margin: 0 0 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-main);
+}
+
+.pricing-factor-card__body {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text-soft) 78%, transparent);
+}
+
+.pricing-general-notes {
+  margin-top: clamp(2rem, 4.5vh, 3rem);
+}
+
+.pricing-general-notes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pricing-general-notes__item {
+  position: relative;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  line-height: 1.58;
+  color: color-mix(in srgb, var(--text-soft) 80%, transparent);
+}
+
+.pricing-general-notes__item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-cyan) 55%, transparent);
+}
+
+.pricing-page-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-top: clamp(2rem, 4vh, 2.75rem);
+  padding-top: clamp(1.5rem, 3vh, 2rem);
+  border-top: 1px solid color-mix(in srgb, var(--text-main) 8%, transparent);
+}
+
+.pricing-page-cta__text {
+  margin: 0;
+  max-width: 32rem;
+  font-size: 0.9375rem;
+  line-height: 1.62;
+  color: color-mix(in srgb, var(--text-soft) 85%, transparent);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 @keyframes pricing-reveal {

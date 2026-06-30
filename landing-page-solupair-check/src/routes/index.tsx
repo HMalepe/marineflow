@@ -1,53 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef } from "react";
-import solupairLogo from "@/assets/solupair-logo.png";
-import solupairWordmark from "@/assets/solupair-wordmark.png";
 import { ContactSection } from "@/components/contact-section";
 import { HeroFaceBall } from "@/components/hero-face-ball";
 import { FinalCtaSection } from "@/components/final-cta-section";
-import { PricingDirectionSection } from "@/components/pricing-direction-section";
 import { ProjectsSection } from "@/components/projects-section";
+import { SiteHeader } from "@/components/site-header";
 import { WhatWeBuildSection } from "@/components/what-we-build-section";
 import { WhoThisIsForSection } from "@/components/who-this-is-for-section";
 
 export const Route = createFileRoute("/")({
   component: NovaHome,
 });
-
-function SolupairLogo() {
-  return (
-    <a
-      href="https://solupair.co.za"
-      className="site-logo inline-flex min-w-0 flex-row items-center gap-2 sm:gap-3 lg:gap-4"
-      aria-label="Solupair"
-    >
-      <img
-        src={solupairLogo}
-        alt=""
-        aria-hidden
-        width={1536}
-        height={1206}
-        decoding="async"
-        className="site-logo-mark w-auto shrink-0 object-contain object-left"
-      />
-      <div className="site-logo-copy min-w-0">
-        <div className="site-logo-wordmark-wrap overflow-hidden">
-          <img
-            src={solupairWordmark}
-            alt="Solupair"
-            width={1600}
-            height={153}
-            decoding="async"
-            className="site-logo-wordmark h-full w-auto object-contain object-left object-top"
-          />
-        </div>
-        <p className="site-logo-tagline hidden md:block">
-          Digital systems for service businesses and teams
-        </p>
-      </div>
-    </a>
-  );
-}
 
 function Hero() {
   const heroGroundRef = useRef<HTMLElement>(null);
@@ -110,23 +73,9 @@ function Hero() {
 
       <HeroFaceBall groundRef={heroGroundRef} />
 
-      <header className="site-header hero-reveal hero-reveal--header safe-area-top relative z-20 shrink-0">
-        <div className="site-header-bar">
-          <div className="site-header-inner">
-            <SolupairLogo />
-            <nav className="site-nav" aria-label="Primary">
-              <a href="#work" className="site-nav-link site-nav-link--secondary">
-                <span className="site-nav-label site-nav-label--short">Projects</span>
-                <span className="site-nav-label site-nav-label--full">See projects</span>
-              </a>
-              <a href="#contact" className="site-nav-link site-nav-link--primary">
-                <span className="site-nav-label site-nav-label--short">Start</span>
-                <span className="site-nav-label site-nav-label--full">Start a project</span>
-              </a>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <div className="hero-reveal hero-reveal--header relative z-20 shrink-0">
+        <SiteHeader />
+      </div>
 
       <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center">
         <div className="hero-reveal hero-reveal--eyebrow flex justify-center">
@@ -193,7 +142,6 @@ function NovaHome() {
       <Hero />
       <WhatWeBuildSection />
       <WhoThisIsForSection />
-      <PricingDirectionSection />
       <ProjectsSection />
       <FinalCtaSection />
       <ContactSection />
