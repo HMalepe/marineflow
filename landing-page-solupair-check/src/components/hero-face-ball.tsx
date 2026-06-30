@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefOb
 import {
   animate,
   motion,
+  useMotionTemplate,
   useMotionValue,
   useScroll,
   useSpring,
@@ -55,6 +56,10 @@ export function HeroFaceBall({
   groundRef: RefObject<HTMLElement | null>;
 }) {
   const { scrollY } = useScroll();
+  const { scrollYProgress: heroProgress } = useScroll({
+    target: groundRef,
+    offset: ["start start", "end start"],
+  });
   const { prefersReducedMotion, isPhone } = useDeviceProfile();
   const ballRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>(prefersReducedMotion ? "idle" : "entering");
@@ -69,6 +74,8 @@ export function HeroFaceBall({
   const posX = useMotionValue(0);
   const posY = useMotionValue(0);
   const entranceSmile = useMotionValue(prefersReducedMotion ? 1 : 0);
+  const cinematicDepth = useMotionValue(0);
+  const breathControlsRef = useRef<ReturnType<typeof animate> | null>(null);
   const stateRef = useRef<PhysicsBallState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const draggingRef = useRef(false);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
@@ -101,6 +108,37 @@ export function HeroFaceBall({
     setPhase(next);
   }, []);
 
+  const stopIdleBreath = useCallback(() => {
+    breathControlsRef.current?.stop();
+    breathControlsRef.current = null;
+  }, []);
+
+  const startIdleBreath = useCallback(() => {
+    stopIdleBreath();
+    breathControlsRef.current = animate(cinematicDepth, [0.3, 0.46, 0.3], {
+      duration: 6.2,
+      repeat: Infinity,
+      ease: "easeInOut",
+    });
+  }, [cinematicDepth, stopIdleBreath]);
+
+  const recedeToBackground = useCallback(() => {
+    stopIdleBreath();
+    void animate(cinematicDepth, 0.38, {
+      duration: 1.35,
+      ease: [0.22, 1, 0.36, 1],
+    }).then(() => {
+      if (phaseRef.current === "idle" || phaseRef.current === "resting") {
+        startIdleBreath();
+      }
+    });
+  }, [cinematicDepth, startIdleBreath, stopIdleBreath]);
+
+  const emergeFromBackground = useCallback(() => {
+    stopIdleBreath();
+    void animate(cinematicDepth, 0, { duration: 0.5, ease: [0.22, 1, 0.36, 1] });
+  }, [cinematicDepth, stopIdleBreath]);
+
   const settleEntrance = useCallback(() => {
     const baseDiameter = getDefaultDiameter();
     setDiameter(baseDiameter);
@@ -119,7 +157,8 @@ export function HeroFaceBall({
       ease: [0.22, 1, 0.36, 1],
     });
     setPhaseSafe("idle");
-  }, [entranceSmile, posX, posY, setPhaseSafe]);
+    recedeToBackground();
+  }, [entranceSmile, posX, posY, recedeToBackground, setPhaseSafe]);
 
   useEffect(() => {
     if (prefersReducedMotion || entranceStartedRef.current) return;
@@ -248,6 +287,37 @@ export function HeroFaceBall({
 
   const lidRaw = useTransform(scrollY, [0, 220], [1, 0]);
   const lidScale = useSpring(lidRaw, { stiffness: 140, damping: 22 });
+
+  const scrollPresenceRaw = useTransform(
+    heroProgress,
+    [0, 0.18, 0.42, 0.68, 1],
+    [1, 0.94, 0.72, 0.44, 0.14],
+  );
+  const scrollPresence = useSpring(scrollPresenceRaw, { stiffness: 80, damping: 22 });
+  const scrollScale = useSpring(
+    useTransform(heroProgress, [0, 0.55, 1], [1, 0.96, 0.88]),
+    { stiffness: 80, damping: 22 },
+  );
+  const scrollBlur = useTransform(heroProgress, [0, 0.45, 1], [0, 1.5, 4]);
+
+  const depthOpacity = useTransform(cinematicDepth, [0, 0.5], [1, 0.55]);
+  const depthScale = useTransform(cinematicDepth, [0, 0.5], [1, 0.93]);
+  const depthBlur = useTransform(cinematicDepth, [0, 0.5], [0, 2.5]);
+
+  const cinematicOpacity = useTransform(
+    [scrollPresence, depthOpacity],
+    ([scroll, depth]) => Number(scroll) * Number(depth),
+  );
+  const cinematicScale = useTransform(
+    [scrollScale, depthScale],
+    ([scroll, depth]) => Number(scroll) * Number(depth),
+  );
+  const cinematicBlurPx = useTransform(
+    [scrollBlur, depthBlur],
+    ([scroll, depth]) => Math.min(8, Number(scroll) + Number(depth)),
+  );
+  const cinematicBlur = useMotionTemplate`blur(${cinematicBlurPx}px)`;
+  const shadowOpacity = useTransform(cinematicOpacity, (value) => Number(value) * 0.72);
   const mouthWidth = useTransform(smile, (v: number) => `${22 + v * 70}px`);
   const mouthHeight = useTransform(smile, (v: number) => `${36 + v * 12}px`);
   const mouthRadius = useTransform(
@@ -296,9 +366,10 @@ export function HeroFaceBall({
 
   const wakeBall = useCallback(() => {
     if (phaseRef.current === "resting") {
+      emergeFromBackground();
       setPhaseSafe("simulating");
     }
-  }, [setPhaseSafe]);
+  }, [emergeFromBackground, setPhaseSafe]);
 
   const activateFromIdle = useCallback(() => {
     const el = ballRef.current;
@@ -322,8 +393,9 @@ export function HeroFaceBall({
     posY.set(local.y);
     setFaceReveal(1);
     setFaceHint(0);
+    emergeFromBackground();
     setPhaseSafe("simulating");
-  }, [groundRef, posX, posY, setPhaseSafe]);
+  }, [emergeFromBackground, groundRef, posX, posY, setPhaseSafe]);
 
   useEffect(() => {
     if (prefersReducedMotion) return;
@@ -369,12 +441,13 @@ export function HeroFaceBall({
 
       if (result.sleeping) {
         setPhaseSafe("resting");
+        recedeToBackground();
       }
     };
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [posX, posY, prefersReducedMotion, readSectionBounds, setPhaseSafe]);
+  }, [posX, posY, prefersReducedMotion, readSectionBounds, recedeToBackground, setPhaseSafe]);
 
   useEffect(() => {
     const el = ballRef.current;
@@ -399,6 +472,10 @@ export function HeroFaceBall({
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, [phase, prefersReducedMotion, readSectionBounds]);
+
+  useEffect(() => {
+    return () => stopIdleBreath();
+  }, [stopIdleBreath]);
 
   useEffect(() => {
     const onResize = () => {
@@ -523,11 +600,14 @@ export function HeroFaceBall({
     );
   }
 
+  const ballLayerZ =
+    phase === "entering" || phase === "simulating" || phase === "resting" ? "z-[18]" : "z-[8]";
+
   return (
     <>
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute left-0 top-0 z-[5]"
+        className={`pointer-events-none absolute left-0 top-0 ${ballLayerZ}`}
         style={{
           width: diameter * 0.72,
           height: diameter * 0.14,
@@ -538,38 +618,51 @@ export function HeroFaceBall({
           borderRadius: "50%",
           background: "radial-gradient(ellipse, oklch(0 0 0 / 0.28) 0%, oklch(0 0 0 / 0) 72%)",
           filter: "blur(10px)",
-          opacity: phase === "entering" ? 0.5 : 0.7,
+          opacity: shadowOpacity,
+          scale: cinematicScale,
         }}
       />
 
       <motion.div
-        ref={ballRef}
         aria-hidden
-        className={`absolute left-0 top-0 ${
-          phase === "entering" ? "z-30 cursor-default" : "cursor-grab active:cursor-grabbing"
-        } ${phase === "idle" ? "z-10" : "z-30"} touch-none`}
+        className={`pointer-events-none absolute left-0 top-0 ${ballLayerZ} touch-none`}
         style={{
-          ...ballStyle,
           x: posX,
           y: posY,
           translateX: "-50%",
           translateY: "-50%",
-          scaleX: squashX,
-          scaleY: squashY,
-          willChange: "transform",
+          opacity: cinematicOpacity,
+          scale: cinematicScale,
+          filter: cinematicBlur,
+          willChange: "transform, opacity, filter",
         }}
-        {...pointerHandlers}
       >
-        {phase === "idle" ? (
-          <div
-            className="h-full w-full animate-[novaBounce_2.8s_ease-in-out_infinite]"
-            style={{ ["--nova-amp" as string]: "8px" }}
-          >
-            {face}
-          </div>
-        ) : (
-          <div className="h-full w-full">{face}</div>
-        )}
+        <motion.div
+          ref={ballRef}
+          className={
+            phase === "entering"
+              ? "pointer-events-auto cursor-default"
+              : "pointer-events-auto cursor-grab active:cursor-grabbing"
+          }
+          style={{
+            ...ballStyle,
+            scaleX: squashX,
+            scaleY: squashY,
+            willChange: "transform",
+          }}
+          {...pointerHandlers}
+        >
+          {phase === "idle" || phase === "resting" ? (
+            <div
+              className="h-full w-full animate-[novaBounce_2.8s_ease-in-out_infinite]"
+              style={{ ["--nova-amp" as string]: "8px" }}
+            >
+              {face}
+            </div>
+          ) : (
+            <div className="h-full w-full">{face}</div>
+          )}
+        </motion.div>
       </motion.div>
     </>
   );
