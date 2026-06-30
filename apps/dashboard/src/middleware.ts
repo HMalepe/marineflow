@@ -5,6 +5,17 @@ import { isJwtExpired } from '@/lib/jwt-payload';
 const PUBLIC_PATHS = ['/login', '/onboarding'];
 const TOKEN_KEY = 'mf_token';
 
+/** Next metadata icons + /public/favicon.* — must not require auth (tabs, Googlebot). */
+function isPublicAsset(pathname: string): boolean {
+  return (
+    pathname.startsWith('/favicon') ||
+    pathname === '/icon' ||
+    pathname.startsWith('/icon.') ||
+    pathname === '/apple-icon' ||
+    pathname.startsWith('/apple-icon.')
+  );
+}
+
 function redirectToLogin(request: NextRequest, clearCookie: boolean) {
   const loginUrl = new URL('/login', request.url);
   const returnPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
@@ -19,6 +30,10 @@ function redirectToLogin(request: NextRequest, clearCookie: boolean) {
 export function middleware(request: NextRequest) {
   const token = request.cookies.get(TOKEN_KEY)?.value;
   const { pathname } = request.nextUrl;
+
+  if (isPublicAsset(pathname)) {
+    return NextResponse.next();
+  }
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
@@ -36,5 +51,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon|icon|apple-icon|api).*)'],
 };

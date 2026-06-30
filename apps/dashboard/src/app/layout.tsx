@@ -16,6 +16,14 @@ export const metadata: Metadata = {
   title: 'Solupair Dashboard',
   description: 'Business management dashboard',
   applicationName: 'Solupair',
+  icons: {
+    icon: [
+      { url: '/favicon-48.png', sizes: '48x48', type: 'image/png' },
+      { url: '/icon', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-icon', sizes: '180x180', type: 'image/png' }],
+    shortcut: '/favicon.ico',
+  },
 };
 
 export const viewport: Viewport = {

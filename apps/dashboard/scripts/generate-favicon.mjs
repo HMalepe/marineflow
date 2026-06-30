@@ -138,9 +138,11 @@ async function makeMarkIcon(size) {
 }
 
 const icon32 = await makeMarkIcon(32);
+const icon48 = await makeMarkIcon(48);
 const icon180 = await makeMarkIcon(180);
 
 writeFileSync(join(root, 'src', 'app', 'icon.png'), icon32);
 writeFileSync(join(root, 'src', 'app', 'apple-icon.png'), icon180);
+writeFileSync(join(root, 'public', 'favicon-48.png'), icon48);
 
-console.log('Generated mark favicons: icon.png (32px), apple-icon.png (180px)');
+console.log('Generated mark favicons: icon.png (32px), apple-icon.png (180px), public/favicon-48.png');
