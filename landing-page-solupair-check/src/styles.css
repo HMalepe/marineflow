@@ -265,20 +265,36 @@
   }
 }
 
-/* ── Projects: native scroll-snap + CSS slide crossfade (no wheel hijack) ── */
+/* ── Full-page scroll choreography: mandatory snap, premium pacing ── */
+html,
+body {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: auto;
+  overscroll-behavior-y: none;
+}
+
 .scroll-snap-canvas {
-  scroll-snap-type: y proximity;
+  scroll-snap-type: y mandatory;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html,
+  body,
   .scroll-snap-canvas {
     scroll-snap-type: none;
+    overscroll-behavior-y: auto;
   }
 }
 
 .snap-section-start {
   scroll-snap-align: start;
-  scroll-snap-stop: normal;
+  scroll-snap-stop: always;
+}
+
+.snap-section-panel {
+  min-height: 100dvh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .projects-scene {

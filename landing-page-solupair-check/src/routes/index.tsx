@@ -14,6 +14,8 @@ import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
+import { useScrollChoreography } from "@/hooks/use-scroll-choreography";
+import { scrollToSnap, snapIdFromProjectIndex } from "@/lib/scroll-choreography";
 
 export const Route = createFileRoute("/")({
   component: NovaHome,
@@ -28,7 +30,7 @@ function clamp(value: number, min: number, max: number) {
 function getProjectIndexFromProgress(progress: number, count: number) {
   if (count <= 1) return 0;
   const scaled = progress * (count - 1);
-  return Math.min(count - 1, Math.max(0, Math.round(scaled)));
+  return Math.min(count - 1, Math.max(0, Math.floor(scaled + 0.5)));
 }
 
 function SolupairLogo() {
@@ -66,8 +68,10 @@ function Hero() {
 
   return (
     <section
+      id="hero"
+      data-scroll-snap="hero"
       ref={heroGroundRef}
-      className="safe-area-x snap-section-start relative flex max-h-[100dvh] min-h-[min(100dvh,52rem)] flex-col overflow-x-clip overflow-y-hidden bg-background text-foreground sm:min-h-[min(100dvh,54rem)] lg:min-h-[min(100dvh,56rem)]"
+      className="safe-area-x snap-section-panel relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-clip overflow-y-hidden bg-background text-foreground"
     >
       <HeroFaceBall groundRef={heroGroundRef} />
       <header className="safe-area-top relative z-20 flex shrink-0 items-start justify-between gap-3 px-4 py-2 sm:items-center sm:px-10 sm:py-3 lg:px-14">
@@ -138,19 +142,10 @@ function Projects() {
     scrollIndexRef.current = clamped;
     setActiveIndex(clamped);
 
-    if (!options?.syncScroll || !sectionRef.current) return;
+    if (!options?.syncScroll) return;
 
     const behavior = prefersReducedMotion ? "auto" : "smooth";
-
-    if (clamped === 0) {
-      sectionRef.current.scrollIntoView({ behavior, block: "start" });
-      return;
-    }
-
-    const anchor = sectionRef.current.querySelector<HTMLElement>(
-      `[data-project-snap="${clamped}"]`,
-    );
-    anchor?.scrollIntoView({ behavior, block: "start" });
+    scrollToSnap(snapIdFromProjectIndex(clamped), behavior);
   }, [prefersReducedMotion]);
 
   useEffect(() => {
@@ -191,10 +186,7 @@ function Projects() {
   }, []);
 
   const scrollToContact = useCallback(() => {
-    document.getElementById("contact")?.scrollIntoView({
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-      block: "start",
-    });
+    scrollToSnap("contact", prefersReducedMotion ? "auto" : "smooth");
   }, [prefersReducedMotion]);
 
   const handleProjectClick = useCallback(() => {
@@ -229,7 +221,12 @@ function Projects() {
   };
 
   return (
-    <section ref={sectionRef} id="work" className="projects-scene snap-section-start">
+    <section
+      ref={sectionRef}
+      id="work"
+      data-scroll-snap="work-0"
+      className="projects-scene snap-section-start"
+    >
       <div
         className="safe-area-x projects-pin sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
         style={{ background: "var(--section-dark)" }}
@@ -364,7 +361,7 @@ function Projects() {
       {projects.slice(1).map((_, index) => (
         <div
           key={index}
-          data-project-snap={index + 1}
+          data-scroll-snap={`work-${index + 1}`}
           className="projects-scroll-snap"
           aria-hidden
         />
@@ -377,7 +374,8 @@ function Contact() {
   return (
     <section
       id="contact"
-      className="safe-area-x snap-section-start relative isolate px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
+      data-scroll-snap="contact"
+      className="safe-area-x snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
       style={{ background: "var(--section-dark)" }}
     >
       <ViewportPhysicsBalls variant="contact" />
@@ -455,6 +453,8 @@ function Contact() {
 }
 
 function NovaHome() {
+  useScrollChoreography();
+
   return (
     <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
