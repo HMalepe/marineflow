@@ -1180,24 +1180,40 @@
 .hero-content {
   min-width: 0;
   padding-inline: clamp(1rem, 4vw, 2.75rem);
-  padding-bottom: clamp(1.75rem, 4vh, 2.75rem);
-  padding-top: clamp(0.75rem, 2.5vh, 1.5rem);
-  margin-top: clamp(0.25rem, 1.5vh, 1rem);
+  padding-bottom: clamp(2rem, 5vh, 3rem);
+  padding-top: clamp(1.25rem, 4vh, 2.25rem);
+  margin-top: clamp(0.5rem, 2vh, 1.25rem);
+}
+
+.hero-copy-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  transform: translate3d(0, clamp(1.25rem, 5vh, 3rem), 0);
 }
 
 @media (min-width: 640px) {
   .hero-content {
-    padding-top: clamp(1rem, 3vh, 2rem);
-    margin-top: clamp(0.5rem, 2vh, 1.25rem);
-    padding-bottom: clamp(2.25rem, 5vh, 3rem);
+    padding-top: clamp(1.5rem, 4.5vh, 2.75rem);
+    margin-top: clamp(0.75rem, 2.5vh, 1.5rem);
+    padding-bottom: clamp(2.5rem, 5.5vh, 3.5rem);
+  }
+
+  .hero-copy-stack {
+    transform: translate3d(0, clamp(1.5rem, 5.5vh, 3.25rem), 0);
   }
 }
 
 @media (min-width: 1024px) {
   .hero-content {
-    padding-top: clamp(1.25rem, 3.5vh, 2.5rem);
-    margin-top: clamp(0.75rem, 2.5vh, 1.5rem);
-    padding-bottom: 2.75rem;
+    padding-top: clamp(1.75rem, 5vh, 3rem);
+    margin-top: clamp(1rem, 3vh, 1.75rem);
+    padding-bottom: 3rem;
+  }
+
+  .hero-copy-stack {
+    transform: translate3d(0, clamp(1.75rem, 6vh, 3.5rem), 0);
   }
 }
 
@@ -1216,8 +1232,12 @@
   }
 
   .hero-content {
-    padding-top: 0.5rem;
-    padding-bottom: 1.5rem;
+    padding-top: 0.75rem;
+    padding-bottom: 2rem;
+  }
+
+  .hero-copy-stack {
+    transform: translate3d(0, clamp(1rem, 4.5vh, 2.25rem), 0);
   }
 
   .hero-ctas {
@@ -4074,6 +4094,10 @@
   .hero-reveal {
     opacity: 1;
     animation: none;
+    transform: none;
+  }
+
+  .hero-copy-stack {
     transform: none;
   }
 

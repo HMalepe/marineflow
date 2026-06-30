@@ -77,45 +77,36 @@ function Hero() {
       </div>
 
       <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center">
-        <div className="hero-reveal hero-reveal--eyebrow flex justify-center">
-          <p className="hero-eyebrow">
-            Websites<span className="hero-eyebrow-sep" aria-hidden>·</span>
-            Dashboards<span className="hero-eyebrow-sep" aria-hidden>·</span>
-            WhatsApp<span className="hero-eyebrow-sep" aria-hidden>·</span>
-            Automation
+        <div className="hero-copy-stack w-full min-w-0">
+          <div className="hero-reveal hero-reveal--eyebrow flex justify-center">
+            <p className="hero-eyebrow">
+              Websites<span className="hero-eyebrow-sep" aria-hidden>·</span>
+              Dashboards<span className="hero-eyebrow-sep" aria-hidden>·</span>
+              WhatsApp<span className="hero-eyebrow-sep" aria-hidden>·</span>
+              Automation
+            </p>
+          </div>
+
+          <div className="hero-stage relative w-full min-w-0 text-center">
+            <div className="hero-headline-scrim" aria-hidden />
+
+            <h1 className="relative z-[1] w-full min-w-0 text-center">
+              <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text hero-headline-text--a">
+                DIGITAL{" "}
+                <span className="hero-headline-gradient">SOLUTIONS</span>
+              </span>
+              <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text hero-headline-text--b">
+                <span className="hero-headline-phrase">FOR YOUR</span>{" "}
+                <span className="hero-headline-phrase">BUSINESS</span>
+              </span>
+            </h1>
+          </div>
+
+          <p className="hero-reveal hero-reveal--subheading hero-subheading text-center">
+            Premium websites, dashboards and automated workflows for teams that need smoother
+            bookings, sharper visibility and faster operations.
           </p>
         </div>
-
-        <div className="hero-stage relative w-full min-w-0 text-center">
-          <div className="hero-headline-scrim" aria-hidden />
-
-          <h1 className="relative z-[1] w-full min-w-0 text-center">
-            <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text hero-headline-text--a">
-              DIGITAL{" "}
-              <span className="hero-headline-gradient">SOLUTIONS</span>
-            </span>
-            <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text hero-headline-text--b">
-              <span className="hero-headline-phrase">FOR YOUR</span>{" "}
-              <span className="hero-headline-phrase">BUSINESS</span>
-            </span>
-          </h1>
-        </div>
-
-        <p className="hero-reveal hero-reveal--subheading hero-subheading text-center">
-          Premium websites, dashboards and automated workflows for teams that need smoother
-          bookings, sharper visibility and faster operations.
-        </p>
-
-        <ul
-          className="hero-reveal hero-reveal--trust-strip hero-trust-strip"
-          aria-label="Trust signals"
-        >
-          <li className="hero-trust-strip__item">South African-built</li>
-          <li className="hero-trust-strip__item">Mobile-first</li>
-          <li className="hero-trust-strip__item">WhatsApp-ready</li>
-          <li className="hero-trust-strip__item">Dashboard-focused</li>
-          <li className="hero-trust-strip__item">Remote-first delivery</li>
-        </ul>
       </div>
     </section>
   );
