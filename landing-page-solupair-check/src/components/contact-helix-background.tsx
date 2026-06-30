@@ -54,7 +54,7 @@ export function ContactHelixBackground() {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || prefersReducedMotion) return;
+    if (!container || prefersReducedMotion || isPhone) return;
 
     let disposed = false;
     let renderer: import("three").WebGLRenderer | null = null;
@@ -295,7 +295,7 @@ export function ContactHelixBackground() {
       className="contact-helix-canvas"
       aria-hidden
     >
-      {prefersReducedMotion ? <div className="contact-helix-fallback" /> : null}
+      {prefersReducedMotion || isPhone ? <div className="contact-helix-fallback" /> : null}
     </div>
   );
 }

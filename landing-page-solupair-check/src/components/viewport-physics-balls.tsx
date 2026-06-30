@@ -38,9 +38,12 @@ function AmbientBlurBall({ size, drift, bounds, className }: AmbientBallProps) {
 
 /** One soft blue blur orb per dark section (Projects + Contact). */
 export function ViewportPhysicsBalls({ variant }: { variant: "projects" | "contact" }) {
-  const { isPhone, isDesktop } = useDeviceProfile();
-  const size = isPhone ? 140 : isDesktop ? 240 : 180;
-  const travel = isPhone ? 36 : isDesktop ? 72 : 52;
+  const { isPhone, isDesktop, prefersReducedMotion } = useDeviceProfile();
+
+  if (isPhone || prefersReducedMotion) return null;
+
+  const size = isDesktop ? 240 : 180;
+  const travel = isDesktop ? 72 : 52;
 
   const bounds = useMemo(
     () => ({

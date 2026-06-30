@@ -157,12 +157,13 @@ function Hero() {
           <div className="hero-headline-scrim" aria-hidden />
 
           <h1 className="relative z-[1] w-full min-w-0 text-center">
-            <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text">
+            <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text hero-headline-text--a">
               DIGITAL{" "}
               <span className="hero-headline-gradient">SOLUTIONS</span>
             </span>
-            <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text">
-              MOVING BUSINESSES FORWARD
+            <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text hero-headline-text--b">
+              <span className="hero-headline-phrase">FOR YOUR</span>{" "}
+              <span className="hero-headline-phrase">BUSINESS</span>
             </span>
           </h1>
         </div>
@@ -367,20 +368,20 @@ function Projects() {
 
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 pt-16 sm:p-8 sm:pt-24 lg:p-10">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-3 pt-14 sm:p-8 sm:pt-24 lg:p-10">
               <div key={`meta-${activeIndex}`} className="project-meta-fade">
-                <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
-                  <div className="font-mono text-[11px] tracking-[0.2em] text-text-soft sm:text-sm">
+                <div className="mb-2 flex items-center justify-between gap-2 sm:mb-4 sm:gap-3">
+                  <div className="font-mono text-[10px] tracking-[0.18em] text-text-soft sm:text-sm sm:tracking-[0.2em]">
                     {String(activeIndex + 1).padStart(2, "0")} /{" "}
                     {String(projects.length).padStart(2, "0")}
                   </div>
-                  <span className="max-w-[58%] truncate rounded-full border border-glass bg-glass-bg px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-foreground backdrop-blur sm:max-w-none sm:px-3 sm:text-xs sm:tracking-[0.18em]">
+                  <span className="max-w-[56%] truncate rounded-full border border-glass bg-glass-bg px-2 py-0.5 text-[8px] font-medium uppercase tracking-[0.14em] text-foreground backdrop-blur sm:max-w-none sm:px-3 sm:py-1 sm:text-xs sm:tracking-[0.18em]">
                     {project.tag}
                   </span>
                 </div>
 
-                <div className="flex items-end justify-between gap-3 sm:gap-4">
-                  <h3 className="min-w-0 font-display text-2xl font-black tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+                <div className="flex items-end justify-between gap-2 sm:gap-4">
+                  <h3 className="project-showcase-title min-w-0 font-display font-black tracking-tight text-foreground">
                     {project.name}
                   </h3>
                   <span className="flex shrink-0 flex-col items-center gap-1 text-brand-cyan transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
