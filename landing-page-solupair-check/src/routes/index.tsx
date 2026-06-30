@@ -37,7 +37,7 @@ function SolupairLogo() {
   return (
     <a
       href="https://solupair.co.za"
-      className="inline-flex shrink-0 flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-3 lg:gap-5"
+      className="hero-logo inline-flex shrink-0 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4 lg:gap-5"
       aria-label="Solupair"
     >
       <img
@@ -47,17 +47,22 @@ function SolupairLogo() {
         width={1536}
         height={1206}
         decoding="async"
-        className="h-[4.5rem] w-auto shrink-0 object-contain object-left drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[5.5rem] lg:h-[6.5rem]"
+        className="hero-logo-mark h-[3.75rem] w-auto shrink-0 object-contain object-left sm:h-[4.75rem] lg:h-[5.5rem]"
       />
-      <div className="h-[1.65rem] overflow-hidden sm:h-[2rem] lg:h-[2.35rem]">
-        <img
-          src={solupairWordmark}
-          alt="Solupair"
-          width={1600}
-          height={153}
-          decoding="async"
-          className="h-full w-auto max-w-[min(58vw,20rem)] object-contain object-left object-top sm:max-w-[min(54vw,24rem)] lg:max-w-none"
-        />
+      <div className="min-w-0">
+        <div className="h-[1.5rem] overflow-hidden sm:h-[1.85rem] lg:h-[2.1rem]">
+          <img
+            src={solupairWordmark}
+            alt="Solupair"
+            width={1600}
+            height={153}
+            decoding="async"
+            className="h-full w-auto max-w-[min(62vw,18rem)] object-contain object-left object-top sm:max-w-[min(50vw,22rem)] lg:max-w-none"
+          />
+        </div>
+        <p className="hero-logo-tagline hidden sm:block">
+          Digital systems that push businesses forward
+        </p>
       </div>
     </a>
   );
@@ -71,57 +76,92 @@ function Hero() {
       id="hero"
       data-scroll-snap="hero"
       ref={heroGroundRef}
-      className="safe-area-x snap-section-panel relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-clip overflow-y-hidden bg-background text-foreground"
+      className="hero-section safe-area-x snap-section-panel relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-clip overflow-y-hidden"
     >
+      <div className="hero-bg" aria-hidden>
+        <div className="hero-bg-base" />
+        <div className="hero-bg-glow hero-bg-glow--cyan" />
+        <div className="hero-bg-glow hero-bg-glow--pink" />
+        <div className="hero-bg-glow hero-bg-glow--purple" />
+        <div className="hero-bg-grain" />
+      </div>
+
       <HeroFaceBall groundRef={heroGroundRef} />
-      <header className="safe-area-top relative z-20 flex shrink-0 items-start justify-between gap-3 px-4 py-2 sm:items-center sm:px-10 sm:py-3 lg:px-14">
+
+      <header className="safe-area-top relative z-20 mx-auto flex w-full max-w-7xl shrink-0 items-start justify-between gap-4 px-4 py-3 sm:items-center sm:px-8 sm:py-4 lg:px-10">
         <SolupairLogo />
-        <nav className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          <a
-            href="#work"
-            className="touch-target rounded-full border border-white/30 px-3 py-2 text-[10px] font-semibold tracking-wider text-foreground transition hover:border-primary hover:text-primary sm:px-5 sm:text-sm"
-          >
-            <span className="sm:hidden">WORK</span>
-            <span className="hidden sm:inline">OUR WORK</span>
+        <nav className="flex shrink-0 items-center gap-2 sm:gap-2.5" aria-label="Primary">
+          <a href="#work" className="hero-nav-link">
+            <span className="sm:hidden">Work</span>
+            <span className="hidden sm:inline">Our work</span>
           </a>
-          <a
-            href="#contact"
-            className="touch-target rounded-full border border-white/30 px-3 py-2 text-[10px] font-semibold tracking-wider text-foreground transition hover:border-primary hover:text-primary sm:px-5 sm:text-sm"
-          >
-            <span className="sm:hidden">CONTACT</span>
-            <span className="hidden sm:inline">GET IN TOUCH</span>
+          <a href="#contact" className="hero-nav-link">
+            <span className="sm:hidden">Contact</span>
+            <span className="hidden sm:inline">Get in touch</span>
           </a>
         </nav>
       </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-start px-4 pb-6 pt-0 sm:px-6 sm:pb-8">
-        <div className="relative z-0 mb-1 text-center text-[10px] font-medium tracking-[0.22em] text-primary sm:mb-2 sm:text-sm sm:tracking-[0.3em]">
-          AUTOMATION &amp; WEB DESIGN
-        </div>
+      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-4 pb-8 pt-2 sm:px-8 sm:pb-10 lg:px-10">
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+          className="hero-eyebrow mb-3 text-center sm:mb-4"
+        >
+          Automation &amp; web design
+        </motion.p>
 
-        <div className="relative w-full max-w-[100vw] -mt-1 sm:-mt-0.5">
+        <div className="relative w-full max-w-[100vw] text-center">
           <motion.h1
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="relative z-0 w-full break-words px-1 text-center font-display font-black leading-[0.86] tracking-tighter text-foreground sm:whitespace-nowrap sm:leading-[0.84] sm:px-0"
-            style={{ fontSize: "clamp(2.5rem, 11vw, 14rem)" }}
+            transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+            className="hero-headline relative z-0 w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
+            style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
           >
             WE DESIGN
           </motion.h1>
           <motion.h1
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.15 }}
-            className="relative z-0 w-full break-words px-1 text-center font-display font-black leading-[0.86] tracking-tighter text-primary sm:whitespace-nowrap sm:leading-[0.84] sm:px-0"
-            style={{ fontSize: "clamp(2.5rem, 11vw, 14rem)" }}
+            transition={{ duration: 0.75, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            className="hero-headline relative z-0 w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
+            style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
           >
-            THE FUTURE
+            <span className="relative inline-block">
+              THE FUTURE
+              <span className="hero-headline-accent" aria-hidden />
+            </span>
           </motion.h1>
         </div>
 
-        <p className="mt-4 max-w-xl px-2 text-center text-[10px] leading-relaxed tracking-[0.14em] text-foreground/70 sm:mt-5 sm:max-w-2xl sm:text-xs sm:tracking-[0.2em]">
-          WEB APPLICATIONS, DASHBOARDS, WHATSAPP BOOKING AGENTS — AND PLENTY MORE BUSINESS SOLUTIONS
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
+          className="hero-subheading mt-5 px-2 text-center sm:mt-6"
+        >
+          Web applications, dashboards, WhatsApp booking agents and business automation systems
+          built to move faster than your competitors.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}
+          className="hero-ctas mt-7 sm:mt-8"
+        >
+          <a href="#contact" className="hero-btn hero-btn--primary">
+            Get in touch
+          </a>
+          <a href="#work" className="hero-btn hero-btn--secondary">
+            Our work
+          </a>
+        </motion.div>
+
+        <p className="hero-logo-tagline mt-6 text-center sm:hidden">
+          Digital systems that push businesses forward
         </p>
       </div>
     </section>
