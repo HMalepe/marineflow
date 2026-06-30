@@ -48,13 +48,19 @@ function SolupairLogo() {
         src={solupairLogo}
         alt=""
         aria-hidden
-        className="h-[4.5rem] w-auto shrink-0 object-contain drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[5.5rem] lg:h-[6.5rem]"
+        width={1536}
+        height={1206}
+        decoding="async"
+        className="h-[4.5rem] w-auto shrink-0 object-contain object-left drop-shadow-[0_2px_14px_oklch(0_0_0_/_0.45)] sm:h-[5.5rem] lg:h-[6.5rem]"
       />
       <div className="h-[1.65rem] overflow-hidden sm:h-[2rem] lg:h-[2.35rem]">
         <img
           src={solupairWordmark}
           alt="Solupair"
-          className="h-auto w-auto max-w-[min(52vw,14rem)] object-contain object-left object-top sm:max-w-[min(48vw,17rem)] lg:max-w-none"
+          width={1600}
+          height={153}
+          decoding="async"
+          className="h-full w-auto max-w-[min(58vw,20rem)] object-contain object-left object-top sm:max-w-[min(54vw,24rem)] lg:max-w-none"
         />
       </div>
     </a>

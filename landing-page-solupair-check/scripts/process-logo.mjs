@@ -5,23 +5,12 @@ import sharp from "sharp";
 
 const root = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-/** Knock out black/near-black background; keep neon strokes and white type. */
-async function knockOutBackground(input, output, { threshold = 36, cropToNameOnly = false } = {}) {
-  let loader = sharp(input);
+/** Upscale small brand assets for crisp retina header display. */
+const WORDMARK_UPSCALE = 4;
+const LOGO_MIN_LONG_EDGE = 1536;
+const NAME_CROP_RATIO = 0.4;
 
-  if (cropToNameOnly) {
-    const meta = await sharp(input).metadata();
-    const cropHeight = Math.max(1, Math.min(meta.height ?? 1, Math.round((meta.height ?? 1) * 0.48)));
-    loader = sharp(input).extract({
-      left: 0,
-      top: 0,
-      width: meta.width ?? 1,
-      height: cropHeight,
-    });
-  }
-
-  const { data, info } = await loader.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-
+function knockOutPixels(data, threshold) {
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -38,29 +27,89 @@ async function knockOutBackground(input, output, { threshold = 36, cropToNameOnl
       data[i + 3] = Math.round(255 * t);
     }
   }
+}
 
-  const png = await sharp(data, {
-    raw: { width: info.width, height: info.height, channels: 4 },
-  })
-    .trim({ threshold: 12 })
-    .png({ compressionLevel: 9, effort: 10 })
+async function exportPng(pipeline, output, { minWidth, minHeight } = {}) {
+  let img = pipeline.trim({ threshold: 12 });
+
+  if (minWidth || minHeight) {
+    img = img.resize({
+      width: minWidth,
+      height: minHeight,
+      fit: "inside",
+      withoutEnlargement: false,
+      kernel: sharp.kernel.lanczos3,
+    });
+  }
+
+  const png = await img
+    .sharpen({ sigma: 0.65, m1: 0.55, m2: 0.3, x1: 2, y2: 10, y3: 20 })
+    .png({ compressionLevel: 6, effort: 10, palette: false })
     .toBuffer();
 
   writeFileSync(output, png);
-  const outMeta = await sharp(png).metadata();
-  console.log(`Wrote ${output} (${png.length} bytes, ${outMeta.width}x${outMeta.height}, alpha: ${outMeta.hasAlpha})`);
+  const meta = await sharp(png).metadata();
+  console.log(`Wrote ${output} (${png.length} bytes, ${meta.width}x${meta.height}, alpha: ${meta.hasAlpha})`);
+}
+
+/** Knock out black/near-black background; keep neon strokes and white type. */
+async function knockOutBackground(
+  input,
+  output,
+  { threshold = 36, cropToNameOnly = false, minWidth, minHeight, preUpscale = 1 } = {},
+) {
+  const sourceMeta = await sharp(input).metadata();
+  const srcW = sourceMeta.width ?? 1;
+  const srcH = sourceMeta.height ?? 1;
+
+  let loader = sharp(input);
+
+  if (preUpscale > 1) {
+    loader = loader.resize({
+      width: Math.round(srcW * preUpscale),
+      height: Math.round(srcH * preUpscale),
+      kernel: sharp.kernel.lanczos3,
+    });
+  }
+
+  if (cropToNameOnly) {
+    const scaledH = Math.round(srcH * preUpscale);
+    const cropHeight = Math.max(1, Math.round(scaledH * NAME_CROP_RATIO));
+    loader = loader.extract({
+      left: 0,
+      top: 0,
+      width: Math.round(srcW * preUpscale),
+      height: cropHeight,
+    });
+  }
+
+  const { data, info } = await loader.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  knockOutPixels(data, threshold);
+
+  await exportPng(
+    sharp(data, {
+      raw: { width: info.width, height: info.height, channels: 4 },
+    }),
+    output,
+    { minWidth, minHeight },
+  );
 }
 
 const jobs = [
   {
     source: join(root, "src/assets/solupair-logo-source.png"),
     output: join(root, "src/assets/solupair-logo.png"),
+    minWidth: LOGO_MIN_LONG_EDGE,
+    minHeight: LOGO_MIN_LONG_EDGE,
   },
   {
     source: join(root, "src/assets/solupair-wordmark-source.png"),
     output: join(root, "src/assets/solupair-wordmark.png"),
     threshold: 32,
     cropToNameOnly: true,
+    preUpscale: WORDMARK_UPSCALE,
+    minWidth: 1600,
+    minHeight: 180,
   },
 ];
 
@@ -72,5 +121,8 @@ for (const job of jobs) {
   await knockOutBackground(job.source, job.output, {
     threshold: job.threshold ?? 36,
     cropToNameOnly: job.cropToNameOnly ?? false,
+    minWidth: job.minWidth,
+    minHeight: job.minHeight,
+    preUpscale: job.preUpscale ?? 1,
   });
 }
