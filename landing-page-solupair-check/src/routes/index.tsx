@@ -1,8 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  AnimatePresence,
   motion,
-  useMotionValueEvent,
   useScroll,
   useSpring,
   useTransform,
@@ -23,18 +21,14 @@ export const Route = createFileRoute("/")({
 
 const projects = PROJECT_SHOWCASES;
 
-/** Flip slides after ~18% of each segment's scroll (high sensitivity). */
-const SLIDE_SCROLL_BIAS = 0.82;
-
-function getProjectIndexFromProgress(progress: number, count: number) {
-  const segments = Math.max(1, count - 1);
-  const scaled = progress * segments;
-  return Math.min(count - 1, Math.max(0, Math.floor(scaled + SLIDE_SCROLL_BIAS)));
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function getProjectScrollProgress(index: number, count: number) {
-  const segments = Math.max(1, count - 1);
-  return index / segments;
+function getProjectIndexFromProgress(progress: number, count: number) {
+  if (count <= 1) return 0;
+  const scaled = progress * (count - 1);
+  return Math.min(count - 1, Math.max(0, Math.round(scaled)));
 }
 
 function SolupairLogo() {
@@ -73,7 +67,7 @@ function Hero() {
   return (
     <section
       ref={heroGroundRef}
-      className="safe-area-x relative flex max-h-[100dvh] min-h-[min(100dvh,52rem)] flex-col overflow-x-clip overflow-y-hidden bg-background text-foreground sm:min-h-[min(100dvh,54rem)] lg:min-h-[min(100dvh,56rem)]"
+      className="safe-area-x snap-section-start relative flex max-h-[100dvh] min-h-[min(100dvh,52rem)] flex-col overflow-x-clip overflow-y-hidden bg-background text-foreground sm:min-h-[min(100dvh,54rem)] lg:min-h-[min(100dvh,56rem)]"
     >
       <HeroFaceBall groundRef={heroGroundRef} />
       <header className="safe-area-top relative z-20 flex shrink-0 items-start justify-between gap-3 px-4 py-2 sm:items-center sm:px-10 sm:py-3 lg:px-14">
@@ -137,71 +131,64 @@ function Projects() {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const didSwipeRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const { isPhone, isTablet, prefersReducedMotion, coarsePointer } = useDeviceProfile();
-
-  // Short scroll runway per slide — less wheel travel between project cards.
-  const stepVh = isPhone ? 32 : isTablet ? 26 : 20;
-  const sectionHeightVh = (projects.length - 1) * stepVh + 100;
-
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start start", "end end"],
-  });
+  const { prefersReducedMotion, coarsePointer } = useDeviceProfile();
 
   const goToProject = useCallback((index: number, options?: { syncScroll?: boolean }) => {
     const clamped = Math.min(projects.length - 1, Math.max(0, index));
     scrollIndexRef.current = clamped;
     setActiveIndex(clamped);
 
-    if (options?.syncScroll && sectionRef.current) {
-      const el = sectionRef.current;
-      const sectionTop = window.scrollY + el.getBoundingClientRect().top;
-      const viewportHeight = getViewportHeight();
-      const scrollable = Math.max(0, el.offsetHeight - viewportHeight);
-      const progress = getProjectScrollProgress(clamped, projects.length);
-      window.scrollTo({
-        top: sectionTop + scrollable * progress,
-        behavior: prefersReducedMotion ? "auto" : "smooth",
-      });
+    if (!options?.syncScroll || !sectionRef.current) return;
+
+    const behavior = prefersReducedMotion ? "auto" : "smooth";
+
+    if (clamped === 0) {
+      sectionRef.current.scrollIntoView({ behavior, block: "start" });
+      return;
     }
+
+    const anchor = sectionRef.current.querySelector<HTMLElement>(
+      `[data-project-snap="${clamped}"]`,
+    );
+    anchor?.scrollIntoView({ behavior, block: "start" });
   }, [prefersReducedMotion]);
 
   useEffect(() => {
-    if (prefersReducedMotion) return;
+    const section = sectionRef.current;
+    if (!section) return;
 
-    let cooldown = false;
-    const COOLDOWN_MS = 220;
+    let raf = 0;
 
-    const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < 2) return;
-
-      const section = sectionRef.current;
-      if (!section) return;
-
-      const rect = section.getBoundingClientRect();
+    const updateFromScroll = () => {
+      raf = 0;
       const viewportHeight = getViewportHeight();
-      const stuck = rect.top <= 2 && rect.bottom >= viewportHeight - 2;
-      if (!stuck) return;
+      const maxScroll = Math.max(0, section.offsetHeight - viewportHeight);
+      if (maxScroll <= 0) return;
 
-      const down = event.deltaY > 0;
-      const idx = scrollIndexRef.current;
+      const scrolled = clamp(-section.getBoundingClientRect().top, 0, maxScroll);
+      const progress = scrolled / maxScroll;
+      const targetIndex = getProjectIndexFromProgress(progress, projects.length);
 
-      if (down && idx >= projects.length - 1) return;
-      if (!down && idx <= 0) return;
-
-      event.preventDefault();
-      if (cooldown) return;
-
-      cooldown = true;
-      goToProject(idx + (down ? 1 : -1), { syncScroll: true });
-      window.setTimeout(() => {
-        cooldown = false;
-      }, COOLDOWN_MS);
+      if (targetIndex === scrollIndexRef.current) return;
+      scrollIndexRef.current = targetIndex;
+      setActiveIndex(targetIndex);
     };
 
-    window.addEventListener("wheel", onWheel, { passive: false });
-    return () => window.removeEventListener("wheel", onWheel);
-  }, [goToProject, prefersReducedMotion]);
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(updateFromScroll);
+    };
+
+    updateFromScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const scrollToContact = useCallback(() => {
     document.getElementById("contact")?.scrollIntoView({
@@ -217,12 +204,6 @@ function Projects() {
     }
     scrollToContact();
   }, [scrollToContact]);
-
-  useMotionValueEvent(scrollYProgress, "change", (progress) => {
-    const targetIndex = getProjectIndexFromProgress(progress, projects.length);
-    if (targetIndex === scrollIndexRef.current) return;
-    goToProject(targetIndex);
-  });
 
   const project = projects[activeIndex];
 
@@ -248,14 +229,9 @@ function Projects() {
   };
 
   return (
-    <section
-      ref={sectionRef}
-      id="work"
-      className="relative"
-      style={{ height: `${sectionHeightVh}dvh` }}
-    >
+    <section ref={sectionRef} id="work" className="projects-scene snap-section-start">
       <div
-        className="safe-area-x sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
+        className="safe-area-x projects-pin sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
         style={{ background: "var(--section-dark)" }}
       >
         <ViewportPhysicsBalls variant="projects" />
@@ -308,60 +284,32 @@ function Projects() {
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
             <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 pt-16 sm:p-8 sm:pt-24 lg:p-10">
-              <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.div
-                    key={`counter-${activeIndex}`}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                    className="font-mono text-[11px] tracking-[0.2em] text-white/70 sm:text-sm"
-                  >
+              <div key={`meta-${activeIndex}`} className="project-meta-fade">
+                <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
+                  <div className="font-mono text-[11px] tracking-[0.2em] text-white/70 sm:text-sm">
                     {String(activeIndex + 1).padStart(2, "0")} /{" "}
                     {String(projects.length).padStart(2, "0")}
-                  </motion.div>
-                </AnimatePresence>
-
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.span
-                    key={`tag-${activeIndex}`}
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                    className="max-w-[58%] truncate rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/90 backdrop-blur sm:max-w-none sm:px-3 sm:text-xs sm:tracking-[0.18em]"
-                  >
+                  </div>
+                  <span className="max-w-[58%] truncate rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/90 backdrop-blur sm:max-w-none sm:px-3 sm:text-xs sm:tracking-[0.18em]">
                     {project.tag}
-                  </motion.span>
-                </AnimatePresence>
-              </div>
-
-              <div className="flex items-end justify-between gap-3 sm:gap-4">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.h3
-                    key={`title-${activeIndex}`}
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="min-w-0 font-display text-2xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl"
-                  >
-                    {project.name}
-                  </motion.h3>
-                </AnimatePresence>
-
-                <span className="flex shrink-0 flex-col items-center gap-1 text-primary transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
-                  <ArrowUpRight className="h-6 w-6 sm:h-8 sm:w-8" aria-hidden />
-                  <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-[9px]">
-                    Contact
                   </span>
-                </span>
+                </div>
+
+                <div className="flex items-end justify-between gap-3 sm:gap-4">
+                  <h3 className="min-w-0 font-display text-2xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
+                    {project.name}
+                  </h3>
+                  <span className="flex shrink-0 flex-col items-center gap-1 text-primary transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                    <ArrowUpRight className="h-6 w-6 sm:h-8 sm:w-8" aria-hidden />
+                    <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-[9px]">
+                      Contact
+                    </span>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Mobile + tablet: 44px touch targets */}
           <div className="safe-area-bottom mx-auto mt-2 flex items-center justify-center gap-1 sm:mt-3 lg:hidden">
             {projects.map((item, index) => (
               <button
@@ -412,6 +360,15 @@ function Projects() {
           </div>
         </div>
       </div>
+
+      {projects.slice(1).map((_, index) => (
+        <div
+          key={index}
+          data-project-snap={index + 1}
+          className="projects-scroll-snap"
+          aria-hidden
+        />
+      ))}
     </section>
   );
 }
@@ -420,7 +377,7 @@ function Contact() {
   return (
     <section
       id="contact"
-      className="safe-area-x relative isolate px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
+      className="safe-area-x snap-section-start relative isolate px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
       style={{ background: "var(--section-dark)" }}
     >
       <ViewportPhysicsBalls variant="contact" />
@@ -499,7 +456,7 @@ function Contact() {
 
 function NovaHome() {
   return (
-    <main className="min-h-[100dvh] bg-background font-sans text-foreground">
+    <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
       <Projects />
       <Contact />

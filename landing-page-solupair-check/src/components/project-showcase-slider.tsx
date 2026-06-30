@@ -1,10 +1,4 @@
-import {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  type ComponentType,
-} from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { forwardRef, useImperativeHandle, useRef, type ComponentType } from "react";
 
 export type ShowcaseSliderHandle = {
   transitionTo: (index: number) => void;
@@ -36,23 +30,17 @@ export const ProjectShowcaseSlider = forwardRef<
     },
   }));
 
-  const slide = slides[activeIndex];
-  if (!slide) return null;
-
   return (
     <div className={className} style={{ touchAction: "pan-y" }}>
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
+      {slides.map((slide, index) => (
+        <div
           key={slide.id}
-          className="absolute inset-0 overflow-hidden rounded-[inherit]"
-          initial={{ opacity: 0, scale: 1.02 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.98 }}
-          transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+          className={`project-showcase-slide ${index === activeIndex ? "is-active" : ""}`}
+          aria-hidden={index !== activeIndex}
         >
           <slide.Preview />
-        </motion.div>
-      </AnimatePresence>
+        </div>
+      ))}
     </div>
   );
 });
