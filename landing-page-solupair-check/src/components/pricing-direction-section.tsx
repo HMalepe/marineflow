@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
+import { useSectionInView } from "@/hooks/use-section-in-view";
+import { navigateToSection } from "@/lib/section-nav";
 
 const PRICING_TIERS = [
   {
@@ -50,31 +52,13 @@ const PRICING_TIERS = [
 ] as const;
 
 export function PricingDirectionSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const [sectionInView, setSectionInView] = useState(false);
+  const { sectionRef, sectionInView } = useSectionInView({ threshold: 0.12 });
   const { prefersReducedMotion } = useDeviceProfile();
 
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    if (prefersReducedMotion) {
-      setSectionInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setSectionInView(true);
-        observer.disconnect();
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [prefersReducedMotion]);
+  const goToContact = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    navigateToSection("contact", prefersReducedMotion);
+  };
 
   return (
     <section
@@ -82,7 +66,7 @@ export function PricingDirectionSection() {
       id="pricing"
       data-scroll-snap="pricing"
       aria-labelledby="pricing-heading"
-      className={`pricing-direction safe-area-x section-surface snap-section-panel relative isolate overflow-hidden px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-28${sectionInView ? " pricing-in-view" : ""}`}
+      className={`pricing-direction safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-28${sectionInView ? " pricing-in-view" : ""}`}
     >
       <div className="pricing-direction-glow pricing-direction-glow--left" aria-hidden />
       <div className="pricing-direction-glow pricing-direction-glow--right" aria-hidden />
@@ -122,6 +106,7 @@ export function PricingDirectionSection() {
 
               <a
                 href="#contact"
+                onClick={goToContact}
                 className={`pricing-card__cta hero-btn touch-target ${tier.featured ? "hero-btn--primary" : "hero-btn--secondary"}`}
               >
                 <span>{tier.cta}</span>

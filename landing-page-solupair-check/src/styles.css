@@ -1552,6 +1552,12 @@
     0 0 28px color-mix(in srgb, var(--brand-purple) 8%, transparent);
 }
 
+.what-we-build-card:focus-visible {
+  outline: 2px solid var(--brand-cyan);
+  outline-offset: 3px;
+  border-color: color-mix(in srgb, var(--brand-cyan) 30%, transparent);
+}
+
 @keyframes what-we-build-reveal {
   from {
     opacity: 0;
@@ -3164,6 +3170,22 @@
   }
 }
 
+.contact-form-reassurance {
+  margin: 0.85rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--text-dim) 88%, transparent);
+  text-align: center;
+}
+
+@media (min-width: 640px) {
+  .contact-form-reassurance {
+    font-size: 0.8125rem;
+    text-align: left;
+  }
+}
+
 .contact-text-link:focus-visible {
   outline: 2px solid var(--brand-cyan);
   outline-offset: 3px;
@@ -3391,6 +3413,20 @@ body {
   scroll-snap-stop: always;
 }
 
+/* Page-2 content sections — snap in gently without trapping scroll */
+.snap-section-flow {
+  scroll-snap-align: start;
+  scroll-snap-stop: normal;
+  min-height: auto;
+}
+
+/* Anchor moments (final CTA) — visible pause without full viewport lock */
+.snap-section-anchor {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: min(88dvh, 52rem);
+}
+
 .snap-section-compact {
   scroll-snap-align: start;
   scroll-snap-stop: always;
@@ -3485,6 +3521,15 @@ body {
   .pricing-direction-heading {
     font-size: clamp(1.65rem, 7vw, 2.35rem);
     line-height: 0.96;
+  }
+
+  .who-for-heading {
+    max-width: 18ch;
+    font-size: clamp(1.45rem, 6.2vw, 2rem);
+  }
+
+  .final-cta {
+    min-height: auto;
   }
 
   .what-we-build-glow,

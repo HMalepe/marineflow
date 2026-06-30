@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import {
   ProjectShowcaseSlider,
   type ShowcaseCarouselState,
@@ -9,16 +9,11 @@ import {
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
 import { ProjectValueCards } from "@/components/project-value-cards";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
+import { useSectionInView } from "@/hooks/use-section-in-view";
+import { navigateToSection } from "@/lib/section-nav";
 
 const REVEAL_EASE = [0.22, 1, 0.36, 1] as const;
 const projects = PROJECT_SHOWCASES;
-
-function scrollToContact(prefersReducedMotion: boolean) {
-  document.getElementById("contact")?.scrollIntoView({
-    behavior: prefersReducedMotion ? "auto" : "smooth",
-    block: "start",
-  });
-}
 
 function revealProps(
   reduceMotion: boolean,
@@ -40,16 +35,16 @@ function revealProps(
 }
 
 export function ProjectsSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const carouselRegionRef = useRef<HTMLDivElement>(null);
+  const { sectionRef, sectionInView } = useSectionInView({
+    threshold: 0.1,
+    rootMargin: "0px 0px -6% 0px",
+  });
   const sliderRef = useRef<ShowcaseSliderHandle>(null);
   const [carousel, setCarousel] = useState<ShowcaseCarouselState>({
     index: 0,
     canScrollPrev: false,
     canScrollNext: projects.length > 1,
   });
-  const [sectionInView, setSectionInView] = useState(false);
-  const [sectionActive, setSectionActive] = useState(false);
   const { prefersReducedMotion } = useDeviceProfile();
   const reduceMotion = useReducedMotion() || prefersReducedMotion;
 
@@ -70,41 +65,6 @@ export function ProjectsSection() {
   const scrollNext = useCallback(() => {
     sliderRef.current?.scrollNext();
   }, []);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    if (reduceMotion) {
-      setSectionInView(true);
-      setSectionActive(true);
-      return;
-    }
-
-    const revealObserver = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setSectionInView(true);
-        revealObserver.disconnect();
-      },
-      { threshold: 0.1, rootMargin: "0px 0px -6% 0px" },
-    );
-
-    const activeObserver = new IntersectionObserver(
-      ([entry]) => {
-        setSectionActive(Boolean(entry?.isIntersecting));
-      },
-      { threshold: 0.15, rootMargin: "0px 0px -10% 0px" },
-    );
-
-    revealObserver.observe(section);
-    activeObserver.observe(section);
-
-    return () => {
-      revealObserver.disconnect();
-      activeObserver.disconnect();
-    };
-  }, [reduceMotion]);
 
   const handleCarouselKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -138,7 +98,7 @@ export function ProjectsSection() {
       id="work"
       data-scroll-snap="work"
       aria-labelledby="projects-heading"
-      className={`projects-section safe-area-x section-surface relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-24${sectionInView ? " projects-in-view" : ""}${sectionActive ? " projects-section--active" : ""}`}
+      className={`projects-section safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-24${sectionInView ? " projects-in-view" : ""}`}
     >
       <div className="projects-glow projects-glow--cyan" aria-hidden />
       <div className="projects-glow projects-glow--magenta" aria-hidden />
@@ -172,7 +132,6 @@ export function ProjectsSection() {
         <motion.div className="projects-stage" {...revealProps(reduceMotion, sectionInView, 0.26, true)}>
           <div className="projects-showcase-shell">
             <div
-              ref={carouselRegionRef}
               className="projects-carousel-region"
               role="region"
               aria-roledescription="carousel"
@@ -221,7 +180,7 @@ export function ProjectsSection() {
                           href="#contact"
                           onClick={(e) => {
                             e.preventDefault();
-                            scrollToContact(reduceMotion);
+                            navigateToSection("contact", reduceMotion);
                           }}
                           className="projects-contact-cta hero-btn hero-btn--secondary touch-target inline-flex shrink-0 self-start sm:self-auto"
                         >

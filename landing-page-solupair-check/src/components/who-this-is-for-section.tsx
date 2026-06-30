@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useDeviceProfile } from "@/hooks/use-device-profile";
+import { useSectionInView } from "@/hooks/use-section-in-view";
 
 const AUDIENCE_CHIPS = [
   "Salons & barbers",
@@ -12,31 +11,7 @@ const AUDIENCE_CHIPS = [
 ] as const;
 
 export function WhoThisIsForSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const [sectionInView, setSectionInView] = useState(false);
-  const { prefersReducedMotion } = useDeviceProfile();
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    if (prefersReducedMotion) {
-      setSectionInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setSectionInView(true);
-        observer.disconnect();
-      },
-      { threshold: 0.14, rootMargin: "0px 0px -8% 0px" },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [prefersReducedMotion]);
+  const { sectionRef, sectionInView } = useSectionInView({ threshold: 0.14 });
 
   return (
     <section
@@ -44,7 +19,7 @@ export function WhoThisIsForSection() {
       id="audience"
       data-scroll-snap="audience"
       aria-labelledby="audience-heading"
-      className={`who-for safe-area-x section-surface snap-section-panel relative isolate overflow-hidden px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-24${sectionInView ? " who-for-in-view" : ""}`}
+      className={`who-for safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-24${sectionInView ? " who-for-in-view" : ""}`}
     >
       <div className="who-for-grid" aria-hidden />
       <div className="who-for-glow who-for-glow--center" aria-hidden />

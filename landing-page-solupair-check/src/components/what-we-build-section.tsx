@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from "react";
-import { useDeviceProfile } from "@/hooks/use-device-profile";
+import { useSectionInView } from "@/hooks/use-section-in-view";
 
 const WHAT_WE_BUILD_ITEMS = [
   {
@@ -33,45 +32,25 @@ const WHAT_WE_BUILD_ITEMS = [
 ] as const;
 
 export function WhatWeBuildSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const [sectionInView, setSectionInView] = useState(false);
-  const { prefersReducedMotion } = useDeviceProfile();
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    if (prefersReducedMotion) {
-      setSectionInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setSectionInView(true);
-        observer.disconnect();
-      },
-      { threshold: 0.14, rootMargin: "0px 0px -8% 0px" },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [prefersReducedMotion]);
+  const { sectionRef, sectionInView } = useSectionInView({ threshold: 0.14 });
 
   return (
     <section
       ref={sectionRef}
       id="services"
       data-scroll-snap="services"
-      className={`what-we-build safe-area-x section-surface snap-section-panel relative isolate overflow-hidden px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-28${sectionInView ? " what-we-build-in-view" : ""}`}
+      aria-labelledby="services-heading"
+      className={`what-we-build safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-28${sectionInView ? " what-we-build-in-view" : ""}`}
     >
       <div className="what-we-build-glow what-we-build-glow--left" aria-hidden />
       <div className="what-we-build-glow what-we-build-glow--right" aria-hidden />
 
       <div className="relative z-10 mx-auto w-full max-w-7xl">
         <header className="what-we-build-header">
-          <h2 className="what-we-build-heading what-we-build-reveal what-we-build-reveal--heading font-display font-black uppercase tracking-tighter text-foreground">
+          <h2
+            id="services-heading"
+            className="what-we-build-heading what-we-build-reveal what-we-build-reveal--heading font-display font-black uppercase tracking-tighter text-foreground"
+          >
             What we build
           </h2>
           <p className="what-we-build-subtitle what-we-build-reveal what-we-build-reveal--subtitle">

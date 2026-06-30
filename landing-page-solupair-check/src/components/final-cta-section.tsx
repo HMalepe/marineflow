@@ -1,32 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
+import { useSectionInView } from "@/hooks/use-section-in-view";
+import { navigateToSection } from "@/lib/section-nav";
 
 export function FinalCtaSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const [sectionInView, setSectionInView] = useState(false);
+  const { sectionRef, sectionInView } = useSectionInView({
+    threshold: 0.18,
+    rootMargin: "0px 0px -6% 0px",
+  });
   const { prefersReducedMotion } = useDeviceProfile();
 
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    if (prefersReducedMotion) {
-      setSectionInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setSectionInView(true);
-        observer.disconnect();
-      },
-      { threshold: 0.2, rootMargin: "0px 0px -6% 0px" },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [prefersReducedMotion]);
+  const goToContact = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    navigateToSection("contact", prefersReducedMotion);
+  };
 
   return (
     <section
@@ -34,7 +21,7 @@ export function FinalCtaSection() {
       id="final-cta"
       data-scroll-snap="cta"
       aria-labelledby="final-cta-heading"
-      className={`final-cta safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col items-center justify-center overflow-hidden px-4 py-20 sm:px-10 sm:py-24 lg:px-14 lg:py-28${sectionInView ? " final-cta-in-view" : ""}`}
+      className={`final-cta safe-area-x section-surface snap-section-anchor relative isolate flex flex-col items-center justify-center overflow-x-clip px-4 py-20 sm:px-10 sm:py-28 lg:px-14 lg:py-32${sectionInView ? " final-cta-in-view" : ""}`}
     >
       <div className="final-cta-glow final-cta-glow--cyan" aria-hidden />
       <div className="final-cta-glow final-cta-glow--magenta" aria-hidden />
@@ -59,7 +46,11 @@ export function FinalCtaSection() {
         </p>
 
         <div className="final-cta-actions final-cta-reveal final-cta-reveal--actions">
-          <a href="#contact" className="final-cta-btn hero-btn hero-btn--primary touch-target">
+          <a
+            href="#contact"
+            onClick={goToContact}
+            className="final-cta-btn hero-btn hero-btn--primary touch-target"
+          >
             <span>Start with a quick message</span>
           </a>
           <a href="mailto:info@solupair.co.za" className="final-cta-email touch-target">
