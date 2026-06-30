@@ -510,11 +510,6 @@
   transition: opacity var(--nav-duration) var(--nav-ease);
 }
 
-.site-logo-copy {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
 .site-logo:hover {
   opacity: 0.94;
 }
@@ -560,22 +555,6 @@
 @media (min-width: 1280px) {
   .site-logo-wordmark {
     max-width: none;
-  }
-}
-
-.site-logo-tagline {
-  margin-top: 0.3rem;
-  max-width: 16rem;
-  font-size: 0.65rem;
-  line-height: 1.45;
-  letter-spacing: 0.015em;
-  color: var(--text-dim);
-}
-
-@media (min-width: 1024px) {
-  .site-logo-tagline {
-    font-size: 0.7rem;
-    max-width: 18rem;
   }
 }
 
