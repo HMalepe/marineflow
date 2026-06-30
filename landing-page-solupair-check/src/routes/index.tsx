@@ -80,6 +80,47 @@ function Hero() {
     >
       <div className="hero-bg" aria-hidden>
         <div className="hero-bg-base" />
+        <div className="hero-bg-grid" />
+        <svg
+          className="hero-bg-circuit"
+          viewBox="0 0 1440 900"
+          preserveAspectRatio="xMidYMid slice"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <defs>
+            <linearGradient id="heroCircuitGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#22E6F2" stopOpacity="0" />
+              <stop offset="40%" stopColor="#22E6F2" stopOpacity="0.5" />
+              <stop offset="60%" stopColor="#FF4FD8" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#FF4FD8" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M80 520 H320 L380 460 H620 L680 500 H920"
+            fill="none"
+            stroke="url(#heroCircuitGrad)"
+            strokeWidth="1"
+            opacity="0.28"
+          />
+          <path
+            d="M1360 280 H1100 L1040 340 H780 L720 300 H480"
+            fill="none"
+            stroke="url(#heroCircuitGrad)"
+            strokeWidth="1"
+            opacity="0.22"
+          />
+          <path
+            d="M200 180 V320 L360 380 H520"
+            fill="none"
+            stroke="url(#heroCircuitGrad)"
+            strokeWidth="1"
+            opacity="0.18"
+          />
+          <circle cx="380" cy="460" r="2.5" fill="#C7FF00" opacity="0.55" />
+          <circle cx="680" cy="500" r="2" fill="#22E6F2" opacity="0.4" />
+          <circle cx="1040" cy="340" r="2.5" fill="#C7FF00" opacity="0.45" />
+          <circle cx="360" cy="380" r="2" fill="#FF4FD8" opacity="0.35" />
+        </svg>
         <div className="hero-bg-glow hero-bg-glow--cyan" />
         <div className="hero-bg-glow hero-bg-glow--pink" />
         <div className="hero-bg-glow hero-bg-glow--purple" />
@@ -103,21 +144,56 @@ function Hero() {
       </header>
 
       <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-4 pb-8 pt-2 sm:px-8 sm:pb-10 lg:px-10">
-        <motion.p
+        <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-          className="hero-eyebrow mb-3 text-center sm:mb-4"
+          className="mb-3 flex justify-center sm:mb-4"
         >
-          Automation &amp; web design
-        </motion.p>
+          <p className="hero-eyebrow">
+            <span className="hero-eyebrow-dot" aria-hidden />
+            Automation &amp; web design
+          </p>
+        </motion.div>
 
-        <div className="relative w-full max-w-[100vw] text-center">
+        <div className="hero-stage relative w-full max-w-[100vw] text-center">
+          <svg
+            className="hero-connectors"
+            viewBox="0 0 800 320"
+            preserveAspectRatio="xMidYMid meet"
+            aria-hidden
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <linearGradient id="heroConnectorGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#22E6F2" stopOpacity="0.15" />
+                <stop offset="50%" stopColor="#22E6F2" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="#FF4FD8" stopOpacity="0.15" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M40 200 H220 L280 140 H520"
+              fill="none"
+              stroke="url(#heroConnectorGrad)"
+              strokeWidth="1"
+            />
+            <path
+              d="M760 120 H580 L520 180 H280"
+              fill="none"
+              stroke="url(#heroConnectorGrad)"
+              strokeWidth="1"
+            />
+            <circle cx="280" cy="140" r="2.5" fill="#C7FF00" opacity="0.65" />
+            <circle cx="520" cy="180" r="2" fill="#22E6F2" opacity="0.5" />
+          </svg>
+
+          <div className="hero-headline-orb" aria-hidden />
+
           <motion.h1
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-            className="hero-headline relative z-0 w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
+            className="hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
             style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
           >
             WE DESIGN
@@ -126,7 +202,7 @@ function Hero() {
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.75, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="hero-headline relative z-0 w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
+            className="hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
             style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
           >
             <span className="relative inline-block">
@@ -134,6 +210,18 @@ function Hero() {
               <span className="hero-headline-accent" aria-hidden />
             </span>
           </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.65, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="hero-microline relative z-[1]"
+          >
+            Systems<span className="hero-microline-sep" aria-hidden>·</span>
+            Automations<span className="hero-microline-sep" aria-hidden>·</span>
+            Interfaces<span className="hero-microline-sep" aria-hidden>·</span>
+            Momentum
+          </motion.p>
         </div>
 
         <motion.p
@@ -153,7 +241,7 @@ function Hero() {
           className="hero-ctas mt-7 sm:mt-8"
         >
           <a href="#contact" className="hero-btn hero-btn--primary">
-            Get in touch
+            <span>Get in touch</span>
           </a>
           <a href="#work" className="hero-btn hero-btn--secondary">
             Our work
