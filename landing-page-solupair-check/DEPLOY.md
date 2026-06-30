@@ -47,7 +47,10 @@ Workflow: `.github/workflows/deploy.yml` on push to `main`.
 
 If you use this, **do not** also connect the same repo in Cloudflare Builds.
 
-Monorepo deploy: `marineflow/.github/workflows/deploy-landing-page.yml` (paths under `landing-page-solupair-check/`).
+Monorepo deploy: `marineflow/.github/workflows/deploy-landing-page.yml` syncs
+`landing-page-solupair-check/` → this repo (`main`), then this repo's workflow deploys
+to Cloudflare. Requires `LANDING_SYNC_TOKEN` on **marineflow** (PAT with `contents:write`
+on `landing-page-solupair`). Cloudflare secrets stay on **this** repo only.
 
 ---
 

@@ -1,5 +1,8 @@
 name: Deploy Landing Page
 
+# Sync monorepo landing code to the mirror repo, which deploys to Cloudflare
+# with its own CLOUDFLARE_* secrets (see landing-page-solupair-check/DEPLOY.md).
+
 on:
   push:
     branches:
@@ -14,40 +17,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: landing-page-solupair-check
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout
+      - name: Checkout marineflow
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: landing-page-solupair-check/package-lock.json
+      - name: Sync to landing-page-solupair
+        env:
+          SYNC_TOKEN: ${{ secrets.LANDING_SYNC_TOKEN }}
+        run: |
+          set -euo pipefail
 
-      - name: Install dependencies
-        run: npm install --no-fund --no-audit
+          if [ -z "${SYNC_TOKEN:-}" ]; then
+            echo "::error::Missing LANDING_SYNC_TOKEN repository secret."
+            echo "Create a fine-grained PAT with contents:write on HMalepe/landing-page-solupair,"
+            echo "then: gh secret set LANDING_SYNC_TOKEN --repo HMalepe/marineflow"
+            exit 1
+          fi
 
-      - name: Build
-        run: npm run build
+          git clone --depth 1 --branch main \
+            "https://x-access-token:${SYNC_TOKEN}@github.com/HMalepe/landing-page-solupair.git" \
+            mirror
 
-      - name: Clear Wrangler deploy metadata
-        run: rm -rf .wrangler
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            --exclude '.output' \
+            --exclude '.wrangler' \
+            landing-page-solupair-check/ mirror/
 
-      - name: Patch Wrangler config for solupair.co.za
-        run: node scripts/patch-wrangler-config.mjs
+          cd mirror
+          git add -A
 
-      - name: Deploy Worker
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: landing-page-solupair-check/.output/server
-          command: deploy --config wrangler.json
+          if git diff --staged --quiet; then
+            echo "No landing changes to sync."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Sync from marineflow@${GITHUB_SHA::7}"
+          git push origin main
