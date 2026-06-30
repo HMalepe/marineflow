@@ -17,6 +17,7 @@ export function ProjectValueCards({ activeIndex, onSelect }: ProjectValueCardsPr
         >
           <button
             type="button"
+            aria-label={`Show ${project.cardTitle} project`}
             aria-current={index === activeIndex ? "true" : undefined}
             onClick={() => onSelect(index)}
             className={`projects-value-card projects-reveal projects-reveal--value-card projects-value-card--${TAG_ACCENTS[index % TAG_ACCENTS.length]} ${

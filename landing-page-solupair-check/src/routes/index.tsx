@@ -1,33 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowUpRight } from "lucide-react";
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
 import solupairWordmark from "@/assets/solupair-wordmark.png";
 import { ContactHelixBackground } from "@/components/contact-helix-background";
 import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
-import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
-import { PROJECT_SHOWCASES } from "@/components/project-showcases";
 import { FinalCtaSection } from "@/components/final-cta-section";
 import { PricingDirectionSection } from "@/components/pricing-direction-section";
-import { ProjectValueCards } from "@/components/project-value-cards";
+import { ProjectsSection } from "@/components/projects-section";
 import { WhatWeBuildSection } from "@/components/what-we-build-section";
 import { WhoThisIsForSection } from "@/components/who-this-is-for-section";
-import { useScrollChoreography } from "@/hooks/use-scroll-choreography";
-import {
-  getNearestSnapIndex,
-  projectIndexFromSnapId,
-  scrollToSnap,
-  snapIdFromProjectIndex,
-  SNAP_ORDER,
-} from "@/lib/scroll-choreography";
 
 export const Route = createFileRoute("/")({
   component: NovaHome,
 });
-
-const projects = PROJECT_SHOWCASES;
 
 function SolupairLogo() {
   return (
@@ -202,266 +189,6 @@ function Hero() {
   );
 }
 
-function Projects() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const sliderRef = useRef<ShowcaseSliderHandle>(null);
-  const scrollIndexRef = useRef(0);
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const didSwipeRef = useRef(false);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [sectionInView, setSectionInView] = useState(false);
-  const { prefersReducedMotion, coarsePointer } = useDeviceProfile();
-
-  const goToProject = useCallback((index: number, options?: { syncScroll?: boolean }) => {
-    const clamped = Math.min(projects.length - 1, Math.max(0, index));
-    scrollIndexRef.current = clamped;
-    setActiveIndex(clamped);
-
-    if (!options?.syncScroll) return;
-
-    const behavior = prefersReducedMotion ? "auto" : "smooth";
-    scrollToSnap(snapIdFromProjectIndex(clamped), behavior);
-  }, [prefersReducedMotion]);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    if (prefersReducedMotion) {
-      setSectionInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting) return;
-        setSectionInView(true);
-        observer.disconnect();
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [prefersReducedMotion]);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    let raf = 0;
-
-    const updateFromScroll = () => {
-      raf = 0;
-      const snapId = SNAP_ORDER[getNearestSnapIndex()];
-      if (snapId !== "work-0" && snapId !== "work-1" && snapId !== "work-2") return;
-
-      const targetIndex = projectIndexFromSnapId(snapId);
-      if (targetIndex === scrollIndexRef.current) return;
-      scrollIndexRef.current = targetIndex;
-      setActiveIndex(targetIndex);
-    };
-
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(updateFromScroll);
-    };
-
-    updateFromScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  const scrollToContact = useCallback(() => {
-    scrollToSnap("contact", prefersReducedMotion ? "auto" : "smooth");
-  }, [prefersReducedMotion]);
-
-  const handleProjectClick = useCallback(() => {
-    if (didSwipeRef.current) {
-      didSwipeRef.current = false;
-      return;
-    }
-    scrollToContact();
-  }, [scrollToContact]);
-
-  const project = projects[activeIndex];
-
-  const handleSwipeStart = (clientX: number, clientY: number) => {
-    touchStartRef.current = { x: clientX, y: clientY };
-  };
-
-  const handleSwipeEnd = (clientX: number, clientY: number) => {
-    const start = touchStartRef.current;
-    touchStartRef.current = null;
-    if (!start) return;
-
-    const dx = clientX - start.x;
-    const dy = clientY - start.y;
-    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-
-    didSwipeRef.current = true;
-    if (dx < 0) {
-      goToProject(scrollIndexRef.current + 1, { syncScroll: true });
-    } else {
-      goToProject(scrollIndexRef.current - 1, { syncScroll: true });
-    }
-  };
-
-  return (
-    <section
-      ref={sectionRef}
-      id="work"
-      data-scroll-snap="work-0"
-      className={`projects-scene snap-section-start${sectionInView ? " projects-in-view" : ""}`}
-    >
-      <div className="safe-area-x projects-pin section-surface sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
-        <ViewportPhysicsBalls variant="projects" />
-        <header className="projects-header projects-reveal projects-reveal--heading relative z-10 mx-auto w-full max-w-7xl shrink-0">
-          <div className="projects-header-main">
-            <h2 className="projects-heading font-display font-black uppercase tracking-tighter text-foreground">
-              Projects
-            </h2>
-            <p className="projects-hint">
-              Scroll to explore · Tap a project to contact us
-            </p>
-          </div>
-          <p className="projects-description">
-            Live dashboards, booking flows and automation tools built to reduce admin, missed
-            bookings and messy operations.
-          </p>
-        </header>
-
-        <div className="projects-stage projects-reveal projects-reveal--mockup relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col">
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label={`Contact us about ${project.name}`}
-            onClick={handleProjectClick}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                scrollToContact();
-              }
-            }}
-            className="project-showcase-card group relative min-h-0 flex-1 cursor-pointer overflow-hidden rounded-2xl border sm:rounded-3xl"
-            onTouchStart={(e) => {
-              const t = e.touches[0];
-              if (t) handleSwipeStart(t.clientX, t.clientY);
-            }}
-            onTouchEnd={(e) => {
-              const t = e.changedTouches[0];
-              if (t) handleSwipeEnd(t.clientX, t.clientY);
-            }}
-          >
-            <ProjectShowcaseSlider
-              ref={sliderRef}
-              slides={projects}
-              activeIndex={activeIndex}
-              className="absolute inset-0 overflow-hidden rounded-[inherit]"
-            />
-
-            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-3 pt-14 sm:p-8 sm:pt-24 lg:p-10">
-              <div key={`meta-${activeIndex}`} className="project-meta-fade">
-                <div className="mb-2 flex items-center justify-between gap-2 sm:mb-4 sm:gap-3">
-                  <div className="font-mono text-[10px] tracking-[0.18em] text-text-soft sm:text-sm sm:tracking-[0.2em]">
-                    {String(activeIndex + 1).padStart(2, "0")} /{" "}
-                    {String(projects.length).padStart(2, "0")}
-                  </div>
-                  <span className="max-w-[56%] truncate rounded-full border border-glass bg-glass-bg px-2 py-0.5 text-[8px] font-medium uppercase tracking-[0.14em] text-foreground backdrop-blur sm:max-w-none sm:px-3 sm:py-1 sm:text-xs sm:tracking-[0.18em]">
-                    {project.tag}
-                  </span>
-                </div>
-
-                <div className="flex items-end justify-between gap-2 sm:gap-4">
-                  <h3 className="project-showcase-title min-w-0 font-display font-black tracking-tight text-foreground">
-                    {project.name}
-                  </h3>
-                  <span className="flex shrink-0 flex-col items-center gap-1 text-brand-cyan transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
-                    <ArrowUpRight className="h-6 w-6 sm:h-8 sm:w-8" aria-hidden />
-                    <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-text-soft sm:text-[9px]">
-                      Contact
-                    </span>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="safe-area-bottom projects-dots mx-auto mt-3 flex items-center justify-center gap-1.5 sm:mt-4 lg:hidden">
-            {projects.map((item, index) => (
-              <button
-                key={item.name}
-                type="button"
-                aria-label={`View ${item.name}`}
-                aria-current={index === activeIndex ? "true" : undefined}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  goToProject(index, { syncScroll: true });
-                }}
-                className="touch-target flex items-center justify-center"
-              >
-                <span
-                  className={`projects-dot block rounded-full transition ${
-                    index === activeIndex ? "projects-dot--active" : ""
-                  }`}
-                />
-              </button>
-            ))}
-          </div>
-
-          {coarsePointer && (
-            <p className="projects-swipe-hint mt-1.5 text-center lg:hidden">
-              Swipe or tap · Scroll to explore
-            </p>
-          )}
-
-          <ProjectValueCards
-            activeIndex={activeIndex}
-            onSelect={(index) => goToProject(index, { syncScroll: true })}
-          />
-
-          <div className="projects-dots-rail absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 flex-col gap-3.5 lg:flex">
-            {projects.map((item, index) => (
-              <button
-                key={item.name}
-                type="button"
-                aria-label={`View ${item.name}`}
-                aria-current={index === activeIndex ? "true" : undefined}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  goToProject(index, { syncScroll: true });
-                }}
-                className={`projects-dot-rail touch-target flex items-center justify-center ${
-                  index === activeIndex ? "projects-dot-rail--active" : ""
-                }`}
-              >
-                <span className="projects-dot block rounded-full" />
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {projects.slice(1).map((_, index) => (
-        <div
-          key={index}
-          data-scroll-snap={`work-${index + 1}`}
-          className="projects-scroll-snap"
-          aria-hidden
-        />
-      ))}
-    </section>
-  );
-}
-
 function Contact() {
   const sectionRef = useRef<HTMLElement>(null);
   const [sectionInView, setSectionInView] = useState(false);
@@ -620,15 +347,13 @@ function Contact() {
 }
 
 function NovaHome() {
-  useScrollChoreography();
-
   return (
     <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
       <WhatWeBuildSection />
       <WhoThisIsForSection />
       <PricingDirectionSection />
-      <Projects />
+      <ProjectsSection />
       <FinalCtaSection />
       <Contact />
     </main>

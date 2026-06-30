@@ -158,8 +158,9 @@ function KpiCard({
 }
 
 /** ExpiryDesk PRO — pharmacy inventory mock. */
-export function ExpiryDeskDashboardPreview() {
+export function ExpiryDeskDashboardPreview({ isActive = true }: { isActive?: boolean }) {
   const reduce = useReducedMotion();
+  const animate = isActive && !reduce;
 
   const rows = [
     { name: "POLYGYNAX VAG CAPS", dose: "6 caps", qty: 14, value: "R 4,872", expires: "12 Jun 2026", status: "CRITICAL", days: "1d left", tone: "bg-rose-500" },
@@ -198,9 +199,9 @@ export function ExpiryDeskDashboardPreview() {
                   strokeWidth="3.5"
                   strokeLinecap="round"
                   strokeDasharray="78 100"
-                  initial={{ strokeDasharray: "0 100" }}
+                  initial={{ strokeDasharray: animate ? "0 100" : "78 100" }}
                   animate={{ strokeDasharray: "78 100" }}
-                  transition={{ duration: reduce ? 0 : 0.9 }}
+                  transition={{ duration: animate ? 0.9 : 0 }}
                 />
               </svg>
               <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-[oklch(0.38_0.24_275)]">
@@ -272,9 +273,9 @@ export function ExpiryDeskDashboardPreview() {
               <motion.div
                 key={row.name}
                 className="grid grid-cols-[1.4fr_0.7fr_0.5fr_0.7fr_0.6fr] items-center gap-1 px-2.5 py-2 sm:grid-cols-[1.5fr_0.8fr_0.55fr_0.75fr_0.65fr] sm:px-3 sm:py-2.5"
-                initial={{ opacity: 0, x: -4 }}
+                initial={{ opacity: animate ? 0 : 1, x: animate ? -4 : 0 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: reduce ? 0 : 0.1 + i * 0.05 }}
+                transition={{ delay: animate ? 0.1 + i * 0.05 : 0 }}
               >
                 <div className="min-w-0">
                   <p className="truncate text-[9px] font-bold text-black/80 sm:text-[10px]">{row.name}</p>
@@ -339,8 +340,9 @@ const LIVE_WA_THREADS: WaThread[] = [
 ];
 
 /** Solupair Live Pulse — owner dashboard with WhatsApp inbox. */
-export function LivePulseDashboardPreview() {
+export function LivePulseDashboardPreview({ isActive = true }: { isActive?: boolean }) {
   const reduce = useReducedMotion();
+  const animate = isActive && !reduce;
 
   return (
     <ShowcaseFrame surface="light">
@@ -400,9 +402,9 @@ export function LivePulseDashboardPreview() {
 
           <motion.div
             className="mb-3 rounded-xl border border-[oklch(0.86_0.06_200)] bg-gradient-to-r from-[oklch(0.97_0.03_200)] to-white p-2.5 shadow-sm sm:p-3"
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: animate ? 0 : 1, y: animate ? 8 : 0 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: reduce ? 0 : 0.45 }}
+            transition={{ duration: animate ? 0.45 : 0 }}
           >
             <div className="flex items-center gap-2.5">
               <div className="flex size-9 items-center justify-center rounded-xl bg-[oklch(0.58_0.16_200)] text-white">
@@ -416,7 +418,7 @@ export function LivePulseDashboardPreview() {
                 </p>
               </div>
               <span className="flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[8px] font-bold text-emerald-700 sm:text-[9px]">
-                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                <span className={`size-1.5 rounded-full bg-emerald-500${animate ? " animate-pulse" : ""}`} />
                 Live
               </span>
             </div>
@@ -436,9 +438,9 @@ export function LivePulseDashboardPreview() {
               <motion.div
                 key={m.label}
                 className={`relative rounded-xl border px-1.5 py-2 text-center sm:px-2 ${m.bg}`}
-                initial={{ opacity: 0, y: 4 }}
+                initial={{ opacity: animate ? 0 : 1, y: animate ? 4 : 0 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: reduce ? 0 : i * 0.04 }}
+                transition={{ delay: animate ? i * 0.04 : 0 }}
               >
                 {m.dot && (
                   <span className="absolute right-1 top-1 size-2 rounded-full bg-rose-500 ring-2 ring-white" />
@@ -493,9 +495,9 @@ export function LivePulseDashboardPreview() {
                         ? "border-[oklch(0.88_0.06_285)] bg-[oklch(0.98_0.02_285)]"
                         : "border-black/[0.05] bg-[oklch(0.995_0.004_270)]"
                     }`}
-                    initial={{ opacity: 0, x: 6 }}
+                    initial={{ opacity: animate ? 0 : 1, x: animate ? 6 : 0 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: reduce ? 0 : 0.15 + i * 0.06 }}
+                    transition={{ delay: animate ? 0.15 + i * 0.06 : 0 }}
                   >
                     <div className="relative flex size-8 shrink-0 items-center justify-center rounded-full bg-[oklch(0.55_0.18_145)] text-[8px] font-bold text-white">
                       {thread.avatar}
@@ -540,8 +542,9 @@ export function LivePulseDashboardPreview() {
 }
 
 /** MarineFlow WhatsApp booking agent — phone mock. */
-export function WhatsAppChatbotPreview() {
+export function WhatsAppChatbotPreview({ isActive = true }: { isActive?: boolean }) {
   const reduce = useReducedMotion();
+  const animate = isActive && !reduce;
 
   return (
     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0b141a] via-[#111b21] to-[#0b141a] p-3 sm:p-5">
@@ -581,7 +584,7 @@ export function WhatsAppChatbotPreview() {
           <ChatBubble from="user" delay={0.78} text="Yes, confirm" time="09:15 ✓✓" />
           <ChatBubble from="bot" delay={0.88} text={demoBookingConfirmedBody} time="09:15" />
 
-          {!reduce && (
+          {!reduce && animate && (
             <motion.div
               className="flex shrink-0 justify-start"
               initial={{ opacity: 0 }}
