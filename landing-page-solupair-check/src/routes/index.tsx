@@ -52,7 +52,7 @@ function SolupairLogo() {
           />
         </div>
         <p className="site-logo-tagline hidden md:block">
-          Websites, apps and automation for teams that move
+          Digital systems for service businesses and teams
         </p>
       </div>
     </a>
@@ -126,12 +126,12 @@ function Hero() {
             <SolupairLogo />
             <nav className="site-nav" aria-label="Primary">
               <a href="#work" className="site-nav-link site-nav-link--secondary">
-                <span className="site-nav-label site-nav-label--short">Work</span>
-                <span className="site-nav-label site-nav-label--full">Our work</span>
+                <span className="site-nav-label site-nav-label--short">Projects</span>
+                <span className="site-nav-label site-nav-label--full">See projects</span>
               </a>
               <a href="#contact" className="site-nav-link site-nav-link--primary">
-                <span className="site-nav-label site-nav-label--short">Contact</span>
-                <span className="site-nav-label site-nav-label--full">Get in touch</span>
+                <span className="site-nav-label site-nav-label--short">Start</span>
+                <span className="site-nav-label site-nav-label--full">Start a project</span>
               </a>
             </nav>
           </div>
@@ -139,82 +139,46 @@ function Hero() {
       </header>
 
       <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center">
-        <div className="hero-reveal hero-reveal--eyebrow mb-3 flex justify-center sm:mb-4">
+        <div className="hero-reveal hero-reveal--eyebrow flex justify-center">
           <p className="hero-eyebrow">
-            <span className="hero-eyebrow-dot" aria-hidden />
-            Websites, apps &amp; automation
-          </p>
-        </div>
-
-        <div className="hero-stage relative w-full min-w-0 text-center">
-          <svg
-            className="hero-connectors"
-            viewBox="0 0 800 320"
-            preserveAspectRatio="xMidYMid meet"
-            aria-hidden
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="heroConnectorGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="var(--brand-cyan)" stopOpacity="0.15" />
-                <stop offset="50%" stopColor="var(--brand-cyan)" stopOpacity="0.55" />
-                <stop offset="100%" stopColor="var(--brand-pink)" stopOpacity="0.15" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M40 200 H220 L280 140 H520"
-              fill="none"
-              stroke="url(#heroConnectorGrad)"
-              strokeWidth="1"
-            />
-            <path
-              d="M760 120 H580 L520 180 H280"
-              fill="none"
-              stroke="url(#heroConnectorGrad)"
-              strokeWidth="1"
-            />
-            <circle cx="280" cy="140" r="2.5" fill="var(--brand-pink)" opacity="0.5" />
-            <circle cx="520" cy="180" r="2" fill="var(--brand-cyan)" opacity="0.5" />
-          </svg>
-
-          <div className="hero-headline-orb" aria-hidden />
-
-          <h1 className="relative z-[1] w-full min-w-0 text-center">
-            <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text">
-              WE DESIGN
-            </span>
-            <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text">
-              <span className="relative inline-block">
-                THE FUTURE
-                <span className="hero-headline-accent" aria-hidden />
-              </span>
-            </span>
-          </h1>
-
-          <p className="hero-reveal hero-reveal--microline hero-microline relative z-[1]">
-            Websites<span className="hero-microline-sep" aria-hidden>·</span>
-            Dashboards<span className="hero-microline-sep" aria-hidden>·</span>
-            WhatsApp<span className="hero-microline-sep" aria-hidden>·</span>
+            Websites<span className="hero-eyebrow-sep" aria-hidden>·</span>
+            Dashboards<span className="hero-eyebrow-sep" aria-hidden>·</span>
+            WhatsApp<span className="hero-eyebrow-sep" aria-hidden>·</span>
             Automation
           </p>
         </div>
 
+        <div className="hero-stage relative w-full min-w-0 text-center">
+          <div className="hero-headline-scrim" aria-hidden />
+
+          <h1 className="relative z-[1] w-full min-w-0 text-center">
+            <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text">
+              DIGITAL{" "}
+              <span className="hero-headline-gradient">SOLUTIONS</span>
+            </span>
+            <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text">
+              MOVING BUSINESSES FORWARD
+            </span>
+          </h1>
+        </div>
+
         <p className="hero-reveal hero-reveal--subheading hero-subheading text-center">
-          We build the digital systems behind smoother bookings, sharper dashboards and faster
-          operations.
+          Premium websites, dashboards and automated workflows for teams that need smoother
+          bookings, sharper visibility and faster operations.
         </p>
 
         <div className="hero-reveal hero-reveal--ctas hero-ctas">
           <a href="#contact" className="hero-btn hero-btn--primary">
-            <span>Get in touch</span>
+            <span>Start a project</span>
           </a>
           <a href="#work" className="hero-btn hero-btn--secondary">
-            View our work
+            <span>See projects</span>
           </a>
         </div>
 
         <p className="hero-reveal hero-reveal--trust hero-trust-line text-center">
-          Built for service businesses, teams and operators who need systems that actually work.
+          Built for service businesses, retail teams and operators who need systems that actually
+          work.
         </p>
       </div>
     </section>
