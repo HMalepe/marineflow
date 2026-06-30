@@ -114,6 +114,36 @@ export const BALL_SURFACE =
 export const BALL_SHADOW =
   "inset -40px -50px 80px oklch(0 0 0 / 0.35), 0 40px 80px oklch(0 0 0 / 0.25)";
 
+/** Rolling-sphere lighting — disc stays round; highlight moves like a real 3D ball. */
+export function getSphereLighting(rollAngle: number, compact = false) {
+  const a = rollAngle;
+  const hx = 34 + Math.sin(a) * 24 + Math.sin(a * 0.5) * 8;
+  const hy = 28 + Math.cos(a * 0.92) * 20 + Math.sin(a * 1.3) * 6;
+  const rimAngle = a + Math.PI * 0.72;
+
+  const background = `radial-gradient(circle at ${hx.toFixed(1)}% ${hy.toFixed(1)}%, oklch(0.78 0.16 275) 0%, oklch(0.58 0.24 275) 28%, oklch(0.44 0.26 275) 52%, oklch(0.30 0.22 275) 78%, oklch(0.18 0.16 275) 100%)`;
+
+  const rimGradient = `linear-gradient(${((rimAngle * 180) / Math.PI).toFixed(1)}deg, oklch(0 0 0 / 0.42) 0%, oklch(0 0 0 / 0) 38%, oklch(1 0 0 / 0.08) 62%, oklch(0 0 0 / 0.35) 100%)`;
+
+  const specular = {
+    x: `${(hx * 0.88).toFixed(1)}%`,
+    y: `${(hy * 0.82).toFixed(1)}%`,
+    w: compact ? "22%" : "20%",
+    h: compact ? "14%" : "12%",
+    opacity: 0.55 + Math.max(0, Math.cos(a)) * 0.25,
+  };
+
+  const insetDepth = compact ? 20 : 40;
+  const dropDepth = compact ? 16 : 40;
+  const boxShadow = [
+    `inset ${(-insetDepth + Math.sin(a) * 10).toFixed(0)}px ${(-insetDepth * 1.2 + Math.cos(a) * 8).toFixed(0)}px ${insetDepth * 2}px oklch(0 0 0 / 0.42)`,
+    `inset ${(insetDepth * 0.4 + Math.cos(a) * 6).toFixed(0)}px ${(insetDepth * 0.35 + Math.sin(a) * 5).toFixed(0)}px ${insetDepth}px oklch(0.9 0.06 275 / 0.12)`,
+    `0 ${dropDepth}px ${dropDepth * 2}px oklch(0 0 0 / 0.28)`,
+  ].join(", ");
+
+  return { background, boxShadow, rimGradient, specular };
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }

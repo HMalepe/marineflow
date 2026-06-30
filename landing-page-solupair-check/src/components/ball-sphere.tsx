@@ -1,5 +1,5 @@
 import { motion, type MotionValue } from "framer-motion";
-import { BALL_SHADOW, BALL_SURFACE } from "@/lib/ball-physics";
+import { getSphereLighting } from "@/lib/ball-physics";
 
 function Eye({ side, lidScale }: { side: "left" | "right"; lidScale: MotionValue<number> }) {
   const posClass = side === "left" ? "left-[26%]" : "right-[26%]";
@@ -12,7 +12,7 @@ function Eye({ side, lidScale }: { side: "left" | "right"; lidScale: MotionValue
         className="absolute inset-0 origin-center rounded-full"
         style={{
           scaleY: lidScale,
-          background: BALL_SURFACE,
+          background: getSphereLighting(0).background,
         }}
       />
     </div>
@@ -23,6 +23,7 @@ type BallSphereProps = {
   showFace?: boolean;
   faceReveal?: number;
   faceHint?: number;
+  rollAngle?: number;
   lidScale?: MotionValue<number>;
   mouthRadius?: MotionValue<string>;
   mouthHeight?: MotionValue<string>;
@@ -34,6 +35,7 @@ export function BallSphere({
   showFace = false,
   faceReveal = 1,
   faceHint = 0,
+  rollAngle = 0,
   lidScale,
   mouthRadius,
   mouthHeight,
@@ -42,17 +44,37 @@ export function BallSphere({
 }: BallSphereProps) {
   const reveal = showFace ? faceReveal : 0;
   const hint = showFace ? 0 : faceHint;
+  const lighting = getSphereLighting(rollAngle, compact);
 
   return (
     <div
-      className="@container relative h-full w-full rounded-full"
+      className="@container relative h-full w-full overflow-hidden rounded-full"
       style={{
-        background: BALL_SURFACE,
-        boxShadow: compact
-          ? "inset -16px -20px 32px oklch(0 0 0 / 0.35), 0 16px 32px oklch(0 0 0 / 0.22)"
-          : BALL_SHADOW,
+        background: lighting.background,
+        boxShadow: lighting.boxShadow,
       }}
     >
+      <div
+        className="pointer-events-none absolute rounded-full bg-white/30 blur-[2px]"
+        style={{
+          width: lighting.specular.w,
+          height: lighting.specular.h,
+          left: lighting.specular.x,
+          top: lighting.specular.y,
+          transform: "translate(-50%, -50%)",
+          opacity: lighting.specular.opacity,
+        }}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 rounded-full"
+        style={{
+          background: lighting.rimGradient,
+          opacity: 0.85,
+        }}
+        aria-hidden
+      />
+
       {hint > 0.02 && (
         <div
           className="pointer-events-none absolute inset-0 rounded-full transition-opacity duration-75"

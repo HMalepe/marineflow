@@ -11,59 +11,74 @@ export function easeEntrance(t: number) {
   return 1 - (1 - clamp(t, 0, 1)) ** 5;
 }
 
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+}
+
 /**
- * Fibonacci-scaled lemniscate (∞) with an off-screen top-left entry and
- * a final spiral into the hero center.
+ * Rolls in from off-screen LEFT, sweeps a Fibonacci-scaled ∞, settles center.
+ * Points are NOT clamped — ball can start fully outside the hero bounds.
  */
 export function buildHeroEntrancePath(
   width: number,
   height: number,
   radius: number,
-  steps = 280,
+  steps = 300,
 ): EntrancePoint[] {
   if (width <= 0 || height <= 0) return [];
 
   const endX = width / 2;
   const endY = height * 0.36;
-  const startX = -radius * 0.35;
-  const startY = -radius * 0.45;
 
-  const cx = width * 0.48;
-  const cy = height * 0.4;
-  const ax = (width * 0.42) / PHI;
-  const ay = (height * 0.3) / Math.sqrt(PHI);
+  const startX = -radius * 3.2;
+  const startY = height * 0.11;
+  const entryEndX = width * 0.2;
+  const entryEndY = height * 0.16;
+
+  const cx = width * 0.5;
+  const cy = height * 0.38;
+  const ax = (width * 0.4) / PHI;
+  const ay = (height * 0.26) / Math.sqrt(PHI);
 
   const points: EntrancePoint[] = [];
 
   for (let i = 0; i <= steps; i += 1) {
     const u = i / steps;
-    const loopT = u * Math.PI * 2.35;
-    const st = Math.sin(loopT);
-    const ct = Math.cos(loopT);
-    const denom = 1 + st * st;
+    let x: number;
+    let y: number;
 
-    let x = cx + (ax * ct) / denom;
-    let y = cy + (ay * st * ct) / denom;
+    if (u < 0.2) {
+      const blend = easeInOutCubic(u / 0.2);
+      x = startX + (entryEndX - startX) * blend;
+      y = startY + (entryEndY - startY) * blend;
+    } else if (u < 0.8) {
+      const loopU = (u - 0.2) / 0.6;
+      const loopT = loopU * Math.PI * 2.1 + 0.35;
+      const st = Math.sin(loopT);
+      const ct = Math.cos(loopT);
+      const denom = 1 + st * st;
 
-    if (u < 0.1) {
-      const blend = u / 0.1;
-      const ease = blend * blend;
-      x = startX + (x - startX) * ease;
-      y = startY + (y - startY) * ease;
-    }
+      x = cx + (ax * ct) / denom;
+      y = cy + (ay * st * ct) / denom;
 
-    if (u > 0.78) {
-      const blend = (u - 0.78) / 0.22;
+      const enterBlend = Math.min(1, loopU * 4);
+      x = entryEndX + (x - entryEndX) * enterBlend;
+      y = entryEndY + (y - entryEndY) * enterBlend;
+    } else {
+      const loopT = Math.PI * 2.1 + 0.35;
+      const st = Math.sin(loopT);
+      const ct = Math.cos(loopT);
+      const denom = 1 + st * st;
+      const loopX = cx + (ax * ct) / denom;
+      const loopY = cy + (ay * st * ct) / denom;
+
+      const blend = (u - 0.8) / 0.2;
       const ease = 1 - (1 - blend) ** 3;
-      x += (endX - x) * ease;
-      y += (endY - y) * ease;
+      x = loopX + (endX - loopX) * ease;
+      y = loopY + (endY - loopY) * ease;
     }
 
-    points.push({
-      x: clamp(x, radius * 0.6, width - radius * 0.6),
-      y: clamp(y, radius * 0.6, height - radius * 0.6),
-      u,
-    });
+    points.push({ x, y, u });
   }
 
   return points;
@@ -92,30 +107,27 @@ export function sampleEntrancePath(
   return { x, y, tangent, progress: t };
 }
 
-/** Rolling spin (rad) from frame displacement — circumference = 2πr. */
+/** Radians rolled from arc length — drives highlight, not CSS skew. */
 export function rollDeltaFromMotion(dx: number, dy: number, radius: number) {
-  const dist = Math.hypot(dx, dy);
-  if (radius <= 0 || dist < 0.001) return { rollZ: 0, rollY: 0, rollX: 0 };
-  const rollZ = dist / radius;
-  const rollY = (dx / radius) * 0.85;
-  const rollX = (-dy / radius) * 0.55;
-  return { rollZ, rollY, rollX };
+  if (radius <= 0) return 0;
+  return Math.hypot(dx, dy) / radius;
 }
 
 export function getEntranceDurationMs(isPhone: boolean) {
-  return isPhone ? 4400 : 5600;
+  return isPhone ? 4800 : 6000;
 }
 
 /** Face reveal ramps only in the final approach. */
 export function faceRevealFromProgress(progress: number) {
-  if (progress < 0.72) return 0;
-  const t = (progress - 0.72) / 0.28;
+  if (progress < 0.74) return 0;
+  const t = (progress - 0.74) / 0.26;
   return clamp(t ** 2.2, 0, 1);
 }
 
-/** Hints peek when the ball tumbles — not a full face. */
-export function faceHintFromRoll(rollY: number, rollX: number, progress: number) {
-  if (progress > 0.85) return 0;
-  const tumble = Math.abs(Math.sin(rollY * 1.4)) * Math.abs(Math.cos(rollX * 0.9));
-  return clamp(tumble * 0.38 * (1 - progress * 0.5), 0, 0.32);
+/** Hints peek when the lit hemisphere turns — not a full face. */
+export function faceHintFromRoll(rollAngle: number, progress: number) {
+  if (progress > 0.82) return 0;
+  const facing = Math.max(0, Math.cos(rollAngle * 0.9));
+  const peek = (1 - facing) * 0.45;
+  return clamp(peek * (1 - progress * 0.4), 0, 0.34);
 }

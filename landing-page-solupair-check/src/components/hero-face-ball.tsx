@@ -27,7 +27,6 @@ type Phase = "entering" | "idle" | "simulating" | "resting";
 
 const MIN_DIAMETER = 120;
 const MAX_DIAMETER = 880;
-const RAD_TO_DEG = 180 / Math.PI;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -53,20 +52,18 @@ export function HeroFaceBall({
   const [diameter, setDiameter] = useState(getDefaultDiameter);
   const [faceReveal, setFaceReveal] = useState(prefersReducedMotion ? 1 : 0);
   const [faceHint, setFaceHint] = useState(0);
+  const [rollAngle, setRollAngle] = useState(0);
   const isHoveringRef = useRef(false);
   const entranceStartedRef = useRef(false);
 
   const posX = useMotionValue(0);
   const posY = useMotionValue(0);
-  const rotate = useMotionValue(0);
-  const rollX = useMotionValue(0);
-  const rollY = useMotionValue(0);
   const stateRef = useRef<PhysicsBallState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const draggingRef = useRef(false);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const pointerSamplesRef = useRef<PointerSample[]>([]);
   const radiusRef = useRef(diameter / 2);
-  const rollAccumRef = useRef({ x: 0, y: 0, z: 0 });
+  const rollAngleRef = useRef(0);
 
   const readSectionBounds = useCallback(() => {
     const ground = groundRef.current;
@@ -103,10 +100,8 @@ export function HeroFaceBall({
     posY.set(cy);
     setFaceReveal(1);
     setFaceHint(0);
-    rollX.set(0);
-    rollY.set(0);
     setPhaseSafe("idle");
-  }, [posX, posY, readSectionBounds, rollX, rollY, setPhaseSafe]);
+  }, [posX, posY, readSectionBounds, setPhaseSafe]);
 
   useEffect(() => {
     if (prefersReducedMotion || entranceStartedRef.current) return;
@@ -123,7 +118,7 @@ export function HeroFaceBall({
       }
 
       const baseDiameter = getDefaultDiameter();
-      const entranceDiameter = baseDiameter * 0.82;
+      const entranceDiameter = baseDiameter * 0.84;
       setDiameter(entranceDiameter);
       radiusRef.current = entranceDiameter / 2;
 
@@ -140,7 +135,8 @@ export function HeroFaceBall({
 
       posX.set(prevX);
       posY.set(prevY);
-      rollAccumRef.current = { x: 0, y: 0, z: 0 };
+      rollAngleRef.current = 0;
+      setRollAngle(0);
       setPhaseSafe("entering");
 
       const tick = (now: number) => {
@@ -157,33 +153,25 @@ export function HeroFaceBall({
 
         const eased = easeEntrance(rawT);
         const sample = sampleEntrancePath(path, eased);
-
-        const wobble = Math.sin(now * 0.0085) * (1 - eased) * 7;
-        const nx = sample.x + Math.cos(sample.tangent + Math.PI / 2) * wobble;
-        const ny = sample.y + Math.sin(sample.tangent + Math.PI / 2) * wobble;
+        const nx = sample.x;
+        const ny = sample.y;
 
         const dx = nx - prevX;
         const dy = ny - prevY;
-        const roll = rollDeltaFromMotion(dx, dy, radiusRef.current);
-        const accum = rollAccumRef.current;
-        accum.z += roll.rollZ;
-        accum.y += roll.rollY;
-        accum.x += roll.rollX;
+        rollAngleRef.current += rollDeltaFromMotion(dx, dy, radiusRef.current);
 
         prevX = nx;
         prevY = ny;
 
         posX.set(nx);
         posY.set(ny);
-        rotate.set(accum.z * RAD_TO_DEG);
-        rollX.set(accum.x * RAD_TO_DEG);
-        rollY.set(accum.y * RAD_TO_DEG);
+        setRollAngle(rollAngleRef.current);
 
-        const grow = 0.82 + eased * 0.18;
+        const grow = 0.84 + eased * 0.16;
         setDiameter(baseDiameter * grow);
 
         setFaceReveal(faceRevealFromProgress(eased));
-        setFaceHint(faceHintFromRoll(accum.y, accum.x, eased));
+        setFaceHint(faceHintFromRoll(rollAngleRef.current, eased));
 
         raf = requestAnimationFrame(tick);
       };
@@ -197,7 +185,7 @@ export function HeroFaceBall({
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [isPhone, landInCenter, posX, posY, prefersReducedMotion, readSectionBounds, rollX, rollY, rotate, setPhaseSafe]);
+  }, [isPhone, landInCenter, posX, posY, prefersReducedMotion, readSectionBounds, setPhaseSafe]);
 
   useEffect(() => {
     if (phase !== "idle") return;
@@ -249,9 +237,15 @@ export function HeroFaceBall({
       const { bounds } = readSectionBounds();
       const px = clamp(localX, bounds.minX, bounds.maxX);
       const py = clamp(localY, bounds.minY, bounds.maxY);
+      const prev = stateRef.current;
+      const dx = px - prev.x;
+      const dy = py - prev.y;
+      rollAngleRef.current += rollDeltaFromMotion(dx, dy, radiusRef.current);
+      setRollAngle(rollAngleRef.current);
+
       pointerRef.current = { x: px, y: py };
       recordPointerSample(px, py);
-      stateRef.current = { ...stateRef.current, x: px, y: py };
+      stateRef.current = { ...prev, x: px, y: py };
       posX.set(px);
       posY.set(py);
     },
@@ -296,16 +290,16 @@ export function HeroFaceBall({
     posY.set(local.y);
     setFaceReveal(1);
     setFaceHint(0);
-    rollX.set(0);
-    rollY.set(0);
     setPhaseSafe("simulating");
-  }, [groundRef, posX, posY, rollX, rollY, setPhaseSafe]);
+  }, [groundRef, posX, posY, setPhaseSafe]);
 
   useEffect(() => {
     if (prefersReducedMotion) return;
 
     let raf = 0;
     let last = performance.now();
+    let prevX = stateRef.current.x;
+    let prevY = stateRef.current.y;
 
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
@@ -328,10 +322,18 @@ export function HeroFaceBall({
           : { isDragging: false },
       );
 
+      const dx = result.x - prevX;
+      const dy = result.y - prevY;
+      if (!drag) {
+        rollAngleRef.current += rollDeltaFromMotion(dx, dy, radiusRef.current);
+        setRollAngle(rollAngleRef.current);
+      }
+
+      prevX = result.x;
+      prevY = result.y;
       stateRef.current = result;
       posX.set(result.x);
       posY.set(result.y);
-      rotate.set(rotate.get() + result.vx * dt * 0.018);
 
       if (result.sleeping) {
         setPhaseSafe("resting");
@@ -340,7 +342,7 @@ export function HeroFaceBall({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [posX, posY, prefersReducedMotion, readSectionBounds, rotate, setPhaseSafe]);
+  }, [posX, posY, prefersReducedMotion, readSectionBounds, setPhaseSafe]);
 
   useEffect(() => {
     const el = ballRef.current;
@@ -445,6 +447,7 @@ export function HeroFaceBall({
   };
 
   const ballStyle = { width: diameter, height: diameter };
+  const radius = diameter / 2;
 
   const pointerHandlers = {
     onPointerDown: handlePointerDown,
@@ -461,6 +464,7 @@ export function HeroFaceBall({
       showFace={showFullFace}
       faceReveal={faceReveal}
       faceHint={faceHint}
+      rollAngle={rollAngle}
       lidScale={lidScale}
       mouthRadius={mouthRadius}
       mouthHeight={mouthHeight}
@@ -483,34 +487,40 @@ export function HeroFaceBall({
     );
   }
 
-  const isRolling = phase === "entering" || phase === "simulating";
-
   return (
-    <motion.div
-      ref={ballRef}
-      aria-hidden
-      className={`absolute left-0 top-0 ${
-        phase === "entering" ? "z-30 cursor-default" : "cursor-grab active:cursor-grabbing"
-      } ${phase === "idle" ? "z-10" : "z-30"} touch-none`}
-      style={{
-        ...ballStyle,
-        x: posX,
-        y: posY,
-        translateX: "-50%",
-        translateY: "-50%",
-        perspective: 920,
-        willChange: "transform",
-      }}
-      {...pointerHandlers}
-    >
+    <>
       <motion.div
-        className="h-full w-full"
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-0 z-[5]"
         style={{
-          rotateX: rollX,
-          rotateY: rollY,
-          rotateZ: rotate,
-          transformStyle: "preserve-3d",
+          width: diameter * 0.72,
+          height: diameter * 0.14,
+          x: posX,
+          y: posY,
+          translateX: "-50%",
+          translateY: radius * 0.92,
+          borderRadius: "50%",
+          background: "radial-gradient(ellipse, oklch(0 0 0 / 0.28) 0%, oklch(0 0 0 / 0) 72%)",
+          filter: "blur(10px)",
+          opacity: phase === "entering" ? 0.55 : 0.7,
         }}
+      />
+
+      <motion.div
+        ref={ballRef}
+        aria-hidden
+        className={`absolute left-0 top-0 ${
+          phase === "entering" ? "z-30 cursor-default" : "cursor-grab active:cursor-grabbing"
+        } ${phase === "idle" ? "z-10" : "z-30"} touch-none`}
+        style={{
+          ...ballStyle,
+          x: posX,
+          y: posY,
+          translateX: "-50%",
+          translateY: "-50%",
+          willChange: "transform",
+        }}
+        {...pointerHandlers}
       >
         {phase === "idle" ? (
           <div
@@ -520,16 +530,9 @@ export function HeroFaceBall({
             {face}
           </div>
         ) : (
-          <div
-            className="h-full w-full"
-            style={{
-              filter: isRolling && faceReveal < 0.4 ? "saturate(1.08) contrast(1.04)" : undefined,
-            }}
-          >
-            {face}
-          </div>
+          <div className="h-full w-full">{face}</div>
         )}
       </motion.div>
-    </motion.div>
+    </>
   );
 }
