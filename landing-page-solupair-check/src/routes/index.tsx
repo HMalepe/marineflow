@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
 import solupairWordmark from "@/assets/solupair-wordmark.png";
+import { ContactHelixBackground } from "@/components/contact-helix-background";
 import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
@@ -27,7 +28,7 @@ function SolupairLogo() {
   return (
     <a
       href="https://solupair.co.za"
-      className="site-logo inline-flex min-w-0 shrink-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3 lg:gap-4"
+      className="site-logo inline-flex min-w-0 flex-row items-center gap-2 sm:gap-3 lg:gap-4"
       aria-label="Solupair"
     >
       <img
@@ -37,17 +38,17 @@ function SolupairLogo() {
         width={1536}
         height={1206}
         decoding="async"
-        className="site-logo-mark h-[3.25rem] w-auto shrink-0 object-contain object-left sm:h-[4rem] lg:h-[4.5rem]"
+        className="site-logo-mark w-auto shrink-0 object-contain object-left"
       />
-      <div className="min-w-0">
-        <div className="h-[1.35rem] overflow-hidden sm:h-[1.65rem] lg:h-[1.85rem]">
+      <div className="site-logo-copy min-w-0">
+        <div className="site-logo-wordmark-wrap overflow-hidden">
           <img
             src={solupairWordmark}
             alt="Solupair"
             width={1600}
             height={153}
             decoding="async"
-            className="h-full w-auto max-w-[min(52vw,16rem)] object-contain object-left object-top sm:max-w-[min(44vw,20rem)] lg:max-w-[14rem] xl:max-w-none"
+            className="site-logo-wordmark h-full w-auto object-contain object-left object-top"
           />
         </div>
         <p className="site-logo-tagline hidden md:block">
@@ -137,7 +138,7 @@ function Hero() {
         </div>
       </header>
 
-      <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-4 pb-8 pt-2 sm:px-8 sm:pb-10 lg:px-10">
+      <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center">
         <div className="hero-reveal hero-reveal--eyebrow mb-3 flex justify-center sm:mb-4">
           <p className="hero-eyebrow">
             <span className="hero-eyebrow-dot" aria-hidden />
@@ -145,7 +146,7 @@ function Hero() {
           </p>
         </div>
 
-        <div className="hero-stage relative w-full max-w-[100vw] text-center">
+        <div className="hero-stage relative w-full min-w-0 text-center">
           <svg
             className="hero-connectors"
             viewBox="0 0 800 320"
@@ -178,16 +179,10 @@ function Hero() {
 
           <div className="hero-headline-orb" aria-hidden />
 
-          <h1
-            className="hero-reveal hero-reveal--headline-a hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
-            style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
-          >
+          <h1 className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text relative z-[1]">
             WE DESIGN
           </h1>
-          <h1
-            className="hero-reveal hero-reveal--headline-b hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
-            style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
-          >
+          <h1 className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text relative z-[1]">
             <span className="relative inline-block">
               THE FUTURE
               <span className="hero-headline-accent" aria-hidden />
@@ -202,12 +197,12 @@ function Hero() {
           </p>
         </div>
 
-        <p className="hero-reveal hero-reveal--subheading hero-subheading mt-5 px-2 text-center sm:mt-6">
+        <p className="hero-reveal hero-reveal--subheading hero-subheading text-center">
           Web applications, dashboards, WhatsApp booking agents and business automation systems
           built to move faster than your competitors.
         </p>
 
-        <div className="hero-reveal hero-reveal--ctas hero-ctas mt-7 sm:mt-8">
+        <div className="hero-reveal hero-reveal--ctas hero-ctas">
           <a href="#contact" className="hero-btn hero-btn--primary">
             <span>Get in touch</span>
           </a>
@@ -464,8 +459,10 @@ function Contact() {
     <section
       id="contact"
       data-scroll-snap="contact"
-      className="safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
+      className="safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center overflow-hidden px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
     >
+      <ContactHelixBackground />
+      <div className="contact-helix-glow-line" aria-hidden />
       <ViewportPhysicsBalls variant="contact" />
       <div className="relative z-10 mx-auto max-w-7xl border-t border-subtle pt-10 sm:pt-16">
         <div className="grid grid-cols-1 gap-10 sm:gap-12 lg:grid-cols-2">
