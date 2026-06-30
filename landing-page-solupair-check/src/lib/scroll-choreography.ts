@@ -1,6 +1,25 @@
-export type SnapId = "hero" | "services" | "work-0" | "work-1" | "work-2" | "contact";
+export type SnapId =
+  | "hero"
+  | "services"
+  | "audience"
+  | "pricing"
+  | "work-0"
+  | "work-1"
+  | "work-2"
+  | "cta"
+  | "contact";
 
-export const SNAP_ORDER: SnapId[] = ["hero", "services", "work-0", "work-1", "work-2", "contact"];
+export const SNAP_ORDER: SnapId[] = [
+  "hero",
+  "services",
+  "audience",
+  "pricing",
+  "work-0",
+  "work-1",
+  "work-2",
+  "cta",
+  "contact",
+];
 
 export function getSnapElement(id: SnapId): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-scroll-snap="${id}"]`);
@@ -20,7 +39,7 @@ export function getSnapTops(scrollY = window.scrollY) {
   });
 }
 
-/** Nearest snap index (0 = hero … 4 = contact). */
+/** Nearest snap index (0 = hero … last = contact). */
 export function getNearestSnapIndex(scrollY = window.scrollY) {
   const tops = getSnapTops(scrollY);
   let nearest = 0;

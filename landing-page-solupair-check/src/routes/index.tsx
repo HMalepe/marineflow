@@ -9,8 +9,11 @@ import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
+import { FinalCtaSection } from "@/components/final-cta-section";
+import { PricingDirectionSection } from "@/components/pricing-direction-section";
 import { ProjectValueCards } from "@/components/project-value-cards";
 import { WhatWeBuildSection } from "@/components/what-we-build-section";
+import { WhoThisIsForSection } from "@/components/who-this-is-for-section";
 import { useScrollChoreography } from "@/hooks/use-scroll-choreography";
 import {
   getNearestSnapIndex,
@@ -182,6 +185,17 @@ function Hero() {
           Built for service businesses, retail teams and operators who need systems that actually
           work.
         </p>
+
+        <ul
+          className="hero-reveal hero-reveal--trust-strip hero-trust-strip"
+          aria-label="Trust signals"
+        >
+          <li className="hero-trust-strip__item">South African-built</li>
+          <li className="hero-trust-strip__item">Mobile-first</li>
+          <li className="hero-trust-strip__item">WhatsApp-ready</li>
+          <li className="hero-trust-strip__item">Dashboard-focused</li>
+          <li className="hero-trust-strip__item">Remote-first delivery</li>
+        </ul>
       </div>
     </section>
   );
@@ -479,7 +493,7 @@ function Contact() {
       ref={sectionRef}
       id="contact"
       data-scroll-snap="contact"
-      className={`contact-section safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-start overflow-hidden px-4 pt-12 pb-14 sm:px-10 sm:pt-16 sm:pb-20 lg:px-14 lg:pt-20 lg:pb-24${sectionInView ? " contact-in-view" : ""}`}
+      className={`contact-section safe-area-x section-surface snap-section-compact relative isolate flex flex-col justify-start overflow-hidden px-4 pt-10 pb-14 sm:px-10 sm:pt-12 sm:pb-20 lg:px-14 lg:pt-14 lg:pb-24${sectionInView ? " contact-in-view" : ""}`}
     >
       <div className="contact-helix-anchor" aria-hidden>
         <ContactHelixBackground />
@@ -611,7 +625,10 @@ function NovaHome() {
     <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
       <WhatWeBuildSection />
+      <WhoThisIsForSection />
+      <PricingDirectionSection />
       <Projects />
+      <FinalCtaSection />
       <Contact />
     </main>
   );
