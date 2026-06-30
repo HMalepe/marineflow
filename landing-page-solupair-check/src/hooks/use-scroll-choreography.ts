@@ -3,14 +3,20 @@ import { useDeviceProfile } from "@/hooks/use-device-profile";
 import {
   getNearestSnapIndex,
   scrollToSnap,
+  snapIdFromIndex,
+  SNAP_ORDER,
 } from "@/lib/scroll-choreography";
 
 const SCROLL_END_MS = 140;
-const BOUNDARY_WHEEL_MIN = 28;
+const WHEEL_DELTA_MIN = 28;
+const WHEEL_LOCK_MS = 560;
+const CORRECTION_COOLDOWN_MS = 120;
+
+const MAX_SNAP_INDEX = SNAP_ORDER.length - 1;
 
 /**
- * Ensures fast flings never skip the Projects runway — always land on page 2
- * before Contact (down) or Hero (up). Uses native CSS mandatory snap + light guards.
+ * One snap per gesture — hard wheel flings and trackpad momentum cannot skip
+ * cards in the Projects runway (or any other section).
  */
 export function useScrollChoreography() {
   const { prefersReducedMotion } = useDeviceProfile();
@@ -18,9 +24,36 @@ export function useScrollChoreography() {
   const scrollingRef = useRef(false);
   const scrollEndTimerRef = useRef<number | null>(null);
   const correctingRef = useRef(false);
+  const wheelLockedRef = useRef(false);
+  const wheelLockTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (prefersReducedMotion) return;
+
+    const releaseWheelLock = () => {
+      wheelLockedRef.current = false;
+      if (wheelLockTimerRef.current) {
+        window.clearTimeout(wheelLockTimerRef.current);
+        wheelLockTimerRef.current = null;
+      }
+    };
+
+    const lockWheel = () => {
+      wheelLockedRef.current = true;
+      if (wheelLockTimerRef.current) {
+        window.clearTimeout(wheelLockTimerRef.current);
+      }
+      wheelLockTimerRef.current = window.setTimeout(releaseWheelLock, WHEEL_LOCK_MS);
+    };
+
+    const correctToSnap = (index: number) => {
+      correctingRef.current = true;
+      gestureStartSnapRef.current = index;
+      scrollToSnap(snapIdFromIndex(index), "auto");
+      window.setTimeout(() => {
+        correctingRef.current = false;
+      }, CORRECTION_COOLDOWN_MS);
+    };
 
     const onScroll = () => {
       if (!scrollingRef.current) {
@@ -36,51 +69,45 @@ export function useScrollChoreography() {
 
     const onScrollEnd = () => {
       scrollingRef.current = false;
+      releaseWheelLock();
+
       if (correctingRef.current) return;
 
       const nearest = getNearestSnapIndex();
       const gestureStart = gestureStartSnapRef.current;
 
-      // Hero fling must land on project 1 — never skip the runway.
-      if (gestureStart === 0 && nearest > 1) {
-        correctingRef.current = true;
-        scrollToSnap("work-0", "smooth");
-        window.setTimeout(() => {
-          correctingRef.current = false;
-        }, 480);
+      // Never advance or retreat more than one snap per gesture.
+      if (nearest > gestureStart + 1) {
+        correctToSnap(gestureStart + 1);
         return;
       }
 
-      // Contact fling upward must land on project 3 first.
-      if (gestureStart === 4 && nearest < 3) {
-        correctingRef.current = true;
-        scrollToSnap("work-2", "smooth");
-        window.setTimeout(() => {
-          correctingRef.current = false;
-        }, 480);
+      if (nearest < gestureStart - 1) {
+        correctToSnap(gestureStart - 1);
         return;
       }
 
-      // Each settled stop becomes the new gesture origin (multi-step scroll journeys).
       gestureStartSnapRef.current = nearest;
     };
 
     const onWheel = (event: WheelEvent) => {
-      if (correctingRef.current || Math.abs(event.deltaY) < BOUNDARY_WHEEL_MIN) return;
-
-      const current = getNearestSnapIndex();
-      const down = event.deltaY > 0;
-
-      if (current === 0 && down) {
+      if (wheelLockedRef.current || correctingRef.current) {
         event.preventDefault();
-        scrollToSnap("work-0", "smooth");
         return;
       }
 
-      if (current === 4 && !down) {
-        event.preventDefault();
-        scrollToSnap("work-2", "smooth");
-      }
+      if (Math.abs(event.deltaY) < WHEEL_DELTA_MIN) return;
+
+      const current = getNearestSnapIndex();
+      const down = event.deltaY > 0;
+      const target = down ? Math.min(MAX_SNAP_INDEX, current + 1) : Math.max(0, current - 1);
+
+      if (target === current) return;
+
+      event.preventDefault();
+      gestureStartSnapRef.current = current;
+      lockWheel();
+      scrollToSnap(snapIdFromIndex(target), "smooth");
     };
 
     const onScrollEndNative = () => onScrollEnd();
@@ -94,6 +121,7 @@ export function useScrollChoreography() {
       window.removeEventListener("wheel", onWheel);
       window.removeEventListener("scrollend", onScrollEndNative);
       if (scrollEndTimerRef.current) window.clearTimeout(scrollEndTimerRef.current);
+      if (wheelLockTimerRef.current) window.clearTimeout(wheelLockTimerRef.current);
     };
   }, [prefersReducedMotion]);
 }

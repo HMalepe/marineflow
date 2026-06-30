@@ -56,12 +56,12 @@ function ShowcaseFrame({
   surface?: "dark" | "light";
 }) {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[oklch(0.06_0.01_260)] via-[oklch(0.09_0.015_270)] to-[oklch(0.07_0.02_275)] p-2 sm:p-3">
+    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-bg-deep via-bg-main to-bg-deep p-2 sm:p-3">
       <div
-        className={`flex h-full w-full max-h-full min-h-0 flex-col overflow-hidden rounded-xl border shadow-[0_28px_90px_oklch(0_0_0_/_0.55)] ${
+        className={`flex h-full w-full max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-subtle shadow-[0_28px_90px_color-mix(in_srgb,var(--bg-deep)_55%,transparent)] ${
           surface === "light"
-            ? "border-white/20 bg-[oklch(0.98_0.005_270)]"
-            : "border-white/10 bg-[oklch(0.11_0.015_270)]"
+            ? "border-glass bg-[oklch(0.98_0.005_270)]"
+            : "border-glass bg-[color-mix(in_srgb,var(--bg-deep)_88%,var(--bg-main))]"
         }`}
       >
         {children}

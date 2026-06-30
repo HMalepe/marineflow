@@ -1,13 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  motion,
-  useScroll,
-  useSpring,
-  useTransform,
-} from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { useRef, useState, useCallback, useEffect } from "react";
-import { getViewportHeight, useDeviceProfile } from "@/hooks/use-device-profile";
+import { useDeviceProfile } from "@/hooks/use-device-profile";
 import solupairLogo from "@/assets/solupair-logo.png";
 import solupairWordmark from "@/assets/solupair-wordmark.png";
 import { HeroFaceBall } from "@/components/hero-face-ball";
@@ -15,23 +9,19 @@ import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
 import { useScrollChoreography } from "@/hooks/use-scroll-choreography";
-import { scrollToSnap, snapIdFromProjectIndex } from "@/lib/scroll-choreography";
+import {
+  getNearestSnapIndex,
+  projectIndexFromSnapId,
+  scrollToSnap,
+  snapIdFromProjectIndex,
+  SNAP_ORDER,
+} from "@/lib/scroll-choreography";
 
 export const Route = createFileRoute("/")({
   component: NovaHome,
 });
 
 const projects = PROJECT_SHOWCASES;
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function getProjectIndexFromProgress(progress: number, count: number) {
-  if (count <= 1) return 0;
-  const scaled = progress * (count - 1);
-  return Math.min(count - 1, Math.max(0, Math.floor(scaled + 0.5)));
-}
 
 function SolupairLogo() {
   return (
@@ -89,10 +79,10 @@ function Hero() {
         >
           <defs>
             <linearGradient id="heroCircuitGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#22E6F2" stopOpacity="0" />
-              <stop offset="40%" stopColor="#22E6F2" stopOpacity="0.5" />
-              <stop offset="60%" stopColor="#FF4FD8" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#FF4FD8" stopOpacity="0" />
+              <stop offset="0%" stopColor="var(--brand-cyan)" stopOpacity="0" />
+              <stop offset="40%" stopColor="var(--brand-cyan)" stopOpacity="0.5" />
+              <stop offset="60%" stopColor="var(--brand-pink)" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="var(--brand-pink)" stopOpacity="0" />
             </linearGradient>
           </defs>
           <path
@@ -116,10 +106,10 @@ function Hero() {
             strokeWidth="1"
             opacity="0.18"
           />
-          <circle cx="380" cy="460" r="2.5" fill="#C7FF00" opacity="0.55" />
-          <circle cx="680" cy="500" r="2" fill="#22E6F2" opacity="0.4" />
-          <circle cx="1040" cy="340" r="2.5" fill="#C7FF00" opacity="0.45" />
-          <circle cx="360" cy="380" r="2" fill="#FF4FD8" opacity="0.35" />
+          <circle cx="380" cy="460" r="2.5" fill="var(--accent-lime)" opacity="0.55" />
+          <circle cx="680" cy="500" r="2" fill="var(--brand-cyan)" opacity="0.4" />
+          <circle cx="1040" cy="340" r="2.5" fill="var(--accent-lime)" opacity="0.45" />
+          <circle cx="360" cy="380" r="2" fill="var(--brand-pink)" opacity="0.35" />
         </svg>
         <div className="hero-bg-glow hero-bg-glow--cyan" />
         <div className="hero-bg-glow hero-bg-glow--pink" />
@@ -129,7 +119,7 @@ function Hero() {
 
       <HeroFaceBall groundRef={heroGroundRef} />
 
-      <header className="site-header safe-area-top relative z-20 shrink-0">
+      <header className="site-header hero-reveal hero-reveal--header safe-area-top relative z-20 shrink-0">
         <div className="site-header-bar">
           <div className="site-header-inner">
             <SolupairLogo />
@@ -147,18 +137,13 @@ function Hero() {
         </div>
       </header>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-4 pb-8 pt-2 sm:px-8 sm:pb-10 lg:px-10">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
-          className="mb-3 flex justify-center sm:mb-4"
-        >
+      <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-4 pb-8 pt-2 sm:px-8 sm:pb-10 lg:px-10">
+        <div className="hero-reveal hero-reveal--eyebrow mb-3 flex justify-center sm:mb-4">
           <p className="hero-eyebrow">
             <span className="hero-eyebrow-dot" aria-hidden />
             Automation &amp; web design
           </p>
-        </motion.div>
+        </div>
 
         <div className="hero-stage relative w-full max-w-[100vw] text-center">
           <svg
@@ -170,9 +155,9 @@ function Hero() {
           >
             <defs>
               <linearGradient id="heroConnectorGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#22E6F2" stopOpacity="0.15" />
-                <stop offset="50%" stopColor="#22E6F2" stopOpacity="0.55" />
-                <stop offset="100%" stopColor="#FF4FD8" stopOpacity="0.15" />
+                <stop offset="0%" stopColor="var(--brand-cyan)" stopOpacity="0.15" />
+                <stop offset="50%" stopColor="var(--brand-cyan)" stopOpacity="0.55" />
+                <stop offset="100%" stopColor="var(--brand-pink)" stopOpacity="0.15" />
               </linearGradient>
             </defs>
             <path
@@ -187,72 +172,51 @@ function Hero() {
               stroke="url(#heroConnectorGrad)"
               strokeWidth="1"
             />
-            <circle cx="280" cy="140" r="2.5" fill="#C7FF00" opacity="0.65" />
-            <circle cx="520" cy="180" r="2" fill="#22E6F2" opacity="0.5" />
+            <circle cx="280" cy="140" r="2.5" fill="var(--accent-lime)" opacity="0.65" />
+            <circle cx="520" cy="180" r="2" fill="var(--brand-cyan)" opacity="0.5" />
           </svg>
 
           <div className="hero-headline-orb" aria-hidden />
 
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
-            className="hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
+          <h1
+            className="hero-reveal hero-reveal--headline-a hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
             style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
           >
             WE DESIGN
-          </motion.h1>
-          <motion.h1
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
-            className="hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
+          </h1>
+          <h1
+            className="hero-reveal hero-reveal--headline-b hero-headline relative z-[1] w-full break-words px-1 font-display font-black leading-[0.88] tracking-tighter sm:whitespace-nowrap sm:leading-[0.86] sm:px-0"
             style={{ fontSize: "clamp(2.5rem, 10.5vw, 13rem)" }}
           >
             <span className="relative inline-block">
               THE FUTURE
               <span className="hero-headline-accent" aria-hidden />
             </span>
-          </motion.h1>
+          </h1>
 
-          <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.65, delay: 0.18, ease: [0.22, 1, 0.36, 1] }}
-            className="hero-microline relative z-[1]"
-          >
+          <p className="hero-reveal hero-reveal--microline hero-microline relative z-[1]">
             Systems<span className="hero-microline-sep" aria-hidden>·</span>
             Automations<span className="hero-microline-sep" aria-hidden>·</span>
             Interfaces<span className="hero-microline-sep" aria-hidden>·</span>
             Momentum
-          </motion.p>
+          </p>
         </div>
 
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.22, ease: [0.22, 1, 0.36, 1] }}
-          className="hero-subheading mt-5 px-2 text-center sm:mt-6"
-        >
+        <p className="hero-reveal hero-reveal--subheading hero-subheading mt-5 px-2 text-center sm:mt-6">
           Web applications, dashboards, WhatsApp booking agents and business automation systems
           built to move faster than your competitors.
-        </motion.p>
+        </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.34, ease: [0.22, 1, 0.36, 1] }}
-          className="hero-ctas mt-7 sm:mt-8"
-        >
+        <div className="hero-reveal hero-reveal--ctas hero-ctas mt-7 sm:mt-8">
           <a href="#contact" className="hero-btn hero-btn--primary">
             <span>Get in touch</span>
           </a>
           <a href="#work" className="hero-btn hero-btn--secondary">
             Our work
           </a>
-        </motion.div>
+        </div>
 
-        <p className="site-logo-tagline mt-6 text-center md:hidden">
+        <p className="hero-reveal hero-reveal--tagline site-logo-tagline mt-6 text-center md:hidden">
           Digital systems that push businesses forward
         </p>
       </div>
@@ -288,14 +252,10 @@ function Projects() {
 
     const updateFromScroll = () => {
       raf = 0;
-      const viewportHeight = getViewportHeight();
-      const maxScroll = Math.max(0, section.offsetHeight - viewportHeight);
-      if (maxScroll <= 0) return;
+      const snapId = SNAP_ORDER[getNearestSnapIndex()];
+      if (snapId !== "work-0" && snapId !== "work-1" && snapId !== "work-2") return;
 
-      const scrolled = clamp(-section.getBoundingClientRect().top, 0, maxScroll);
-      const progress = scrolled / maxScroll;
-      const targetIndex = getProjectIndexFromProgress(progress, projects.length);
-
+      const targetIndex = projectIndexFromSnapId(snapId);
       if (targetIndex === scrollIndexRef.current) return;
       scrollIndexRef.current = targetIndex;
       setActiveIndex(targetIndex);
@@ -359,10 +319,7 @@ function Projects() {
       data-scroll-snap="work-0"
       className="projects-scene snap-section-start"
     >
-      <div
-        className="safe-area-x projects-pin sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10"
-        style={{ background: "var(--section-dark)" }}
-      >
+      <div className="safe-area-x projects-pin section-surface sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10">
         <ViewportPhysicsBalls variant="projects" />
         <div className="relative z-10 mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
           <div>
@@ -372,11 +329,11 @@ function Projects() {
             >
               Projects
             </h2>
-            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.28em] text-foreground/45 sm:mt-3 sm:text-[11px]">
+            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.28em] text-text-dim sm:mt-3 sm:text-[11px]">
               Scroll to explore · Tap a project to contact us
             </p>
           </div>
-          <p className="hidden max-w-sm text-right text-xs tracking-[0.2em] text-foreground/70 sm:block sm:text-sm">
+          <p className="hidden max-w-sm text-right text-xs tracking-[0.2em] text-text-soft sm:block sm:text-sm">
             WEBSITES WITH MOTION · LIVE DASHBOARDS · WHATSAPP BOOKING AGENTS — BUILT CLEAN &amp; PREMIUM.
           </p>
         </div>
@@ -393,7 +350,7 @@ function Projects() {
                 scrollToContact();
               }
             }}
-            className="group relative min-h-0 flex-1 cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-[0_24px_80px_oklch(0_0_0_/_0.45)] transition hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:rounded-3xl sm:shadow-[0_40px_120px_oklch(0_0_0_/_0.45)]"
+            className="project-showcase-card group relative min-h-0 flex-1 cursor-pointer overflow-hidden rounded-2xl border sm:rounded-3xl"
             onTouchStart={(e) => {
               const t = e.touches[0];
               if (t) handleSwipeStart(t.clientX, t.clientY);
@@ -415,22 +372,22 @@ function Projects() {
             <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/60 to-transparent p-4 pt-16 sm:p-8 sm:pt-24 lg:p-10">
               <div key={`meta-${activeIndex}`} className="project-meta-fade">
                 <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
-                  <div className="font-mono text-[11px] tracking-[0.2em] text-white/70 sm:text-sm">
+                  <div className="font-mono text-[11px] tracking-[0.2em] text-text-soft sm:text-sm">
                     {String(activeIndex + 1).padStart(2, "0")} /{" "}
                     {String(projects.length).padStart(2, "0")}
                   </div>
-                  <span className="max-w-[58%] truncate rounded-full border border-white/15 bg-black/50 px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/90 backdrop-blur sm:max-w-none sm:px-3 sm:text-xs sm:tracking-[0.18em]">
+                  <span className="max-w-[58%] truncate rounded-full border border-glass bg-glass-bg px-2.5 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-foreground backdrop-blur sm:max-w-none sm:px-3 sm:text-xs sm:tracking-[0.18em]">
                     {project.tag}
                   </span>
                 </div>
 
                 <div className="flex items-end justify-between gap-3 sm:gap-4">
-                  <h3 className="min-w-0 font-display text-2xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
+                  <h3 className="min-w-0 font-display text-2xl font-black tracking-tight text-foreground sm:text-5xl lg:text-6xl">
                     {project.name}
                   </h3>
-                  <span className="flex shrink-0 flex-col items-center gap-1 text-primary transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                  <span className="flex shrink-0 flex-col items-center gap-1 text-brand-cyan transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
                     <ArrowUpRight className="h-6 w-6 sm:h-8 sm:w-8" aria-hidden />
-                    <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-white/70 sm:text-[9px]">
+                    <span className="text-[8px] font-semibold uppercase tracking-[0.2em] text-text-soft sm:text-[9px]">
                       Contact
                     </span>
                   </span>
@@ -453,10 +410,10 @@ function Projects() {
                 className="touch-target flex items-center justify-center"
               >
                 <span
-                  className={`block rounded-full border border-white/25 transition ${
+                  className={`block rounded-full border border-glass transition ${
                     index === activeIndex
-                      ? "h-3 w-3 bg-white opacity-100 sm:h-3.5 sm:w-3.5"
-                      : "h-2.5 w-2.5 bg-white/30 opacity-40 sm:h-3 sm:w-3"
+                      ? "h-3 w-3 bg-foreground opacity-100 sm:h-3.5 sm:w-3.5"
+                      : "h-2.5 w-2.5 bg-muted-foreground opacity-40 sm:h-3 sm:w-3"
                   }`}
                 />
               </button>
@@ -464,7 +421,7 @@ function Projects() {
           </div>
 
           {coarsePointer && (
-            <p className="mt-1 text-center text-[9px] uppercase tracking-[0.2em] text-foreground/35 lg:hidden">
+            <p className="mt-1 text-center text-[9px] uppercase tracking-[0.2em] text-text-dim lg:hidden">
               Swipe or tap · Scroll to explore
             </p>
           )}
@@ -479,10 +436,10 @@ function Projects() {
                   e.stopPropagation();
                   goToProject(index, { syncScroll: true });
                 }}
-                className={`relative h-3.5 w-3.5 rounded-full border border-white/20 transition ${
+                className={`relative h-3.5 w-3.5 rounded-full border border-glass transition ${
                   index === activeIndex
-                    ? "scale-100 bg-white opacity-100"
-                    : "scale-90 bg-white/30 opacity-35 hover:opacity-70"
+                    ? "scale-100 bg-foreground opacity-100"
+                    : "scale-90 bg-muted-foreground opacity-35 hover:opacity-70"
                 }`}
               />
             ))}
@@ -507,11 +464,10 @@ function Contact() {
     <section
       id="contact"
       data-scroll-snap="contact"
-      className="safe-area-x snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
-      style={{ background: "var(--section-dark)" }}
+      className="safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
     >
       <ViewportPhysicsBalls variant="contact" />
-      <div className="relative z-10 mx-auto max-w-7xl border-t border-white/10 pt-10 sm:pt-16">
+      <div className="relative z-10 mx-auto max-w-7xl border-t border-subtle pt-10 sm:pt-16">
         <div className="grid grid-cols-1 gap-10 sm:gap-12 lg:grid-cols-2">
           <div>
             <h2
@@ -520,7 +476,7 @@ function Contact() {
             >
               Let's Talk
             </h2>
-            <p className="mt-4 max-w-md text-xs uppercase leading-relaxed tracking-[0.16em] text-foreground/70 sm:mt-6 sm:text-sm sm:tracking-[0.18em]">
+            <p className="mt-4 max-w-md text-xs uppercase leading-relaxed tracking-[0.16em] text-text-soft sm:mt-6 sm:text-sm sm:tracking-[0.18em]">
               Got a project in mind? We'd love to hear about it. Drop us a line and let's create something extraordinary.
             </p>
 
@@ -530,22 +486,19 @@ function Contact() {
             >
               <input
                 placeholder="YOUR NAME"
-                className="mobile-input w-full border-b border-white/20 bg-transparent py-3 text-base tracking-wider text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none sm:text-sm"
+                className="contact-form-input mobile-input w-full border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
               />
               <input
                 type="email"
                 placeholder="YOUR EMAIL"
-                className="mobile-input w-full border-b border-white/20 bg-transparent py-3 text-base tracking-wider text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none sm:text-sm"
+                className="contact-form-input mobile-input w-full border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
               />
               <textarea
                 rows={3}
                 placeholder="Tell us about your project"
-                className="mobile-input w-full resize-none border-b border-white/20 bg-transparent py-3 text-base tracking-wider text-foreground placeholder:text-foreground/40 focus:border-primary focus:outline-none sm:text-sm"
+                className="contact-form-input mobile-input w-full resize-none border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
               />
-              <button
-                type="submit"
-                className="touch-target inline-flex items-center gap-2 rounded-full border border-primary px-6 py-3 text-xs font-bold uppercase tracking-[0.2em] text-primary transition hover:bg-primary hover:text-primary-foreground"
-              >
+              <button type="submit" className="contact-submit-btn touch-target">
                 Send Message <ArrowUpRight className="h-4 w-4" />
               </button>
             </form>
@@ -554,17 +507,17 @@ function Contact() {
           <div className="lg:pl-12">
             <div className="space-y-5 sm:space-y-6">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-foreground/60">Email</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-text-dim">Email</div>
                 <a
                   href="mailto:info@solupair.co.za"
-                  className="mt-1 block text-base text-foreground break-all hover:text-primary"
+                  className="mt-1 block text-base text-foreground break-all transition hover:text-brand-cyan"
                 >
                   info@solupair.co.za
                 </a>
               </div>
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-foreground/60">Location</div>
-                <div className="mt-1 text-sm leading-relaxed text-foreground sm:text-base">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-text-dim">Location</div>
+                <div className="mt-1 text-sm leading-relaxed text-text-soft sm:text-base">
                   South Africa · Johannesburg &amp; Cape Town · Remote-first
                 </div>
               </div>
@@ -572,11 +525,11 @@ function Contact() {
           </div>
         </div>
 
-        <div className="safe-area-bottom mt-12 flex flex-col items-start justify-between gap-3 border-t border-white/10 pt-6 text-[10px] uppercase tracking-[0.18em] text-foreground/60 sm:mt-20 sm:flex-row sm:items-center sm:gap-4 sm:text-[11px] sm:tracking-[0.2em]">
+        <div className="safe-area-bottom mt-12 flex flex-col items-start justify-between gap-3 border-t border-subtle pt-6 text-[10px] uppercase tracking-[0.18em] text-text-dim sm:mt-20 sm:flex-row sm:items-center sm:gap-4 sm:text-[11px] sm:tracking-[0.2em]">
           <div>© 2026 Solupair Pty Ltd. All rights reserved.</div>
           <div className="flex gap-6">
-            <a href="#" className="touch-target hover:text-primary">Privacy</a>
-            <a href="#" className="touch-target hover:text-primary">Terms</a>
+            <a href="#" className="touch-target transition hover:text-brand-cyan">Privacy</a>
+            <a href="#" className="touch-target transition hover:text-brand-cyan">Terms</a>
           </div>
         </div>
       </div>

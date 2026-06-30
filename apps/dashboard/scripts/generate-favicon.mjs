@@ -7,7 +7,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const source = join(root, 'public', 'solupair-icon.png');
 const WORK_SIZE = 128;
-const MARK_SCALE = 0.9;
+/** Match landing page: logo occupies 85% of icon box — leaves breathing room in the tab. */
+const MARK_SCALE = 0.85;
 
 function removeDarkBackground(data, channels) {
   for (let i = 0; i < data.length; i += channels) {
@@ -78,48 +79,6 @@ function cleanDarkHalos(data, channels, width, height) {
   }
 }
 
-async function embolden(input, spread) {
-  const meta = await sharp(input).metadata();
-  const pad = spread;
-  const width = meta.width + pad * 2;
-  const height = meta.height + pad * 2;
-
-  const layers = [];
-  for (let dx = -spread; dx <= spread; dx++) {
-    for (let dy = -spread; dy <= spread; dy++) {
-      if (dx === 0 && dy === 0) continue;
-      layers.push({
-        input,
-        left: pad + dx,
-        top: pad + dy,
-        blend: 'lighten',
-      });
-    }
-  }
-  layers.push({ input, left: pad, top: pad });
-
-  const bold = await sharp({
-    create: {
-      width,
-      height,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite(layers)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  cleanDarkHalos(bold.data, bold.info.channels, width, height);
-
-  return sharp(bold.data, {
-    raw: { width, height, channels: bold.info.channels },
-  })
-    .png()
-    .toBuffer();
-}
-
 async function makeMarkIcon(size) {
   const logo = await sharp(source).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { data, info } = logo;
@@ -163,23 +122,15 @@ async function makeMarkIcon(size) {
     .png()
     .toBuffer();
 
-  const bold = await embolden(filled, 2);
-
-  const extracted = await sharp(bold)
-    .extract({
-      left: 2,
-      top: 2,
-      width: WORK_SIZE,
-      height: WORK_SIZE,
-    })
+  const polished = await sharp(filled)
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  cleanDarkHalos(extracted.data, extracted.info.channels, WORK_SIZE, WORK_SIZE);
+  cleanDarkHalos(polished.data, polished.info.channels, WORK_SIZE, WORK_SIZE);
 
-  return sharp(extracted.data, {
-    raw: { width: WORK_SIZE, height: WORK_SIZE, channels: extracted.info.channels },
+  return sharp(polished.data, {
+    raw: { width: WORK_SIZE, height: WORK_SIZE, channels: polished.info.channels },
   })
     .resize(size, size, { kernel: sharp.kernel.lanczos3 })
     .png()
@@ -192,4 +143,4 @@ const icon180 = await makeMarkIcon(180);
 writeFileSync(join(root, 'src', 'app', 'icon.png'), icon32);
 writeFileSync(join(root, 'src', 'app', 'apple-icon.png'), icon180);
 
-console.log('Generated bold mark favicons: icon.png (32px), apple-icon.png (180px)');
+console.log('Generated mark favicons: icon.png (32px), apple-icon.png (180px)');
