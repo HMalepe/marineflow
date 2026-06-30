@@ -98,6 +98,8 @@ export function HeroFaceBall({
     stateRef.current = { x: cx, y: cy, vx: 0, vy: 0 };
     posX.set(cx);
     posY.set(cy);
+    rollAngleRef.current = 0;
+    setRollAngle(0);
     setFaceReveal(1);
     setFaceHint(0);
     setPhaseSafe("idle");
