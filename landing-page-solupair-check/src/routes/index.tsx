@@ -52,7 +52,7 @@ function SolupairLogo() {
           />
         </div>
         <p className="site-logo-tagline hidden md:block">
-          Digital systems that push businesses forward
+          Websites, apps and automation for teams that move
         </p>
       </div>
     </a>
@@ -142,7 +142,7 @@ function Hero() {
         <div className="hero-reveal hero-reveal--eyebrow mb-3 flex justify-center sm:mb-4">
           <p className="hero-eyebrow">
             <span className="hero-eyebrow-dot" aria-hidden />
-            Automation &amp; web design
+            Websites, apps &amp; automation
           </p>
         </div>
 
@@ -190,16 +190,16 @@ function Hero() {
           </h1>
 
           <p className="hero-reveal hero-reveal--microline hero-microline relative z-[1]">
-            Systems<span className="hero-microline-sep" aria-hidden>·</span>
-            Automations<span className="hero-microline-sep" aria-hidden>·</span>
-            Interfaces<span className="hero-microline-sep" aria-hidden>·</span>
-            Momentum
+            Websites<span className="hero-microline-sep" aria-hidden>·</span>
+            Dashboards<span className="hero-microline-sep" aria-hidden>·</span>
+            WhatsApp<span className="hero-microline-sep" aria-hidden>·</span>
+            Automation
           </p>
         </div>
 
         <p className="hero-reveal hero-reveal--subheading hero-subheading text-center">
-          Web applications, dashboards, WhatsApp booking agents and business automation systems
-          built to move faster than your competitors.
+          We build the digital systems behind smoother bookings, sharper dashboards and faster
+          operations.
         </p>
 
         <div className="hero-reveal hero-reveal--ctas hero-ctas">
@@ -207,12 +207,12 @@ function Hero() {
             <span>Get in touch</span>
           </a>
           <a href="#work" className="hero-btn hero-btn--secondary">
-            Our work
+            View our work
           </a>
         </div>
 
-        <p className="hero-reveal hero-reveal--tagline site-logo-tagline mt-6 text-center md:hidden">
-          Digital systems that push businesses forward
+        <p className="hero-reveal hero-reveal--trust hero-trust-line text-center">
+          Built for service businesses, teams and operators who need systems that actually work.
         </p>
       </div>
     </section>

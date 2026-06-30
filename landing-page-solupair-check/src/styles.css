@@ -834,9 +834,27 @@
   animation-delay: 0.72s;
 }
 
-.hero-reveal--tagline {
+.hero-reveal--trust {
   animation-duration: 0.75s;
   animation-delay: 0.86s;
+}
+
+.hero-trust-line {
+  max-width: 26rem;
+  margin-top: 1.25rem;
+  padding-inline: 0.5rem;
+  font-size: 0.65rem;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  color: var(--text-dim);
+}
+
+@media (min-width: 640px) {
+  .hero-trust-line {
+    max-width: 32rem;
+    margin-top: 1.5rem;
+    font-size: 0.7rem;
+  }
 }
 
 .hero-headline {
@@ -1091,7 +1109,7 @@
     margin-top: 1.25rem;
   }
 
-  .hero-reveal--tagline {
+  .hero-reveal--trust {
     margin-top: 1rem;
   }
 
