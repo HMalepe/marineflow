@@ -37,7 +37,7 @@ function SolupairLogo() {
   return (
     <a
       href="https://solupair.co.za"
-      className="hero-logo inline-flex shrink-0 flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4 lg:gap-5"
+      className="site-logo inline-flex min-w-0 shrink-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3 lg:gap-4"
       aria-label="Solupair"
     >
       <img
@@ -47,20 +47,20 @@ function SolupairLogo() {
         width={1536}
         height={1206}
         decoding="async"
-        className="hero-logo-mark h-[3.75rem] w-auto shrink-0 object-contain object-left sm:h-[4.75rem] lg:h-[5.5rem]"
+        className="site-logo-mark h-[3.25rem] w-auto shrink-0 object-contain object-left sm:h-[4rem] lg:h-[4.5rem]"
       />
       <div className="min-w-0">
-        <div className="h-[1.5rem] overflow-hidden sm:h-[1.85rem] lg:h-[2.1rem]">
+        <div className="h-[1.35rem] overflow-hidden sm:h-[1.65rem] lg:h-[1.85rem]">
           <img
             src={solupairWordmark}
             alt="Solupair"
             width={1600}
             height={153}
             decoding="async"
-            className="h-full w-auto max-w-[min(62vw,18rem)] object-contain object-left object-top sm:max-w-[min(50vw,22rem)] lg:max-w-none"
+            className="h-full w-auto max-w-[min(52vw,16rem)] object-contain object-left object-top sm:max-w-[min(44vw,20rem)] lg:max-w-[14rem] xl:max-w-none"
           />
         </div>
-        <p className="hero-logo-tagline hidden sm:block">
+        <p className="site-logo-tagline hidden md:block">
           Digital systems that push businesses forward
         </p>
       </div>
@@ -129,18 +129,22 @@ function Hero() {
 
       <HeroFaceBall groundRef={heroGroundRef} />
 
-      <header className="safe-area-top relative z-20 mx-auto flex w-full max-w-7xl shrink-0 items-start justify-between gap-4 px-4 py-3 sm:items-center sm:px-8 sm:py-4 lg:px-10">
-        <SolupairLogo />
-        <nav className="flex shrink-0 items-center gap-2 sm:gap-2.5" aria-label="Primary">
-          <a href="#work" className="hero-nav-link">
-            <span className="sm:hidden">Work</span>
-            <span className="hidden sm:inline">Our work</span>
-          </a>
-          <a href="#contact" className="hero-nav-link">
-            <span className="sm:hidden">Contact</span>
-            <span className="hidden sm:inline">Get in touch</span>
-          </a>
-        </nav>
+      <header className="site-header safe-area-top relative z-20 shrink-0">
+        <div className="site-header-bar">
+          <div className="site-header-inner">
+            <SolupairLogo />
+            <nav className="site-nav" aria-label="Primary">
+              <a href="#work" className="site-nav-link site-nav-link--secondary">
+                <span className="site-nav-label site-nav-label--short">Work</span>
+                <span className="site-nav-label site-nav-label--full">Our work</span>
+              </a>
+              <a href="#contact" className="site-nav-link site-nav-link--primary">
+                <span className="site-nav-label site-nav-label--short">Contact</span>
+                <span className="site-nav-label site-nav-label--full">Get in touch</span>
+              </a>
+            </nav>
+          </div>
+        </div>
       </header>
 
       <div className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center px-4 pb-8 pt-2 sm:px-8 sm:pb-10 lg:px-10">
@@ -248,7 +252,7 @@ function Hero() {
           </a>
         </motion.div>
 
-        <p className="hero-logo-tagline mt-6 text-center sm:hidden">
+        <p className="site-logo-tagline mt-6 text-center md:hidden">
           Digital systems that push businesses forward
         </p>
       </div>
