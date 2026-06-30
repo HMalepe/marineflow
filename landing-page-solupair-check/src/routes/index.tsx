@@ -107,9 +107,9 @@ function Hero() {
             strokeWidth="1"
             opacity="0.18"
           />
-          <circle cx="380" cy="460" r="2.5" fill="var(--accent-lime)" opacity="0.55" />
+          <circle cx="380" cy="460" r="2.5" fill="var(--brand-cyan)" opacity="0.45" />
           <circle cx="680" cy="500" r="2" fill="var(--brand-cyan)" opacity="0.4" />
-          <circle cx="1040" cy="340" r="2.5" fill="var(--accent-lime)" opacity="0.45" />
+          <circle cx="1040" cy="340" r="2.5" fill="var(--brand-pink)" opacity="0.4" />
           <circle cx="360" cy="380" r="2" fill="var(--brand-pink)" opacity="0.35" />
         </svg>
         <div className="hero-bg-glow hero-bg-glow--cyan" />
@@ -173,19 +173,21 @@ function Hero() {
               stroke="url(#heroConnectorGrad)"
               strokeWidth="1"
             />
-            <circle cx="280" cy="140" r="2.5" fill="var(--accent-lime)" opacity="0.65" />
+            <circle cx="280" cy="140" r="2.5" fill="var(--brand-pink)" opacity="0.5" />
             <circle cx="520" cy="180" r="2" fill="var(--brand-cyan)" opacity="0.5" />
           </svg>
 
           <div className="hero-headline-orb" aria-hidden />
 
-          <h1 className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text relative z-[1]">
-            WE DESIGN
-          </h1>
-          <h1 className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text relative z-[1]">
-            <span className="relative inline-block">
-              THE FUTURE
-              <span className="hero-headline-accent" aria-hidden />
+          <h1 className="relative z-[1] w-full min-w-0 text-center">
+            <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text">
+              WE DESIGN
+            </span>
+            <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text">
+              <span className="relative inline-block">
+                THE FUTURE
+                <span className="hero-headline-accent" aria-hidden />
+              </span>
             </span>
           </h1>
 
@@ -473,8 +475,9 @@ function Contact() {
             >
               Let's Talk
             </h2>
-            <p className="mt-4 max-w-md text-xs uppercase leading-relaxed tracking-[0.16em] text-text-soft sm:mt-6 sm:text-sm sm:tracking-[0.18em]">
-              Got a project in mind? We'd love to hear about it. Drop us a line and let's create something extraordinary.
+            <p className="contact-lead">
+              Tell us what you&apos;re building — websites, dashboards, booking flows or automation.
+              We&apos;ll reply with clear next steps.
             </p>
 
             <form
@@ -482,16 +485,25 @@ function Contact() {
               className="mt-8 max-w-md space-y-5 sm:mt-10 sm:space-y-6"
             >
               <input
+                type="text"
+                name="name"
+                autoComplete="name"
+                aria-label="Your name"
                 placeholder="YOUR NAME"
                 className="contact-form-input mobile-input w-full border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
               />
               <input
                 type="email"
+                name="email"
+                autoComplete="email"
+                aria-label="Your email"
                 placeholder="YOUR EMAIL"
                 className="contact-form-input mobile-input w-full border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
               />
               <textarea
+                name="message"
                 rows={3}
+                aria-label="Tell us about your project"
                 placeholder="Tell us about your project"
                 className="contact-form-input mobile-input w-full resize-none border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
               />
@@ -507,7 +519,7 @@ function Contact() {
                 <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-text-dim">Email</div>
                 <a
                   href="mailto:info@solupair.co.za"
-                  className="mt-1 block text-base text-foreground break-all transition hover:text-brand-cyan"
+                  className="contact-text-link mt-1 block text-base text-foreground break-all transition hover:text-brand-cyan"
                 >
                   info@solupair.co.za
                 </a>
@@ -525,8 +537,20 @@ function Contact() {
         <div className="safe-area-bottom mt-12 flex flex-col items-start justify-between gap-3 border-t border-subtle pt-6 text-[10px] uppercase tracking-[0.18em] text-text-dim sm:mt-20 sm:flex-row sm:items-center sm:gap-4 sm:text-[11px] sm:tracking-[0.2em]">
           <div>© 2026 Solupair Pty Ltd. All rights reserved.</div>
           <div className="flex gap-6">
-            <a href="#" className="touch-target transition hover:text-brand-cyan">Privacy</a>
-            <a href="#" className="touch-target transition hover:text-brand-cyan">Terms</a>
+            <a
+              href="#"
+              className="contact-footer-link touch-target transition hover:text-brand-cyan"
+              onClick={(e) => e.preventDefault()}
+            >
+              Privacy
+            </a>
+            <a
+              href="#"
+              className="contact-footer-link touch-target transition hover:text-brand-cyan"
+              onClick={(e) => e.preventDefault()}
+            >
+              Terms
+            </a>
           </div>
         </div>
       </div>
