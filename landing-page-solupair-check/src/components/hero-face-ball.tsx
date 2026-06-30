@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type RefObject } from "react";
-import { motion, useMotionValue, useScroll, useSpring, useTransform } from "framer-motion";
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import { BallSphere } from "@/components/ball-sphere";
 import { useDeviceProfile } from "@/hooks/use-device-profile";
 import {
-  buildHeroEntrancePath,
-  easeEntrance,
+  ENTRANCE_PHYSICS,
   faceHintFromRoll,
-  faceRevealFromProgress,
-  getEntranceDurationMs,
+  getEntranceInitialState,
+  getEntranceMaxDurationMs,
+  HERO_BALL_PHYSICS,
+  HERO_BALL_SIZE_SCALE,
   rollDeltaFromMotion,
-  sampleEntrancePath,
 } from "@/lib/hero-ball-entrance";
 import {
   BALL_SHADOW,
   BALL_SURFACE,
-  BASKETBALL_PHYSICS,
   clientToSectionLocal,
   computeThrowVelocity,
   getSectionBallBounds,
@@ -25,18 +31,22 @@ import {
 
 type Phase = "entering" | "idle" | "simulating" | "resting";
 
-const MIN_DIAMETER = 120;
-const MAX_DIAMETER = 880;
+const MIN_DIAMETER = Math.round(120 * HERO_BALL_SIZE_SCALE);
+const MAX_DIAMETER = Math.round(880 * HERO_BALL_SIZE_SCALE);
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
 function getDefaultDiameter() {
-  if (typeof window === "undefined") return 280;
-  if (window.matchMedia("(min-width: 1024px)").matches) return 440;
-  if (window.matchMedia("(min-width: 640px)").matches) return 360;
-  return 280;
+  if (typeof window === "undefined") return Math.round(280 * HERO_BALL_SIZE_SCALE);
+  if (window.matchMedia("(min-width: 1024px)").matches) {
+    return Math.round(440 * HERO_BALL_SIZE_SCALE);
+  }
+  if (window.matchMedia("(min-width: 640px)").matches) {
+    return Math.round(360 * HERO_BALL_SIZE_SCALE);
+  }
+  return Math.round(280 * HERO_BALL_SIZE_SCALE);
 }
 
 export function HeroFaceBall({
@@ -58,12 +68,14 @@ export function HeroFaceBall({
 
   const posX = useMotionValue(0);
   const posY = useMotionValue(0);
+  const entranceSmile = useMotionValue(prefersReducedMotion ? 1 : 0);
   const stateRef = useRef<PhysicsBallState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const draggingRef = useRef(false);
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
   const pointerSamplesRef = useRef<PointerSample[]>([]);
   const radiusRef = useRef(diameter / 2);
   const rollAngleRef = useRef(0);
+  const [squash, setSquash] = useState(1);
 
   const readSectionBounds = useCallback(() => {
     const ground = groundRef.current;
@@ -89,21 +101,25 @@ export function HeroFaceBall({
     setPhase(next);
   }, []);
 
-  const landInCenter = useCallback(() => {
-    const { width, height } = readSectionBounds();
-    if (width <= 0 || height <= 0) return;
+  const settleEntrance = useCallback(() => {
+    const baseDiameter = getDefaultDiameter();
+    setDiameter(baseDiameter);
+    radiusRef.current = baseDiameter / 2;
+    setSquash(1);
 
-    const cx = width / 2;
-    const cy = height * 0.36;
-    stateRef.current = { x: cx, y: cy, vx: 0, vy: 0 };
-    posX.set(cx);
-    posY.set(cy);
-    rollAngleRef.current = 0;
-    setRollAngle(0);
+    const s = stateRef.current;
+    stateRef.current = { x: s.x, y: s.y, vx: 0, vy: 0 };
+    posX.set(s.x);
+    posY.set(s.y);
+
     setFaceReveal(1);
     setFaceHint(0);
+    void animate(entranceSmile, 1, {
+      duration: 0.9,
+      ease: [0.22, 1, 0.36, 1],
+    });
     setPhaseSafe("idle");
-  }, [posX, posY, readSectionBounds, setPhaseSafe]);
+  }, [entranceSmile, posX, posY, setPhaseSafe]);
 
   useEffect(() => {
     if (prefersReducedMotion || entranceStartedRef.current) return;
@@ -111,32 +127,26 @@ export function HeroFaceBall({
 
     let raf = 0;
     let cancelled = false;
+    let last = performance.now();
+    const startTime = performance.now();
+    const maxDuration = getEntranceMaxDurationMs(isPhone);
+    const baseDiameter = getDefaultDiameter();
 
-    const run = () => {
+    const boot = () => {
       const { width, height } = readSectionBounds();
       if (width <= 0 || height <= 0) {
-        raf = requestAnimationFrame(run);
+        raf = requestAnimationFrame(boot);
         return;
       }
 
-      const baseDiameter = getDefaultDiameter();
-      const entranceDiameter = baseDiameter * 0.84;
+      const entranceDiameter = baseDiameter * 0.9;
       setDiameter(entranceDiameter);
       radiusRef.current = entranceDiameter / 2;
 
-      const path = buildHeroEntrancePath(width, height, radiusRef.current);
-      if (path.length === 0) {
-        landInCenter();
-        return;
-      }
-
-      const duration = getEntranceDurationMs(isPhone);
-      const startTime = performance.now();
-      let prevX = path[0].x;
-      let prevY = path[0].y;
-
-      posX.set(prevX);
-      posY.set(prevY);
+      const initial = getEntranceInitialState(width, height, radiusRef.current);
+      stateRef.current = initial;
+      posX.set(initial.x);
+      posY.set(initial.y);
       rollAngleRef.current = 0;
       setRollAngle(0);
       setPhaseSafe("entering");
@@ -144,36 +154,51 @@ export function HeroFaceBall({
       const tick = (now: number) => {
         if (cancelled || phaseRef.current !== "entering") return;
 
-        const rawT = (now - startTime) / duration;
-
-        if (rawT >= 1) {
-          setDiameter(baseDiameter);
-          radiusRef.current = baseDiameter / 2;
-          landInCenter();
+        if (now - startTime > maxDuration) {
+          settleEntrance();
           return;
         }
 
-        const eased = easeEntrance(rawT);
-        const sample = sampleEntrancePath(path, eased);
-        const nx = sample.x;
-        const ny = sample.y;
+        const dt = Math.min(now - last, 32);
+        last = now;
 
-        const dx = nx - prevX;
-        const dy = ny - prevY;
+        const { bounds } = readSectionBounds();
+        const prev = stateRef.current;
+        const result = stepBasketballPhysics(prev, ENTRANCE_PHYSICS, bounds, dt, {
+          isDragging: false,
+        });
+
+        const dx = result.x - prev.x;
+        const dy = result.y - prev.y;
         rollAngleRef.current += rollDeltaFromMotion(dx, dy, radiusRef.current);
-
-        prevX = nx;
-        prevY = ny;
-
-        posX.set(nx);
-        posY.set(ny);
         setRollAngle(rollAngleRef.current);
 
-        const grow = 0.84 + eased * 0.16;
-        setDiameter(baseDiameter * grow);
+        const hitRightWall =
+          prev.x < bounds.maxX - 2 && result.x >= bounds.maxX - 2 && prev.vx > 0;
+        const hitLeftWall =
+          prev.x > bounds.minX + 2 && result.x <= bounds.minX + 2 && prev.vx < 0;
+        const hitFloor =
+          prev.y < bounds.maxY - 2 && result.y >= bounds.maxY - 2 && prev.vy > 0;
 
-        setFaceReveal(faceRevealFromProgress(eased));
-        setFaceHint(faceHintFromRoll(rollAngleRef.current, eased));
+        if (hitRightWall || hitLeftWall || hitFloor) {
+          const impact = Math.min(1, Math.hypot(prev.vx, prev.vy) / 2000);
+          setSquash(1 - impact * 0.12);
+        } else {
+          setSquash((current) => current + (1 - current) * 0.2);
+        }
+
+        const elapsed = (now - startTime) / maxDuration;
+        setFaceHint(faceHintFromRoll(rollAngleRef.current, false));
+        setDiameter(baseDiameter * (0.9 + Math.min(1, elapsed) * 0.1));
+
+        stateRef.current = result;
+        posX.set(result.x);
+        posY.set(result.y);
+
+        if (result.sleeping) {
+          settleEntrance();
+          return;
+        }
 
         raf = requestAnimationFrame(tick);
       };
@@ -181,25 +206,26 @@ export function HeroFaceBall({
       raf = requestAnimationFrame(tick);
     };
 
-    raf = requestAnimationFrame(run);
+    raf = requestAnimationFrame(boot);
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [isPhone, landInCenter, posX, posY, prefersReducedMotion, readSectionBounds, setPhaseSafe]);
+  }, [isPhone, posX, posY, prefersReducedMotion, readSectionBounds, settleEntrance, setPhaseSafe]);
 
   useEffect(() => {
-    if (phase !== "idle") return;
-    const { width, height } = readSectionBounds();
+    if (prefersReducedMotion || phase !== "idle") return;
+
+    const { width, height, bounds } = readSectionBounds();
     if (width <= 0 || height <= 0) return;
 
     const cx = width / 2;
-    const cy = height * 0.36;
+    const cy = bounds.maxY;
     stateRef.current = { x: cx, y: cy, vx: 0, vy: 0 };
     posX.set(cx);
     posY.set(cy);
-  }, [phase, readSectionBounds, posX, posY]);
+  }, [phase, prefersReducedMotion, readSectionBounds, posX, posY]);
 
   useEffect(() => {
     if (phase === "idle" || phase === "entering") return;
@@ -214,10 +240,14 @@ export function HeroFaceBall({
     }
   }, [diameter, phase, readSectionBounds, posX, posY]);
 
+  const scrollSmileRaw = useTransform(scrollY, [180, 520], [0, 1]);
+  const combinedSmile = useTransform([entranceSmile, scrollSmileRaw], ([entrance, scroll]) =>
+    Math.max(Number(entrance), Number(scroll)),
+  );
+  const smile = useSpring(combinedSmile, { stiffness: 140, damping: 22 });
+
   const lidRaw = useTransform(scrollY, [0, 220], [1, 0]);
   const lidScale = useSpring(lidRaw, { stiffness: 140, damping: 22 });
-  const smileRaw = useTransform(scrollY, [180, 520], [0, 1]);
-  const smile = useSpring(smileRaw, { stiffness: 140, damping: 22 });
   const mouthWidth = useTransform(smile, (v: number) => `${22 + v * 70}px`);
   const mouthHeight = useTransform(smile, (v: number) => `${36 + v * 12}px`);
   const mouthRadius = useTransform(
@@ -316,7 +346,7 @@ export function HeroFaceBall({
 
       const result = stepBasketballPhysics(
         stateRef.current,
-        BASKETBALL_PHYSICS,
+        HERO_BALL_PHYSICS,
         bounds,
         dt,
         drag
@@ -401,8 +431,7 @@ export function HeroFaceBall({
     if (prefersReducedMotion) return;
 
     if (phaseRef.current === "entering") {
-      setDiameter(getDefaultDiameter());
-      landInCenter();
+      settleEntrance();
       return;
     }
 
@@ -419,7 +448,9 @@ export function HeroFaceBall({
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current || phaseRef.current === "idle" || phaseRef.current === "entering") return;
+    if (!draggingRef.current || phaseRef.current === "idle" || phaseRef.current === "entering") {
+      return;
+    }
     applyClientDrag(event.clientX, event.clientY);
   };
 
@@ -428,7 +459,8 @@ export function HeroFaceBall({
 
     const throwVel = computeThrowVelocity(
       pointerSamplesRef.current,
-      BASKETBALL_PHYSICS.maxSpeed,
+      HERO_BALL_PHYSICS.maxSpeed,
+      1.05,
     );
     const current = stateRef.current;
     stateRef.current = {
@@ -450,6 +482,8 @@ export function HeroFaceBall({
 
   const ballStyle = { width: diameter, height: diameter };
   const radius = diameter / 2;
+  const squashY = phase === "entering" ? squash : 1;
+  const squashX = phase === "entering" ? 2 - squash : 1;
 
   const pointerHandlers = {
     onPointerDown: handlePointerDown,
@@ -460,7 +494,7 @@ export function HeroFaceBall({
     onPointerLeave: handlePointerLeave,
   };
 
-  const showFullFace = faceReveal > 0.08;
+  const showFullFace = faceReveal > 0.08 || phase === "idle";
   const face = (
     <BallSphere
       showFace={showFullFace}
@@ -478,7 +512,7 @@ export function HeroFaceBall({
     return (
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[36%] z-10 -translate-x-1/2 -translate-y-1/2"
+        className="pointer-events-none absolute bottom-[10%] left-1/2 z-10 -translate-x-1/2"
         style={ballStyle}
       >
         <div
@@ -504,7 +538,7 @@ export function HeroFaceBall({
           borderRadius: "50%",
           background: "radial-gradient(ellipse, oklch(0 0 0 / 0.28) 0%, oklch(0 0 0 / 0) 72%)",
           filter: "blur(10px)",
-          opacity: phase === "entering" ? 0.55 : 0.7,
+          opacity: phase === "entering" ? 0.5 : 0.7,
         }}
       />
 
@@ -520,6 +554,8 @@ export function HeroFaceBall({
           y: posY,
           translateX: "-50%",
           translateY: "-50%",
+          scaleX: squashX,
+          scaleY: squashY,
           willChange: "transform",
         }}
         {...pointerHandlers}
@@ -527,7 +563,7 @@ export function HeroFaceBall({
         {phase === "idle" ? (
           <div
             className="h-full w-full animate-[novaBounce_2.8s_ease-in-out_infinite]"
-            style={{ ["--nova-amp" as string]: "10px" }}
+            style={{ ["--nova-amp" as string]: "8px" }}
           >
             {face}
           </div>

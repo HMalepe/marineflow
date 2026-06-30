@@ -92,8 +92,8 @@ export function ContactHelixBackground() {
       scene.fog = new THREE.FogExp2(0x07051c, 0.085);
 
       const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 45);
-      camera.position.set(0, 0.85, 7.4);
-      camera.lookAt(0, -0.72, 0);
+      camera.position.set(0, 0.62, 7.4);
+      camera.lookAt(0, -0.42, 0);
 
       scene.add(new THREE.AmbientLight(0x1a1040, 0.45));
 
@@ -227,8 +227,8 @@ export function ContactHelixBackground() {
 
       const group = new THREE.Group();
       group.add(mesh);
-      group.position.y = -0.22;
-      group.rotation.x = -0.28;
+      group.position.y = 0.12;
+      group.rotation.x = -0.18;
       scene.add(group);
 
       const render = () => {

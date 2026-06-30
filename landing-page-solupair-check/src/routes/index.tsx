@@ -463,8 +463,10 @@ function Contact() {
       data-scroll-snap="contact"
       className="safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center overflow-hidden px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
     >
-      <ContactHelixBackground />
-      <div className="contact-helix-glow-line" aria-hidden />
+      <div className="contact-helix-anchor" aria-hidden>
+        <ContactHelixBackground />
+        <div className="contact-helix-glow-line" />
+      </div>
       <ViewportPhysicsBalls variant="contact" />
       <div className="relative z-10 mx-auto max-w-7xl border-t border-subtle pt-10 sm:pt-16">
         <div className="grid grid-cols-1 gap-10 sm:gap-12 lg:grid-cols-2">

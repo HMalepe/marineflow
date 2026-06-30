@@ -1343,51 +1343,74 @@
   outline-offset: 3px;
 }
 
-/* ── Contact helix: 3D neon particle waves along footer ── */
+/* ── Contact helix: 3D neon particle waves behind the form ── */
+.contact-helix-anchor {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  z-index: 0;
+  height: clamp(240px, 34vh, 380px);
+  pointer-events: none;
+  transform: translateY(-54%);
+}
+
 .contact-helix-stage {
   position: absolute;
-  inset: auto 0 0 0;
+  inset: 0;
   z-index: 0;
-  height: clamp(260px, 44vh, 480px);
   pointer-events: none;
   overflow: hidden;
   mask-image: linear-gradient(
     to top,
     black 0%,
-    black 36%,
-    color-mix(in srgb, black 70%, transparent) 58%,
+    black 48%,
+    color-mix(in srgb, black 76%, transparent) 78%,
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to top,
     black 0%,
-    black 36%,
-    color-mix(in srgb, black 70%, transparent) 58%,
+    black 48%,
+    color-mix(in srgb, black 76%, transparent) 78%,
     transparent 100%
   );
 }
 
 .contact-helix-canvas {
   position: absolute;
-  inset: auto 0 0 0;
+  inset: 0;
   z-index: 0;
-  height: clamp(240px, 42vh, 460px);
   pointer-events: none;
   overflow: hidden;
   mask-image: linear-gradient(
     to top,
     black 0%,
-    black 38%,
-    color-mix(in srgb, black 72%, transparent) 62%,
+    black 50%,
+    color-mix(in srgb, black 78%, transparent) 80%,
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to top,
     black 0%,
-    black 38%,
-    color-mix(in srgb, black 72%, transparent) 62%,
+    black 50%,
+    color-mix(in srgb, black 78%, transparent) 80%,
     transparent 100%
   );
+}
+
+@media (min-width: 640px) {
+  .contact-helix-anchor {
+    height: clamp(260px, 36vh, 400px);
+    transform: translateY(-56%);
+  }
+}
+
+@media (min-width: 1024px) {
+  .contact-helix-anchor {
+    inset-inline: 0 24%;
+    height: clamp(280px, 38vh, 420px);
+    transform: translateY(-58%);
+  }
 }
 
 .contact-helix-canvas__gl {
@@ -1400,9 +1423,9 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(ellipse 80% 60% at 15% 85%, color-mix(in srgb, var(--brand-cyan) 22%, transparent), transparent 70%),
-    radial-gradient(ellipse 70% 55% at 85% 90%, color-mix(in srgb, var(--brand-pink) 20%, transparent), transparent 72%),
-    radial-gradient(ellipse 50% 40% at 50% 95%, color-mix(in srgb, var(--brand-purple) 16%, transparent), transparent 68%);
+    radial-gradient(ellipse 80% 60% at 18% 58%, color-mix(in srgb, var(--brand-cyan) 22%, transparent), transparent 70%),
+    radial-gradient(ellipse 70% 55% at 82% 62%, color-mix(in srgb, var(--brand-pink) 20%, transparent), transparent 72%),
+    radial-gradient(ellipse 50% 40% at 50% 68%, color-mix(in srgb, var(--brand-purple) 16%, transparent), transparent 68%);
   opacity: 0.85;
 }
 
@@ -1414,7 +1437,7 @@
   z-index: 1;
   height: 1px;
   background: var(--gradient-brand);
-  opacity: 0.6;
+  opacity: 0.55;
   box-shadow:
     0 0 16px var(--glow-cyan),
     0 0 28px var(--glow-pink),
