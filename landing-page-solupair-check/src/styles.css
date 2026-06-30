@@ -135,6 +135,8 @@
   --section-dark: var(--bg-deep);
   --shadow-elegant: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px -8px rgba(0, 0, 0, 0.45);
   --shadow-glow: 0 0 40px var(--glow-cyan), 0 0 64px var(--glow-pink);
+  --hero-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --hero-duration: 0.82s;
   --chart-1: var(--brand-cyan);
   --chart-2: var(--brand-pink);
   --chart-3: var(--brand-purple);
@@ -352,12 +354,6 @@
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
-}
-
-/* Premium ease — smooth deceleration, no bounce */
-:root {
-  --hero-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --hero-duration: 0.82s;
 }
 
 /* ── Hero: premium playful neon ── */
@@ -728,6 +724,7 @@
   );
   filter: blur(36px);
   pointer-events: none;
+  transform: translate3d(-50%, -50%, 0);
   animation: hero-orb-breathe 18s var(--hero-ease) infinite;
 }
 
@@ -1011,8 +1008,21 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-bg-glow {
+  .hero-bg-glow,
+  .hero-headline-orb,
+  .hero-connectors {
     animation: none;
+  }
+
+  .hero-headline-orb {
+    opacity: 0.92;
+    transform: translate3d(-50%, -50%, 0);
+  }
+
+  .hero-reveal {
+    opacity: 1;
+    animation: none;
+    transform: none;
   }
 
   .hero-btn--primary::after {
@@ -1021,8 +1031,15 @@
 
   .hero-btn:hover,
   .hero-btn--primary:hover,
-  .hero-btn--secondary:hover {
+  .hero-btn--secondary:hover,
+  .site-nav-link--secondary:hover,
+  .site-nav-link--primary:hover {
     transform: none;
+  }
+
+  .site-logo:hover,
+  .site-logo:hover .site-logo-mark {
+    filter: drop-shadow(0 3px 16px rgba(0, 0, 0, 0.32));
   }
 }
 
