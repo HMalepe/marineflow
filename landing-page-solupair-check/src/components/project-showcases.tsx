@@ -56,7 +56,7 @@ function ShowcaseFrame({
   surface?: "dark" | "light";
 }) {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-bg-deep via-bg-main to-bg-deep p-2 sm:p-3">
+    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-bg-deep via-bg-main to-bg-deep p-1 sm:p-1.5">
       <div
         className={`flex h-full w-full max-h-full min-h-0 flex-col overflow-hidden rounded-xl border border-subtle shadow-[0_28px_90px_color-mix(in_srgb,var(--bg-deep)_55%,transparent)] ${
           surface === "light"

@@ -98,7 +98,7 @@ export function ProjectsSection() {
       id="work"
       data-scroll-snap="work"
       aria-labelledby="projects-heading"
-      className={`projects-section safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-24${sectionInView ? " projects-in-view" : ""}`}
+      className={`projects-section safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-10 sm:px-10 sm:py-12 lg:px-14 lg:py-14${sectionInView ? " projects-in-view" : ""}`}
     >
       <div className="projects-glow projects-glow--cyan" aria-hidden />
       <div className="projects-glow projects-glow--magenta" aria-hidden />
@@ -169,7 +169,7 @@ export function ProjectsSection() {
                   aria-hidden
                 />
 
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/70 to-transparent p-3 pt-16 sm:p-8 sm:pt-24 lg:p-10">
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2 pt-8 sm:p-4 sm:pt-10 lg:p-5 lg:pt-12">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={project.id}
@@ -179,7 +179,7 @@ export function ProjectsSection() {
                       exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
                       transition={{ duration: 0.5, ease: REVEAL_EASE }}
                     >
-                      <div className="mb-2 flex items-center justify-between gap-2 sm:mb-4 sm:gap-3">
+                      <div className="mb-1 flex items-center justify-between gap-2 sm:mb-2 sm:gap-3">
                         <div className="font-mono text-[10px] tracking-[0.18em] text-text-soft sm:text-sm sm:tracking-[0.2em]">
                           {String(carousel.index + 1).padStart(2, "0")} /{" "}
                           {String(projects.length).padStart(2, "0")}
@@ -235,7 +235,7 @@ export function ProjectsSection() {
             </div>
           </div>
 
-          <div className="projects-carousel-controls safe-area-bottom mt-4 flex items-center justify-center sm:mt-5">
+          <div className="projects-carousel-controls safe-area-bottom mt-2 flex items-center justify-center sm:mt-3">
             <div
               id="projects-carousel-panel"
               className="projects-dots flex items-center justify-center gap-2"
