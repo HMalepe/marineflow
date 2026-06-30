@@ -9,6 +9,8 @@ import { HeroFaceBall } from "@/components/hero-face-ball";
 import { ViewportPhysicsBalls } from "@/components/viewport-physics-balls";
 import { ProjectShowcaseSlider, type ShowcaseSliderHandle } from "@/components/project-showcase-slider";
 import { PROJECT_SHOWCASES } from "@/components/project-showcases";
+import { ProjectValueCards } from "@/components/project-value-cards";
+import { WhatWeBuildSection } from "@/components/what-we-build-section";
 import { useScrollChoreography } from "@/hooks/use-scroll-choreography";
 import {
   getNearestSnapIndex,
@@ -192,6 +194,7 @@ function Projects() {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const didSwipeRef = useRef(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [sectionInView, setSectionInView] = useState(false);
   const { prefersReducedMotion, coarsePointer } = useDeviceProfile();
 
   const goToProject = useCallback((index: number, options?: { syncScroll?: boolean }) => {
@@ -203,6 +206,28 @@ function Projects() {
 
     const behavior = prefersReducedMotion ? "auto" : "smooth";
     scrollToSnap(snapIdFromProjectIndex(clamped), behavior);
+  }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    if (prefersReducedMotion) {
+      setSectionInView(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setSectionInView(true);
+        observer.disconnect();
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+    );
+
+    observer.observe(section);
+    return () => observer.disconnect();
   }, [prefersReducedMotion]);
 
   useEffect(() => {
@@ -278,28 +303,26 @@ function Projects() {
       ref={sectionRef}
       id="work"
       data-scroll-snap="work-0"
-      className="projects-scene snap-section-start"
+      className={`projects-scene snap-section-start${sectionInView ? " projects-in-view" : ""}`}
     >
-      <div className="safe-area-x projects-pin section-surface sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden py-4 sm:py-8 lg:py-10">
+      <div className="safe-area-x projects-pin section-surface sticky top-0 isolate grid h-[100dvh] max-h-[100dvh] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
         <ViewportPhysicsBalls variant="projects" />
-        <div className="relative z-10 mx-auto flex w-full max-w-7xl shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
-          <div>
-            <h2
-              className="font-display font-black uppercase leading-[0.9] tracking-tighter text-foreground"
-              style={{ fontSize: "clamp(2.25rem, 11vw, 9rem)" }}
-            >
+        <header className="projects-header projects-reveal projects-reveal--heading relative z-10 mx-auto w-full max-w-7xl shrink-0">
+          <div className="projects-header-main">
+            <h2 className="projects-heading font-display font-black uppercase tracking-tighter text-foreground">
               Projects
             </h2>
-            <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.28em] text-text-dim sm:mt-3 sm:text-[11px]">
+            <p className="projects-hint">
               Scroll to explore · Tap a project to contact us
             </p>
           </div>
-          <p className="hidden max-w-sm text-right text-xs tracking-[0.2em] text-text-soft sm:block sm:text-sm">
-            WEBSITES WITH MOTION · LIVE DASHBOARDS · WHATSAPP BOOKING AGENTS — BUILT CLEAN &amp; PREMIUM.
+          <p className="projects-description">
+            Live dashboards, booking flows and automation tools built to reduce admin, missed
+            bookings and messy operations.
           </p>
-        </div>
+        </header>
 
-        <div className="relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col px-0 sm:px-0">
+        <div className="projects-stage projects-reveal projects-reveal--mockup relative z-10 mx-auto flex min-h-0 w-full max-w-7xl flex-col">
           <div
             role="button"
             tabIndex={0}
@@ -357,7 +380,7 @@ function Projects() {
             </div>
           </div>
 
-          <div className="safe-area-bottom mx-auto mt-2 flex items-center justify-center gap-1 sm:mt-3 lg:hidden">
+          <div className="safe-area-bottom projects-dots mx-auto mt-3 flex items-center justify-center gap-1.5 sm:mt-4 lg:hidden">
             {projects.map((item, index) => (
               <button
                 key={item.name}
@@ -371,10 +394,8 @@ function Projects() {
                 className="touch-target flex items-center justify-center"
               >
                 <span
-                  className={`block rounded-full border border-glass transition ${
-                    index === activeIndex
-                      ? "h-3 w-3 bg-foreground opacity-100 sm:h-3.5 sm:w-3.5"
-                      : "h-2.5 w-2.5 bg-muted-foreground opacity-40 sm:h-3 sm:w-3"
+                  className={`projects-dot block rounded-full transition ${
+                    index === activeIndex ? "projects-dot--active" : ""
                   }`}
                 />
               </button>
@@ -382,27 +403,33 @@ function Projects() {
           </div>
 
           {coarsePointer && (
-            <p className="mt-1 text-center text-[9px] uppercase tracking-[0.2em] text-text-dim lg:hidden">
+            <p className="projects-swipe-hint mt-1.5 text-center lg:hidden">
               Swipe or tap · Scroll to explore
             </p>
           )}
 
-          <div className="absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 flex-col gap-4 lg:flex">
+          <ProjectValueCards
+            activeIndex={activeIndex}
+            onSelect={(index) => goToProject(index, { syncScroll: true })}
+          />
+
+          <div className="projects-dots-rail absolute right-0 top-1/2 hidden -translate-y-1/2 translate-x-1/2 flex-col gap-3.5 lg:flex">
             {projects.map((item, index) => (
               <button
                 key={item.name}
                 type="button"
                 aria-label={`View ${item.name}`}
+                aria-current={index === activeIndex ? "true" : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
                   goToProject(index, { syncScroll: true });
                 }}
-                className={`relative h-3.5 w-3.5 rounded-full border border-glass transition ${
-                  index === activeIndex
-                    ? "scale-100 bg-foreground opacity-100"
-                    : "scale-90 bg-muted-foreground opacity-35 hover:opacity-70"
+                className={`projects-dot-rail touch-target flex items-center justify-center ${
+                  index === activeIndex ? "projects-dot-rail--active" : ""
                 }`}
-              />
+              >
+                <span className="projects-dot block rounded-full" />
+              </button>
             ))}
           </div>
         </div>
@@ -421,86 +448,139 @@ function Projects() {
 }
 
 function Contact() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const [sectionInView, setSectionInView] = useState(false);
+  const { prefersReducedMotion } = useDeviceProfile();
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    if (prefersReducedMotion) {
+      setSectionInView(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        setSectionInView(true);
+        observer.disconnect();
+      },
+      { threshold: 0.14, rootMargin: "0px 0px -6% 0px" },
+    );
+
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [prefersReducedMotion]);
+
   return (
     <section
+      ref={sectionRef}
       id="contact"
       data-scroll-snap="contact"
-      className="safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-center overflow-hidden px-4 py-16 sm:px-10 sm:py-24 lg:px-14 lg:py-32"
+      className={`contact-section safe-area-x section-surface snap-section-panel relative isolate flex min-h-[100dvh] flex-col justify-start overflow-hidden px-4 pt-12 pb-14 sm:px-10 sm:pt-16 sm:pb-20 lg:px-14 lg:pt-20 lg:pb-24${sectionInView ? " contact-in-view" : ""}`}
     >
       <div className="contact-helix-anchor" aria-hidden>
         <ContactHelixBackground />
         <div className="contact-helix-glow-line" />
       </div>
       <ViewportPhysicsBalls variant="contact" />
-      <div className="relative z-10 mx-auto max-w-7xl border-t border-subtle pt-10 sm:pt-16">
-        <div className="grid grid-cols-1 gap-10 sm:gap-12 lg:grid-cols-2">
-          <div>
-            <h2
-              className="font-display font-black uppercase leading-[0.9] tracking-tighter text-foreground"
-              style={{ fontSize: "clamp(2rem, 10vw, 7rem)" }}
-            >
-              Let's Talk
+      <div className="contact-shell relative z-10 mx-auto w-full max-w-7xl border-t border-subtle pt-6 sm:pt-8 lg:pt-10">
+        <div className="contact-grid">
+          <div className="contact-intro">
+            <h2 className="contact-heading contact-reveal contact-reveal--heading font-display font-black uppercase tracking-tighter text-foreground">
+              Let&apos;s Talk
             </h2>
-            <p className="contact-lead">
-              Tell us what you&apos;re building — websites, dashboards, booking flows or automation.
-              We&apos;ll reply with clear next steps.
+            <p className="contact-lead contact-reveal contact-reveal--lead">
+              Tell us what you need. We&apos;ll reply with the best next step, rough scope and
+              starting price range.
             </p>
+          </div>
 
-            <form
-              onSubmit={(e) => e.preventDefault()}
-              className="mt-8 max-w-md space-y-5 sm:mt-10 sm:space-y-6"
+          <aside className="contact-details contact-reveal contact-reveal--details">
+            <div className="contact-details-block">
+              <div className="contact-details-label">Email</div>
+              <a
+                href="mailto:info@solupair.co.za"
+                className="contact-text-link mt-1 block break-all text-base text-foreground transition hover:text-brand-cyan"
+              >
+                info@solupair.co.za
+              </a>
+            </div>
+            <div className="contact-details-block">
+              <div className="contact-details-label">Location</div>
+              <p className="contact-details-copy">
+                South Africa · Johannesburg &amp; Cape Town · Remote-first
+              </p>
+            </div>
+          </aside>
+
+          <form
+            onSubmit={(e) => e.preventDefault()}
+            className="contact-form contact-reveal contact-reveal--form"
+          >
+            <div
+              className="contact-field contact-reveal contact-reveal--field"
+              style={{ animationDelay: "0.22s" }}
             >
+              <label htmlFor="contact-name" className="contact-field-label">
+                Your name
+              </label>
               <input
+                id="contact-name"
                 type="text"
                 name="name"
                 autoComplete="name"
-                aria-label="Your name"
-                placeholder="YOUR NAME"
-                className="contact-form-input mobile-input w-full border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
+                placeholder="Your name"
+                className="contact-form-input mobile-input"
               />
+            </div>
+
+            <div
+              className="contact-field contact-reveal contact-reveal--field"
+              style={{ animationDelay: "0.3s" }}
+            >
+              <label htmlFor="contact-email" className="contact-field-label">
+                Your email
+              </label>
               <input
+                id="contact-email"
                 type="email"
                 name="email"
                 autoComplete="email"
-                aria-label="Your email"
-                placeholder="YOUR EMAIL"
-                className="contact-form-input mobile-input w-full border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
+                placeholder="you@company.com"
+                className="contact-form-input mobile-input"
               />
-              <textarea
-                name="message"
-                rows={3}
-                aria-label="Tell us about your project"
-                placeholder="Tell us about your project"
-                className="contact-form-input mobile-input w-full resize-none border-b bg-transparent py-3 text-base tracking-wider sm:text-sm"
-              />
-              <button type="submit" className="contact-submit-btn touch-target">
-                Send Message <ArrowUpRight className="h-4 w-4" />
-              </button>
-            </form>
-          </div>
-
-          <div className="lg:pl-12">
-            <div className="space-y-5 sm:space-y-6">
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-text-dim">Email</div>
-                <a
-                  href="mailto:info@solupair.co.za"
-                  className="contact-text-link mt-1 block text-base text-foreground break-all transition hover:text-brand-cyan"
-                >
-                  info@solupair.co.za
-                </a>
-              </div>
-              <div>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.25em] text-text-dim">Location</div>
-                <div className="mt-1 text-sm leading-relaxed text-text-soft sm:text-base">
-                  South Africa · Johannesburg &amp; Cape Town · Remote-first
-                </div>
-              </div>
             </div>
-          </div>
+
+            <div
+              className="contact-field contact-reveal contact-reveal--field"
+              style={{ animationDelay: "0.38s" }}
+            >
+              <label htmlFor="contact-message" className="contact-field-label">
+                Tell us about your project
+              </label>
+              <textarea
+                id="contact-message"
+                name="message"
+                rows={4}
+                placeholder="What are you building? Timeline, goals, current pain points…"
+                className="contact-form-input contact-form-input--message mobile-input"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="contact-submit-btn hero-btn hero-btn--primary contact-reveal contact-reveal--submit touch-target"
+              style={{ animationDelay: "0.48s" }}
+            >
+              <span>Send project request</span>
+            </button>
+          </form>
         </div>
 
-        <div className="safe-area-bottom mt-12 flex flex-col items-start justify-between gap-3 border-t border-subtle pt-6 text-[10px] uppercase tracking-[0.18em] text-text-dim sm:mt-20 sm:flex-row sm:items-center sm:gap-4 sm:text-[11px] sm:tracking-[0.2em]">
+        <div className="safe-area-bottom contact-footer mt-10 flex flex-col items-start justify-between gap-3 border-t border-subtle pt-6 text-[10px] uppercase tracking-[0.18em] text-text-dim sm:mt-14 sm:flex-row sm:items-center sm:gap-4 sm:text-[11px] sm:tracking-[0.2em] lg:mt-16">
           <div>© 2026 Solupair Pty Ltd. All rights reserved.</div>
           <div className="flex gap-6">
             <a
@@ -530,6 +610,7 @@ function NovaHome() {
   return (
     <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
+      <WhatWeBuildSection />
       <Projects />
       <Contact />
     </main>

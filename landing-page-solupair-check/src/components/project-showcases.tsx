@@ -619,18 +619,30 @@ export const PROJECT_SHOWCASES = [
   {
     id: "expiry-desk",
     name: "ExpiryDesk Dashboard",
+    cardTitle: "ExpiryDesk PRO",
+    valueTag: "Inventory intelligence",
+    valueDescription:
+      "Track short-dated stock, write-offs and recovered value before losses happen.",
     tag: "Pharmacy inventory · expiry tracking",
     Preview: ExpiryDeskDashboardPreview,
   },
   {
     id: "live-pulse",
     name: "Live Pulse",
+    cardTitle: "Live Pulse Dashboard",
+    valueTag: "Business visibility",
+    valueDescription:
+      "See bookings, revenue, staff activity and business health in one clean live view.",
     tag: "Solupair · WhatsApp booking engine",
     Preview: LivePulseDashboardPreview,
   },
   {
     id: "whatsapp-agent",
     name: WHATSAPP_AGENT_NAME,
+    cardTitle: "WhatsApp Booking Agent",
+    valueTag: "Customer automation",
+    valueDescription:
+      "Let customers book, reschedule, ask FAQs and receive reminders automatically.",
     tag: "MarineFlow booking bot",
     Preview: WhatsAppChatbotPreview,
   },

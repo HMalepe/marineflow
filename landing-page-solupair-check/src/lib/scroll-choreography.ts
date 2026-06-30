@@ -1,6 +1,6 @@
-export type SnapId = "hero" | "work-0" | "work-1" | "work-2" | "contact";
+export type SnapId = "hero" | "services" | "work-0" | "work-1" | "work-2" | "contact";
 
-export const SNAP_ORDER: SnapId[] = ["hero", "work-0", "work-1", "work-2", "contact"];
+export const SNAP_ORDER: SnapId[] = ["hero", "services", "work-0", "work-1", "work-2", "contact"];
 
 export function getSnapElement(id: SnapId): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-scroll-snap="${id}"]`);
