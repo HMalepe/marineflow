@@ -1,10 +1,9 @@
-export type SnapId = "hero" | "services" | "audience" | "work" | "cta" | "contact";
+export type SnapId = "hero" | "services" | "work" | "cta" | "contact";
 
 /** Major page sections — CSS scroll-snap targets only (not carousel state). */
 export const SNAP_ORDER: SnapId[] = [
   "hero",
   "services",
-  "audience",
   "work",
   "cta",
   "contact",

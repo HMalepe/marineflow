@@ -81,5 +81,5 @@ export const PRICING_GENERAL_POINTS = [
   "We quote properly after a short discovery call or message thread.",
   "Most projects land inside a range; some need less, some need more.",
   "You will always receive a written estimate before any build starts.",
-  "Upgrades, add-ons and phased rollouts can spread cost over time.",
+  "Monthly running costs usually cover hosting, messaging usage and light support — quoted separately from setup.",
 ] as const;

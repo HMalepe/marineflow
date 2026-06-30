@@ -6,7 +6,6 @@ import { FinalCtaSection } from "@/components/final-cta-section";
 import { ProjectsSection } from "@/components/projects-section";
 import { SiteHeader } from "@/components/site-header";
 import { WhatWeBuildSection } from "@/components/what-we-build-section";
-import { WhoThisIsForSection } from "@/components/who-this-is-for-section";
 
 export const Route = createFileRoute("/")({
   component: NovaHome,
@@ -107,20 +106,6 @@ function Hero() {
           bookings, sharper visibility and faster operations.
         </p>
 
-        <div className="hero-reveal hero-reveal--ctas hero-ctas">
-          <a href="#contact" className="hero-btn hero-btn--primary">
-            <span>Start a project</span>
-          </a>
-          <a href="#work" className="hero-btn hero-btn--secondary">
-            <span>See projects</span>
-          </a>
-        </div>
-
-        <p className="hero-reveal hero-reveal--trust hero-trust-line text-center">
-          Built for service businesses, retail teams and operators who need systems that actually
-          work.
-        </p>
-
         <ul
           className="hero-reveal hero-reveal--trust-strip hero-trust-strip"
           aria-label="Trust signals"
@@ -141,7 +126,6 @@ function NovaHome() {
     <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
       <WhatWeBuildSection />
-      <WhoThisIsForSection />
       <ProjectsSection />
       <FinalCtaSection />
       <ContactSection />

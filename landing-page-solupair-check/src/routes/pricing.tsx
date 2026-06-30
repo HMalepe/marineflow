@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SITE_URL } from "@/lib/site-seo";
 
 const PRICING_DESCRIPTION =
-  "Indicative starting estimates for Solupair websites, dashboards and automation builds. Every project is quoted individually after discovery.";
+  "Indicative setup, monthly and year-one estimates for Solupair websites, dashboards and WhatsApp automation — by business type and project tier. Every quote is scoped individually.";
 
 export const Route = createFileRoute("/pricing")({
   component: PricingPage,

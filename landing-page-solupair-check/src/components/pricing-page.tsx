@@ -1,3 +1,4 @@
+import { PricingCategoriesSection } from "@/components/pricing-categories-section";
 import { useSectionInView } from "@/hooks/use-section-in-view";
 import {
   PRICING_FACTORS,
@@ -21,11 +22,11 @@ export function PricingPageContent() {
           id="pricing-heading"
           className="pricing-direction-heading pricing-reveal pricing-reveal--heading font-display font-black uppercase tracking-tighter text-foreground"
         >
-          Start with the system you need
+          Pricing &amp; estimates
         </h1>
         <p className="pricing-direction-subtitle pricing-reveal pricing-reveal--subtitle">
-          Simple builds, clean dashboards and custom automation. The figures below are typical
-          starting points to help you orient — every project is scoped individually after we
+          Indicative costs for the digital solutions we build — by business type and by project
+          tier. Every figure is a starting estimate; your final quote is scoped after we
           understand your workflow.
         </p>
       </header>
@@ -34,11 +35,27 @@ export function PricingPageContent() {
         <p className="pricing-estimate-banner__title">How to read these numbers</p>
         <p className="pricing-estimate-banner__body">
           Prices differ from client to client. What you see here are <strong>estimates</strong>,
-          not final invoices. Your quote reflects your team size, tools, content, integrations
-          and how much automation you actually need — we confirm everything in writing before
-          work begins.
+          not final invoices. Setup fees, monthly running costs and year-one totals are
+          generalisations based on similar builds — your quote reflects team size, tools,
+          content, integrations and how much automation you actually need. We confirm everything
+          in writing before work begins.
         </p>
       </aside>
+
+      <PricingCategoriesSection />
+
+      <header className="pricing-direction-header pricing-direction-header--tiers">
+        <p className="pricing-page-eyebrow pricing-reveal pricing-reveal--heading">
+          Build tiers · starting points
+        </p>
+        <h2 className="pricing-direction-heading pricing-reveal pricing-reveal--heading font-display font-black uppercase tracking-tighter text-foreground">
+          Start with the system you need
+        </h2>
+        <p className="pricing-direction-subtitle pricing-reveal pricing-reveal--subtitle">
+          Simple builds, clean dashboards and custom automation. The tiers below complement the
+          sector examples above — use them to gauge where your project might begin.
+        </p>
+      </header>
 
       <div className="pricing-direction-grid">
         {PRICING_TIERS.map((tier, index) => (
