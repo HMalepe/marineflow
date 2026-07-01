@@ -3,6 +3,8 @@
 **Live preview:** https://solupair-landing.holiday-malepe.workers.dev  
 **Target domain:** `solupair.co.za`
 
+> **Mobile fix (2026-07-01):** `ViewportPhysicsBalls` must call all hooks before any `isPhone` early return — otherwise iOS hits React error #300 and the site shows “This page didn't load”.
+
 **Repos**
 
 | Repo | Branch | Use |
