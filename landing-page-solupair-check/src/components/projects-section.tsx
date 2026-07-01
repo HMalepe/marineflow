@@ -114,10 +114,16 @@ export function ProjectsSection() {
               Projects
             </motion.h2>
             <motion.p
-              className="projects-hint"
+              className="projects-hint projects-hint--desktop"
               {...revealProps(reduceMotion, sectionInView, 0.1)}
             >
               Swipe, use the arrows, dots or cards below to browse builds.
+            </motion.p>
+            <motion.p
+              className="projects-hint projects-hint--mobile"
+              {...revealProps(reduceMotion, sectionInView, 0.1)}
+            >
+              Swipe the showcase or tap a card below.
             </motion.p>
           </div>
           <motion.p
@@ -142,7 +148,7 @@ export function ProjectsSection() {
               <div className="project-showcase-card relative overflow-hidden rounded-2xl border sm:rounded-3xl">
                 <button
                   type="button"
-                  className="projects-showcase-arrow projects-showcase-arrow--prev touch-target"
+                  className="projects-showcase-arrow projects-showcase-arrow--prev projects-showcase-arrow--desktop touch-target"
                   aria-label="Previous project"
                   onClick={scrollPrev}
                 >
@@ -150,7 +156,7 @@ export function ProjectsSection() {
                 </button>
                 <button
                   type="button"
-                  className="projects-showcase-arrow projects-showcase-arrow--next touch-target"
+                  className="projects-showcase-arrow projects-showcase-arrow--next projects-showcase-arrow--desktop touch-target"
                   aria-label="Next project"
                   onClick={scrollNext}
                 >
@@ -169,7 +175,9 @@ export function ProjectsSection() {
                   aria-hidden
                 />
 
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] flex flex-col justify-end bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2 pt-8 sm:p-4 sm:pt-10 lg:p-5 lg:pt-12">
+                <div
+                  className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] hidden flex-col justify-end bg-gradient-to-t from-black/95 via-black/70 to-transparent p-2 pt-8 sm:flex sm:p-4 sm:pt-10 lg:p-5 lg:pt-12 projects-card-overlay--desktop"
+                >
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={project.id}
@@ -210,6 +218,36 @@ export function ProjectsSection() {
                 </div>
               </div>
             </div>
+
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={project.id}
+                className="projects-mobile-caption sm:hidden"
+                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
+                transition={{ duration: 0.4, ease: REVEAL_EASE }}
+              >
+                <div className="projects-mobile-caption__meta">
+                  <span className="projects-mobile-caption__index">
+                    {String(carousel.index + 1).padStart(2, "0")} / {String(projects.length).padStart(2, "0")}
+                  </span>
+                  <span className="projects-mobile-caption__tag">{project.tag}</span>
+                </div>
+                <h3 className="projects-mobile-caption__title">{project.name}</h3>
+                <a
+                  href="#contact"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    navigateToSection("contact", reduceMotion);
+                  }}
+                  className="projects-contact-cta hero-btn hero-btn--secondary touch-target inline-flex w-full justify-center sm:w-auto"
+                >
+                  <span>Discuss this build</span>
+                  <ArrowUpRight className="size-4" aria-hidden />
+                </a>
+              </motion.div>
+            </AnimatePresence>
 
             <div
               className="projects-dots-rail hidden flex-col gap-3.5 lg:flex"

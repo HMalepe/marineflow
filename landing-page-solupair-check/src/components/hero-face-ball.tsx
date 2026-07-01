@@ -47,15 +47,23 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function isMobileHeroLayout() {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 767px)").matches;
+}
+
 function getDefaultDiameter() {
-  if (typeof window === "undefined") return Math.round(280 * HERO_BALL_SIZE_SCALE);
+  if (typeof window === "undefined") return Math.round(240 * HERO_BALL_SIZE_SCALE);
   if (window.matchMedia("(min-width: 1024px)").matches) {
     return Math.round(440 * HERO_BALL_SIZE_SCALE);
   }
-  if (window.matchMedia("(min-width: 640px)").matches) {
+  if (window.matchMedia("(min-width: 768px)").matches) {
     return Math.round(360 * HERO_BALL_SIZE_SCALE);
   }
-  return Math.round(280 * HERO_BALL_SIZE_SCALE);
+  if (isMobileHeroLayout()) {
+    return Math.round(168 * HERO_BALL_SIZE_SCALE);
+  }
+  return Math.round(200 * HERO_BALL_SIZE_SCALE);
 }
 
 export function HeroFaceBall({
@@ -108,10 +116,22 @@ export function HeroFaceBall({
 
     const width = ground.clientWidth;
     const height = ground.clientHeight;
+    const bounds = getSectionBallBounds(width, height, radiusRef.current);
+
+    if (!isMobileHeroLayout()) {
+      return { width, height, bounds };
+    }
+
+    // Keep the hero ball in the upper band on mobile so copy stays readable.
+    const ceiling = height * 0.24;
     return {
       width,
       height,
-      bounds: getSectionBallBounds(width, height, radiusRef.current),
+      bounds: {
+        ...bounds,
+        minY: Math.min(bounds.minY, height * 0.07),
+        maxY: Math.min(bounds.maxY, ceiling),
+      },
     };
   }, [groundRef]);
 
@@ -657,7 +677,7 @@ export function HeroFaceBall({
     return (
       <div
         aria-hidden
-        className="pointer-events-none absolute bottom-[10%] left-1/2 z-10 -translate-x-1/2"
+        className="pointer-events-none absolute left-1/2 z-[8] -translate-x-1/2 top-[14%] md:top-auto md:bottom-[10%]"
         style={ballStyle}
       >
         <div

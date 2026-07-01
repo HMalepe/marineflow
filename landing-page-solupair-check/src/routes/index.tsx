@@ -76,7 +76,7 @@ function Hero() {
         <SiteHeader />
       </div>
 
-      <div className="hero-content relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-center">
+      <div className="hero-content relative z-20 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-end md:z-10 md:justify-center">
         <div className="hero-copy-stack w-full min-w-0">
           <div className="hero-reveal hero-reveal--eyebrow flex justify-center">
             <p className="hero-eyebrow">
@@ -92,12 +92,12 @@ function Hero() {
 
             <h1 className="relative z-[1] w-full min-w-0 text-center">
               <span className="hero-reveal hero-reveal--headline-a hero-headline hero-headline-text hero-headline-text--a">
-                DIGITAL{" "}
-                <span className="hero-headline-gradient">SOLUTIONS</span>
+                <span className="hero-headline-line">DIGITAL</span>{" "}
+                <span className="hero-headline-line hero-headline-gradient">SOLUTIONS</span>
               </span>
               <span className="hero-reveal hero-reveal--headline-b hero-headline hero-headline-text hero-headline-text--b">
-                <span className="hero-headline-phrase">FOR YOUR</span>{" "}
-                <span className="hero-headline-phrase">BUSINESS</span>
+                <span className="hero-headline-line hero-headline-phrase">FOR YOUR</span>{" "}
+                <span className="hero-headline-line hero-headline-phrase">BUSINESS</span>
               </span>
             </h1>
           </div>

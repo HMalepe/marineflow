@@ -4635,3 +4635,5 @@ body {
     font-size: 0.8125rem;
   }
 }
+
+@import "./styles-mobile.css";
