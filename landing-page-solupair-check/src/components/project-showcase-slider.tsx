@@ -37,112 +37,131 @@ type ProjectShowcaseSliderProps = {
   className?: string;
 };
 
-export const ProjectShowcaseSlider = forwardRef<
-  ShowcaseSliderHandle,
-  ProjectShowcaseSliderProps
->(function ProjectShowcaseSlider({ slides, onSelect, className }, ref) {
-  const { prefersReducedMotion } = useDeviceProfile();
-  const plugins = useMemo(
-    () => (prefersReducedMotion ? [] : [Fade()]),
-    [prefersReducedMotion],
-  );
+type SliderEngineProps = ProjectShowcaseSliderProps & {
+  useFade: boolean;
+};
 
-  const useFade = !prefersReducedMotion;
+const ProjectShowcaseSliderEngine = forwardRef<ShowcaseSliderHandle, SliderEngineProps>(
+  function ProjectShowcaseSliderEngine({ slides, onSelect, className, useFade }, ref) {
+    const { prefersReducedMotion } = useDeviceProfile();
+    const plugins = useMemo(() => (useFade ? [Fade()] : []), [useFade]);
 
-  const [emblaRef, emblaApi] = useEmblaCarousel(
-    {
-      loop: true,
-      align: "start",
-      containScroll: "trimSnaps",
-      // Fade plugin owns transitions; non-zero scroll duration leaves slide 0 visible.
-      duration: 0,
-      watchDrag: true,
-    },
-    plugins,
-  );
+    const [emblaRef, emblaApi] = useEmblaCarousel(
+      {
+        loop: true,
+        align: "start",
+        containScroll: "trimSnaps",
+        duration: useFade ? 0 : prefersReducedMotion ? 0 : 24,
+        watchDrag: true,
+      },
+      plugins,
+    );
 
-  const [selectedIndex, setSelectedIndex] = useState(0);
+    const [selectedIndex, setSelectedIndex] = useState(0);
 
-  const applySelectedSlideVisibility = useCallback(
-    (index: number) => {
-      if (!emblaApi || !useFade) return;
-      const { dragHandler, slideRegistry } = emblaApi.internalEngine();
-      if (dragHandler.pointerDown()) return;
+    const applySelectedSlideVisibility = useCallback(
+      (index: number) => {
+        if (!emblaApi || !useFade) return;
+        const { dragHandler, slideRegistry } = emblaApi.internalEngine();
+        if (dragHandler.pointerDown()) return;
 
-      const slidesInSnap = slideRegistry[index] ?? [index];
-      emblaApi.slideNodes().forEach((node, slideIndex) => {
-        const visible = slidesInSnap.includes(slideIndex);
-        node.style.opacity = visible ? "1" : "0";
-        node.style.pointerEvents = visible ? "auto" : "none";
+        const slidesInSnap = slideRegistry[index] ?? [index];
+        emblaApi.slideNodes().forEach((node, slideIndex) => {
+          const visible = slidesInSnap.includes(slideIndex);
+          node.style.opacity = visible ? "1" : "0";
+          node.style.pointerEvents = visible ? "auto" : "none";
+        });
+      },
+      [emblaApi, useFade],
+    );
+
+    const syncCarouselState = useCallback(() => {
+      if (!emblaApi) return;
+      const index = emblaApi.selectedScrollSnap();
+      setSelectedIndex(index);
+      applySelectedSlideVisibility(index);
+      onSelect?.({
+        index,
+        canScrollPrev: emblaApi.canScrollPrev(),
+        canScrollNext: emblaApi.canScrollNext(),
       });
-    },
-    [emblaApi, useFade],
-  );
+    }, [applySelectedSlideVisibility, emblaApi, onSelect]);
 
-  const syncCarouselState = useCallback(() => {
-    if (!emblaApi) return;
-    const index = emblaApi.selectedScrollSnap();
-    setSelectedIndex(index);
-    applySelectedSlideVisibility(index);
-    onSelect?.({
-      index,
-      canScrollPrev: emblaApi.canScrollPrev(),
-      canScrollNext: emblaApi.canScrollNext(),
-    });
-  }, [applySelectedSlideVisibility, emblaApi, onSelect]);
+    useEffect(() => {
+      if (!emblaApi) return;
+      syncCarouselState();
+      emblaApi.on("select", syncCarouselState);
+      emblaApi.on("reInit", syncCarouselState);
+      return () => {
+        emblaApi.off("select", syncCarouselState);
+        emblaApi.off("reInit", syncCarouselState);
+      };
+    }, [emblaApi, syncCarouselState]);
 
-  useEffect(() => {
-    if (!emblaApi) return;
-    syncCarouselState();
-    emblaApi.on("select", syncCarouselState);
-    emblaApi.on("reInit", syncCarouselState);
-    return () => {
-      emblaApi.off("select", syncCarouselState);
-      emblaApi.off("reInit", syncCarouselState);
-    };
-  }, [emblaApi, syncCarouselState]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        scrollTo: (index: number) => emblaApi?.scrollTo(index),
+        scrollPrev: () => emblaApi?.scrollPrev(),
+        scrollNext: () => emblaApi?.scrollNext(),
+        getSelectedIndex: () => emblaApi?.selectedScrollSnap() ?? selectedIndex,
+      }),
+      [emblaApi, selectedIndex],
+    );
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      scrollTo: (index: number) => emblaApi?.scrollTo(index),
-      scrollPrev: () => emblaApi?.scrollPrev(),
-      scrollNext: () => emblaApi?.scrollNext(),
-      getSelectedIndex: () => emblaApi?.selectedScrollSnap() ?? selectedIndex,
-    }),
-    [emblaApi, selectedIndex],
-  );
+    const emblaModeClass = useFade
+      ? "projects-embla--fade"
+      : prefersReducedMotion
+        ? "projects-embla--reduced"
+        : "projects-embla--scroll";
 
-  return (
-    <div className={className}>
-      <div
-        ref={emblaRef}
-        className={`projects-embla projects-embla--fade h-full overflow-hidden rounded-[inherit]${prefersReducedMotion ? " projects-embla--reduced" : ""}`}
-      >
-        <div className="projects-embla__container">
-          {slides.map((slide, index) => (
-            <div
-              key={slide.id}
-              className="projects-embla__slide"
-              role="group"
-              aria-roledescription="slide"
-              aria-label={`${slide.cardTitle} showcase`}
-              aria-hidden={index !== selectedIndex}
-              inert={index !== selectedIndex ? true : undefined}
-            >
-              <div className="projects-embla__slide-inner">
-                <slide.Preview isActive={index === selectedIndex} />
+    return (
+      <div className={className}>
+        <div
+          ref={emblaRef}
+          className={`projects-embla ${emblaModeClass} h-full overflow-hidden rounded-[inherit]`}
+        >
+          <div className="projects-embla__container">
+            {slides.map((slide, index) => (
+              <div
+                key={slide.id}
+                className="projects-embla__slide"
+                role="group"
+                aria-roledescription="slide"
+                aria-label={`${slide.cardTitle} showcase`}
+                aria-hidden={index !== selectedIndex}
+                inert={index !== selectedIndex ? true : undefined}
+              >
+                <div className="projects-embla__slide-inner">
+                  <slide.Preview isActive={index === selectedIndex} />
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+        <span className="sr-only" aria-live="polite" aria-atomic="true">
+          Showing {slides[selectedIndex]?.cardTitle ?? "project"} — slide {selectedIndex + 1} of{" "}
+          {slides.length}
+        </span>
       </div>
-      <span className="sr-only" aria-live="polite" aria-atomic="true">
-        Showing {slides[selectedIndex]?.cardTitle ?? "project"} — slide {selectedIndex + 1} of{" "}
-        {slides.length}
-      </span>
-    </div>
-  );
-});
+    );
+  },
+);
+
+export const ProjectShowcaseSlider = forwardRef<ShowcaseSliderHandle, ProjectShowcaseSliderProps>(
+  function ProjectShowcaseSlider(props, ref) {
+    const { prefersReducedMotion, isMobileLanding } = useDeviceProfile();
+    const useFade = !prefersReducedMotion && !isMobileLanding;
+
+    return (
+      <ProjectShowcaseSliderEngine
+        key={useFade ? "fade" : "scroll"}
+        ref={ref}
+        {...props}
+        useFade={useFade}
+      />
+    );
+  },
+);
 
 export type { Slide as ShowcaseSlide };

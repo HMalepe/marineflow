@@ -245,8 +245,35 @@
     gap: 0.35rem;
   }
 
+  .projects-embla--scroll .projects-embla__container {
+    display: flex;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .projects-embla--scroll .projects-embla__slide {
+    flex: 0 0 100%;
+    opacity: 1;
+  }
+
   .projects-value-cards {
     margin-top: 0.35rem;
+  }
+
+  .projects-value-cards__item--compact {
+    display: list-item;
+  }
+
+  .projects-value-cards__item--compact .projects-value-card {
+    padding: 0.55rem 0.7rem;
+    gap: 0.2rem;
+  }
+
+  .projects-value-cards__item--compact .projects-value-card__desc {
+    display: none;
+  }
+
+  .projects-value-cards__item--compact .projects-value-card__title {
+    font-size: 0.8125rem;
   }
 
   .projects-value-card {
