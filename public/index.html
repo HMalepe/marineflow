@@ -3,241 +3,524 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MarineFlow Dashboard</title>
+    <meta name="description" content="Solupair — WhatsApp booking automation for salons and barbershops. Let your clients book, reschedule, and pay without lifting a finger." />
+    <title>Solupair — WhatsApp Booking for Salons</title>
     <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
       :root {
-        font-family: system-ui, sans-serif;
-        background: #0f1419;
-        color: #e7e9ea;
+        --bg: #07090f;
+        --surface: #0e1118;
+        --surface2: #151a24;
+        --border: #1e2535;
+        --accent: #3ecf8e;
+        --accent2: #25a36c;
+        --text: #e8eaf0;
+        --muted: #7c8799;
+        --wa: #25d366;
       }
+
+      html { scroll-behavior: smooth; }
+
       body {
-        max-width: 960px;
-        margin: 0 auto;
-        padding: 1.5rem;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
       }
-      a {
-        color: #8ab4f8;
+
+      /* NAV */
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+        background: rgba(7, 9, 15, 0.85);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
       }
-      .card {
-        background: #1a1f26;
-        border-radius: 12px;
-        padding: 1rem 1.25rem;
-        margin-bottom: 1rem;
+      .logo {
+        font-size: 1.25rem;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        color: var(--text);
+        text-decoration: none;
       }
-      label {
-        display: block;
-        margin-top: 0.5rem;
-        font-size: 0.85rem;
-        color: #8b98a5;
-      }
-      input {
-        width: 100%;
-        padding: 0.5rem 0.6rem;
+      .logo span { color: var(--accent); }
+      nav a.btn-nav {
+        padding: 0.45rem 1.1rem;
         border-radius: 8px;
-        border: 1px solid #38444d;
-        background: #0f1419;
-        color: inherit;
-        box-sizing: border-box;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: border-color .2s;
       }
-      button {
-        margin-top: 0.75rem;
-        padding: 0.55rem 1rem;
+      nav a.btn-nav:hover { border-color: var(--accent); }
+
+      /* HERO */
+      .hero {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 5rem 1.5rem 4rem;
+        text-align: center;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.3rem 0.9rem;
         border-radius: 999px;
-        border: none;
-        background: #1d9bf0;
-        color: #fff;
+        background: rgba(62, 207, 142, 0.1);
+        border: 1px solid rgba(62, 207, 142, 0.25);
+        color: var(--accent);
+        font-size: 0.8rem;
         font-weight: 600;
+        letter-spacing: 0.02em;
+        margin-bottom: 1.75rem;
+      }
+      h1 {
+        font-size: clamp(2.2rem, 5vw, 3.6rem);
+        font-weight: 800;
+        line-height: 1.1;
+        letter-spacing: -1.5px;
+        margin-bottom: 1.25rem;
+      }
+      h1 em { font-style: normal; color: var(--accent); }
+      .hero p {
+        font-size: 1.15rem;
+        color: var(--muted);
+        max-width: 580px;
+        margin: 0 auto 2.5rem;
+      }
+      .cta-group {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.8rem 1.8rem;
+        background: var(--accent);
+        color: #07090f;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 1rem;
+        text-decoration: none;
+        transition: background .2s, transform .15s;
+        border: none;
         cursor: pointer;
       }
-      button.secondary {
-        background: #38444d;
+      .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+      .btn-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.8rem 1.8rem;
+        background: var(--surface2);
+        color: var(--text);
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 1rem;
+        text-decoration: none;
+        border: 1px solid var(--border);
+        transition: border-color .2s;
       }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.9rem;
+      .btn-secondary:hover { border-color: var(--accent); }
+
+      /* SOCIAL PROOF */
+      .proof {
+        text-align: center;
+        padding: 1rem 1.5rem 3rem;
+        color: var(--muted);
+        font-size: 0.85rem;
       }
-      th,
-      td {
-        text-align: left;
-        padding: 0.45rem 0.35rem;
-        border-bottom: 1px solid #38444d;
+
+      /* DEMO PHONE */
+      .phone-wrap {
+        max-width: 360px;
+        margin: 0 auto 5rem;
+        padding: 0 1.5rem;
       }
-      .banner {
-        font-size: 0.75rem;
-        color: #ffba1a;
+      .phone {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 1.5rem 1.25rem;
+        box-shadow: 0 32px 80px rgba(0,0,0,.5);
+      }
+      .phone-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .wa-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--wa);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+      }
+      .phone-header .name { font-weight: 600; font-size: 0.95rem; }
+      .phone-header .online { font-size: 0.75rem; color: var(--accent); }
+      .bubble-row { margin-bottom: 0.6rem; }
+      .bubble {
+        display: inline-block;
+        max-width: 85%;
+        padding: 0.55rem 0.85rem;
+        border-radius: 14px;
+        font-size: 0.85rem;
+        line-height: 1.45;
+      }
+      .bubble.bot {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-bottom-left-radius: 4px;
+      }
+      .bubble.user {
+        background: rgba(62, 207, 142, 0.15);
+        border: 1px solid rgba(62, 207, 142, 0.2);
+        border-bottom-right-radius: 4px;
+        float: right;
+      }
+      .clearfix::after { content: ''; display: table; clear: both; }
+      .bubble .time { font-size: 0.65rem; color: var(--muted); margin-top: 0.25rem; text-align: right; }
+
+      /* HOW IT WORKS */
+      section { padding: 4rem 1.5rem; }
+      .section-label {
+        text-align: center;
+        color: var(--accent);
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
         margin-bottom: 0.75rem;
       }
-      pre {
-        overflow: auto;
-        font-size: 0.75rem;
-        background: #0f1419;
-        padding: 0.75rem;
-        border-radius: 8px;
+      h2 {
+        text-align: center;
+        font-size: clamp(1.6rem, 3.5vw, 2.4rem);
+        font-weight: 800;
+        letter-spacing: -0.75px;
+        margin-bottom: 0.75rem;
       }
+      .section-sub {
+        text-align: center;
+        color: var(--muted);
+        max-width: 520px;
+        margin: 0 auto 3rem;
+        font-size: 1rem;
+      }
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1.25rem;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      .step {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.5rem;
+        transition: border-color .2s;
+      }
+      .step:hover { border-color: rgba(62, 207, 142, 0.3); }
+      .step-num {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: rgba(62, 207, 142, 0.12);
+        color: var(--accent);
+        font-size: 0.85rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+      }
+      .step h3 { font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; }
+      .step p { font-size: 0.875rem; color: var(--muted); }
+
+      /* FEATURES */
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      .feat {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 1.5rem;
+      }
+      .feat-icon { font-size: 1.75rem; margin-bottom: 0.75rem; }
+      .feat h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 0.35rem; }
+      .feat p { font-size: 0.85rem; color: var(--muted); }
+
+      /* PRICING */
+      .pricing-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1.25rem;
+        max-width: 820px;
+        margin: 0 auto;
+      }
+      .plan {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 2rem;
+        position: relative;
+      }
+      .plan.featured {
+        border-color: var(--accent);
+        background: linear-gradient(135deg, rgba(62, 207, 142, 0.06), var(--surface));
+      }
+      .plan-tag {
+        position: absolute;
+        top: -1px;
+        right: 1.5rem;
+        background: var(--accent);
+        color: #07090f;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.25rem 0.6rem;
+        border-radius: 0 0 8px 8px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+      .plan-name { font-size: 0.85rem; font-weight: 600; color: var(--muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+      .plan-price { font-size: 2.25rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 0.25rem; }
+      .plan-price span { font-size: 1rem; font-weight: 500; color: var(--muted); }
+      .plan-desc { font-size: 0.85rem; color: var(--muted); margin-bottom: 1.5rem; }
+      .plan ul { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 1.75rem; }
+      .plan li { font-size: 0.875rem; display: flex; align-items: flex-start; gap: 0.5rem; }
+      .plan li::before { content: '✓'; color: var(--accent); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+      .plan .btn-primary, .plan .btn-secondary { width: 100%; justify-content: center; }
+
+      /* CTA BANNER */
+      .cta-banner {
+        max-width: 760px;
+        margin: 0 auto;
+        background: linear-gradient(135deg, rgba(62, 207, 142, 0.1), rgba(62, 207, 142, 0.04));
+        border: 1px solid rgba(62, 207, 142, 0.2);
+        border-radius: 24px;
+        padding: 3rem 2rem;
+        text-align: center;
+      }
+      .cta-banner h2 { margin-bottom: 0.75rem; }
+      .cta-banner p { color: var(--muted); margin-bottom: 2rem; }
+
+      /* FOOTER */
+      footer {
+        text-align: center;
+        padding: 2.5rem 1.5rem;
+        color: var(--muted);
+        font-size: 0.8rem;
+        border-top: 1px solid var(--border);
+      }
+      footer a { color: var(--muted); text-decoration: none; }
+      footer a:hover { color: var(--text); }
     </style>
   </head>
   <body>
-    <div class="banner" id="envBanner"></div>
-    <div id="login" class="card">
-      <h1>MarineFlow</h1>
-      <p>Staff login — JWT stored in sessionStorage.</p>
-      <label>Email</label>
-      <input type="email" id="email" autocomplete="username" value="owner@demo-salon.local" />
-      <label>Password</label>
-      <input type="password" id="password" autocomplete="current-password" value="demo123" />
-      <button type="button" id="btnLogin">Sign in</button>
-      <pre id="loginErr"></pre>
-    </div>
 
-    <div class="card" id="plannedPublic">
-      <h2>Planned APIs (weekly scaffold)</h2>
-      <p style="color: #8b98a5; font-size: 0.85rem">
-        Stub routes for week-by-week delivery. Catalog is public; real dashboards stay behind login.
-      </p>
-      <button type="button" class="secondary" id="btnPlanned">Full catalog</button>
-      <button type="button" class="secondary" id="btnWeek1">Week 1 todo list (JSON)</button>
-      <pre id="plannedOut" style="max-height: 280px">Load catalog or Week 1 checklist.</pre>
-    </div>
+    <nav>
+      <a class="logo" href="/">Solu<span>pair</span></a>
+      <a class="btn-nav" href="/dashboard">Dashboard →</a>
+    </nav>
 
-    <div id="app" style="display: none">
-      <div class="card">
-        <p>
-          Signed in as <strong id="who"></strong>
-          <button type="button" class="secondary" id="btnLogout">Sign out</button>
-        </p>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="badge">
+        <span>💬</span> WhatsApp Booking Automation
       </div>
-      <div class="card">
-        <h2>Today</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>When</th>
-              <th>Service</th>
-              <th>Staff</th>
-              <th>Customer</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="todayBody"></tbody>
-        </table>
+      <h1>Your salon books itself<br>on <em>WhatsApp</em></h1>
+      <p>Clients book, reschedule and pay — all via WhatsApp. No app to download. No phone tag. Your bot runs 24/7 while you focus on the cut.</p>
+      <div class="cta-group">
+        <a class="btn-primary" href="/dashboard/onboarding">Get started free →</a>
+        <a class="btn-secondary" href="#how">See how it works</a>
       </div>
-      <div class="card">
-        <h2>Reports (30d)</h2>
-        <pre id="reports"></pre>
-      </div>
-      <div class="card">
-        <h2>Tickets</h2>
-        <pre id="tickets"></pre>
+    </section>
+
+    <div class="proof">Trusted by salons and barbershops across South Africa 🇿🇦</div>
+
+    <!-- DEMO PHONE -->
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="phone-header">
+          <div class="wa-icon">✂️</div>
+          <div>
+            <div class="name">Marine — Solupair Bot</div>
+            <div class="online">● Online 24/7</div>
+          </div>
+        </div>
+
+        <div class="bubble-row">
+          <div class="bubble bot">Hey Thabo 😊 Welcome back! Ready to book your next fade?<div class="time">10:02</div></div>
+        </div>
+        <div class="bubble-row clearfix">
+          <div class="bubble user">Ya, Saturday morning pls<div class="time">10:03</div></div>
+        </div>
+        <div class="bubble-row">
+          <div class="bubble bot">Here's what's open Saturday — reply A, B or C:<br><br>A) Sat 05 Jul 09:00 — Fade with Jabu<br>B) Sat 05 Jul 10:30 — Fade with Jabu<br>C) Sat 05 Jul 11:00 — Fade with Sipho<div class="time">10:03</div></div>
+        </div>
+        <div class="bubble-row clearfix">
+          <div class="bubble user">A<div class="time">10:04</div></div>
+        </div>
+        <div class="bubble-row">
+          <div class="bubble bot">Confirmed! ✅ Fade with Jabu on Sat 05 Jul at 09:00. See you then 💈<div class="time">10:04</div></div>
+        </div>
       </div>
     </div>
 
-    <script>
-      const api = (path, opts = {}) => {
-        const token = sessionStorage.getItem('token');
-        return fetch(path, {
-          ...opts,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(opts.headers || {}),
-            ...(token ? { Authorization: 'Bearer ' + token } : {}),
-          },
-        });
-      };
+    <!-- HOW IT WORKS -->
+    <section id="how">
+      <div class="section-label">How it works</div>
+      <h2>Set up in under an hour</h2>
+      <p class="section-sub">No developers needed. You configure your services, staff and hours — we handle the rest.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <h3>Connect your WhatsApp</h3>
+          <p>Link your business WhatsApp number. Your bot goes live the same day.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <h3>Add your services & staff</h3>
+          <p>Set your menu, prices, working hours and who does what.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <h3>Share your number</h3>
+          <p>Clients WhatsApp you like normal — the bot handles bookings automatically.</p>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <h3>Watch your calendar fill</h3>
+          <p>Appointments, reminders, and payments all handled. You just show up and deliver.</p>
+        </div>
+      </div>
+    </section>
 
-      document.getElementById('envBanner').textContent =
-        location.hostname === 'localhost' ? 'Local development — configure Twilio & Stripe for full flows.' : '';
+    <!-- FEATURES -->
+    <section id="features">
+      <div class="section-label">Features</div>
+      <h2>Everything your salon needs</h2>
+      <p class="section-sub">One bot that does the work of a full-time receptionist.</p>
+      <div class="features">
+        <div class="feat">
+          <div class="feat-icon">📅</div>
+          <h3>Smart booking</h3>
+          <p>Clients pick service, stylist and slot from a live calendar — no double-bookings ever.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">🔔</div>
+          <h3>Automated reminders</h3>
+          <p>24-hour and 1-hour reminders sent automatically. No-shows drop significantly.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">💳</div>
+          <h3>Deposits & payments</h3>
+          <p>Collect deposits upfront via PayFast. Protect your time from last-minute cancellations.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">⭐</div>
+          <h3>Loyalty stamps</h3>
+          <p>Built-in loyalty programme keeps clients coming back. Reward every 5th or 10th visit.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">📊</div>
+          <h3>Live dashboard</h3>
+          <p>See today's appointments, revenue, and client activity in one clean view.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">🤝</div>
+          <h3>Human handoff</h3>
+          <p>One tap escalates to a real person when the bot can't help. Always professional.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">📣</div>
+          <h3>WhatsApp campaigns</h3>
+          <p>Send promotions and specials to your full client list in one click.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-icon">🔒</div>
+          <h3>POPIA compliant</h3>
+          <p>Client data is handled lawfully with consent collection and right-to-erasure built in.</p>
+        </div>
+      </div>
+    </section>
 
-      async function refresh() {
-        const token = sessionStorage.getItem('token');
-        if (!token) return;
+    <!-- PRICING -->
+    <section id="pricing">
+      <div class="section-label">Pricing</div>
+      <h2>Simple, honest pricing</h2>
+      <p class="section-sub">No setup fees. Cancel anytime.</p>
+      <div class="pricing-grid">
+        <div class="plan">
+          <div class="plan-name">Starter</div>
+          <div class="plan-price">R499 <span>/ month</span></div>
+          <div class="plan-desc">Perfect for a single-chair or solo stylist.</div>
+          <ul>
+            <li>WhatsApp booking bot</li>
+            <li>Up to 2 staff</li>
+            <li>Automated reminders</li>
+            <li>Basic dashboard</li>
+            <li>Email support</li>
+          </ul>
+          <a class="btn-secondary" href="/dashboard/onboarding">Start free trial</a>
+        </div>
+        <div class="plan featured">
+          <div class="plan-tag">Most popular</div>
+          <div class="plan-name">Growth</div>
+          <div class="plan-price">R999 <span>/ month</span></div>
+          <div class="plan-desc">For established salons ready to scale.</div>
+          <ul>
+            <li>Everything in Starter</li>
+            <li>Unlimited staff</li>
+            <li>Deposits & online payments</li>
+            <li>Loyalty stamp programme</li>
+            <li>WhatsApp campaigns</li>
+            <li>Analytics & reporting</li>
+            <li>Priority support</li>
+          </ul>
+          <a class="btn-primary" href="/dashboard/onboarding">Start free trial</a>
+        </div>
+      </div>
+    </section>
 
-        const me = await api('/api/me').then((r) => r.json());
-        if (!me.user) {
-          sessionStorage.removeItem('token');
-          location.reload();
-          return;
-        }
-        document.getElementById('who').textContent = me.user.email + ' (' + me.user.role + ')';
+    <!-- CTA BANNER -->
+    <section>
+      <div class="cta-banner">
+        <h2>Ready to stop missing bookings?</h2>
+        <p>Join salons across South Africa running on autopilot with Solupair.</p>
+        <a class="btn-primary" href="/dashboard/onboarding">Get started free — no card needed →</a>
+      </div>
+    </section>
 
-        const today = await api('/api/appointments/today').then((r) => r.json());
-        const tb = document.getElementById('todayBody');
-        tb.innerHTML = '';
-        for (const a of today.appointments || []) {
-          const tr = document.createElement('tr');
-          const when = new Date(a.start).toLocaleString();
-          tr.innerHTML =
-            '<td>' +
-            when +
-            '</td><td>' +
-            a.service.name +
-            '</td><td>' +
-            a.staff.name +
-            '</td><td>' +
-            a.customer.waId +
-            '</td><td><button data-id="' +
-            a.id +
-            '">Complete + stamp</button></td>';
-          tb.appendChild(tr);
-        }
-        tb.querySelectorAll('button[data-id]').forEach((btn) => {
-          btn.addEventListener('click', async () => {
-            const id = btn.getAttribute('data-id');
-            const res = await api('/api/appointments/' + id + '/complete', { method: 'POST' });
-            if (res.ok) refresh();
-            else alert('Failed');
-          });
-        });
+    <footer>
+      <p>© 2026 Solupair · <a href="mailto:hello@solupair.co.za">hello@solupair.co.za</a> · <a href="/dashboard">Dashboard login</a></p>
+    </footer>
 
-        const rep = await api('/api/reports/summary').then((r) => r.json());
-        document.getElementById('reports').textContent = JSON.stringify(rep, null, 2);
-
-        const tix = await api('/api/tickets').then((r) => r.json());
-        document.getElementById('tickets').textContent = JSON.stringify(tix.tickets?.slice(0, 5), null, 2);
-      }
-
-      document.getElementById('btnLogin').addEventListener('click', async () => {
-        const email = document.getElementById('email').value;
-        const password = document.getElementById('password').value;
-        const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        const data = await res.json();
-        document.getElementById('loginErr').textContent = '';
-        if (!res.ok) {
-          document.getElementById('loginErr').textContent = JSON.stringify(data, null, 2);
-          return;
-        }
-        sessionStorage.setItem('token', data.token);
-        document.getElementById('login').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        refresh();
-      });
-
-      document.getElementById('btnLogout').addEventListener('click', () => {
-        sessionStorage.removeItem('token');
-        location.reload();
-      });
-
-      document.getElementById('btnPlanned').addEventListener('click', async () => {
-        const res = await fetch('/api/planned/catalog');
-        const data = await res.json();
-        document.getElementById('plannedOut').textContent = JSON.stringify(data, null, 2);
-      });
-
-      document.getElementById('btnWeek1').addEventListener('click', async () => {
-        const res = await fetch('/api/planned/checklists/week-1');
-        const data = await res.json();
-        document.getElementById('plannedOut').textContent = JSON.stringify(data, null, 2);
-      });
-
-      if (sessionStorage.getItem('token')) {
-        document.getElementById('login').style.display = 'none';
-        document.getElementById('app').style.display = 'block';
-        refresh();
-      }
-    </script>
   </body>
 </html>
