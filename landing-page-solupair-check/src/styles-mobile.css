@@ -11,6 +11,12 @@
 }
 
 @media (max-width: 767px) {
+  html,
+  body,
+  .scroll-snap-canvas {
+    scroll-snap-type: y proximity;
+  }
+
   /* ── Header: logo + compact nav ── */
   .site-header-inner {
     align-items: center;
@@ -144,9 +150,15 @@
 
   /* ── Projects: clean mock + caption below ── */
   .projects-section {
-    scroll-snap-align: none;
+    min-height: 100dvh;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
     padding-top: 2rem;
     padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .what-we-build {
+    scroll-snap-stop: always;
   }
 
   .projects-hint--desktop {
