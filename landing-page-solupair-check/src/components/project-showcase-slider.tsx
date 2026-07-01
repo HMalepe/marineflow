@@ -47,12 +47,15 @@ export const ProjectShowcaseSlider = forwardRef<
     [prefersReducedMotion],
   );
 
+  const useFade = !prefersReducedMotion;
+
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
       loop: true,
       align: "start",
       containScroll: "trimSnaps",
-      duration: prefersReducedMotion ? 0 : 32,
+      // Fade plugin owns transitions; non-zero scroll duration leaves slide 0 visible.
+      duration: 0,
       watchDrag: true,
     },
     plugins,
@@ -60,16 +63,33 @@ export const ProjectShowcaseSlider = forwardRef<
 
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const applySelectedSlideVisibility = useCallback(
+    (index: number) => {
+      if (!emblaApi || !useFade) return;
+      const { dragHandler, slideRegistry } = emblaApi.internalEngine();
+      if (dragHandler.pointerDown()) return;
+
+      const slidesInSnap = slideRegistry[index] ?? [index];
+      emblaApi.slideNodes().forEach((node, slideIndex) => {
+        const visible = slidesInSnap.includes(slideIndex);
+        node.style.opacity = visible ? "1" : "0";
+        node.style.pointerEvents = visible ? "auto" : "none";
+      });
+    },
+    [emblaApi, useFade],
+  );
+
   const syncCarouselState = useCallback(() => {
     if (!emblaApi) return;
     const index = emblaApi.selectedScrollSnap();
     setSelectedIndex(index);
+    applySelectedSlideVisibility(index);
     onSelect?.({
       index,
       canScrollPrev: emblaApi.canScrollPrev(),
       canScrollNext: emblaApi.canScrollNext(),
     });
-  }, [emblaApi, onSelect]);
+  }, [applySelectedSlideVisibility, emblaApi, onSelect]);
 
   useEffect(() => {
     if (!emblaApi) return;
