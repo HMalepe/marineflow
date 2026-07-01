@@ -40,8 +40,6 @@ function AmbientBlurBall({ size, drift, bounds, className }: AmbientBallProps) {
 export function ViewportPhysicsBalls({ variant }: { variant: "projects" | "contact" }) {
   const { isPhone, isDesktop, prefersReducedMotion } = useDeviceProfile();
 
-  if (isPhone || prefersReducedMotion) return null;
-
   const size = isDesktop ? 240 : 180;
   const travel = isDesktop ? 72 : 52;
 
@@ -82,6 +80,8 @@ export function ViewportPhysicsBalls({ variant }: { variant: "projects" | "conta
       } satisfies DriftConfig,
     };
   }, [travel, variant]);
+
+  if (isPhone || prefersReducedMotion) return null;
 
   return (
     <AmbientBlurBall size={size} drift={config.drift} bounds={bounds} className={config.className} />
