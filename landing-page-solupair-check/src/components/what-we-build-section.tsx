@@ -34,7 +34,7 @@ export function WhatWeBuildSection() {
       id="services"
       data-scroll-snap="services"
       aria-labelledby="services-heading"
-      className="what-we-build safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-16 sm:px-10 sm:py-20 lg:px-14 lg:py-28 lg:pb-32"
+      className="what-we-build safe-area-x section-surface snap-section-flow relative isolate overflow-x-clip px-4 py-3 md:px-10 md:py-16 lg:px-14 lg:py-28 lg:pb-32"
     >
       <div className="what-we-build-glow what-we-build-glow--left" aria-hidden />
       <div className="what-we-build-glow what-we-build-glow--right" aria-hidden />
