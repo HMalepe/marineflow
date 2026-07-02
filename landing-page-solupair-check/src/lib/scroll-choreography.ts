@@ -1,13 +1,7 @@
-export type SnapId = "hero" | "services" | "work" | "cta" | "contact";
+export type SnapId = "hero" | "work" | "cta" | "contact";
 
 /** Major page sections — CSS scroll-snap targets only (not carousel state). */
-export const SNAP_ORDER: SnapId[] = [
-  "hero",
-  "services",
-  "work",
-  "cta",
-  "contact",
-];
+export const SNAP_ORDER: SnapId[] = ["hero", "work", "cta", "contact"];
 
 export function getSnapElement(id: SnapId): HTMLElement | null {
   return document.querySelector<HTMLElement>(`[data-scroll-snap="${id}"]`);

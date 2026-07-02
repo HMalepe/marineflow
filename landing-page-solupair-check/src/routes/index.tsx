@@ -5,7 +5,6 @@ import { HeroFaceBall } from "@/components/hero-face-ball";
 import { FinalCtaSection } from "@/components/final-cta-section";
 import { ProjectsSection } from "@/components/projects-section";
 import { SiteHeader } from "@/components/site-header";
-import { WhatWeBuildSection } from "@/components/what-we-build-section";
 
 export const Route = createFileRoute("/")({
   component: NovaHome,
@@ -116,7 +115,6 @@ function NovaHome() {
   return (
     <main className="scroll-snap-canvas min-h-[100dvh] bg-background font-sans text-foreground">
       <Hero />
-      <WhatWeBuildSection />
       <ProjectsSection />
       <FinalCtaSection />
       <ContactSection />
