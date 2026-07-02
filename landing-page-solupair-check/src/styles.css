@@ -4618,10 +4618,8 @@ body {
 }
 
 @media (max-height: 700px) and (max-width: 767px) {
-  .hero-section {
-    overflow-y: auto;
-    overflow-x: clip;
-    -webkit-overflow-scrolling: touch;
+  .hero-section.snap-section-panel {
+    overflow-y: hidden;
   }
 }
 

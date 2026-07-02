@@ -19,7 +19,7 @@ function Hero() {
       id="hero"
       data-scroll-snap="hero"
       ref={heroGroundRef}
-      className="hero-section safe-area-x snap-section-panel relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-clip overflow-y-hidden"
+      className="hero-section safe-area-x snap-section-panel relative flex h-[100dvh] max-h-[100dvh] flex-col overflow-x-clip overflow-y-hidden max-md:h-[50dvh] max-md:max-h-[52dvh] max-md:min-h-[46dvh]"
     >
       <div className="hero-bg" aria-hidden>
         <div className="hero-bg-base" />
@@ -76,7 +76,7 @@ function Hero() {
         <SiteHeader />
       </div>
 
-      <div className="hero-content relative z-20 mx-auto flex w-full max-w-7xl flex-1 flex-col items-center justify-end md:z-10 md:justify-center">
+      <div className="hero-content relative z-20 mx-auto flex w-full max-w-7xl flex-col items-center justify-start md:z-10 md:flex-1 md:justify-center">
         <div className="hero-copy-stack w-full min-w-0">
           <div className="hero-reveal hero-reveal--eyebrow flex justify-center">
             <p className="hero-eyebrow">

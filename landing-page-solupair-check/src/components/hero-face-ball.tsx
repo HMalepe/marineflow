@@ -61,7 +61,7 @@ function getDefaultDiameter() {
     return Math.round(360 * HERO_BALL_SIZE_SCALE);
   }
   if (isMobileHeroLayout()) {
-    return Math.round(168 * HERO_BALL_SIZE_SCALE);
+    return Math.round(140 * HERO_BALL_SIZE_SCALE);
   }
   return Math.round(200 * HERO_BALL_SIZE_SCALE);
 }
@@ -123,7 +123,7 @@ export function HeroFaceBall({
     }
 
     // Keep the hero ball in the upper band on mobile so copy stays readable.
-    const ceiling = height * 0.24;
+    const ceiling = height * 0.32;
     return {
       width,
       height,
