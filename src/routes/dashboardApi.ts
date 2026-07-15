@@ -932,7 +932,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/appointments/today', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const start = new Date();
       start.setHours(0, 0, 0, 0);
@@ -941,6 +941,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
       const rows = await db.appointment.findMany({
         where: {
+          salonId: user.salonId,
           start: { gte: start, lt: end },
           status: { not: 'CANCELLED' },
         },
@@ -971,7 +972,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/appointments', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string; branchId?: string };
       const fromParsed = q.from ? new Date(q.from) : null;
@@ -981,6 +982,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
       const rows = await db.appointment.findMany({
         where: {
+          salonId: user.salonId,
           start: { gte: from, lte: to },
           ...(q.branchId ? { branchId: q.branchId } : {}),
         },
@@ -1716,11 +1718,22 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_status', valid: validStatuses };
         }
+        let assigneeStaffUserId = request.body.assigneeStaffUserId;
+        if (assigneeStaffUserId) {
+          const assignee = await db.staffUser.findFirst({
+            where: { id: assigneeStaffUserId, salonId: user.salonId, active: true },
+            select: { id: true },
+          });
+          if (!assignee) {
+            reply.code(400);
+            return { error: 'invalid_assignee', message: 'Assignee must be a staff user on this salon.' };
+          }
+        }
         const updated = await db.ticket.update({
           where: { id: t.id },
           data: {
             status: statusInput as ValidStatus | undefined,
-            assigneeStaffUserId: request.body.assigneeStaffUserId,
+            assigneeStaffUserId,
           },
         });
         return { ticket: updated };
@@ -1729,9 +1742,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/faq', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const items = await db.faqItem.findMany({
+        where: { salonId: user.salonId },
         orderBy: { sortOrder: 'asc' },
       });
       return { items };
@@ -1763,17 +1777,18 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/reports/summary', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const since = new Date(Date.now() - 30 * 86400000);
       const [appts, revenue] = await Promise.all([
         db.appointment.groupBy({
           by: ['status'],
-          where: { createdAt: { gte: since } },
+          where: { salonId: user.salonId, createdAt: { gte: since } },
           _count: true,
         }),
         db.payment.aggregate({
           where: {
+            salonId: user.salonId,
             status: 'SUCCEEDED',
             createdAt: { gte: since },
           },
@@ -1788,14 +1803,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/export/appointments.csv', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string };
       const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86400000);
       const to = q.to ? new Date(q.to) : new Date();
 
       const rows = await db.appointment.findMany({
-        where: { start: { gte: from, lte: to } },
+        where: { salonId: user.salonId, start: { gte: from, lte: to } },
         include: { service: true, staff: true, customer: true },
         orderBy: { start: 'asc' },
         take: 5000,
@@ -1822,14 +1837,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/export/payments.csv', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string };
       const from = q.from ? new Date(q.from) : new Date(Date.now() - 30 * 86400000);
       const to = q.to ? new Date(q.to) : new Date();
 
       const rows = await db.payment.findMany({
-        where: { createdAt: { gte: from, lte: to } },
+        where: { salonId: user.salonId, createdAt: { gte: from, lte: to } },
         include: { customer: true },
         orderBy: { createdAt: 'asc' },
         take: 5000,
@@ -1867,6 +1882,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         try {
           await refundPaymentStaff({
             paymentId: request.params.id,
+            salonId: user.salonId,
             actorUserId: user.sub,
             reason,
           });
@@ -1880,7 +1896,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/payments', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as {
         provider?: string;
@@ -1893,7 +1909,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const take = Math.min(Number(q.limit) || 50, 200);
       const skip = Number(q.offset) || 0;
 
-      const where: Record<string, unknown> = {};
+      const where: Record<string, unknown> = { salonId: user.salonId };
       if (q.provider) where.provider = q.provider;
       if (q.status) where.status = q.status;
       if (q.from || q.to) {
@@ -2432,7 +2448,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/customers', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as {
         search?: string;
@@ -2443,7 +2459,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const take = Math.min(Number(q.limit) || 50, 200);
       const skip = Number(q.offset) || 0;
 
-      const where: Record<string, unknown> = { deletedAt: null };
+      const where: Record<string, unknown> = { salonId: user.salonId, deletedAt: null };
       if (q.tag) {
         where.tags = { has: q.tag };
       }
@@ -4250,17 +4266,17 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/uploads', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const { purpose } = request.query as { purpose?: string };
-      const files = await listUploads(purpose);
+      const files = await listUploads(user.salonId, purpose);
       return { files };
     });
   });
 
   app.delete('/uploads/:id', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const { id } = request.params as { id: string };
-      const file = await deleteUpload(id);
+      const file = await deleteUpload(id, user.salonId);
       if (!file) {
         reply.code(404);
         return { error: 'not_found' };
@@ -5156,8 +5172,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get('/campaigns', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
-      const items = await listCampaigns();
+    return withUserTenant(request, reply, async (user) => {
+      const items = await listCampaigns(user.salonId);
       return { campaigns: items.map(serializeCampaign) };
     });
   });
@@ -5207,8 +5223,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   );
 
   app.get<{ Params: { id: string } }>('/campaigns/:id', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
-      const item = await getCampaign(request.params.id);
+    return withUserTenant(request, reply, async (user) => {
+      const item = await getCampaign(request.params.id, user.salonId);
       if (!item) {
         reply.code(404);
         return { error: 'not_found' };
@@ -5335,7 +5351,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
-        const existing = await getCampaign(request.params.id);
+        const existing = await getCampaign(request.params.id, user.salonId);
         if (!existing) {
           reply.code(404);
           return { error: 'not_found' };
@@ -5417,7 +5433,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         try {
-          const updated = await updateCampaign(request.params.id, {
+          const updated = await updateCampaign(request.params.id, user.salonId, {
             name: name?.trim(),
             message: message !== undefined ? nextMessage : undefined,
             mediaUrl: clearMedia || mediaUrl !== undefined ? nextMediaUrl : undefined,
@@ -5455,7 +5471,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
-        const existing = await getCampaign(request.params.id);
+        const existing = await getCampaign(request.params.id, user.salonId);
         if (!existing) {
           reply.code(404);
           return { error: 'not_found' };
@@ -5512,14 +5528,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
-        const existing = await getCampaign(request.params.id);
+        const existing = await getCampaign(request.params.id, user.salonId);
         if (!existing) {
           reply.code(404);
           return { error: 'not_found' };
         }
 
         try {
-          const updated = await cancelCampaign(request.params.id);
+          const updated = await cancelCampaign(request.params.id, user.salonId);
           await getTenantDb().auditLog.create({
             data: {
               salonId: user.salonId,

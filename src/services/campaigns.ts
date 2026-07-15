@@ -204,6 +204,7 @@ export async function createCampaign(params: {
 
 export async function updateCampaign(
   campaignId: string,
+  salonId: string,
   params: {
     name?: string;
     message?: string;
@@ -214,7 +215,12 @@ export async function updateCampaign(
   },
 ) {
   const db = getTenantDb();
-  const existing = await db.campaign.findUniqueOrThrow({ where: { id: campaignId } });
+  const existing = await db.campaign.findFirst({ where: { id: campaignId, salonId } });
+  if (!existing) {
+    const err = new Error('campaign_not_found') as Error & { statusCode?: number };
+    err.statusCode = 404;
+    throw err;
+  }
   if (existing.status !== 'DRAFT' && existing.status !== 'SCHEDULED') {
     throw new Error('campaign_not_editable');
   }
@@ -239,9 +245,14 @@ export async function updateCampaign(
   return db.campaign.update({ where: { id: campaignId }, data });
 }
 
-export async function cancelCampaign(campaignId: string) {
+export async function cancelCampaign(campaignId: string, salonId: string) {
   const db = getTenantDb();
-  const existing = await db.campaign.findUniqueOrThrow({ where: { id: campaignId } });
+  const existing = await db.campaign.findFirst({ where: { id: campaignId, salonId } });
+  if (!existing) {
+    const err = new Error('campaign_not_found') as Error & { statusCode?: number };
+    err.statusCode = 404;
+    throw err;
+  }
   if (existing.status !== 'DRAFT' && existing.status !== 'SCHEDULED') {
     throw new Error('campaign_not_cancellable');
   }
@@ -253,7 +264,17 @@ export async function cancelCampaign(campaignId: string) {
 
 export async function queueCampaignSend(campaignId: string, salonId: string) {
   const db = getTenantDb();
-  const existing = await db.campaign.findUniqueOrThrow({ where: { id: campaignId } });
+  const existing = await db.campaign.findFirst({ where: { id: campaignId, salonId } });
+  if (!existing) {
+    const err = new Error('campaign_not_found') as Error & { statusCode?: number };
+    err.statusCode = 404;
+    throw err;
+  }
+  if (existing.salonId !== salonId) {
+    const err = new Error('campaign_salon_mismatch') as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
   if (existing.status !== 'DRAFT' && existing.status !== 'SCHEDULED') {
     throw new Error('campaign_not_sendable');
   }
@@ -423,21 +444,22 @@ export async function executeCampaign(campaignId: string) {
 }
 
 /**
- * Get campaigns for dashboard display.
+ * Get campaigns for dashboard display — always scoped to the caller's salon.
  */
-export async function listCampaigns() {
+export async function listCampaigns(salonId: string) {
   const db = getTenantDb();
   return db.campaign.findMany({
+    where: { salonId },
     orderBy: { createdAt: 'desc' },
     take: 100,
     include: { send: true },
   });
 }
 
-export async function getCampaign(campaignId: string) {
+export async function getCampaign(campaignId: string, salonId: string) {
   const db = getTenantDb();
   return db.campaign.findFirst({
-    where: { id: campaignId },
+    where: { id: campaignId, salonId },
     include: { send: true },
   });
 }

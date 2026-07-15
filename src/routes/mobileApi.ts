@@ -134,7 +134,7 @@ export async function mobileApiRoutes(app: FastifyInstance) {
   });
 
   app.delete('/mobile/push-token', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const { token } = request.body as { token: string };
       if (!token) {
         reply.code(400);
@@ -143,7 +143,7 @@ export async function mobileApiRoutes(app: FastifyInstance) {
 
       const db = getTenantDb();
       await db.pushToken.updateMany({
-        where: { token },
+        where: { token, salonId: user.salonId },
         data: { active: false },
       });
 
@@ -179,11 +179,18 @@ export async function mobileApiRoutes(app: FastifyInstance) {
       }
 
       if (appointmentId) {
+        const apt = await db.appointment.findFirst({
+          where: { id: appointmentId, salonId: user.salonId },
+        });
+        if (!apt) {
+          reply.code(404);
+          return { error: 'appointment_not_found' };
+        }
         await db.appointment.update({
-          where: { id: appointmentId },
+          where: { id: apt.id },
           data: { status: 'CONFIRMED' },
         });
-        return { checkedIn: true, appointmentId };
+        return { checkedIn: true, appointmentId: apt.id };
       }
 
       reply.code(400);
@@ -193,10 +200,18 @@ export async function mobileApiRoutes(app: FastifyInstance) {
 
   // ─── QR Code Generation ────────────────────────────────────────────
   app.get('/mobile/checkin-qr/:appointmentId', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const { appointmentId } = request.params as { appointmentId: string };
-      const payload = Buffer.from(appointmentId, 'utf8').toString('base64url');
-      return { qrPayload: payload, appointmentId };
+      const apt = await getTenantDb().appointment.findFirst({
+        where: { id: appointmentId, salonId: user.salonId },
+        select: { id: true },
+      });
+      if (!apt) {
+        reply.code(404);
+        return { error: 'appointment_not_found' };
+      }
+      const payload = Buffer.from(apt.id, 'utf8').toString('base64url');
+      return { qrPayload: payload, appointmentId: apt.id };
     });
   });
 }

@@ -9,6 +9,12 @@ export type DashboardTenantUser = {
   impersonatedBy?: string;
 };
 
+function authError(message: string, statusCode = 401): Error & { statusCode: number } {
+  const err = new Error(message) as Error & { statusCode: number };
+  err.statusCode = statusCode;
+  return err;
+}
+
 /**
  * Extracts the authenticated staff user and wraps the handler in a
  * tenant-scoped RLS context.
@@ -33,7 +39,7 @@ export async function withUserTenant<T>(
   };
 
   if (!payload?.sub) {
-    throw new Error('missing_user_context');
+    throw authError('missing_user_context');
   }
 
   const staff = await prisma.staffUser.findUnique({
@@ -42,16 +48,15 @@ export async function withUserTenant<T>(
   });
 
   if (!staff) {
-    throw new Error('user_not_found');
+    throw authError('user_not_found');
   }
   if (!staff.active) {
-    throw new Error('account_inactive');
+    throw authError('account_inactive');
   }
 
   // Reject JWT that claims a different salon than the staff user belongs to.
-  // (Impersonation always uses the target OWNER's sub, so salonIds must still match.)
   if (payload.salonId && payload.salonId !== staff.salonId) {
-    throw new Error('salon_mismatch');
+    throw authError('salon_mismatch');
   }
 
   const user: DashboardTenantUser = {
@@ -69,17 +74,17 @@ export async function withUserTenant<T>(
  */
 export async function resolveDashboardUser(request: FastifyRequest) {
   const payload = request.user as { sub: string; salonId?: string };
-  if (!payload?.sub) throw new Error('unauthorized');
+  if (!payload?.sub) throw authError('unauthorized');
 
   const user = await prisma.staffUser.findUniqueOrThrow({
     where: { id: payload.sub },
     select: { id: true, email: true, name: true, role: true, salonId: true, active: true },
   });
 
-  if (!user.active) throw new Error('account_inactive');
+  if (!user.active) throw authError('account_inactive');
 
   if (payload.salonId && payload.salonId !== user.salonId) {
-    throw new Error('salon_mismatch');
+    throw authError('salon_mismatch');
   }
 
   return user;

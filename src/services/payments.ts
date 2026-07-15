@@ -312,10 +312,18 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
 
 export async function refundPayfastPayment(input: {
   paymentId: string;
+  salonId: string;
   actorUserId: string;
   reason: string;
 }): Promise<void> {
-  const payment = await prisma.payment.findUniqueOrThrow({ where: { id: input.paymentId } });
+  const payment = await prisma.payment.findFirst({
+    where: { id: input.paymentId, salonId: input.salonId },
+  });
+  if (!payment) {
+    const err = new Error('payment_not_found') as Error & { statusCode?: number };
+    err.statusCode = 404;
+    throw err;
+  }
   if (!payment.payfastPaymentId) throw new Error('no_payfast_payment_id');
 
   await prisma.$transaction([

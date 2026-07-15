@@ -177,18 +177,21 @@ export async function confirmUpload(
   }
 }
 
-export async function listUploads(purpose?: string) {
+export async function listUploads(salonId: string, purpose?: string) {
   const db = getTenantDb();
   return db.uploadedFile.findMany({
-    where: purpose ? { purpose } : undefined,
+    where: {
+      salonId,
+      ...(purpose ? { purpose } : {}),
+    },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
 }
 
-export async function deleteUpload(fileId: string) {
+export async function deleteUpload(fileId: string, salonId: string) {
   const db = getTenantDb();
-  const file = await db.uploadedFile.findUnique({ where: { id: fileId } });
+  const file = await db.uploadedFile.findFirst({ where: { id: fileId, salonId } });
   if (!file) return null;
 
   // Delete from S3
