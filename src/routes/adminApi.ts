@@ -230,6 +230,9 @@ export async function adminApiRoutes(app: FastifyInstance) {
     );
 
     const result = await prisma.$transaction(async (tx) => {
+      // New tenants always start from scratch — empty services, empty staff,
+      // empty FAQs. Only default business hours + loyalty program skeleton.
+      // Never copy catalog/settings from another salon (e.g. Bontle ↔ Selantra).
       const salon = await tx.salon.create({
         data: {
           name,

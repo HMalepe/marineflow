@@ -1080,7 +1080,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const appt = await db.appointment.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
           include: { service: true, customer: { select: { waId: true } } },
         });
         if (!appt) {
@@ -1125,7 +1125,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const appt = await db.appointment.findFirst({ where: { id: request.params.id } });
+        const appt = await db.appointment.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
         if (!appt) {
           reply.code(404);
           return { error: 'not_found' };
@@ -1165,7 +1165,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const appt = await db.appointment.findFirst({ where: { id: request.params.id } });
+        const appt = await db.appointment.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
         if (!appt) {
           reply.code(404);
           return { error: 'not_found' };
@@ -1208,7 +1208,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const appt = await db.appointment.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
           include: { payments: { where: { status: 'SUCCEEDED' }, select: { id: true } } },
         });
         if (!appt) {
@@ -1225,7 +1225,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         const customer = await db.customer.findFirst({
-          where: { id: appt.customerId, deletedAt: null },
+          where: { id: appt.customerId, salonId: user.salonId, deletedAt: null },
           select: { id: true, waId: true, marketingConsentStatus: true },
         });
         if (!customer) {
@@ -1299,7 +1299,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const appt = await db.appointment.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
           include: {
             customer: { select: { id: true, waId: true, firstName: true, displayName: true } },
             salon: { select: { whatsappPhoneId: true, tradingName: true, name: true } },
@@ -1570,7 +1570,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string }; Body: { csat?: number } }>(
     '/appointments/:id/csat',
     async (request, reply) => {
-      return withUserTenant(request, reply, async () => {
+      return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const score = request.body?.csat;
         if (typeof score !== 'number' || score < 1 || score > 5) {
@@ -1578,7 +1578,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'invalid_csat' };
         }
         const appt = await db.appointment.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
         });
         if (!appt) {
           reply.code(404);
@@ -1700,10 +1700,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     '/tickets/:id',
     { preHandler: requireRole('OWNER', 'MANAGER') },
     async (request, reply) => {
-      return withUserTenant(request, reply, async () => {
+      return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const t = await db.ticket.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
         });
         if (!t) {
           reply.code(404);
@@ -1919,9 +1919,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/audit', { preHandler: requireRole('OWNER') }, async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const logs = await db.auditLog.findMany({
+        where: { salonId: user.salonId },
         orderBy: { createdAt: 'desc' },
         take: 200,
       });
@@ -1930,12 +1931,13 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get('/staff', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as { branchId?: string };
       const now = new Date();
       const staff = await db.staff.findMany({
         where: {
+          salonId: user.salonId,
           deletedAt: null,
           ...(q.branchId ? { branchId: q.branchId } : {}),
         },
@@ -2240,7 +2242,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // ─── Roster ──────────────────────────────────────────────────────────────
 
   app.get('/roster', { preHandler: requireRole('OWNER', 'MANAGER') }, async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const q = request.query as { from?: string; to?: string; branchId?: string };
 
@@ -2251,6 +2253,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
       const staff = await db.staff.findMany({
         where: {
+          salonId: user.salonId,
           deletedAt: null,
           ...(q.branchId ? { branchId: q.branchId } : {}),
         },
@@ -2265,6 +2268,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
 
       const businessRows = await db.businessHour.findMany({
+        where: { salonId: user.salonId },
         orderBy: { dayOfWeek: 'asc' },
       });
       const salonScheduleDefaults = businessRowsToScheduleDefaults(
@@ -2507,10 +2511,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/customers/:id', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const customer = await db.customer.findFirst({
-        where: { id: request.params.id, deletedAt: null },
+        where: { id: request.params.id, salonId: user.salonId, deletedAt: null },
         include: {
           preferredStaff: { select: { id: true, name: true } },
         },
@@ -2595,7 +2599,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const existing = await db.customer.findFirst({
-          where: { id: request.params.id, deletedAt: null },
+          where: { id: request.params.id, salonId: user.salonId, deletedAt: null },
         });
         if (!existing) {
           reply.code(404);
@@ -2748,9 +2752,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // ── Branch CRUD ────────────────────────────────────────────
 
   app.get('/branches', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const branches = await db.branch.findMany({
+        where: { salonId: user.salonId },
         orderBy: { sortOrder: 'asc' },
         include: { _count: { select: { staff: true, appointments: true } } },
       });
@@ -2771,10 +2776,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   });
 
   app.get<{ Params: { id: string } }>('/branches/:id', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const branch = await db.branch.findFirst({
-        where: { id: request.params.id },
+        where: { id: request.params.id, salonId: user.salonId },
         include: { _count: { select: { staff: true, appointments: true } } },
       });
       if (!branch) {
@@ -2824,7 +2829,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const existing = await db.branch.findFirst({ where: { id: request.params.id } });
+        const existing = await db.branch.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
         if (!existing) {
           reply.code(404);
           return { error: 'not_found' };
@@ -2865,7 +2870,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const existing = await db.branch.findFirst({ where: { id: request.params.id } });
+        const existing = await db.branch.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
         if (!existing) {
           reply.code(404);
           return { error: 'not_found' };
@@ -2893,10 +2898,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // ── Service CRUD ────────────────────────────────────────────
 
   app.get('/services', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const services = await db.service.findMany({
-        where: { deletedAt: null },
+        where: { salonId: user.salonId, deletedAt: null },
         include: { category: { select: { id: true, name: true } } },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       });
@@ -3031,7 +3036,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const existing = await db.service.findFirst({
-          where: { id: request.params.id, deletedAt: null },
+          where: { id: request.params.id, salonId: user.salonId, deletedAt: null },
         });
         if (!existing) {
           reply.code(404);
@@ -3070,6 +3075,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         if (durationMin !== undefined && (!Number.isFinite(durationMin) || durationMin < 1)) {
           reply.code(400);
           return { error: 'invalid_duration' };
+        }
+
+        if (categoryId !== undefined && categoryId) {
+          const cat = await db.serviceCategory.findFirst({
+            where: { id: categoryId, salonId: user.salonId },
+          });
+          if (!cat) {
+            reply.code(400);
+            return { error: 'invalid_category', message: 'Category not found for this salon.' };
+          }
         }
 
         const updated = await db.service.update({
@@ -3214,9 +3229,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   // ── FAQ CRUD ────────────────────────────────────────────────
 
   app.get('/faqs', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const items = await db.faqItem.findMany({
+        where: { salonId: user.salonId },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
       return { faqs: items.map(serializeFaq) };
@@ -3239,7 +3255,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
         let order = sortOrder;
         if (order === undefined || !Number.isFinite(order)) {
-          const max = await db.faqItem.aggregate({ _max: { sortOrder: true } });
+          const max = await db.faqItem.aggregate({
+            where: { salonId: user.salonId },
+            _max: { sortOrder: true },
+          });
           order = (max._max.sortOrder ?? -1) + 1;
         }
 
@@ -3399,7 +3418,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const existing = await db.faqItem.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
         });
         if (!existing) {
           reply.code(404);
@@ -3478,7 +3497,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
         const existing = await db.faqItem.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
         });
         if (!existing) {
           reply.code(404);
@@ -4118,11 +4137,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
       let currentCount = 0;
       if (resource === 'staff') {
-        currentCount = await db.staff.count({ where: { deletedAt: null } });
+        currentCount = await db.staff.count({ where: { salonId: user.salonId, deletedAt: null } });
       } else if (resource === 'branches') {
-        currentCount = await db.branch.count();
+        currentCount = await db.branch.count({ where: { salonId: user.salonId } });
       } else if (resource === 'services') {
-        currentCount = await db.service.count({ where: { deletedAt: null } });
+        currentCount = await db.service.count({ where: { salonId: user.salonId, deletedAt: null } });
       } else {
         reply.code(400);
         return { error: 'invalid_resource' };
@@ -4850,10 +4869,10 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
 
   /** Full message thread for a conversation (dashboard chat view). */
   app.get<{ Params: { id: string } }>('/conversations/:id/messages', async (request, reply) => {
-    return withUserTenant(request, reply, async () => {
+    return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
       const conv = await db.conversation.findFirst({
-        where: { id: request.params.id },
+        where: { id: request.params.id, salonId: user.salonId },
         include: {
           customer: {
             select: { id: true, waId: true, displayName: true, firstName: true, lastName: true },
@@ -4902,7 +4921,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
 
         const conv = await db.conversation.findFirst({
-          where: { id: request.params.id },
+          where: { id: request.params.id, salonId: user.salonId },
           include: { customer: true },
         });
         if (!conv) {
@@ -4969,7 +4988,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
     async (request, reply) => {
       return withUserTenant(request, reply, async (user) => {
         const db = getTenantDb();
-        const conv = await db.conversation.findFirst({ where: { id: request.params.id } });
+        const conv = await db.conversation.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
         if (!conv) {
           reply.code(404);
           return { error: 'conversation_not_found' };
@@ -5010,7 +5029,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   ) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
-      const conv = await db.conversation.findFirst({ where: { id: request.params.id } });
+      const conv = await db.conversation.findFirst({ where: { id: request.params.id, salonId: user.salonId } });
       if (!conv) {
         reply.code(404);
         return { error: 'conversation_not_found' };

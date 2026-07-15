@@ -1,8 +1,8 @@
-# MarineFlow
+# Selantra WhatsApp Chatbot
 
-**Local folder:** `C:\Users\134203\Desktop\marineflow` — separate from **VOUCH** and independent of any other repo.
+**Local folder:** `C:\Users\134203\Desktop\selantra whatsapp chatbot` — formerly MarineFlow; separate from **VOUCH** and independent of any other repo.
 
-**MarineFlow** is a WhatsApp-first booking and operations bot for hair salons, barbershops, and parlors: **Twilio WhatsApp**, **Postgres**, **Redis**, staff **dashboard**, **payments** (Stripe), **loyalty** (stamp cards), **support tickets**, and **analytics**.
+**Selantra WhatsApp Chatbot** is a WhatsApp-first booking and operations bot for hair salons, barbershops, and parlors: **Twilio WhatsApp**, **Postgres**, **Redis**, staff **dashboard**, **payments** (Stripe), **loyalty** (stamp cards), **support tickets**, and **analytics**.
 
 **PCI:** Card data is handled by Stripe; this app stores Stripe IDs and metadata only—never full card numbers.
 

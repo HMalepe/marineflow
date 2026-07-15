@@ -50,10 +50,15 @@ export async function assertStaffSessionActive(
 
   const user = await prisma.staffUser.findUnique({
     where: { id: payload.sub },
-    select: { active: true },
+    select: { active: true, salonId: true },
   });
   if (!user?.active) {
     reply.code(401).send({ error: 'account_inactive' });
+    return false;
+  }
+  // Hard tenant guard: JWT salon must match the staff user's salon in DB.
+  if (payload.salonId && payload.salonId !== user.salonId) {
+    reply.code(401).send({ error: 'salon_mismatch' });
     return false;
   }
   return true;

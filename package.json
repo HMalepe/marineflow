@@ -1,8 +1,8 @@
 {
-  "name": "marineflow",
+  "name": "selantra-whatsapp-chatbot",
   "version": "0.1.0",
   "private": true,
-  "description": "MarineFlow — WhatsApp-first booking and operations (Twilio + Postgres + Redis)",
+  "description": "Selantra WhatsApp Chatbot — WhatsApp-first booking and operations (Twilio + Postgres + Redis)",
   "type": "module",
   "engines": {
     "node": ">=20"
