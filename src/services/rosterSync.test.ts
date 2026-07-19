@@ -46,6 +46,18 @@ describe('rosterSync', () => {
     );
   });
 
+  it('syncSalonRoster settings scope busts caches and publishes settings_changed', async () => {
+    await syncSalonRoster('salon-1', 'settings', { action: 'settings_update' });
+
+    expect(mocks.invalidateBusinessHoursCache).toHaveBeenCalledWith('salon-1');
+    expect(mocks.invalidateServicesCache).toHaveBeenCalledWith('salon-1');
+    expect(mocks.invalidateStaffCache).toHaveBeenCalledWith('salon-1');
+    expect(mocks.invalidatePattern).toHaveBeenCalledWith('cache:slots:salon-1:*');
+    expect(mocks.publishEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'salon.settings_changed', salonId: 'salon-1' }),
+    );
+  });
+
   it('notifyAppointmentBooked clears slots and emits created', async () => {
     await notifyAppointmentBooked('salon-1', 'appt-1', { status: 'HELD' });
 

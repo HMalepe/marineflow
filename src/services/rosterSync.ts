@@ -11,7 +11,7 @@ import {
 import { invalidatePattern } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 
-export type RosterSyncScope = 'services' | 'staff' | 'availability' | 'all';
+export type RosterSyncScope = 'services' | 'staff' | 'availability' | 'settings' | 'all';
 
 /**
  * Invalidate caches + fan out SSE so dashboard and bot consumers see roster changes immediately.
@@ -56,6 +56,21 @@ export async function syncSalonRoster(
         type: 'appointment.updated',
         salonId,
         payload: { reason: 'availability_changed', ...payload },
+        timestamp: new Date().toISOString(),
+      }),
+    );
+  }
+
+  if (scope === 'settings' || scope === 'all') {
+    tasks.push(invalidateBusinessHoursCache(salonId));
+    tasks.push(invalidateServicesCache(salonId));
+    tasks.push(invalidateStaffCache(salonId));
+    tasks.push(invalidatePattern(`cache:slots:${salonId}:*`));
+    tasks.push(
+      publishEvent({
+        type: 'salon.settings_changed',
+        salonId,
+        payload,
         timestamp: new Date().toISOString(),
       }),
     );

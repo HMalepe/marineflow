@@ -8,10 +8,11 @@ const LIVE_ROSTER_EVENTS = new Set([
   'staff.roster_changed',
   'appointment.created',
   'appointment.updated',
+  'salon.settings_changed',
 ]);
 
 /**
- * Subscribe to salon SSE events and refresh UI when services, staff, or availability change.
+ * Subscribe to salon SSE events and refresh UI when services, staff, settings, or availability change.
  * Debounces rapid bursts (e.g. bulk sort) into a single refresh.
  */
 export function useSalonLiveUpdates(

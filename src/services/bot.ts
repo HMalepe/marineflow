@@ -22,6 +22,7 @@ import { buildMainMenuInteractive } from './mainMenuInteractive.js';
 import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
 import { firstNameFromWaProfile } from '../lib/waProfileName.js';
+import { formatSalonHoursReply, isSalonOpenNow } from '../lib/businessHoursStatus.js';
 import { isConversationWakeMessage, shouldResetConversationOnWake, staffHandoffExpired } from '../lib/conversationWake.js';
 import {
   getBotRequestStore,
@@ -424,7 +425,7 @@ async function loadActiveServicesForBooking(salonId: string) {
     'services_catalog_fallback',
     () =>
       getTenantDb().service.findMany({
-        where: { salonId, active: true },
+        where: { salonId, active: true, deletedAt: null },
         orderBy: { sortOrder: 'asc' },
         include: { category: true },
       }).then(filterBookableCatalogServices),
@@ -977,29 +978,6 @@ async function replyWithMenu(
 
 function mainMenu(salon: Salon): string {
   return buildMainMenuText(salon);
-}
-
-function parseHmToMin(hm: string): number {
-  const [h, m] = hm.split(':').map(Number);
-  return (h ?? 0) * 60 + (m ?? 0);
-}
-
-function isWithinBusinessHours(salon: Salon, now = new Date()): boolean {
-  const open = salon.openTime ?? '09:00';
-  const close = salon.closeTime ?? '17:00';
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: salon.timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
-  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
-  const nowMin = hour * 60 + minute;
-  const openMin = parseHmToMin(open);
-  const closeMin = parseHmToMin(close);
-  if (closeMin <= openMin) return nowMin >= openMin || nowMin < closeMin;
-  return nowMin >= openMin && nowMin < closeMin;
 }
 
 function afterHoursHumanReply(salon: Salon): string {
@@ -1617,7 +1595,7 @@ async function processInboundWhatsApp(
   }
 
   if (isHumanHandoffRequest(text)) {
-    if (!isWithinBusinessHours(salon)) {
+    if (!(await isSalonOpenNow(salon))) {
       // After hours — don't escalate yet; offer AI help first
       await saveCtx(conv.id, {}, ConversationStep.MENU);
       await reply(
@@ -1841,7 +1819,7 @@ async function escalateNegativeSentiment(
     ConversationStep.HANDOFF,
   );
 
-  const isOpen = isWithinBusinessHours(conv.salon);
+  const isOpen = await isSalonOpenNow(conv.salon);
   const holdingMessage = isOpen
     ? "I can hear that you're frustrated, and I'm sorry for any inconvenience. " +
       "I've flagged this for one of our team members who will reach out to you shortly. " +
@@ -3195,14 +3173,7 @@ async function menuActionShowContact(
 async function menuActionShowHours(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
-  const salon = conv.salon;
-  const open = salon.openTime ?? '09:00';
-  const close = salon.closeTime ?? '17:00';
-  const isOpen = isWithinBusinessHours(salon);
-  await reply(
-    conv,
-    `🕐 *Business hours*\n\nMon–Sat: ${open} – ${close}\n\nWe are currently ${isOpen ? '✅ open' : '🔴 closed'}.`,
-  );
+  await reply(conv, await formatSalonHoursReply(conv.salon));
   await replyMenu(conv);
 }
 
@@ -5611,7 +5582,7 @@ async function handleOtherQuery(
     }
     if (upper === 'NO' || upper === 'N') {
       // Escalate to human
-      const isOpen = isWithinBusinessHours(conv.salon);
+      const isOpen = await isSalonOpenNow(conv.salon);
       await recordSupportTicketMessage({
         salonId: conv.salonId,
         customerId: conv.customerId,

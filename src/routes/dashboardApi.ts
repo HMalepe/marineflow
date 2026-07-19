@@ -506,6 +506,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: user.salonId,
           },
         });
+        syncSalonRosterLater(user.salonId, 'settings', { action: 'business_hours_update' });
         return { hours };
       });
     },
@@ -866,6 +867,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             entityId: user.salonId,
           },
         });
+
+        // Bust bot caches + notify open dashboards so mobile/desktop edits apply immediately.
+        syncSalonRosterLater(user.salonId, 'settings', { action: 'settings_update' });
 
         return {
           salon: {
@@ -3403,8 +3407,20 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           if (toApprove.length > 0) {
             await db.faqItem.updateMany({
               where: { id: { in: toApprove }, salonId: user.salonId },
-              data: { status: 'APPROVED' },
+              data: {
+                status: 'APPROVED',
+                approvedAt: new Date(),
+                approvedBy: user.sub,
+              },
             });
+            // Embed so WhatsApp semantic search answers these immediately.
+            for (const faqId of toApprove) {
+              try {
+                await embedFaqItem(faqId, user.salonId);
+              } catch {
+                // best-effort — FAQ is still approved for numbered list
+              }
+            }
           }
         }
 
@@ -3520,6 +3536,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found' };
         }
 
+        await db.faqEmbedding.deleteMany({ where: { faqItemId: existing.id } });
         await db.faqItem.delete({ where: { id: existing.id } });
 
         await db.auditLog.create({
