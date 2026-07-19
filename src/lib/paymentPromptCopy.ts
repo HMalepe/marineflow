@@ -19,6 +19,8 @@ export function buildSecurePaymentPromptBody(
       '',
       `Tap below to complete payment on PayFast — encrypted, trusted by millions across South Africa, and usually done in under a minute.`,
       '',
+      `_Android tip: if PayFast opens but payment options stay blank, choose Open in Chrome on the next screen._`,
+      '',
       `_We'll confirm your booking the moment payment clears._`,
     ].join('\n');
   }
@@ -31,6 +33,8 @@ export function buildSecurePaymentPromptBody(
     serviceLine,
     '',
     `Tap below for encrypted PayFast checkout. Your card details never touch us — just instant confirmation when payment goes through.`,
+    '',
+    `_Android tip: if payment options don't load, choose Open in Chrome on the next screen._`,
     '',
     `_Prefer to pay on arrival? Reply *2* or tap *Cash on arrival* below._`,
   ].join('\n');
@@ -95,6 +99,8 @@ export function buildManualPaymentLinkBody(input: {
     `*${input.serviceName.trim()}* · ${amount}`,
     '',
     `Tap below for encrypted PayFast checkout — trusted across South Africa, usually under a minute.`,
+    '',
+    `_Android tip: if payment options don't load, choose Open in Chrome on the next screen._`,
     '',
     `_We'll confirm your booking the moment payment clears._`,
   ].join('\n');

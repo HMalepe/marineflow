@@ -14,6 +14,7 @@ describe('paymentPromptCopy', () => {
     expect(cta.url).toMatch(/^https:\/\//);
     expect(body).toContain('R 450.00');
     expect(body).toContain('Secure your booking');
+    expect(body).toContain('Open in Chrome');
   });
 
   it('includes service name when provided', () => {
