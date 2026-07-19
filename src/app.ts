@@ -236,6 +236,7 @@ export async function buildApp() {
             messageSid: inbound.externalId,
             metaPhoneNumberId: inbound.metaPhoneNumberId,
             twilioTo: inbound.toAddress,
+            profileName: inbound.profileName,
           });
         } catch (botErr: unknown) {
           logger.error({ err: botErr, externalId: inbound.externalId }, 'meta_bot_error');

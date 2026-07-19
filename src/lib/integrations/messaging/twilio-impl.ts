@@ -47,12 +47,14 @@ export const twilioMessaging: MessagingProvider = {
     const body = (params['Body'] ?? '').trim() || (params['ButtonPayload'] ?? '').trim();
     const sid = params['MessageSid'] ?? '';
     if (!from || !sid) return [];
+    const profileName = (params['ProfileName'] ?? '').trim() || undefined;
     return [{
       externalId: sid,
       fromPhoneE164: normalizeWaId(from),
       toAddress: to,
       body,
       receivedAt: new Date(),
+      ...(profileName ? { profileName } : {}),
     }];
   },
 };

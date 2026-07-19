@@ -48,6 +48,7 @@ export async function handleTwilioWhatsAppWebhook(
   const from = params['From'] ?? '';
   const to = params['To'] ?? '';
   const body = params['Body'] ?? '';
+  const profileName = (params['ProfileName'] ?? '').trim() || undefined;
 
   const tenantForTo = to ? await resolveTenantFromTwilioAddress(to) : null;
   if (to && !tenantForTo) {
@@ -94,8 +95,9 @@ export async function handleTwilioWhatsAppWebhook(
       body,
       messageSid,
       twilioTo: to,
+      profileName,
     });
-    logger.info({ from, bodyLen: body.length }, 'twilio_bot_handled_ok');
+    logger.info({ from, bodyLen: body.length, hasProfileName: !!profileName }, 'twilio_bot_handled_ok');
   } catch (botErr: unknown) {
     logger.error({ err: botErr }, 'twilio_bot_error');
   }

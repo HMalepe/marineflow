@@ -21,6 +21,7 @@ import { sendWithFallback } from './channelRouter.js';
 import { buildMainMenuInteractive } from './mainMenuInteractive.js';
 import { emitMessageReceived, emitBotEscalation } from '../lib/eventBus.js';
 import { normalizeWaId } from '../lib/phone.js';
+import { firstNameFromWaProfile } from '../lib/waProfileName.js';
 import { isConversationWakeMessage, shouldResetConversationOnWake, staffHandoffExpired } from '../lib/conversationWake.js';
 import {
   getBotRequestStore,
@@ -308,6 +309,52 @@ function isProfileIncomplete(customer: Customer): boolean {
   // Only firstName is required. email and dateOfBirth are optional — requiring them
   // caused the POPIA gate to re-trigger every session for customers who skipped those fields.
   return !customer.firstName;
+}
+
+function suggestedFirstNameFromCustomer(customer: Customer): string | null {
+  if (customer.firstName && PROFILE_NAME_REGEX.test(customer.firstName.trim())) {
+    return customer.firstName.trim();
+  }
+  return firstNameFromWaProfile(customer.displayName);
+}
+
+function buildOptionalDobPrompt(greetingLine?: string): string {
+  return [
+    ...(greetingLine ? [greetingLine, ''] : []),
+    '*Date of birth* is optional (for birthday treats 🎂).',
+    'Reply DD/MM/YYYY (e.g. 15/06/1990), or *SKIP* to continue booking.',
+    '',
+    'Reply *SKIP* to skip · *BACK* for menu.',
+  ].join('\n');
+}
+
+/** Start name collection, or skip straight to DOB when WhatsApp profile name is usable. */
+async function beginProfileCollection(
+  conv: Conversation & { customer: Customer; salon: Salon },
+  options?: { thankYou?: boolean },
+): Promise<void> {
+  const suggested = suggestedFirstNameFromCustomer(conv.customer);
+  if (suggested) {
+    await saveCtx(conv.id, { pendingFirstName: suggested }, ConversationStep.COLLECT_DATE_OF_BIRTH);
+    syncConvContext(conv, { pendingFirstName: suggested }, ConversationStep.COLLECT_DATE_OF_BIRTH);
+    const hello = options?.thankYou
+      ? `Thank you! Nice to meet you, *${suggested}* — we used your WhatsApp name.`
+      : `Nice to meet you, *${suggested}* — we used your WhatsApp name.`;
+    await reply(conv, buildOptionalDobPrompt(hello));
+    return;
+  }
+
+  await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
+  syncConvContext(conv, {}, ConversationStep.COLLECT_FIRST_NAME);
+  await reply(
+    conv,
+    [
+      options?.thankYou ? "Thank you! Let's get your details set up." : "Let's get your details set up.",
+      '',
+      'What is your *first name*?',
+      '(Letters only — reply BACK for menu.)',
+    ].join('\n'),
+  );
 }
 
 /** Max time slots shown in one WhatsApp list (was 8 — too restrictive on busy days). */
@@ -1072,6 +1119,8 @@ export async function handleInboundWhatsApp(input: {
   messageSid: string;
   twilioTo?: string;
   metaPhoneNumberId?: string;
+  /** WhatsApp profile display name (Twilio ProfileName / Meta contacts). */
+  profileName?: string;
 }): Promise<void> {
   const waId = normalizeWaId(input.from);
   const text = (input.body ?? '').trim();
@@ -1138,7 +1187,12 @@ export async function handleInboundWhatsApp(input: {
       await runWithBotRequest(async () => {
         try {
           await withTenantContext(tenant.id, async () => {
-            await processInboundWhatsApp(tenant, { waId, text, messageSid: input.messageSid });
+            await processInboundWhatsApp(tenant, {
+              waId,
+              text,
+              messageSid: input.messageSid,
+              profileName: input.profileName,
+            });
           });
         } finally {
           await flushPendingOutbound();
@@ -1225,24 +1279,36 @@ export async function handleInboundWhatsApp(input: {
 
 async function processInboundWhatsApp(
   tenant: ResolvedTenant,
-  input: { waId: string; text: string; messageSid: string },
+  input: { waId: string; text: string; messageSid: string; profileName?: string },
 ): Promise<void> {
-  const { waId, text, messageSid } = input;
+  const { waId, text, messageSid, profileName } = input;
   // EC-07/EC-15: drop empty messages (media-only, delivery receipts, etc.)
   if (!text) return;
   const salon = await getTenantDb().salon.findUniqueOrThrow({ where: { id: tenant.id } });
+
+  const waFirstName = firstNameFromWaProfile(profileName);
+  const profileDisplay = waFirstName ?? profileName?.trim() ?? undefined;
 
   let customer = await getTenantDb().customer.findUnique({
     where: { salonId_waId: { salonId: salon.id, waId } },
   });
   if (!customer) {
     customer = await getTenantDb().customer.create({
-      data: { salonId: salon.id, waId, lastInteractionAt: new Date() },
+      data: {
+        salonId: salon.id,
+        waId,
+        lastInteractionAt: new Date(),
+        ...(profileDisplay ? { displayName: profileDisplay } : {}),
+      },
     });
   } else {
     customer = await getTenantDb().customer.update({
       where: { id: customer.id },
-      data: { lastInteractionAt: new Date() },
+      data: {
+        lastInteractionAt: new Date(),
+        // Keep WhatsApp profile name when we don't have a preferred display name yet.
+        ...(!customer.displayName && profileDisplay ? { displayName: profileDisplay } : {}),
+      },
     });
   }
 
@@ -2336,27 +2402,11 @@ async function repromptCurrentStep(conv: Conversation & { customer: Customer; sa
       await reply(conv, 'What is your *first name*? (letters only)\n\nReply BACK for main menu.');
       return;
     case ConversationStep.COLLECT_EMAIL:
-      await reply(
-        conv,
-        [
-          'What is your *email address*?',
-          '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
-          '',
-          'Reply BACK to go back.',
-        ].join('\n'),
-      );
+      // Email step removed — nudge anyone mid-flow onto optional DOB.
+      await reply(conv, buildOptionalDobPrompt());
       return;
     case ConversationStep.COLLECT_DATE_OF_BIRTH:
-      await reply(
-        conv,
-        [
-          'What is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
-          '',
-          '_We use your DOB for age-based pricing and birthday rewards. 🎂_',
-          '',
-          'Reply *SKIP* to skip · *BACK* for menu.',
-        ].join('\n'),
-      );
+      await reply(conv, buildOptionalDobPrompt());
       return;
     case ConversationStep.BOOKING_POPIA_CONSENT:
       await replyMaybeInteractive(
@@ -2508,17 +2558,9 @@ async function goBackOneStep(conv: Conversation & { customer: Customer; salon: S
       return;
 
     case ConversationStep.COLLECT_DATE_OF_BIRTH:
-      await saveCtx(conv.id, { pendingEmail: undefined }, ConversationStep.COLLECT_EMAIL);
-      syncConvContext(conv, { pendingEmail: undefined }, ConversationStep.COLLECT_EMAIL);
-      await reply(
-        conv,
-        [
-          'What is your *email address*?',
-          '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
-          '',
-          'Reply BACK to go back.',
-        ].join('\n'),
-      );
+      await saveCtx(conv.id, { pendingEmail: undefined }, ConversationStep.COLLECT_FIRST_NAME);
+      syncConvContext(conv, { pendingEmail: undefined }, ConversationStep.COLLECT_FIRST_NAME);
+      await reply(conv, 'What is your *first name*? (letters only)\n\nReply BACK for main menu.');
       return;
 
     case ConversationStep.COLLECT_EMAIL:
@@ -2773,74 +2815,43 @@ async function handleCollectFirstName(
     return;
   }
 
-  await saveCtx(conv.id, { pendingFirstName: name }, ConversationStep.COLLECT_EMAIL);
-  await reply(
-    conv,
-    [
-      `Nice to meet you, *${name}*! 😊`,
-      '',
-      'What is your *email address*?',
-      '_We\'ll send your booking confirmation and appointment reminders here — no spam, ever._',
-      '',
-      'Reply BACK for menu.',
-    ].join('\n'),
-  );
+  await saveCtx(conv.id, { pendingFirstName: name }, ConversationStep.COLLECT_DATE_OF_BIRTH);
+  syncConvContext(conv, { pendingFirstName: name }, ConversationStep.COLLECT_DATE_OF_BIRTH);
+  await reply(conv, buildOptionalDobPrompt(`Nice to meet you, *${name}*! 😊`));
 }
 
+/**
+ * Email collection removed from onboarding (less invasive).
+ * Kept for conversations still sitting on COLLECT_EMAIL — optionally save if they
+ * happen to send a valid email, then continue to optional DOB.
+ */
 async function handleCollectEmail(
   conv: Conversation & { customer: Customer; salon: Salon },
   text: string,
 ): Promise<void> {
-  const upper = text.trim().toUpperCase();
-
-  if (upper === 'SKIP') {
-    await saveCtx(conv.id, { pendingEmail: undefined }, ConversationStep.COLLECT_DATE_OF_BIRTH);
-    await reply(
-      conv,
-      [
-        'No problem! Last question — what is your *date of birth*? (DD/MM/YYYY, e.g. 15/06/1990)',
-        '',
-        '_We use your DOB for age-based pricing and birthday rewards. 🎂_',
-        '',
-        'Reply *SKIP* to skip · *BACK* for menu.',
-      ].join('\n'),
-    );
-    return;
-  }
-
   const email = text.trim().toLowerCase();
-  if (!PROFILE_EMAIL_REGEX.test(email)) {
-    await reply(
-      conv,
-      'Please enter a valid email address (e.g. name@example.com).\n\nReply *SKIP* to skip this step · *BACK* for menu.',
-    );
-    return;
+  const patch: Pick<BotContext, 'pendingEmail'> = {};
+  if (PROFILE_EMAIL_REGEX.test(email)) {
+    patch.pendingEmail = email;
+  } else {
+    patch.pendingEmail = undefined;
   }
 
-  await saveCtx(conv.id, { pendingEmail: email }, ConversationStep.COLLECT_DATE_OF_BIRTH);
-  await reply(
-    conv,
-    [
-      'Almost done!',
-      '',
-      '*Date of birth* is optional (for birthday treats 🎂).',
-      'Reply DD/MM/YYYY (e.g. 15/06/1990), or *SKIP* to continue booking.',
-      '',
-      'Reply *SKIP* to skip · *BACK* for menu.',
-    ].join('\n'),
-  );
+  await saveCtx(conv.id, patch, ConversationStep.COLLECT_DATE_OF_BIRTH);
+  syncConvContext(conv, patch, ConversationStep.COLLECT_DATE_OF_BIRTH);
+  await reply(conv, buildOptionalDobPrompt('Almost done!'));
 }
 
 async function commitPendingProfileAndContinueBooking(
   conv: Conversation & { customer: Customer; salon: Salon },
-  data: { firstName: string; email: string; dateOfBirth?: Date },
+  data: { firstName: string; email?: string | null; dateOfBirth?: Date },
 ): Promise<void> {
   const db = getTenantDb();
   await db.customer.update({
     where: { id: conv.customerId },
     data: {
       firstName: data.firstName,
-      email: data.email,
+      ...(data.email ? { email: data.email } : {}),
       ...(data.dateOfBirth ? { dateOfBirth: data.dateOfBirth } : {}),
       displayName: data.firstName,
     },
@@ -2858,7 +2869,7 @@ async function handleCollectDateOfBirth(
   const firstName = pending.pendingFirstName as string | undefined;
   const email = pending.pendingEmail as string | undefined;
 
-  if (!firstName || !email) {
+  if (!firstName) {
     await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);
     await replyMaybeInteractive(
       conv,
@@ -2951,16 +2962,8 @@ async function handleBookingPopiaConsent(
     data: { popiaConsentAt: new Date() },
   });
 
-  await saveCtx(conv.id, {}, ConversationStep.COLLECT_FIRST_NAME);
-  await reply(
-    conv,
-    [
-      'Thank you! Let\'s get your details set up.',
-      '',
-      'What is your *first name*?',
-      '(Letters only — reply BACK for menu.)',
-    ].join('\n'),
-  );
+  const refreshed = await db.customer.findUniqueOrThrow({ where: { id: conv.customerId } });
+  await beginProfileCollection({ ...conv, customer: refreshed }, { thankYou: true });
 }
 
 async function menuActionStartBooking(
@@ -2978,12 +2981,7 @@ async function menuActionStartBooking(
       if (customer.popiaConsentAt) {
         // Already gave POPIA consent at the combined first-contact gate — go
         // straight to collecting their name instead of asking again.
-        await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
-        syncConvContext(conv, BOOKING_CTX_CLEAR, ConversationStep.COLLECT_FIRST_NAME);
-        await reply(
-          conv,
-          ['Let\'s get your details set up.', '', 'What is your *first name*?', '(Letters only — reply BACK for menu.)'].join('\n'),
-        );
+        await beginProfileCollection({ ...conv, customer });
         return;
       }
       await saveCtx(conv.id, BOOKING_CTX_CLEAR, ConversationStep.BOOKING_POPIA_CONSENT);

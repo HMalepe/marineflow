@@ -87,6 +87,8 @@ export interface NormalisedInboundMessage {
   mediaUrl?: string | null;
   receivedAt: Date;
   metaPhoneNumberId?: string;
+  /** WhatsApp profile display name when the provider sends it (Twilio ProfileName / Meta contacts). */
+  profileName?: string;
 }
 
 export interface MessagingProvider {

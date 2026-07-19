@@ -166,6 +166,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
         changes?: {
           value?: {
             metadata?: { phone_number_id?: string };
+            contacts?: { profile?: { name?: string }; wa_id?: string }[];
             messages?: {
               id: string;
               from: string;
@@ -188,8 +189,16 @@ export const whatsappCloudMessaging: MessagingProvider = {
       for (const change of entry.changes ?? []) {
         const value = change.value;
         const phoneId = value?.metadata?.phone_number_id;
+        const nameByWaId = new Map<string, string>();
+        for (const contact of value?.contacts ?? []) {
+          const waId = contact.wa_id?.replace(/\D/g, '');
+          const name = contact.profile?.name?.trim();
+          if (waId && name) nameByWaId.set(waId, name);
+        }
         for (const msg of value?.messages ?? []) {
           const ts = Number(msg.timestamp);
+          const fromDigits = msg.from.replace(/\D/g, '');
+          const profileName = nameByWaId.get(fromDigits);
           results.push({
             externalId: msg.id,
             fromPhoneE164: msg.from.startsWith('+') ? msg.from : `+${msg.from}`,
@@ -197,6 +206,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
             body: extractInboundBody(msg),
             receivedAt: isNaN(ts) ? new Date() : new Date(ts * 1000),
             metaPhoneNumberId: phoneId,
+            ...(profileName ? { profileName } : {}),
           });
         }
       }
