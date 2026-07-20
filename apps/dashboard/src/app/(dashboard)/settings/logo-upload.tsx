@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { ImageCropModal } from '@/components/image-crop-modal';
 import { cn } from '@/lib/utils';
 import { SaveErrorFeedback, SaveSuccessFeedback } from '@/components/save-feedback';
@@ -19,6 +19,7 @@ interface Props {
 
 export function LogoUpload({ current, salonName }: Props) {
   const router = useRouter();
+  const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(current);
   const [pending, setPending] = useState<string | null>(null);
@@ -102,11 +103,11 @@ export function LogoUpload({ current, salonName }: Props) {
       <div className="space-y-4">
         <div className="flex items-center gap-5">
           {/* Avatar preview — white bg so dark logos are always visible */}
-          <button
-            type="button"
-            onClick={() => inputRef.current?.click()}
+          <label
+            htmlFor={inputId}
+            tabIndex={0}
             className={cn(
-              'relative size-20 rounded-2xl overflow-hidden shrink-0 transition-all',
+              'relative size-20 rounded-2xl overflow-hidden shrink-0 transition-all cursor-pointer',
               'border-2 hover:ring-2 hover:ring-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               display ? 'border-border bg-white' : 'border-dashed border-muted-foreground/30 bg-muted/50',
             )}
@@ -118,8 +119,8 @@ export function LogoUpload({ current, salonName }: Props) {
             ) : (
               <span className="text-xl font-bold text-muted-foreground">{initials}</span>
             )}
-            {/* Camera overlay */}
-            <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
+            {/* Camera overlay — always visible on touch devices, hover-only on desktop */}
+            <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 [@media(hover:none)]:opacity-100 [@media(hover:none)]:bg-black/25 transition-opacity rounded-2xl">
               <svg
                 className="size-6 text-white"
                 fill="none"
@@ -139,7 +140,7 @@ export function LogoUpload({ current, salonName }: Props) {
                 />
               </svg>
             </span>
-          </button>
+          </label>
 
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Salon logo</p>
@@ -149,14 +150,13 @@ export function LogoUpload({ current, salonName }: Props) {
               You&apos;ll be able to crop and adjust before saving.
             </p>
             <div className="flex items-center gap-2 pt-0.5">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => inputRef.current?.click()}
+              <label
+                htmlFor={inputId}
+                tabIndex={0}
+                className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'cursor-pointer')}
               >
                 {display ? 'Change' : 'Upload logo'}
-              </Button>
+              </label>
               {preview && !pending && (
                 <Button
                   type="button"
@@ -189,14 +189,13 @@ export function LogoUpload({ current, salonName }: Props) {
             >
               Discard
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => inputRef.current?.click()}
+            <label
+              htmlFor={inputId}
+              tabIndex={0}
+              className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'cursor-pointer')}
             >
               Re-crop
-            </Button>
+            </label>
           </div>
         )}
 
@@ -205,6 +204,7 @@ export function LogoUpload({ current, salonName }: Props) {
 
         <input
           ref={inputRef}
+          id={inputId}
           type="file"
           accept="image/*"
           className="hidden"

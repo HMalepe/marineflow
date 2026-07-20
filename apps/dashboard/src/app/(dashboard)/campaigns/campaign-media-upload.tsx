@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Film, ImageIcon, Loader2, Upload, X } from 'lucide-react';
 import { apiUploadFile, ApiError } from '@/lib/api';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { SaveErrorFeedback, SaveSuccessFeedback } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
@@ -30,6 +30,7 @@ interface Props {
 }
 
 export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disabled }: Props) {
+  const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [localPreview, setLocalPreview] = useState<string | null>(null);
@@ -111,14 +112,12 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
           </div>
         </div>
       ) : (
-        <button
-          type="button"
-          disabled={disabled || uploading}
-          onClick={() => inputRef.current?.click()}
+        <label
+          htmlFor={disabled || uploading ? undefined : inputId}
+          tabIndex={disabled || uploading ? undefined : 0}
           className={cn(
             'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 transition-colors',
-            'hover:border-[#128c7e]/50 hover:bg-[#25d366]/5',
-            disabled && 'opacity-50 cursor-not-allowed',
+            disabled || uploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[#128c7e]/50 hover:bg-[#25d366]/5',
           )}
         >
           {uploading ? (
@@ -142,13 +141,19 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
               </span>
             </>
           )}
-        </button>
+        </label>
       )}
 
       {preview && !disabled && (
-        <Button type="button" variant="outline" size="sm" onClick={() => inputRef.current?.click()} disabled={uploading}>
-          Replace media
-        </Button>
+        uploading ? (
+          <Button type="button" variant="outline" size="sm" disabled>
+            Replace media
+          </Button>
+        ) : (
+          <label htmlFor={inputId} tabIndex={0} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'cursor-pointer')}>
+            Replace media
+          </label>
+        )
       )}
 
       <SaveSuccessFeedback message={success} className="text-xs" />
@@ -156,6 +161,7 @@ export function CampaignMediaUpload({ token, mediaUrl, mediaType, onChange, disa
 
       <input
         ref={inputRef}
+        id={inputId}
         type="file"
         accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime"
         className="hidden"

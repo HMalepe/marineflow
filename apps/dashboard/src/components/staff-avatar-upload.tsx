@@ -1,14 +1,14 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Camera, Loader2, X } from 'lucide-react';
 import { apiUploadFile, ApiError } from '@/lib/api';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { StaffAvatar } from './staff-avatar';
 
 const MAX_BYTES = 5 * 1024 * 1024;
-const ACCEPT = 'image/jpeg,image/png,image/webp';
+const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 
 interface Props {
   token: string;
@@ -27,6 +27,7 @@ export function StaffAvatarUpload({
   onChange,
   disabled,
 }: Props) {
+  const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -36,8 +37,11 @@ export function StaffAvatarUpload({
 
   async function handleFile(file: File) {
     setError(null);
-    if (!file.type.startsWith('image/') || !ACCEPT.split(',').includes(file.type)) {
-      setError('Use JPEG, PNG, or WebP.');
+    // Some iOS versions report an empty type for HEIC photos — tolerate that
+    // rather than reject a photo the user can genuinely see on their phone.
+    const isImage = file.type.startsWith('image/') || file.type === '';
+    if (!isImage) {
+      setError('Use JPEG, PNG, WebP, or HEIC.');
       return;
     }
     if (file.size > MAX_BYTES) {
@@ -83,14 +87,14 @@ export function StaffAvatarUpload({
             className={cn(uploading && 'opacity-60')}
           />
           {!disabled && !uploading && (
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              className="absolute -bottom-1 -right-1 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90"
+            <label
+              htmlFor={inputId}
+              tabIndex={0}
+              className="absolute -bottom-2 -right-2 flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 cursor-pointer"
               aria-label="Upload profile photo"
             >
-              <Camera className="size-3.5" />
-            </button>
+              <Camera className="size-4" />
+            </label>
           )}
           {uploading && (
             <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
@@ -105,15 +109,19 @@ export function StaffAvatarUpload({
             Shown on the roster calendar so you can spot who&apos;s working at a glance.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disabled || uploading}
-              onClick={() => inputRef.current?.click()}
-            >
-              {shownUrl ? 'Replace photo' : 'Add photo'}
-            </Button>
+            {disabled || uploading ? (
+              <Button type="button" variant="outline" size="sm" disabled>
+                {shownUrl ? 'Replace photo' : 'Add photo'}
+              </Button>
+            ) : (
+              <label
+                htmlFor={inputId}
+                tabIndex={0}
+                className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'cursor-pointer')}
+              >
+                {shownUrl ? 'Replace photo' : 'Add photo'}
+              </label>
+            )}
             {shownUrl && !disabled && !uploading && (
               <Button type="button" variant="ghost" size="sm" onClick={clearPhoto}>
                 <X className="size-3.5 mr-1" />
@@ -128,6 +136,7 @@ export function StaffAvatarUpload({
 
       <input
         ref={inputRef}
+        id={inputId}
         type="file"
         accept={ACCEPT}
         className="hidden"
