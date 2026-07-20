@@ -17,7 +17,6 @@ import type { SetupHealthData } from '@/components/SetupHealthScore';
 import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { NeedsYouPanel } from '@/components/overview/NeedsYouPanel';
-import { OverviewCoachNudges } from '@/components/overview/OverviewCoachNudges';
 import { TodayBookingsPanel, type TodayAppointment } from '@/components/overview/TodayBookingsPanel';
 import { overviewNeonBox } from '@/components/overview/overviewNeon';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
@@ -340,8 +339,6 @@ async function AppointmentView({ token }: { token: string | null }) {
       )}
 
       <TodayBookingsPanel appointments={appointments} error={error} />
-
-      {overviewKpis && <OverviewCoachNudges data={overviewKpis} />}
 
       {/* Onboarding banner */}
       {!onboardingDone && (

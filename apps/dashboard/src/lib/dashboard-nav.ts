@@ -98,10 +98,19 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   return pathname.startsWith(href);
 }
 
+/**
+ * Parked for pilot: real, working pages — not deleted — just not worth the
+ * nav clutter until a pilot salon asks for one by name. Live Pulse and Team
+ * Performance need setup most pilots won't do yet; Branches and Newsletter
+ * are built for scale a one-location pilot doesn't have. Drop an href here
+ * to bring a page back.
+ */
+const PILOT_HIDDEN_HREFS = new Set(['/pulse', '/tickets', '/branches', '/campaigns', '/team-performance']);
+
 export function visibleSalonNavGroups(isOwner: boolean): NavGroup[] {
   return SALON_NAV_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.ownerOnly || isOwner),
+    items: group.items.filter((item) => !item.ownerOnly || isOwner).filter((item) => !PILOT_HIDDEN_HREFS.has(item.href)),
   })).filter((group) => group.items.length > 0);
 }
 

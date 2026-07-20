@@ -176,6 +176,14 @@ function formatMonthLabel(month: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
 }
 
+/**
+ * Parked for pilot: ratings, retention, reviews, loyalty, no-shows, funnel,
+ * opt-outs, a second staff table, and campaign history are all real and
+ * working — just more BI than a pilot-stage owner needs on day one. Flip
+ * this on once someone's asking "where's my X."
+ */
+const SHOW_EXTENDED_INSIGHTS = false;
+
 export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = '' }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -622,6 +630,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             )}
           </CollapsibleSection>
 
+          {SHOW_EXTENDED_INSIGHTS && (
+          <>
           {/* Staff ratings */}
           <CollapsibleSection id="analytics-staff-ratings" title="Staff ratings — last 3 months" defaultOpen>
             {!data.staffRatings || data.staffRatings.length === 0 ? (
@@ -939,6 +949,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                 </table>
               </div>
             </CollapsibleSection>
+          )}
+          </>
           )}
         </>
       )}
