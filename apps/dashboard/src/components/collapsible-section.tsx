@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { ChevronDown } from 'lucide-react';
 import {
   CollapsedAttentionBadge,
@@ -26,10 +26,22 @@ interface CollapsibleSectionProps {
   children: ReactNode;
   id?: string;
   className?: string;
-  /** @deprecated All sections are collapsible on every screen size. Kept for callers that passed it. */
-  collapseOnMobile?: boolean;
   defaultOpen?: boolean;
   action?: ReactNode;
+}
+
+function storageKey(id: string): string {
+  return `dashboard-collapsible:${id}`;
+}
+
+function readPersistedOpen(id: string | undefined, fallback: boolean): boolean {
+  if (!id || typeof window === 'undefined') return fallback;
+  try {
+    const stored = window.localStorage.getItem(storageKey(id));
+    return stored === null ? fallback : stored === '1';
+  } catch {
+    return fallback;
+  }
 }
 
 export function CollapsibleSection({
@@ -44,20 +56,29 @@ export function CollapsibleSection({
   children,
   id,
   className,
-  collapseOnMobile = false,
   defaultOpen = true,
   action,
 }: CollapsibleSectionProps) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpenState] = useState(() => readPersistedOpen(id, defaultOpen));
+  const setOpen = useCallback(
+    (updater: boolean | ((prev: boolean) => boolean)) => {
+      setOpenState((prev) => {
+        const next = typeof updater === 'function' ? updater(prev) : updater;
+        if (id && typeof window !== 'undefined') {
+          try {
+            window.localStorage.setItem(storageKey(id), next ? '1' : '0');
+          } catch {
+            // Private browsing / quota exceeded — toggle still works in-memory this session
+          }
+        }
+        return next;
+      });
+    },
+    [id],
+  );
   const [contextCount, setContextCount] = useState(0);
   const [contextSeverity, setContextSeverity] =
     useState<CollapsedAttention['severity']>('warning');
-
-  useEffect(() => {
-    if (collapseOnMobile && window.matchMedia('(max-width: 767px)').matches) {
-      setOpen(false);
-    }
-  }, [collapseOnMobile]);
 
   const handleAggregateChange = useCallback(
     (total: number, severity: CollapsedAttention['severity']) => {
@@ -87,7 +108,7 @@ export function CollapsibleSection({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="dashboard-section-header dashboard-section-header-toggle w-full text-left touch-manipulation"
+        className="dashboard-section-header dashboard-section-header-toggle group w-full text-left touch-manipulation"
         aria-expanded={open}
         aria-controls={id ? `${id}-panel` : undefined}
       >
@@ -117,13 +138,19 @@ export function CollapsibleSection({
             {action}
           </div>
         )}
-        <ChevronDown
+        <span
           className={cn(
-            'size-4 shrink-0 text-muted-foreground transition-transform duration-200',
-            open && 'rotate-180',
+            'flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors',
+            open
+              ? 'border-primary/30 bg-primary/10 text-primary'
+              : 'border-border bg-muted/70 text-muted-foreground group-hover:bg-muted group-hover:text-foreground',
           )}
           aria-hidden
-        />
+        >
+          <ChevronDown
+            className={cn('size-5 transition-transform duration-200', open && 'rotate-180')}
+          />
+        </span>
       </button>
       <CollapsibleSectionAttentionProvider onAggregateChange={handleAggregateChange}>
         <div
