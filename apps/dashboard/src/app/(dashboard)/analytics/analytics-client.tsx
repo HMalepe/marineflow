@@ -572,8 +572,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                       <tr>
                         <th className="text-left p-3 font-medium">Month</th>
                         <th className="text-right p-3 font-medium">Revenue</th>
-                        <th className="text-right p-3 font-medium">Customers</th>
-                        <th className="text-right p-3 font-medium">Invoices</th>
+                        <th className="text-right p-3 font-medium hidden sm:table-cell">Customers</th>
+                        <th className="text-right p-3 font-medium hidden md:table-cell">Invoices</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -581,8 +581,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                         <tr key={r.month} className="hover:bg-muted/30">
                           <td className="p-3">{formatMonth(r.month)}</td>
                           <td className="p-3 text-right font-medium tabular-nums">{formatCurrency(r.total_revenue_cents)}</td>
-                          <td className="p-3 text-right tabular-nums">{r.unique_customers}</td>
-                          <td className="p-3 text-right tabular-nums">{r.invoice_count}</td>
+                          <td className="p-3 text-right tabular-nums hidden sm:table-cell">{r.unique_customers}</td>
+                          <td className="p-3 text-right tabular-nums hidden md:table-cell">{r.invoice_count}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -600,9 +600,9 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left p-3 font-medium">Staff member</th>
-                      <th className="text-right p-3 font-medium">Appointments</th>
-                      <th className="text-right p-3 font-medium">Completed</th>
-                      <th className="text-right p-3 font-medium">No-shows</th>
+                      <th className="text-right p-3 font-medium hidden sm:table-cell">Appointments</th>
+                      <th className="text-right p-3 font-medium hidden md:table-cell">Completed</th>
+                      <th className="text-right p-3 font-medium hidden lg:table-cell">No-shows</th>
                       <th className="text-right p-3 font-medium">Revenue</th>
                     </tr>
                   </thead>
@@ -610,9 +610,9 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                     {data.staffPerformance.map((s) => (
                       <tr key={s.staffId} className="hover:bg-muted/30">
                         <td className="p-3 font-medium">{s.staffName}</td>
-                        <td className="p-3 text-right tabular-nums">{s.total_appointments}</td>
-                        <td className="p-3 text-right tabular-nums">{s.completed}</td>
-                        <td className="p-3 text-right tabular-nums text-destructive">{s.no_shows}</td>
+                        <td className="p-3 text-right tabular-nums hidden sm:table-cell">{s.total_appointments}</td>
+                        <td className="p-3 text-right tabular-nums hidden md:table-cell">{s.completed}</td>
+                        <td className="p-3 text-right tabular-nums text-destructive hidden lg:table-cell">{s.no_shows}</td>
                         <td className="p-3 text-right tabular-nums font-medium">{formatCurrency(s.revenue_cents)}</td>
                       </tr>
                     ))}
@@ -633,7 +633,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                     <tr>
                       <th className="text-left p-3 font-medium">Staff member</th>
                       <th className="text-right p-3 font-medium">Avg rating</th>
-                      <th className="text-right p-3 font-medium">No. of ratings</th>
+                      <th className="text-right p-3 font-medium hidden sm:table-cell">No. of ratings</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -644,7 +644,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                           <span className="tabular-nums mr-1">{s.avg_rating.toFixed(1)}</span>
                           <StarDisplay score={Math.round(s.avg_rating)} />
                         </td>
-                        <td className="p-3 text-right tabular-nums">{s.rating_count}</td>
+                        <td className="p-3 text-right tabular-nums hidden sm:table-cell">{s.rating_count}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -661,8 +661,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left p-3 font-medium">Month</th>
-                      <th className="text-right p-3 font-medium">Unique customers</th>
-                      <th className="text-right p-3 font-medium">Returning</th>
+                      <th className="text-right p-3 font-medium hidden sm:table-cell">Unique customers</th>
+                      <th className="text-right p-3 font-medium hidden md:table-cell">Returning</th>
                       <th className="text-right p-3 font-medium">Rate</th>
                     </tr>
                   </thead>
@@ -674,8 +674,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                       return (
                         <tr key={r.month} className="hover:bg-muted/30">
                           <td className="p-3">{formatMonth(r.month)}</td>
-                          <td className="p-3 text-right tabular-nums">{r.unique_customers}</td>
-                          <td className="p-3 text-right tabular-nums">{r.returning_customers}</td>
+                          <td className="p-3 text-right tabular-nums hidden sm:table-cell">{r.unique_customers}</td>
+                          <td className="p-3 text-right tabular-nums hidden md:table-cell">{r.returning_customers}</td>
                           <td className={cn('p-3 text-right font-medium tabular-nums',
                             rate !== null && rate >= 50 ? 'text-green-700 dark:text-green-400' : ''
                           )}>
@@ -862,22 +862,22 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                   <thead>
                     <tr className="bg-muted/50 text-left">
                       <th className="px-4 py-2.5 font-medium text-muted-foreground">Staff</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">{APPOINTMENTS_LABEL}</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Completed</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right hidden sm:table-cell">{APPOINTMENTS_LABEL}</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right hidden md:table-cell">Completed</th>
                       <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Revenue</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">No-shows</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right hidden lg:table-cell">No-shows</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {staffRevenue.map((row) => (
                       <tr key={row.staffId} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 font-medium">{row.staffName}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{row.bookings}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{row.completed}</td>
+                        <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">{row.bookings}</td>
+                        <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell">{row.completed}</td>
                         <td className="px-4 py-3 text-right tabular-nums font-medium">
                           R {Math.round(row.revenueCents / 100).toLocaleString('en-ZA')}
                         </td>
-                        <td className={cn('px-4 py-3 text-right tabular-nums', row.noShows > 0 && 'text-rose-600 dark:text-rose-400')}>
+                        <td className={cn('px-4 py-3 text-right tabular-nums hidden lg:table-cell', row.noShows > 0 && 'text-rose-600 dark:text-rose-400')}>
                           {row.noShows}
                         </td>
                       </tr>
@@ -896,10 +896,10 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                     <tr className="bg-muted/50 text-left">
                       <th className="px-4 py-2.5 font-medium text-muted-foreground">Campaign</th>
                       <th className="px-4 py-2.5 font-medium text-muted-foreground">Status</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Recipients</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Delivered</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right">Failed</th>
-                      <th className="px-4 py-2.5 font-medium text-muted-foreground">Date</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right hidden md:table-cell">Recipients</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right hidden sm:table-cell">Delivered</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground text-right hidden lg:table-cell">Failed</th>
+                      <th className="px-4 py-2.5 font-medium text-muted-foreground hidden lg:table-cell">Date</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -921,15 +921,15 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                               {c.status.toLowerCase()}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-right tabular-nums">{c.totalRecipients}</td>
-                          <td className="px-4 py-3 text-right tabular-nums">
+                          <td className="px-4 py-3 text-right tabular-nums hidden md:table-cell">{c.totalRecipients}</td>
+                          <td className="px-4 py-3 text-right tabular-nums hidden sm:table-cell">
                             {c.delivered}
                             {deliverPct !== null && <span className="text-muted-foreground text-xs ml-1">({deliverPct}%)</span>}
                           </td>
-                          <td className={cn('px-4 py-3 text-right tabular-nums', c.failed > 0 && 'text-rose-600 dark:text-rose-400')}>
+                          <td className={cn('px-4 py-3 text-right tabular-nums hidden lg:table-cell', c.failed > 0 && 'text-rose-600 dark:text-rose-400')}>
                             {c.failed}
                           </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                          <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
                             {date ? (() => { const d = new Date(date); return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: '2-digit' }); })() : '—'}
                           </td>
                         </tr>
