@@ -123,11 +123,11 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
             <tr>
               <th className="text-left p-3 font-medium">Business</th>
               <th className="text-left p-3 font-medium">Status</th>
-              <th className="text-left p-3 font-medium">Tier</th>
-              <th className="text-right p-3 font-medium">Staff</th>
-              <th className="text-right p-3 font-medium">Customers</th>
-              <th className="text-right p-3 font-medium">{APPOINTMENTS_LABEL}</th>
-              <th className="text-left p-3 font-medium">Created</th>
+              <th className="text-left p-3 font-medium hidden sm:table-cell">Tier</th>
+              <th className="text-right p-3 font-medium hidden md:table-cell">Staff</th>
+              <th className="text-right p-3 font-medium hidden md:table-cell">Customers</th>
+              <th className="text-right p-3 font-medium hidden md:table-cell">{APPOINTMENTS_LABEL}</th>
+              <th className="text-left p-3 font-medium hidden lg:table-cell">Created</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -147,15 +147,15 @@ export function AgencyDashboard({ metrics, salons: initialSalons, token }: Props
                 <td className="p-3">
                   <StatusBadge status={s.status} />
                 </td>
-                <td className="p-3">
+                <td className="p-3 hidden sm:table-cell">
                   <span className="text-xs font-medium px-2 py-0.5 bg-muted rounded capitalize">
                     {s.tier}
                   </span>
                 </td>
-                <td className="p-3 text-right">{s._count?.staff ?? 0}</td>
-                <td className="p-3 text-right">{s._count?.customers ?? 0}</td>
-                <td className="p-3 text-right">{s._count?.appointments ?? 0}</td>
-                <td className="p-3 text-muted-foreground text-xs">
+                <td className="p-3 text-right hidden md:table-cell">{s._count?.staff ?? 0}</td>
+                <td className="p-3 text-right hidden md:table-cell">{s._count?.customers ?? 0}</td>
+                <td className="p-3 text-right hidden md:table-cell">{s._count?.appointments ?? 0}</td>
+                <td className="p-3 text-muted-foreground text-xs hidden lg:table-cell">
                   {new Date(s.createdAt).toLocaleDateString()}
                 </td>
               </tr>
