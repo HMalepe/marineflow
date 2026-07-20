@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 
-const CROP_SIZE = 320;
+const MAX_CROP_SIZE = 320;
 
 interface Props {
   src: string;
@@ -24,24 +24,29 @@ export function ImageCropModal({
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  // This modal only ever mounts client-side (triggered by a file input's
+  // onChange), so window is always available by the time this runs.
+  const [cropSize] = useState(() => Math.min(MAX_CROP_SIZE, window.innerWidth - 64));
   const dragging = useRef(false);
   const lastPointer = useRef({ x: 0, y: 0 });
+  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const lastPinchDist = useRef<number | null>(null);
 
   const minScale =
     naturalSize.w > 0
-      ? Math.max(CROP_SIZE / naturalSize.w, CROP_SIZE / naturalSize.h)
+      ? Math.max(cropSize / naturalSize.w, cropSize / naturalSize.h)
       : 1;
 
   const clampOffset = useCallback(
     (ox: number, oy: number, s: number, nw: number, nh: number) => {
-      const maxX = Math.max(0, (nw * s - CROP_SIZE) / 2);
-      const maxY = Math.max(0, (nh * s - CROP_SIZE) / 2);
+      const maxX = Math.max(0, (nw * s - cropSize) / 2);
+      const maxY = Math.max(0, (nh * s - cropSize) / 2);
       return {
         x: Math.max(-maxX, Math.min(maxX, ox)),
         y: Math.max(-maxY, Math.min(maxY, oy)),
       };
     },
-    [],
+    [cropSize],
   );
 
   function handleLoad() {
@@ -50,18 +55,48 @@ export function ImageCropModal({
     const nw = img.naturalWidth;
     const nh = img.naturalHeight;
     setNaturalSize({ w: nw, h: nh });
-    const ms = Math.max(CROP_SIZE / nw, CROP_SIZE / nh);
+    const ms = Math.max(cropSize / nw, cropSize / nh);
     setScale(ms);
     setOffset({ x: 0, y: 0 });
   }
 
+  function pinchDistance() {
+    const pts = Array.from(activePointers.current.values());
+    if (pts.length < 2) return null;
+    const [a, b] = pts;
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
   function handlePointerDown(e: React.PointerEvent) {
-    dragging.current = true;
-    lastPointer.current = { x: e.clientX, y: e.clientY };
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointers.current.size === 2) {
+      dragging.current = false;
+      lastPinchDist.current = pinchDistance();
+    } else {
+      dragging.current = true;
+      lastPointer.current = { x: e.clientX, y: e.clientY };
+    }
   }
 
   function handlePointerMove(e: React.PointerEvent) {
+    if (!activePointers.current.has(e.pointerId)) return;
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointers.current.size === 2) {
+      const dist = pinchDistance();
+      if (dist != null && lastPinchDist.current != null) {
+        const factor = dist / lastPinchDist.current;
+        setScale((prev) => {
+          const next = Math.max(minScale, Math.min(minScale * 6, prev * factor));
+          setOffset((o) => clampOffset(o.x, o.y, next, naturalSize.w, naturalSize.h));
+          return next;
+        });
+      }
+      lastPinchDist.current = dist;
+      return;
+    }
+
     if (!dragging.current) return;
     const dx = e.clientX - lastPointer.current.x;
     const dy = e.clientY - lastPointer.current.y;
@@ -71,8 +106,10 @@ export function ImageCropModal({
     );
   }
 
-  function handlePointerUp() {
-    dragging.current = false;
+  function handlePointerUp(e: React.PointerEvent) {
+    activePointers.current.delete(e.pointerId);
+    lastPinchDist.current = null;
+    dragging.current = activePointers.current.size === 1;
   }
 
   function handleWheel(e: React.WheelEvent) {
@@ -100,10 +137,10 @@ export function ImageCropModal({
     const ctx = canvas.getContext('2d')!;
 
     // Map container top-left [0,0] to source image coordinates
-    const srcX = naturalSize.w / 2 - (CROP_SIZE / 2 + offset.x) / scale;
-    const srcY = naturalSize.h / 2 - (CROP_SIZE / 2 + offset.y) / scale;
-    const srcW = CROP_SIZE / scale;
-    const srcH = CROP_SIZE / scale;
+    const srcX = naturalSize.w / 2 - (cropSize / 2 + offset.x) / scale;
+    const srcY = naturalSize.h / 2 - (cropSize / 2 + offset.y) / scale;
+    const srcW = cropSize / scale;
+    const srcH = cropSize / scale;
 
     ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outputSize, outputSize);
     onApply(canvas.toDataURL('image/jpeg', 0.92));
@@ -128,11 +165,12 @@ export function ImageCropModal({
         <div className="flex justify-center bg-black/20 py-5">
           <div
             className="relative overflow-hidden cursor-grab active:cursor-grabbing select-none bg-black"
-            style={{ width: CROP_SIZE, height: CROP_SIZE, touchAction: 'none' }}
+            style={{ width: cropSize, height: cropSize, touchAction: 'none' }}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -149,22 +187,22 @@ export function ImageCropModal({
             {/* Crop overlay */}
             <div className="absolute inset-0 pointer-events-none">
               <svg
-                viewBox={`0 0 ${CROP_SIZE} ${CROP_SIZE}`}
-                width={CROP_SIZE}
-                height={CROP_SIZE}
+                viewBox={`0 0 ${cropSize} ${cropSize}`}
+                width={cropSize}
+                height={cropSize}
               >
                 <defs>
                   <mask id="crop-hole">
                     <rect width="100%" height="100%" fill="white" />
                     {circular ? (
                       <circle
-                        cx={CROP_SIZE / 2}
-                        cy={CROP_SIZE / 2}
-                        r={CROP_SIZE / 2 - 10}
+                        cx={cropSize / 2}
+                        cy={cropSize / 2}
+                        r={cropSize / 2 - 10}
                         fill="black"
                       />
                     ) : (
-                      <rect x="10" y="10" width={CROP_SIZE - 20} height={CROP_SIZE - 20} rx="4" fill="black" />
+                      <rect x="10" y="10" width={cropSize - 20} height={cropSize - 20} rx="4" fill="black" />
                     )}
                   </mask>
                 </defs>
@@ -176,9 +214,9 @@ export function ImageCropModal({
                 />
                 {circular ? (
                   <circle
-                    cx={CROP_SIZE / 2}
-                    cy={CROP_SIZE / 2}
-                    r={CROP_SIZE / 2 - 10}
+                    cx={cropSize / 2}
+                    cy={cropSize / 2}
+                    r={cropSize / 2 - 10}
                     fill="none"
                     stroke="white"
                     strokeWidth="1.5"
@@ -188,8 +226,8 @@ export function ImageCropModal({
                   <rect
                     x="10"
                     y="10"
-                    width={CROP_SIZE - 20}
-                    height={CROP_SIZE - 20}
+                    width={cropSize - 20}
+                    height={cropSize - 20}
                     rx="4"
                     fill="none"
                     stroke="white"

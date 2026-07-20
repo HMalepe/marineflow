@@ -392,10 +392,14 @@ export function CustomersClient({ token }: Props) {
               size="sm"
               className="shrink-0"
               onClick={() => {
+                // Append to DOM before clicking so iOS Safari honours the download
                 const a = document.createElement('a');
                 a.href = `/api/proxy/customers/export-csv`;
                 a.download = 'customers.csv';
+                a.style.display = 'none';
+                document.body.appendChild(a);
                 a.click();
+                document.body.removeChild(a);
               }}
               title="Download all customers as CSV"
             >

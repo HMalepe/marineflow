@@ -212,7 +212,7 @@ export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCoun
 
       {/* "More" slide-up sheet */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70vh] overflow-y-auto pb-safe">
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[70dvh] overflow-y-auto pb-safe">
           <SheetHeader className="pb-2">
             <SheetTitle className="text-base">More</SheetTitle>
           </SheetHeader>

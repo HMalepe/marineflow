@@ -1076,7 +1076,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                     if (next) setInactivityDelay2(next);
                   }
                 }}
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                className="min-h-[2.75rem] rounded-md border border-input bg-background px-2 text-sm"
               >
                 {[5, 10, 15, 20, 30].map((m) => (
                   <option key={m} value={m}>{m} minutes of silence</option>
@@ -1111,7 +1111,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 id="inactivityDelay2"
                 value={inactivityDelay2}
                 onChange={(e) => setInactivityDelay2(Number(e.target.value))}
-                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                className="min-h-[2.75rem] rounded-md border border-input bg-background px-2 text-sm"
               >
                 {[15, 20, 30, 45, 60].filter((m) => m > inactivityDelay1).map((m) => (
                   <option key={m} value={m}>{m} minutes of silence</option>
