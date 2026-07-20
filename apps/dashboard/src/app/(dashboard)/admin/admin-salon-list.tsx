@@ -589,7 +589,7 @@ export function AdminSalonList({ token }: Props) {
                 id="user-role"
                 value={addUserForm.role}
                 onChange={(e) => setAddUserForm((f) => ({ ...f, role: e.target.value as StaffRoleOption }))}
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none dark:bg-input/30"
+                className="min-h-[2.75rem] w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none dark:bg-input/30"
               >
                 <option value="OWNER">Owner</option>
                 <option value="MANAGER">Manager</option>

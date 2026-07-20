@@ -770,7 +770,7 @@ export function ServicesClient({ token }: Props) {
                 <select
                   value={bulkCategoryId}
                   onChange={(e) => setBulkCategoryId(e.target.value)}
-                  className="h-8 rounded-lg border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring dark:bg-input/30"
+                  className="min-h-[2.75rem] rounded-lg border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring dark:bg-input/30"
                 >
                   <option value="">Assign to category…</option>
                   {categories.map((c) => (

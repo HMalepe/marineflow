@@ -302,7 +302,7 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
             value={form.timezone}
             onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
             className={cn(
-              'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none',
+              'min-h-[2.75rem] w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none',
               'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30',
             )}
           >
