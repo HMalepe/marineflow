@@ -19,7 +19,6 @@ import {
   type ConversationListItemData,
 } from '@/components/ConversationListItem';
 import { Search, RefreshCw, Pin, ChevronLeft, MoreHorizontal } from 'lucide-react';
-import { PaneHeader } from '@/components/section-panel';
 import { MobileFilterBar } from '@/components/mobile-filter-bar';
 import { PremiumDisclosure } from '@/components/premium-disclosure';
 import {
@@ -456,20 +455,6 @@ export function ConversationsClient({ token, staffName }: Props) {
             showThreadOnMobile && 'hidden md:flex',
           )}
         >
-          <PaneHeader
-            title="Chats"
-            trailing={
-              handoffCount > 0 ? (
-                <Badge variant="destructive" className="text-[10px] px-2 py-0">
-                  {handoffCount}
-                </Badge>
-              ) : (
-                <Button variant="ghost" size="icon" className="size-8 md:hidden" onClick={refreshAll} aria-label="Refresh">
-                  <RefreshCw className="size-4" />
-                </Button>
-              )
-            }
-          />
           <CollapsibleSection
             id="conversations-filters"
             title="Search & filters"
@@ -561,6 +546,17 @@ export function ConversationsClient({ token, staffName }: Props) {
             actionBadgeText="need you"
             actionSeverity="critical"
             defaultOpen
+            action={
+              handoffCount > 0 ? (
+                <Badge variant="destructive" className="text-[10px] px-2 py-0">
+                  {handoffCount}
+                </Badge>
+              ) : (
+                <Button variant="ghost" size="icon" className="size-8 md:hidden" onClick={refreshAll} aria-label="Refresh">
+                  <RefreshCw className="size-4" />
+                </Button>
+              )
+            }
             className="border-0 shadow-none rounded-none flex-1 flex flex-col min-h-0 [&_.dashboard-section-body]:flex-1 [&_.dashboard-section-body]:flex [&_.dashboard-section-body]:flex-col [&_.dashboard-section-body]:min-h-0 [&_.dashboard-section-body]:p-0"
           >
           <div className="chat-list-scroll flex-1 overflow-y-auto overscroll-y-contain min-h-0">

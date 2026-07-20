@@ -6,7 +6,6 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PremiumDisclosure } from '@/components/premium-disclosure';
-import { PaneHeader } from '@/components/section-panel';
 import {
   ChatComposer,
   ChatEmptyState,
@@ -201,16 +200,6 @@ export function TicketsClient({ token }: Props) {
             selected && 'hidden md:flex',
           )}
         >
-          <PaneHeader
-            title="Queue"
-            trailing={
-              openCount > 0 && filter !== 'noise' ? (
-                <Badge variant="destructive" className="text-[10px] px-2 py-0">
-                  {openCount}
-                </Badge>
-              ) : undefined
-            }
-          />
           <CollapsibleSection
             id="tickets-filter"
             title="Filter queue"
@@ -247,6 +236,13 @@ export function TicketsClient({ token }: Props) {
             actionBadgeText="open"
             actionSeverity="critical"
             defaultOpen
+            action={
+              openCount > 0 && filter !== 'noise' ? (
+                <Badge variant="destructive" className="text-[10px] px-2 py-0">
+                  {openCount}
+                </Badge>
+              ) : undefined
+            }
             className="border-0 shadow-none rounded-none flex-1 flex flex-col min-h-0 [&_.dashboard-section-body]:flex-1 [&_.dashboard-section-body]:flex [&_.dashboard-section-body]:flex-col [&_.dashboard-section-body]:min-h-0 [&_.dashboard-section-body]:p-0"
           >
           <div className="chat-list-scroll flex-1 overflow-y-auto overscroll-y-contain min-h-0">
