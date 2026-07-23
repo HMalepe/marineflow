@@ -1280,14 +1280,14 @@ async function processInboundWhatsApp(
       },
     });
   } else {
-    customer = await getTenantDb().customer.update({
+    void getTenantDb().customer.update({
       where: { id: customer.id },
       data: {
         lastInteractionAt: new Date(),
         // Keep WhatsApp profile name when we don't have a preferred display name yet.
         ...(!customer.displayName && profileDisplay ? { displayName: profileDisplay } : {}),
       },
-    });
+    }).catch(() => {});
   }
 
   void recordCampaignReply(salon.id, customer.id).catch(() => {});
@@ -1308,10 +1308,7 @@ async function processInboundWhatsApp(
       include: { customer: true, salon: true },
     });
   } else {
-    conv = await getTenantDb().conversation.findUniqueOrThrow({
-      where: { id: existingConv.id },
-      include: { customer: true, salon: true },
-    });
+    conv = existingConv;
   }
 
   // Use upsert to avoid P2002 on providerSid if the same wamid arrives twice (Meta retries)
@@ -1338,14 +1335,14 @@ async function processInboundWhatsApp(
     });
   }
 
-  await getTenantDb().conversation.update({
+  void getTenantDb().conversation.update({
     where: { id: conv.id },
     data: {
       lastMessageAt: new Date(),
       lastCustomerMessageAt: new Date(),
       messageCount: { increment: 1 },
     },
-  });
+  }).catch(() => {});
 
   getTenantDb().analyticsEvent.create({
     data: {
