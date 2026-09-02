@@ -448,6 +448,24 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(ownerPassword, 12);
   const ownerPhone = process.env.BART_OWNER_PHONE?.trim() || null;
+
+  // StaffUser.phone is globally unique — free it from another salon user if needed
+  if (ownerPhone) {
+    const phoneHolder = await prisma.staffUser.findFirst({
+      where: { phone: ownerPhone, NOT: { email: ownerEmail } },
+      select: { id: true, email: true, salonId: true },
+    });
+    if (phoneHolder) {
+      await prisma.staffUser.update({
+        where: { id: phoneHolder.id },
+        data: { phone: null },
+      });
+      console.log(
+        `Note: moved phone ${ownerPhone} from ${phoneHolder.email} → Bart owner (StaffUser.phone is unique).`,
+      );
+    }
+  }
+
   await prisma.staffUser.upsert({
     where: { email: ownerEmail },
     create: {
