@@ -1,4 +1,3 @@
-import { getTenantDb } from '../lib/db/tenantSession.js';
 import { twilioMessaging } from '../lib/integrations/messaging/twilio-impl.js';
 import { whatsappCloudMessaging } from '../lib/integrations/messaging/whatsapp-cloud-impl.js';
 import { smsMessaging } from '../lib/integrations/messaging/sms-impl.js';
@@ -77,10 +76,8 @@ export async function sendWithFallback(params: {
   mediaType?: 'image' | 'video' | 'document' | 'audio';
   interactive?: InteractiveMessage;
 }): Promise<{ channel: Channel; result: SentMessage }> {
-  const salon = await getTenantDb().salon.findUniqueOrThrow({
-    where: { id: params.salonId },
-    select: { whatsappPhoneId: true, twilioWhatsAppNumber: true },
-  });
+  const { resolveOutboundWhatsAppChannel } = await import('../lib/businessRouter.js');
+  const channelCreds = await resolveOutboundWhatsAppChannel(params.salonId);
 
   const sendOpts = {
     to: params.to,
@@ -89,8 +86,8 @@ export async function sendWithFallback(params: {
     mediaType: params.mediaType,
   };
 
-  const cloudPhoneId = salon.whatsappPhoneId?.trim();
-  const twilioFrom = resolveTwilioFrom(salon.twilioWhatsAppNumber);
+  const cloudPhoneId = params.phoneNumberId?.trim() || channelCreds.whatsappPhoneId?.trim();
+  const twilioFrom = resolveTwilioFrom(channelCreds.twilioWhatsAppNumber);
   const twilioReady = isTwilioAccountConfigured() && twilioFrom != null;
 
   if (!twilioFrom && !cloudPhoneId) {

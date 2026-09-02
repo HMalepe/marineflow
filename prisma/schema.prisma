@@ -15,6 +15,7 @@ enum BusinessType {
   SALON
   RESTAURANT
   CAR_WASH
+  RETAIL
   OTHER
 }
 
@@ -181,6 +182,14 @@ enum ConversationStep {
   BOOKING_RATING
   CONFIRM_CANCEL
   WRITE_REVIEW
+  /// Shared WhatsApp number — pick Bontle vs Bart Marley (router salon only)
+  CHOOSE_BUSINESS
+  /// Dispensary / retail cart checkout
+  RETAIL_BROWSE
+  RETAIL_CART
+  RETAIL_FULFILLMENT
+  RETAIL_ADDRESS
+  RETAIL_CONFIRM
 }
 
 model Salon {
@@ -244,6 +253,8 @@ model Salon {
   /// Optional per-tenant Twilio subaccount (future isolation)
   twilioAccountSid     String?
   twilioAuthToken      String?
+  /// Gateway salon that owns a shared WhatsApp number and shows a business picker
+  isBusinessRouter Boolean @default(false)
   onboardingCompletedAt DateTime?
   metadata       Json         @default("{}")
   deletedAt      DateTime?
@@ -289,6 +300,9 @@ model Salon {
   platformAlerts PlatformAlert[]
   messageLogs      MessageLog[]
   platformEvents   PlatformEvent[]
+  retailOrders     RetailOrder[]
+  retailOrderItems RetailOrderItem[]
+  deliveryAddresses DeliveryAddress[]
 }
 
 model Branch {
@@ -366,6 +380,8 @@ model Customer {
   memberships     CustomerMembership[]
   tickets         Ticket[]
   payments        Payment[]
+  retailOrders    RetailOrder[]
+  deliveryAddresses DeliveryAddress[]
   reviewIncentiveClaims ReviewIncentiveClaim[]
 
   @@unique([salonId, waId])
@@ -473,11 +489,16 @@ model Service {
   /// Custom post-appointment care instructions sent ~10min after completion.
   /// Falls back to a keyword-based default template (barber/lashes/nails/etc.) when unset.
   aftercareNote   String?          @db.Text
+  /// Retail inventory — when trackInventory is true, stockQty gates WhatsApp ordering.
+  trackInventory  Boolean          @default(false)
+  stockQty        Int              @default(0)
+  lowStockThreshold Int            @default(5)
 
   staffLinks   StaffService[]
   appointments Appointment[]
   addonLinks   ServiceAddon[]       @relation("ParentService")
   addonOf      ServiceAddon[]       @relation("AddonService")
+  retailOrderItems RetailOrderItem[]
 
   @@index([salonId])
   @@index([categoryId])
@@ -1382,3 +1403,96 @@ model WebhookEvent {
   @@unique([provider, providerEventId])
   @@index([salonId, createdAt])
 }
+
+// ─── Retail / dispensary orders (Bart Marley etc.) ─────────────────────
+
+enum RetailFulfillment {
+  DELIVERY
+  COLLECTION
+}
+
+enum RetailOrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  PREPARING
+  OUT_FOR_DELIVERY
+  READY_FOR_COLLECTION
+  COMPLETED
+  CANCELLED
+}
+
+model DeliveryAddress {
+  id          String   @id @default(cuid())
+  salonId     String
+  salon       Salon    @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  label       String?
+  line1       String
+  line2       String?
+  suburb      String?
+  city        String?
+  postalCode  String?
+  notes       String?  @db.Text
+  isDefault   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  orders      RetailOrder[]
+
+  @@index([salonId, customerId])
+}
+
+model RetailOrder {
+  id                String             @id @default(cuid())
+  salonId           String
+  salon             Salon              @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  customerId        String
+  customer          Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status            RetailOrderStatus  @default(DRAFT)
+  fulfillment       RetailFulfillment  @default(DELIVERY)
+  deliveryAddressId String?
+  deliveryAddress   DeliveryAddress?   @relation(fields: [deliveryAddressId], references: [id], onDelete: SetNull)
+  /// Snapshot when address is free-typed in WhatsApp before DeliveryAddress row exists
+  deliveryLine1     String?
+  deliverySuburb    String?
+  deliveryCity      String?
+  deliveryNotes     String?            @db.Text
+  subtotalCents     Int                @default(0)
+  deliveryFeeCents  Int                @default(0)
+  totalCents        Int                @default(0)
+  currency          String             @default("zar")
+  paymentId         String?
+  customerNotes     String?            @db.Text
+  estimatedReadyAt  DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  metadata          Json               @default("{}")
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @default(now()) @updatedAt
+
+  items             RetailOrderItem[]
+
+  @@index([salonId, status])
+  @@index([salonId, customerId, createdAt])
+  @@index([salonId, createdAt])
+}
+
+model RetailOrderItem {
+  id          String      @id @default(cuid())
+  salonId     String
+  salon       Salon       @relation(fields: [salonId], references: [id], onDelete: Cascade)
+  orderId     String
+  order       RetailOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  serviceId   String
+  service     Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  nameSnapshot String
+  unitPriceCents Int
+  quantity    Int         @default(1)
+  lineTotalCents Int
+
+  @@index([salonId, orderId])
+  @@index([serviceId])
+}
+

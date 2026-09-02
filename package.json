@@ -19,6 +19,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:bart": "tsx prisma/seed-bart-marley.ts",
     "db:studio": "prisma studio",
     "worker": "tsx src/worker.ts",
     "lint:schema": "tsx scripts/lint-schema-tenant.ts"

@@ -9,6 +9,8 @@ const LIVE_ROSTER_EVENTS = new Set([
   'appointment.created',
   'appointment.updated',
   'salon.settings_changed',
+  'retail.order.created',
+  'retail.order.updated',
 ]);
 
 /**

@@ -1,5 +1,6 @@
 import { DateTime } from 'luxon';
 import { getCachedBusinessHours } from '../services/cachedQueries.js';
+import { isRetailAlwaysOpen } from './retailSettings.js';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
@@ -51,6 +52,7 @@ function isWithinLegacyOpenClose(
 /**
  * Open/closed for handoff + Hours replies — uses per-day BusinessHour rows
  * (same source as booking slots), not only salon.openTime/closeTime.
+ * Dispensary defaults to 24/7 via metadata.retail.alwaysOpen.
  */
 export async function isSalonOpenNow(
   salon: {
@@ -58,9 +60,15 @@ export async function isSalonOpenNow(
     timezone: string;
     openTime?: string | null;
     closeTime?: string | null;
+    metadata?: unknown;
+    industryTemplate?: string | null;
   },
   now = new Date(),
 ): Promise<boolean> {
+  if (isRetailAlwaysOpen(salon.metadata, salon.industryTemplate)) {
+    return true;
+  }
+
   const hours = await getCachedBusinessHours(salon.id);
   if (hours.length === 0) {
     return isWithinLegacyOpenClose(salon, now);
@@ -80,11 +88,24 @@ export async function formatSalonHoursReply(
     timezone: string;
     openTime?: string | null;
     closeTime?: string | null;
+    metadata?: unknown;
+    industryTemplate?: string | null;
   },
   now = new Date(),
 ): Promise<string> {
-  const hours = await getCachedBusinessHours(salon.id);
   const isOpen = await isSalonOpenNow(salon, now);
+
+  if (isRetailAlwaysOpen(salon.metadata, salon.industryTemplate)) {
+    return [
+      '🕐 *Hours*',
+      '',
+      'We’re open *24/7* for WhatsApp orders — order anytime.',
+      '',
+      `Status right now: ${isOpen ? '✅ accepting orders' : '🔴 paused'}`,
+    ].join('\n');
+  }
+
+  const hours = await getCachedBusinessHours(salon.id);
   const status = isOpen ? '✅ open' : '🔴 closed';
 
   if (hours.length === 0) {

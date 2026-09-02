@@ -7,7 +7,7 @@ import {
   ADMIN_MOBILE_TAB_ITEMS,
   adminMobileMoreItems,
   isNavItemActive,
-  MOBILE_BOTTOM_TAB_ITEMS,
+  mobileBottomTabItems,
   mobileMoreNavGroups,
 } from '@/lib/dashboard-nav';
 import { cn } from '@/lib/utils';
@@ -88,6 +88,7 @@ interface NavProps {
   businessName: string;
   logoUrl: string | null;
   handoffCount?: number;
+  industryTemplate?: string | null;
 }
 
 interface TabItem {
@@ -99,7 +100,10 @@ interface TabItem {
 const TAB_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   '/': HomeIcon,
   '/appointments': CalendarIcon,
+  '/orders': CalendarIcon,
+  '/inventory': GridIcon,
   '/conversations': ChatIcon,
+  '/customers': PeopleIcon,
   '/roster': PeopleIcon,
   '/services': GridIcon,
   '/agency': PeopleIcon,
@@ -114,18 +118,29 @@ function tabsFromNavItems(items: { href: string; label: string }[]): TabItem[] {
   }));
 }
 
-const ownerTabs = tabsFromNavItems(MOBILE_BOTTOM_TAB_ITEMS);
 const adminTabs = tabsFromNavItems(ADMIN_MOBILE_TAB_ITEMS);
 
-export function MobileNav({ isAdmin, isOwner, businessName, logoUrl, handoffCount = 0 }: NavProps) {
+export function MobileNav({
+  isAdmin,
+  isOwner,
+  businessName,
+  logoUrl,
+  handoffCount = 0,
+  industryTemplate,
+}: NavProps) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const liveHandoffCount = useHandoffCount(handoffCount);
 
-  const tabs = isAdmin ? adminTabs : ownerTabs;
+  const tabs = isAdmin
+    ? adminTabs
+    : tabsFromNavItems(mobileBottomTabItems(industryTemplate));
   const moreGroups = useMemo(
-    () => (isAdmin ? [{ title: 'Admin', items: adminMobileMoreItems() }] : mobileMoreNavGroups(isOwner)),
-    [isAdmin, isOwner],
+    () =>
+      isAdmin
+        ? [{ title: 'Admin', items: adminMobileMoreItems() }]
+        : mobileMoreNavGroups(isOwner, industryTemplate),
+    [isAdmin, isOwner, industryTemplate],
   );
   const moreActive = moreGroups.some((group) =>
     group.items.some((item) => isNavItemActive(pathname, item.href)),

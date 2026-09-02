@@ -8,9 +8,10 @@ interface Props {
   isAdmin: boolean;
   isOwner: boolean;
   handoffCount?: number;
+  industryTemplate?: string | null;
 }
 
-export function DashboardStickyHeader({ isAdmin }: Props) {
+export function DashboardStickyHeader({ isAdmin, industryTemplate }: Props) {
   const pathname = usePathname();
   const headerRef = useRef<HTMLElement>(null);
 
@@ -38,7 +39,7 @@ export function DashboardStickyHeader({ isAdmin }: Props) {
       ref={headerRef}
       className="dashboard-sticky-shell sticky top-0 z-40 hidden md:block supports-[backdrop-filter]:bg-background/85"
     >
-      <PageSectionNav isAdmin={isAdmin} />
+      <PageSectionNav isAdmin={isAdmin} industryTemplate={industryTemplate} />
     </header>
   );
 }

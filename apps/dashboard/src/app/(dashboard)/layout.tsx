@@ -76,6 +76,8 @@ async function DashboardLayoutInner({
 
   const isOwner = user.role === 'OWNER';
   const isAdmin = user.role === 'SUPER_ADMIN';
+  const industryTemplate = user.industryTemplate ?? null;
+  const isDispensary = industryTemplate === 'dispensary';
 
   let handoffCount = 0;
   try {
@@ -88,7 +90,10 @@ async function DashboardLayoutInner({
   }
 
   return (
-    <div className="min-h-dvh flex flex-col">
+    <div
+      className={`min-h-dvh flex flex-col ${isDispensary ? 'theme-dispensary' : ''}`}
+      data-industry={industryTemplate ?? 'salon'}
+    >
       {isDashboardDebugEnabled() && <DashboardDebugBanner />}
       {impersonating && <ImpersonationBanner businessName={businessName} />}
       <div className="min-h-dvh flex flex-col md:flex-row flex-1">
@@ -99,6 +104,7 @@ async function DashboardLayoutInner({
         businessName={businessName}
         logoUrl={logoUrl}
         handoffCount={handoffCount}
+        industryTemplate={industryTemplate}
       />
 
       {/* Sidebar (desktop only) — pinned to viewport while main content scrolls */}
@@ -119,7 +125,7 @@ async function DashboardLayoutInner({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 leading-none mb-0.5">
-              {formatRole(user.role)}
+              {isDispensary ? 'Dispensary · Owner' : formatRole(user.role)}
             </p>
             <p className="text-sm font-bold leading-tight truncate">{businessName}</p>
             <div className="flex items-center gap-0.5 mt-0.5 min-w-0">
@@ -142,7 +148,12 @@ async function DashboardLayoutInner({
 
         {/* Nav — scrolls independently inside the fixed sidebar */}
         <nav className="flex-1 min-h-0 p-3 overflow-y-auto overscroll-contain space-y-0.5">
-          <NavLinks isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
+          <NavLinks
+            isAdmin={isAdmin}
+            isOwner={isOwner}
+            handoffCount={handoffCount}
+            industryTemplate={industryTemplate}
+          />
         </nav>
 
         {/* Product watermark */}
@@ -155,10 +166,10 @@ async function DashboardLayoutInner({
             </span>
             <div>
               <p className="text-[13px] font-bold leading-none tracking-tight solupair-text-gradient">
-                Solupair
+                {isDispensary ? 'Bart Marley' : 'Solupair'}
               </p>
               <p className="text-[10px] text-muted-foreground/80 leading-tight mt-0.5 tracking-wide">
-                MarineFlow · WhatsApp
+                {isDispensary ? 'Dispensary · WhatsApp retail' : 'MarineFlow · WhatsApp'}
               </p>
             </div>
           </div>
@@ -172,7 +183,12 @@ async function DashboardLayoutInner({
 
       {/* Main */}
       <main className="dashboard-main-shell flex-1 min-w-0 min-h-dvh flex flex-col">
-        <DashboardStickyHeader isAdmin={isAdmin} isOwner={isOwner} handoffCount={handoffCount} />
+        <DashboardStickyHeader
+          isAdmin={isAdmin}
+          isOwner={isOwner}
+          handoffCount={handoffCount}
+          industryTemplate={industryTemplate}
+        />
         <div className="flex-1 p-5 pb-mobile-main md:p-8 min-w-0 min-h-0 overflow-x-clip flex flex-col dashboard-page-shell">
           {children}
         </div>

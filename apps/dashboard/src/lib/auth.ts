@@ -29,7 +29,17 @@ export async function clearToken(): Promise<void> {
 import { getServerApiBaseUrl } from './api-config';
 import { isJwtExpired, readJwtPayload } from './jwt-payload';
 
-export async function getUser(): Promise<{ sub: string; email: string; name: string; businessName: string; role: string; salonId: string; phone?: string } | null> {
+export async function getUser(): Promise<{
+  sub: string;
+  email: string;
+  name: string;
+  businessName: string;
+  role: string;
+  salonId: string;
+  phone?: string;
+  industryTemplate?: string;
+  businessType?: string;
+} | null> {
   const token = await getToken();
   if (!token) return null;
 
@@ -57,7 +67,12 @@ export async function getUser(): Promise<{ sub: string; email: string; name: str
     }
     const { user, salon } = await res.json() as {
       user: { id: string; email: string; name: string; role: string; salonId: string };
-      salon: { displayName: string; whatsappName: string };
+      salon: {
+        displayName: string;
+        whatsappName: string;
+        industryTemplate?: string;
+        businessType?: string;
+      };
     };
     return {
       sub: user.id,
@@ -67,6 +82,8 @@ export async function getUser(): Promise<{ sub: string; email: string; name: str
       role: user.role,
       salonId: user.salonId,
       phone: typeof raw.phone === 'string' ? raw.phone : undefined,
+      industryTemplate: salon.industryTemplate,
+      businessType: salon.businessType,
     };
   } catch {
     return null;

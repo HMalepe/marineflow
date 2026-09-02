@@ -48,17 +48,24 @@ export function buildMainMenuInteractive(salon: SalonMenuInput): InteractiveList
 
 function mainMenuRowDescription(item: ReturnType<typeof getMainMenuItems>[number]): string {
   if (item.kind === 'direct') {
-    return item.action === 'book' ? 'Pick a service, date & time' : '';
+    if (item.action === 'book') {
+      return item.label.toLowerCase().includes('delivery')
+        ? 'Build a cart & choose delivery'
+        : 'Pick a service, date & time';
+    }
+    return '';
   }
   switch (item.id) {
     case 'my_appointments':
-      return 'View, reschedule or cancel';
+      return item.label === 'My Orders'
+        ? 'History, track & reorder the usual'
+        : 'View, reschedule or cancel';
     case 'services':
-      return 'Browse treatments & pricing';
+      return item.label === 'Products' ? 'Browse flower, edibles & more' : 'Browse treatments & pricing';
     case 'rewards':
       return 'Your stamps, rewards & referrals';
     case 'promotions':
-      return 'Specials, packages & gift vouchers';
+      return item.label.includes('Deals') ? 'Limited drops & member deals' : 'Specials, packages & gift vouchers';
     case 'about':
       return 'Hours, location & contact';
     case 'support':

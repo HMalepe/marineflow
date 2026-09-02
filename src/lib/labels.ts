@@ -1,13 +1,14 @@
 /** Coarse tenant category — distinct from `industryTemplate` (vertical copy/vocabulary). */
 
-export type BusinessType = 'SALON' | 'RESTAURANT' | 'CAR_WASH' | 'OTHER';
+export type BusinessType = 'SALON' | 'RESTAURANT' | 'CAR_WASH' | 'RETAIL' | 'OTHER';
 
-export const BUSINESS_TYPES: BusinessType[] = ['SALON', 'RESTAURANT', 'CAR_WASH', 'OTHER'];
+export const BUSINESS_TYPES: BusinessType[] = ['SALON', 'RESTAURANT', 'CAR_WASH', 'RETAIL', 'OTHER'];
 
 const BUSINESS_TYPE_LABELS: Record<BusinessType, string> = {
   SALON: 'Salon & beauty',
   RESTAURANT: 'Restaurant',
   CAR_WASH: 'Car wash',
+  RETAIL: 'Retail & dispensary',
   OTHER: 'Other business',
 };
 
@@ -16,6 +17,7 @@ const BUSINESS_TYPE_SHORT_LABELS: Record<BusinessType, string> = {
   SALON: 'Salon',
   RESTAURANT: 'Restaurant',
   CAR_WASH: 'Car wash',
+  RETAIL: 'Retail',
   OTHER: 'Other',
 };
 
@@ -38,6 +40,8 @@ export function businessTypeFromIndustryTemplate(template: string): BusinessType
       return 'RESTAURANT';
     case 'carwash':
       return 'CAR_WASH';
+    case 'dispensary':
+      return 'RETAIL';
     case 'fitness':
     case 'clinic':
       return 'OTHER';

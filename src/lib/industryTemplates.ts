@@ -9,7 +9,8 @@ export type IndustryTemplateId =
   | 'fitness'
   | 'clinic'
   | 'petgrooming'
-  | 'carwash';
+  | 'carwash'
+  | 'dispensary';
 
 export const INDUSTRY_TEMPLATE_IDS: IndustryTemplateId[] = [
   'salon',
@@ -20,6 +21,7 @@ export const INDUSTRY_TEMPLATE_IDS: IndustryTemplateId[] = [
   'clinic',
   'petgrooming',
   'carwash',
+  'dispensary',
 ];
 
 export function isIndustryTemplateId(value: unknown): value is IndustryTemplateId {
@@ -166,6 +168,24 @@ export const INDUSTRY_TEMPLATES: Record<IndustryTemplateId, IndustryTemplate> = 
       wash: ['wash', 'exterior', 'quick wash'],
       valet: ['valet', 'interior', 'full valet', 'detailing'],
       protection: ['wax', 'polish', 'ceramic', 'coating'],
+    },
+  },
+  dispensary: {
+    id: 'dispensary',
+    label: 'Cannabis Dispensary',
+    bookAction: 'Order for delivery',
+    servicesLabel: 'Products',
+    providerNoun: 'budtender',
+    providerNounPlural: 'Budtenders',
+    bookingExample: 'order flower for delivery',
+    nextBookingNoun: 'order',
+    serviceCategoryAliases: {
+      flower: ['flower', 'herb', 'indica', 'sativa', 'hybrid', 'weed', 'bud', 'greenhouse'],
+      preroll: ['pre-roll', 'preroll', 'joint', 'blunt', 'moonstick', 'tunnel'],
+      edible: ['edible', 'medible', 'gummy', 'gummies', 'chocolate', 'cookie', 'strip'],
+      concentrate: ['hash', 'rosin', 'diamond', 'badder', 'crumble', 'honeycomb', 'dab'],
+      vape: ['vape', 'cart', 'cartridge', 'disposable', 'resin'],
+      caps: ['cap', 'caps', 'capsule', 'capsules'],
     },
   },
 };

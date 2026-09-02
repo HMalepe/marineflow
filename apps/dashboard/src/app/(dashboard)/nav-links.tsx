@@ -17,6 +17,7 @@ interface NavLinksProps {
   isAdmin: boolean;
   isOwner: boolean;
   handoffCount?: number;
+  industryTemplate?: string | null;
 }
 
 function NavSection({
@@ -65,7 +66,12 @@ function NavItemLink({
   );
 }
 
-export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) {
+export function NavLinks({
+  isAdmin,
+  isOwner,
+  handoffCount = 0,
+  industryTemplate,
+}: NavLinksProps) {
   const pathname = usePathname();
   const liveHandoffCount = useHandoffCount(handoffCount);
 
@@ -87,7 +93,7 @@ export function NavLinks({ isAdmin, isOwner, handoffCount = 0 }: NavLinksProps) 
     );
   }
 
-  const groups = visibleSalonNavGroups(isOwner);
+  const groups = visibleSalonNavGroups(isOwner, industryTemplate);
 
   return (
     <div className="space-y-4">

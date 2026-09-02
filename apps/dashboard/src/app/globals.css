@@ -1181,3 +1181,54 @@ body::before {
 .animate-marquee {
   animation: pulse-marquee 40s linear infinite;
 }
+
+/* -- Dispensary / Bart Marley retail theme ----------------------------- */
+.theme-dispensary {
+  --solupair-cyan: oklch(0.78 0.12 155);
+  --solupair-violet: oklch(0.42 0.12 150);
+  --solupair-magenta: oklch(0.62 0.14 85);
+  --solupair-gradient: linear-gradient(
+    135deg,
+    oklch(0.72 0.14 145) 0%,
+    oklch(0.38 0.1 155) 48%,
+    oklch(0.58 0.12 95) 100%
+  );
+  --solupair-gradient-soft: linear-gradient(
+    135deg,
+    oklch(0.78 0.1 155 / 0.16) 0%,
+    oklch(0.42 0.1 150 / 0.12) 50%,
+    oklch(0.62 0.12 90 / 0.1) 100%
+  );
+  --solupair-glow: 0 0 32px -8px oklch(0.45 0.12 150 / 0.4);
+  --solupair-glow-strong: 0 0 48px -6px oklch(0.55 0.14 140 / 0.45);
+  --chat-thread-gradient: linear-gradient(
+    168deg,
+    oklch(0.98 0.02 145) 0%,
+    oklch(0.96 0.035 150) 40%,
+    oklch(0.94 0.045 140) 100%
+  );
+}
+
+.theme-dispensary .dashboard-sidebar-shell {
+  background:
+    radial-gradient(ellipse 80% 50% at 10% 0%, oklch(0.55 0.12 145 / 0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 100%, oklch(0.5 0.1 95 / 0.12) 0%, transparent 50%),
+    var(--background);
+}
+
+.theme-dispensary .dashboard-main-shell {
+  background:
+    radial-gradient(ellipse 70% 45% at 80% -10%, oklch(0.65 0.1 145 / 0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 35% at 0% 100%, oklch(0.55 0.08 95 / 0.08) 0%, transparent 50%),
+    var(--background);
+}
+
+.theme-dispensary .nav-link-active {
+  background: linear-gradient(135deg, oklch(0.55 0.12 145 / 0.22), oklch(0.45 0.1 155 / 0.16));
+  border-color: oklch(0.55 0.12 145 / 0.35);
+  color: oklch(0.92 0.04 145);
+}
+
+.dark .theme-dispensary .nav-link-active {
+  color: oklch(0.92 0.05 145);
+}

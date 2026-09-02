@@ -48,12 +48,13 @@ function SectionPill({ id, label }: PageSectionLink) {
 
 interface Props {
   isAdmin: boolean;
+  industryTemplate?: string | null;
 }
 
-export function PageSectionNav({ isAdmin }: Props) {
+export function PageSectionNav({ isAdmin, industryTemplate }: Props) {
   const pathname = usePathname();
   const [sections, setSections] = useState<PageSectionLink[]>([]);
-  const pageTitle = pageTitleForPath(pathname, isAdmin);
+  const pageTitle = pageTitleForPath(pathname, isAdmin, industryTemplate);
 
   const rescan = useCallback(() => {
     setSections(collectPageSections());

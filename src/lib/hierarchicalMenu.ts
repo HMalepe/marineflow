@@ -51,12 +51,19 @@ export function getMainMenuItems(
   salon: Pick<SalonMenuInput, 'botLoyaltyEnabled' | 'industryTemplate'>,
 ): MainMenuItem[] {
   const template = getIndustryTemplate(salon.industryTemplate);
+  const isDispensary = salon.industryTemplate === 'dispensary';
   const items = MAIN_MENU_ITEMS.map((item) => {
     if (item.kind === 'direct' && item.action === 'book') {
       return { ...item, label: template.bookAction };
     }
     if (item.kind === 'category' && item.id === 'services') {
       return { ...item, label: template.servicesLabel };
+    }
+    if (item.kind === 'category' && item.id === 'my_appointments' && isDispensary) {
+      return { ...item, label: 'My Orders' };
+    }
+    if (item.kind === 'category' && item.id === 'promotions' && isDispensary) {
+      return { ...item, label: 'Deals & Drops' };
     }
     return item;
   });
@@ -108,13 +115,20 @@ export function buildMainMenuText(salon: SalonMenuInput): string {
       : {};
   const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
   const specialLine = special ? `\n🌟 *Special:* ${special}` : '';
+  const isDispensary = salon.industryTemplate === 'dispensary';
+  const freeTextHint = isDispensary
+    ? '💬 Or tell me what you want — e.g. "2g indica" or "CBD oil delivery" — and I\'ll build your order.'
+    : '💬 Or just tell me what you need — e.g. "Monday 15:00 low fade" — and I\'ll book it for you.';
   return [
     welcome,
     ...lines,
     '',
-    '💬 Or just tell me what you need — e.g. "Monday 15:00 low fade" — and I\'ll book it for you.',
+    freeTextHint,
     'Reply BACK anytime for this menu.',
-  ].join('\n') + specialLine;
+    isDispensary ? 'Reply SWITCH to choose another business.' : '',
+  ]
+    .filter(Boolean)
+    .join('\n') + specialLine;
 }
 
 export function buildSubMenuText(categoryId: MenuCategoryId | LegacyMenuCategoryId): string {

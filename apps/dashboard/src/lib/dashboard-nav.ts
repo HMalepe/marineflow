@@ -4,9 +4,11 @@
 export const OVERVIEW_LABEL = 'Today at a glance';
 export const OVERVIEW_MOBILE_TAB_LABEL = 'Today';
 export const APPOINTMENTS_LABEL = 'Bookings';
+export const ORDERS_LABEL = 'Orders';
 export const CONVERSATIONS_LABEL = 'Inbox';
 export const TICKETS_LABEL = 'Help requests';
 export const CUSTOMERS_LABEL = 'Clients';
+export const BUYERS_LABEL = 'Buyers';
 export const ANALYTICS_LABEL = 'Insights';
 export const BOT_FAQS_LABEL = 'Bot FAQs';
 export const BRANCHES_LABEL = 'Branches';
@@ -28,6 +30,8 @@ export type NavGroup = {
   title: string;
   items: NavItem[];
 };
+
+export type DashboardIndustry = 'salon' | 'dispensary' | string;
 
 export const SALON_OVERVIEW_ITEM: NavItem = { href: '/', label: OVERVIEW_LABEL };
 
@@ -70,6 +74,42 @@ export const SALON_NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+/** Dispensary / retail nav — same routes where possible, retail vocabulary. */
+export const DISPENSARY_NAV_GROUPS: NavGroup[] = [
+  {
+    title: 'Run the shop',
+    items: [
+      { href: '/orders', label: ORDERS_LABEL },
+      { href: '/inventory', label: 'Inventory' },
+      { href: '/conversations', label: CONVERSATIONS_LABEL },
+      { href: '/customers', label: BUYERS_LABEL },
+      { href: '/tickets', label: TICKETS_LABEL },
+    ],
+  },
+  {
+    title: 'Catalogue & ops',
+    items: [
+      { href: '/services', label: 'Products' },
+      { href: '/faqs', label: BOT_FAQS_LABEL },
+      { href: '/settings', label: 'Delivery & settings' },
+    ],
+  },
+  {
+    title: 'Growth',
+    items: [
+      { href: '/campaigns', label: 'Drops & newsletter' },
+      { href: '/automations', label: 'Automations' },
+      { href: '/analytics', label: ANALYTICS_LABEL },
+    ],
+  },
+  {
+    title: 'Account',
+    items: [
+      { href: '/billing', label: 'Billing', ownerOnly: true },
+    ],
+  },
+];
+
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Overview' },
   { href: '/admin', label: 'Businesses' },
@@ -80,8 +120,15 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
 /** True when pathname matches a nav href (including roster ↔ staff alias). */
 export function isNavItemActive(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
-  if (href === '/appointments') {
-    return pathname.startsWith('/appointments') || (pathname.includes('/branch/') && pathname.includes('/appointments'));
+  if (href === '/appointments' || href === '/orders') {
+    return (
+      pathname.startsWith('/appointments') ||
+      pathname.startsWith('/orders') ||
+      (pathname.includes('/branch/') && pathname.includes('/appointments'))
+    );
+  }
+  if (href === '/inventory') {
+    return pathname.startsWith('/inventory');
   }
   if (href === '/pulse') {
     return pathname.startsWith('/pulse');
@@ -107,11 +154,23 @@ export function isNavItemActive(pathname: string, href: string): boolean {
  */
 const PILOT_HIDDEN_HREFS = new Set(['/pulse', '/tickets', '/branches', '/campaigns', '/team-performance']);
 
-export function visibleSalonNavGroups(isOwner: boolean): NavGroup[] {
-  return SALON_NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !item.ownerOnly || isOwner).filter((item) => !PILOT_HIDDEN_HREFS.has(item.href)),
-  })).filter((group) => group.items.length > 0);
+export function salonNavGroupsForIndustry(industry: DashboardIndustry | null | undefined): NavGroup[] {
+  return industry === 'dispensary' ? DISPENSARY_NAV_GROUPS : SALON_NAV_GROUPS;
+}
+
+export function visibleSalonNavGroups(
+  isOwner: boolean,
+  industry?: DashboardIndustry | null,
+): NavGroup[] {
+  const hidePilotExtras = industry !== 'dispensary';
+  return salonNavGroupsForIndustry(industry)
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .filter((item) => !item.ownerOnly || isOwner)
+        .filter((item) => !hidePilotExtras || !PILOT_HIDDEN_HREFS.has(item.href)),
+    }))
+    .filter((group) => group.items.length > 0);
 }
 
 /** Bottom tab bar on mobile — high-frequency destinations. */
@@ -123,14 +182,28 @@ export const MOBILE_BOTTOM_TAB_ITEMS: NavItem[] = [
   { href: '/services', label: 'Services' },
 ];
 
-const MOBILE_TAB_HREFS = new Set(MOBILE_BOTTOM_TAB_ITEMS.map((item) => item.href));
+export const DISPENSARY_MOBILE_BOTTOM_TAB_ITEMS: NavItem[] = [
+  { href: '/', label: OVERVIEW_MOBILE_TAB_LABEL },
+  { href: '/orders', label: ORDERS_LABEL },
+  { href: '/inventory', label: 'Stock' },
+  { href: '/conversations', label: CONVERSATIONS_LABEL },
+  { href: '/services', label: 'Products' },
+];
+
+export function mobileBottomTabItems(industry?: DashboardIndustry | null): NavItem[] {
+  return industry === 'dispensary' ? DISPENSARY_MOBILE_BOTTOM_TAB_ITEMS : MOBILE_BOTTOM_TAB_ITEMS;
+}
 
 /** Salon items for the mobile More sheet (excludes bottom tabs), grouped like desktop. */
-export function mobileMoreNavGroups(isOwner: boolean): NavGroup[] {
-  return visibleSalonNavGroups(isOwner)
+export function mobileMoreNavGroups(
+  isOwner: boolean,
+  industry?: DashboardIndustry | null,
+): NavGroup[] {
+  const tabs = new Set(mobileBottomTabItems(industry).map((item) => item.href));
+  return visibleSalonNavGroups(isOwner, industry)
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !MOBILE_TAB_HREFS.has(item.href)),
+      items: group.items.filter((item) => !tabs.has(item.href)),
     }))
     .filter((group) => group.items.length > 0);
 }
@@ -149,45 +222,63 @@ export function adminMobileMoreItems(): NavItem[] {
 }
 
 /** Human-readable title for the sticky in-page nav (not duplicated in the sidebar). */
-export function pageTitleForPath(pathname: string, isAdmin: boolean): string {
+export function pageTitleForPath(
+  pathname: string,
+  isAdmin: boolean,
+  industry?: DashboardIndustry | null,
+): string {
+  const retail = industry === 'dispensary';
   if (pathname === '/') return isAdmin ? 'Platform overview' : OVERVIEW_LABEL;
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return 'Businesses';
+  if (pathname.startsWith('/orders')) return ORDERS_LABEL;
+  if (pathname.startsWith('/inventory')) return 'Inventory';
   if (pathname.startsWith('/appointments') || (pathname.includes('/branch/') && pathname.includes('/appointments'))) {
-    return APPOINTMENTS_LABEL;
+    return retail ? ORDERS_LABEL : APPOINTMENTS_LABEL;
   }
   if (pathname.startsWith('/pulse')) return 'Live Pulse';
   if (pathname.startsWith('/conversations')) return CONVERSATIONS_LABEL;
-  if (pathname.startsWith('/customers')) return CUSTOMERS_LABEL;
+  if (pathname.startsWith('/customers')) return retail ? BUYERS_LABEL : CUSTOMERS_LABEL;
   if (pathname.startsWith('/tickets')) return TICKETS_LABEL;
-  if (pathname.startsWith('/services')) return 'Services';
+  if (pathname.startsWith('/services')) return retail ? 'Products' : 'Services';
   if (pathname.startsWith('/roster') || pathname.startsWith('/staff')) return 'Staff Roster';
   if (pathname.startsWith('/branches') || pathname.startsWith('/branch/')) return BRANCHES_LABEL;
   if (pathname.startsWith('/faqs')) return BOT_FAQS_LABEL;
-  if (pathname.startsWith('/campaigns')) return 'Newsletter';
-  if (pathname.startsWith('/automations')) return 'Power Features';
+  if (pathname.startsWith('/campaigns')) return retail ? 'Drops & newsletter' : 'Newsletter';
+  if (pathname.startsWith('/automations')) return retail ? 'Automations' : 'Power Features';
   if (pathname.startsWith('/team-performance')) return 'Team Performance';
   if (pathname.startsWith('/analytics')) return ANALYTICS_LABEL;
   if (pathname.startsWith('/billing')) return 'Billing';
-  if (pathname.startsWith('/settings')) return 'Settings';
+  if (pathname.startsWith('/settings')) return retail ? 'Delivery & settings' : 'Settings';
   if (pathname.startsWith('/agency')) return 'Agency';
   return 'Dashboard';
 }
 
 /** @deprecated Sticky header now uses in-page section nav — kept for tests or legacy callers. */
-export function flatDashboardNavItems(input: { isAdmin: boolean; isOwner: boolean }): NavItem[] {
+export function flatDashboardNavItems(input: {
+  isAdmin: boolean;
+  isOwner: boolean;
+  industry?: DashboardIndustry | null;
+}): NavItem[] {
   if (input.isAdmin) return ADMIN_NAV_ITEMS;
   return [
     SALON_OVERVIEW_ITEM,
-    ...visibleSalonNavGroups(input.isOwner).flatMap((g) => g.items),
+    ...visibleSalonNavGroups(input.isOwner, input.industry).flatMap((g) => g.items),
   ];
 }
 
 /** Grouped items for sticky header — preserves section labels. */
-export function stickyHeaderNavGroups(input: { isAdmin: boolean; isOwner: boolean }): NavGroup[] {
+export function stickyHeaderNavGroups(input: {
+  isAdmin: boolean;
+  isOwner: boolean;
+  industry?: DashboardIndustry | null;
+}): NavGroup[] {
   if (input.isAdmin) {
     return [{ title: 'Platform', items: ADMIN_NAV_ITEMS }];
   }
-  return [{ title: OVERVIEW_LABEL, items: [SALON_OVERVIEW_ITEM] }, ...visibleSalonNavGroups(input.isOwner)];
+  return [
+    { title: OVERVIEW_LABEL, items: [SALON_OVERVIEW_ITEM] },
+    ...visibleSalonNavGroups(input.isOwner, input.industry),
+  ];
 }
 
 export type SettingsSectionLink = { id: string; label: string };

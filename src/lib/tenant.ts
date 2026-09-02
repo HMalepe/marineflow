@@ -17,6 +17,7 @@ export type ResolvedTenant = Pick<
   | 'botName'
   | 'whatsappPhoneId'
   | 'twilioWhatsAppNumber'
+  | 'isBusinessRouter'
 >;
 
 const tenantSelect = {
@@ -28,6 +29,7 @@ const tenantSelect = {
   botName: true,
   whatsappPhoneId: true,
   twilioWhatsAppNumber: true,
+  isBusinessRouter: true,
 } as const;
 
 /** Platform registry lookup — Salon has no RLS. */

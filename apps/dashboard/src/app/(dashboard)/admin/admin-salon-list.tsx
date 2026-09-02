@@ -49,6 +49,7 @@ const INDUSTRY_TEMPLATE_OPTIONS = [
   { value: 'clinic', label: 'Medical / Dental Clinic' },
   { value: 'petgrooming', label: 'Pet Grooming' },
   { value: 'carwash', label: 'Car Wash & Detailing' },
+  { value: 'dispensary', label: 'Cannabis Dispensary' },
 ];
 
 interface CreatedSalonCredentials {
@@ -536,7 +537,7 @@ export function AdminSalonList({ token }: Props) {
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">
-                Controls bot menu wording (e.g. &quot;Book a table&quot; vs &quot;Book an appointment&quot;) — the flow stays the same.
+                Controls bot menu wording and checkout style — e.g. salon booking vs cannabis delivery orders.
               </p>
             </div>
             <SheetFooter className="px-0">

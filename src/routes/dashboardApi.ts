@@ -347,12 +347,24 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       });
       const salon = await db.salon.findUniqueOrThrow({
         where: { id: user.salonId },
-        select: { name: true, tradingName: true },
+        select: {
+          name: true,
+          tradingName: true,
+          industryTemplate: true,
+          businessType: true,
+          logoUrl: true,
+        },
       });
       const displayName = salon.tradingName?.trim() || salon.name;
       return {
         user: u,
-        salon: { displayName, whatsappName: salon.name },
+        salon: {
+          displayName,
+          whatsappName: salon.name,
+          industryTemplate: salon.industryTemplate,
+          businessType: salon.businessType,
+          logoUrl: salon.logoUrl,
+        },
       };
     });
   });
@@ -1015,6 +1027,92 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { appointments: rows };
     });
   });
+
+  app.get('/retail-orders', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      const db = getTenantDb();
+      const q = request.query as { status?: string; limit?: string };
+      const take = Math.min(200, Math.max(1, Number.parseInt(q.limit ?? '80', 10) || 80));
+      const status = q.status?.trim() || undefined;
+      const rows = await db.retailOrder.findMany({
+        where: {
+          salonId: user.salonId,
+          ...(status ? { status: status as never } : {}),
+        },
+        include: {
+          items: true,
+          customer: {
+            select: {
+              id: true,
+              displayName: true,
+              firstName: true,
+              lastName: true,
+              waId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take,
+      });
+      return { orders: rows };
+    });
+  });
+
+  app.patch<{ Params: { id: string }; Body: { status?: string } }>(
+    '/retail-orders/:id',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'RECEPTIONIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const status = request.body?.status?.trim();
+        const allowed = new Set([
+          'DRAFT',
+          'PENDING_PAYMENT',
+          'PAID',
+          'PREPARING',
+          'OUT_FOR_DELIVERY',
+          'READY_FOR_COLLECTION',
+          'COMPLETED',
+          'CANCELLED',
+        ]);
+        if (!status || !allowed.has(status)) {
+          reply.code(400);
+          return { error: 'invalid_status' };
+        }
+        const existing = await db.retailOrder.findFirst({
+          where: { id: request.params.id, salonId: user.salonId },
+        });
+        if (!existing) {
+          reply.code(404);
+          return { error: 'not_found' };
+        }
+        const order = await db.retailOrder.update({
+          where: { id: existing.id },
+          data: {
+            status: status as never,
+            ...(status === 'COMPLETED' ? { completedAt: new Date() } : {}),
+            ...(status === 'CANCELLED' ? { cancelledAt: new Date() } : {}),
+          },
+          include: {
+            items: true,
+            customer: {
+              select: {
+                waId: true,
+                displayName: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        });
+
+        const { notifyRetailOrderStatusLater } = await import('../services/retailOrderNotify.js');
+        notifyRetailOrderStatusLater(order, order.status);
+
+        return { order };
+      });
+    },
+  );
 
   app.post<{ Params: { id: string } }>(
     '/appointments/:id/send-payment-link',
@@ -3048,6 +3146,9 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       removeFromCatalog?: boolean;
       categoryId?: string | null;
       aftercareNote?: string | null;
+      trackInventory?: boolean;
+      stockQty?: number;
+      lowStockThreshold?: number;
     };
   }>(
     '/services/:id',
@@ -3063,8 +3164,20 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           return { error: 'not_found', message: 'Service not found.' };
         }
 
-        const { name, description, priceCents, durationMin, bufferMin, active, removeFromCatalog, categoryId, aftercareNote } =
-          request.body;
+        const {
+          name,
+          description,
+          priceCents,
+          durationMin,
+          bufferMin,
+          active,
+          removeFromCatalog,
+          categoryId,
+          aftercareNote,
+          trackInventory,
+          stockQty,
+          lowStockThreshold,
+        } = request.body;
 
         if (removeFromCatalog) {
           try {
@@ -3092,9 +3205,20 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           reply.code(400);
           return { error: 'invalid_price' };
         }
-        if (durationMin !== undefined && (!Number.isFinite(durationMin) || durationMin < 1)) {
+        if (durationMin !== undefined && (!Number.isFinite(durationMin) || durationMin < 0)) {
           reply.code(400);
           return { error: 'invalid_duration' };
+        }
+        if (stockQty !== undefined && (!Number.isFinite(stockQty) || stockQty < 0)) {
+          reply.code(400);
+          return { error: 'invalid_stock' };
+        }
+        if (
+          lowStockThreshold !== undefined &&
+          (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 0)
+        ) {
+          reply.code(400);
+          return { error: 'invalid_low_stock_threshold' };
         }
 
         if (categoryId !== undefined && categoryId) {
@@ -3118,6 +3242,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(active !== undefined && { active }),
             ...(categoryId !== undefined && { categoryId: categoryId || null }),
             ...(aftercareNote !== undefined && { aftercareNote: aftercareNote?.trim() || null }),
+            ...(trackInventory !== undefined && { trackInventory: !!trackInventory }),
+            ...(stockQty !== undefined && { stockQty: Math.round(stockQty) }),
+            ...(lowStockThreshold !== undefined && {
+              lowStockThreshold: Math.round(lowStockThreshold),
+            }),
           },
         });
 
@@ -3128,11 +3257,67 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             action: 'service_update',
             entity: 'Service',
             entityId: existing.id,
+            payload: {
+              trackInventory: updated.trackInventory,
+              stockQty: updated.stockQty,
+            },
           },
         });
 
         syncSalonRosterLater(user.salonId, 'services', { serviceId: updated.id, action: 'update' });
         return { service: updated };
+      });
+    },
+  );
+
+  app.post<{
+    Body: {
+      updates: { id: string; stockQty?: number; trackInventory?: boolean; lowStockThreshold?: number; active?: boolean }[];
+    };
+  }>(
+    '/inventory/bulk',
+    { preHandler: requireRole('OWNER', 'MANAGER', 'RECEPTIONIST') },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async (user) => {
+        const db = getTenantDb();
+        const updates = Array.isArray(request.body?.updates) ? request.body.updates : [];
+        if (updates.length === 0) {
+          reply.code(400);
+          return { error: 'updates_required' };
+        }
+        if (updates.length > 200) {
+          reply.code(400);
+          return { error: 'too_many_updates' };
+        }
+
+        let updated = 0;
+        for (const row of updates) {
+          if (!row?.id) continue;
+          const existing = await db.service.findFirst({
+            where: { id: row.id, salonId: user.salonId, deletedAt: null },
+            select: { id: true },
+          });
+          if (!existing) continue;
+          await db.service.update({
+            where: { id: existing.id },
+            data: {
+              ...(row.stockQty !== undefined &&
+                Number.isFinite(row.stockQty) &&
+                row.stockQty >= 0 && { stockQty: Math.round(row.stockQty) }),
+              ...(row.trackInventory !== undefined && { trackInventory: !!row.trackInventory }),
+              ...(row.lowStockThreshold !== undefined &&
+                Number.isFinite(row.lowStockThreshold) &&
+                row.lowStockThreshold >= 0 && {
+                  lowStockThreshold: Math.round(row.lowStockThreshold),
+                }),
+              ...(row.active !== undefined && { active: !!row.active }),
+            },
+          });
+          updated += 1;
+        }
+
+        syncSalonRosterLater(user.salonId, 'services', { action: 'inventory_bulk', updated });
+        return { ok: true, updated };
       });
     },
   );

@@ -22,15 +22,17 @@ export function getTwilioClient(): ReturnType<typeof twilio> | null {
 
 /**
  * Resolve the outbound WhatsApp From address for a tenant.
- * Throws if the tenant has no twilioWhatsAppNumber — never falls back to env.
+ * Uses the tenant’s own number, or the shared business-router number when linked.
  */
 export async function getTenantWhatsAppFrom(tenantId: string): Promise<string> {
-  const salon = await prisma.salon.findFirst({
-    where: { id: tenantId, deletedAt: null },
-    select: { twilioWhatsAppNumber: true, name: true, slug: true },
-  });
-  const raw = salon?.twilioWhatsAppNumber?.trim();
+  const { resolveOutboundWhatsAppChannel } = await import('./businessRouter.js');
+  const channel = await resolveOutboundWhatsAppChannel(tenantId);
+  const raw = channel.twilioWhatsAppNumber?.trim();
   if (!raw) {
+    const salon = await prisma.salon.findFirst({
+      where: { id: tenantId, deletedAt: null },
+      select: { slug: true },
+    });
     throw new Error(
       `Tenant ${tenantId}${salon ? ` (${salon.slug})` : ''} has no twilioWhatsAppNumber configured`,
     );

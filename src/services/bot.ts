@@ -13,6 +13,7 @@ import { getTenantDb, tryDbSavepoint, withTenantContext } from '../lib/db/tenant
 import { prisma } from '../lib/prisma.js';
 import {
   assertTenantActive,
+  findSalonById,
   resolveTenantForInbound,
   type ResolvedTenant,
 } from '../lib/tenant.js';
@@ -89,6 +90,15 @@ import {
   computeAppointmentEnd,
 } from './botPowerFeatures.js';
 import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
+import { resolveOperatingTenantViaRouter } from './businessRouterBot.js';
+import {
+  handleRetailStep,
+  listRetailOrders,
+  shouldUseRetailOrderFlow,
+  startRetailOrderFlow,
+  tryRetailProductQuickAdd,
+} from './retailBot.js';
+import { isSwitchBusinessCommand } from '../lib/businessRouter.js';
 import {
   claimReviewIncentive,
   applyReviewCreditTx,
@@ -1109,15 +1119,62 @@ export async function handleInboundWhatsApp(input: {
   let lockKey = '';
 
   try {
-    const tenant = await resolveTenantForInbound({
+    const resolved = await resolveTenantForInbound({
       twilioTo: input.twilioTo,
       metaPhoneNumberId: input.metaPhoneNumberId,
     });
-    logger.info({ tenantId: tenant?.id ?? null, tenantSlug: tenant?.slug ?? null, twilioTo: input.twilioTo }, 'bot_tenant_resolved');
-    if (!tenant) {
+    logger.info({ tenantId: resolved?.id ?? null, tenantSlug: resolved?.slug ?? null, twilioTo: input.twilioTo }, 'bot_tenant_resolved');
+    if (!resolved) {
       logger.error({ twilioTo: input.twilioTo }, 'tenant_not_resolved');
       inboundStatus = 'UNHANDLED';
       return;
+    }
+
+    let tenant = resolved;
+    let textForBot = text;
+
+    // Registered delivery drivers: ACCEPT/DECLINE on the shared number (before business picker)
+    {
+      const { tryHandleDriverWhatsApp } = await import('./retailDriverDispatch.js');
+      if (await tryHandleDriverWhatsApp({ waId, text })) {
+        inboundSalonId = tenant.id;
+        return;
+      }
+    }
+
+    // Shared WhatsApp number → business picker (Bontle / Bart Marley)
+    if (tenant.isBusinessRouter) {
+      const routed = await resolveOperatingTenantViaRouter({
+        routerTenant: tenant,
+        waId,
+        text,
+      });
+      if (routed.handled) {
+        inboundSalonId = tenant.id;
+        return;
+      }
+      tenant = routed.tenant;
+      if (routed.textOverride) textForBot = routed.textOverride;
+    }
+
+    // From an operating salon, SWITCH re-asks the shared picker via the router
+    if (isSwitchBusinessCommand(textForBot) && !tenant.isBusinessRouter) {
+      const { findRouterForLinkedSalon } = await import('../lib/businessRouter.js');
+      const router = await findRouterForLinkedSalon(tenant.id);
+      if (router) {
+        const routerTenant = await findSalonById(router.id);
+        if (routerTenant) {
+          const routed = await resolveOperatingTenantViaRouter({
+            routerTenant,
+            waId,
+            text: 'switch',
+          });
+          if (routed.handled) {
+            inboundSalonId = router.id;
+            return;
+          }
+        }
+      }
     }
 
     inboundSalonId = tenant.id;
@@ -1140,7 +1197,7 @@ export async function handleInboundWhatsApp(input: {
       return;
     }
 
-    logger.info({ tenantId: tenant.id, waId, textLen: text.length }, 'bot_processing');
+    logger.info({ tenantId: tenant.id, waId, textLen: textForBot.length }, 'bot_processing');
 
     // EC-19: Per-user Redis mutex to serialise concurrent messages from the same number
     lockKey = `conv:lock:${tenant.id}:${waId}`;
@@ -1167,7 +1224,7 @@ export async function handleInboundWhatsApp(input: {
           await withTenantContext(tenant.id, async () => {
             await processInboundWhatsApp(tenant, {
               waId,
-              text,
+              text: textForBot,
               messageSid: input.messageSid,
               profileName: input.profileName,
             });
@@ -2587,6 +2644,13 @@ async function routeConversation(
     case ConversationStep.IDLE:
       await handleMenu(conv, t);
       break;
+    case ConversationStep.RETAIL_BROWSE:
+    case ConversationStep.RETAIL_CART:
+    case ConversationStep.RETAIL_FULFILLMENT:
+    case ConversationStep.RETAIL_ADDRESS:
+    case ConversationStep.RETAIL_CONFIRM:
+      await handleRetailStep(conv, t);
+      break;
     case ConversationStep.MARKETING_CONSENT:
       await handleMarketingConsentFlow(conv, t);
       break;
@@ -3449,12 +3513,20 @@ async function handleMainMenuSelection(
   selection: NonNullable<ReturnType<typeof parseMainMenuSelection>>,
 ): Promise<void> {
   if (selection.kind === 'direct' && selection.action === 'book') {
+    if (shouldUseRetailOrderFlow(conv.salon)) {
+      await startRetailOrderFlow(conv);
+      return;
+    }
     await menuActionStartBooking(conv);
     return;
   }
   if (selection.kind === 'category') {
     if (selection.id === 'rewards' && !conv.salon.botLoyaltyEnabled) {
       await replyWithMenu(conv, 'Rewards are not available at this salon right now.');
+      return;
+    }
+    if (selection.id === 'my_appointments' && shouldUseRetailOrderFlow(conv.salon)) {
+      await listRetailOrders(conv);
       return;
     }
     if (selection.id === 'services') {
@@ -3619,15 +3691,36 @@ async function handleMenu(
     return;
   }
 
+  if (shouldUseRetailOrderFlow(conv.salon)) {
+    const lower = trimmed.toLowerCase();
+    if (lower === 'usual' || lower === 'the usual') {
+      await startRetailOrderFlow(conv);
+      return;
+    }
+    if (lower === 'history' || lower === 'orders' || lower === 'my orders') {
+      await listRetailOrders(conv);
+      return;
+    }
+  }
+
+  if (shouldUseRetailOrderFlow(conv.salon)) {
+    const quick = await tryRetailProductQuickAdd(conv, trimmed);
+    if (quick.handled) return;
+  }
+
   const bookingExample = getIndustryTemplate(conv.salon.industryTemplate).bookingExample;
   await reply(
     conv,
     [
-      'I\'m not sure I caught that — I\'m best at helping with bookings, prices, and salon info. 😊',
+      shouldUseRetailOrderFlow(conv.salon)
+        ? "I'm not sure I caught that — I can help you order products, track deliveries, and answer menu questions. 🌿"
+        : "I'm not sure I caught that — I'm best at helping with bookings, prices, and salon info. 😊",
       '',
       'Type *MENU* to see everything I can help with, or just ask me something like:',
       `• "I want to ${bookingExample}"`,
-      '• "What are your prices?"',
+      shouldUseRetailOrderFlow(conv.salon)
+        ? '• "What indica do you have?"'
+        : '• "What are your prices?"',
       '• "What time do you open?"',
     ].join('\n'),
   );
