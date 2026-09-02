@@ -354,11 +354,20 @@ async function main() {
   const keepNames = new Set(CANNABIS_CATALOG.flatMap((c) => c.items.map((i) => i.name)));
   let sort = 0;
   for (const cat of CANNABIS_CATALOG) {
-    const category = await prisma.serviceCategory.upsert({
-      where: { salonId_slug: { salonId: bart.id, slug: cat.slug } },
-      create: { salonId: bart.id, name: cat.category, slug: cat.slug, sortOrder: sort++ },
-      update: { name: cat.category, sortOrder: sort - 1 },
+    // findFirst+create/update: production may lack salonId+slug unique (Prisma upsert needs it)
+    let category = await prisma.serviceCategory.findFirst({
+      where: { salonId: bart.id, slug: cat.slug },
     });
+    if (category) {
+      category = await prisma.serviceCategory.update({
+        where: { id: category.id },
+        data: { name: cat.category, sortOrder: sort++ },
+      });
+    } else {
+      category = await prisma.serviceCategory.create({
+        data: { salonId: bart.id, name: cat.category, slug: cat.slug, sortOrder: sort++ },
+      });
+    }
     let itemSort = 0;
     for (const item of cat.items) {
       const existing = await prisma.service.findFirst({
