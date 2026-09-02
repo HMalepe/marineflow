@@ -14,12 +14,29 @@
  *   BONTLE_SLUG=bontle-entle           # existing salon slug to link
  *   TWILIO_WHATSAPP_FROM=whatsapp:+27… # moved onto the router
  */
-import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
-import { DEFAULT_RETAIL_SETTINGS } from '../src/lib/retailSettings.js';
 
 const prisma = new PrismaClient();
+
+/** Inline defaults so this seed runs in Railway (image has no `src/`). */
+const DEFAULT_RETAIL_SETTINGS = {
+  alwaysOpen: true,
+  deliveryEnabled: true,
+  collectionEnabled: true,
+  deliveryFeeCents: 5000,
+  minOrderCents: 15000,
+  deliveryAreaNote: 'We deliver across Joburg metro — reply with your suburb and we’ll confirm.',
+  ageGateEnabled: true,
+  ageGateCopy:
+    '🌿 *Bart Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.',
+  deliveryEtaMinutes: 60,
+  collectionEtaMinutes: 30,
+  notifyStaffOnOrder: true,
+  driverNotifyEnabled: false,
+  driverPhones: [] as string[],
+  drivers: [] as { name: string; phone: string }[],
+};
 
 /** Official Dr. Marley price list — SKUs for WhatsApp cart. */
 const CANNABIS_CATALOG: {
