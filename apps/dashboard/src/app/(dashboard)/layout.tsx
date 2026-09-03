@@ -166,7 +166,7 @@ async function DashboardLayoutInner({
             </span>
             <div>
               <p className="text-[13px] font-bold leading-none tracking-tight solupair-text-gradient">
-                {isDispensary ? 'Bart Marley' : 'Solupair'}
+                {isDispensary ? 'Dr Marley' : 'Solupair'}
               </p>
               <p className="text-[10px] text-muted-foreground/80 leading-tight mt-0.5 tracking-wide">
                 {isDispensary ? 'Dispensary · WhatsApp retail' : 'MarineFlow · WhatsApp'}

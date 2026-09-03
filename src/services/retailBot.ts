@@ -1,5 +1,5 @@
 /**
- * Bart Marley / dispensary WhatsApp order flow — cart, delivery/collection, confirm.
+ * Dr Marley / dispensary WhatsApp order flow — cart, delivery/collection, confirm.
  * Products are Service rows (durationMin often 0). Orders persist as RetailOrder.
  */
 

@@ -1142,7 +1142,7 @@ export async function handleInboundWhatsApp(input: {
       }
     }
 
-    // Shared WhatsApp number → business picker (Bontle / Bart Marley)
+    // Shared WhatsApp number → business picker (Bontle / Dr Marley)
     if (tenant.isBusinessRouter) {
       const routed = await resolveOperatingTenantViaRouter({
         routerTenant: tenant,

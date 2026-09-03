@@ -1,5 +1,5 @@
 /**
- * WhatsApp business-picker gateway for shared numbers (Bontle + Bart Marley).
+ * WhatsApp business-picker gateway for shared numbers (Bontle + Dr Marley).
  * Runs in the router salon’s tenant context only — never mixes RLS with operating salons.
  */
 

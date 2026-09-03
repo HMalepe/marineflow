@@ -182,7 +182,7 @@ enum ConversationStep {
   BOOKING_RATING
   CONFIRM_CANCEL
   WRITE_REVIEW
-  /// Shared WhatsApp number — pick Bontle vs Bart Marley (router salon only)
+  /// Shared WhatsApp number — pick Bontle vs Dr Marley (router salon only)
   CHOOSE_BUSINESS
   /// Dispensary / retail cart checkout
   RETAIL_BROWSE
@@ -1404,7 +1404,7 @@ model WebhookEvent {
   @@index([salonId, createdAt])
 }
 
-// ─── Retail / dispensary orders (Bart Marley etc.) ─────────────────────
+// ─── Retail / dispensary orders (Dr Marley etc.) ─────────────────────
 
 enum RetailFulfillment {
   DELIVERY

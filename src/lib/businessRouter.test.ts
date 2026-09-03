@@ -8,13 +8,13 @@ import {
 describe('businessRouter picker', () => {
   const options = [
     { salonId: 'a', label: 'Bontle - Entle', subtitle: 'Salon' },
-    { salonId: 'b', label: 'Bart Marley - Dispensary', subtitle: 'Retail' },
+    { salonId: 'b', label: 'Dr Marley - Dispensary', subtitle: 'Retail' },
   ];
 
   it('builds numbered picker copy', () => {
     const text = buildBusinessPickerText(options);
     expect(text).toContain('1 — *Bontle - Entle*');
-    expect(text).toContain('2 — *Bart Marley - Dispensary*');
+    expect(text).toContain('2 — *Dr Marley - Dispensary*');
     expect(text).toContain('SWITCH');
   });
 

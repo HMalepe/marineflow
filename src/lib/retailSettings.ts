@@ -45,7 +45,7 @@ export const DEFAULT_RETAIL_SETTINGS: RetailSettings = {
   deliveryAreaNote: 'We deliver across Joburg metro — reply with your suburb and we’ll confirm.',
   ageGateEnabled: true,
   ageGateCopy:
-    '🌿 *Bart Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.',
+    '🌿 *Dr Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.',
   deliveryEtaMinutes: 60,
   collectionEtaMinutes: 30,
   notifyStaffOnOrder: true,

@@ -1,18 +1,18 @@
 /**
- * Seeds Bart Marley Dispensary + a shared WhatsApp business router.
+ * Seeds Dr Marley Dispensary + a shared WhatsApp business router.
  *
  * Usage:
  *   npx tsx prisma/seed-bart-marley.ts
  *
- * Env (optional):
- *   BART_OWNER_EMAIL=owner@bartmarley.co.za
- *   BART_OWNER_PASSWORD=ChangeMeStrong1!
- *   BART_OWNER_NAME=Bart Marley
- *   BART_OWNER_PHONE=+27…              # shop WhatsApp alerts on new orders
- *   BART_DRIVER_PHONES=+27a,+27b       # Uber-style ACCEPT/DECLINE on shared WA number
- *   BART_DRIVER_NAMES=Thabo,Sipho      # optional names aligned to phones
- *   BONTLE_SLUG=bontle-entle           # existing salon slug to link
- *   TWILIO_WHATSAPP_FROM=whatsapp:+27… # moved onto the router
+ * Env (optional — DR_MARLEY_* preferred, BART_* still accepted):
+ *   DR_MARLEY_OWNER_EMAIL=owner@drmarley.co.za
+ *   DR_MARLEY_OWNER_PASSWORD=ChangeMeStrong1!
+ *   DR_MARLEY_OWNER_NAME=Dr Marley
+ *   DR_MARLEY_OWNER_PHONE=+27…          # shop WhatsApp alerts on new orders
+ *   DR_MARLEY_DRIVER_PHONES=+27a,+27b   # Uber-style ACCEPT/DECLINE on shared WA number
+ *   DR_MARLEY_DRIVER_NAMES=Thabo,Sipho  # optional names aligned to phones
+ *   BONTLE_SLUG=bontle-entle            # existing salon slug to link
+ *   TWILIO_WHATSAPP_FROM=whatsapp:+27…  # moved onto the router
  */
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
@@ -29,7 +29,7 @@ const DEFAULT_RETAIL_SETTINGS = {
   deliveryAreaNote: 'We deliver across Joburg metro — reply with your suburb and we’ll confirm.',
   ageGateEnabled: true,
   ageGateCopy:
-    '🌿 *Bart Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.',
+    '🌿 *Dr Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.',
   deliveryEtaMinutes: 60,
   collectionEtaMinutes: 30,
   notifyStaffOnOrder: true,
@@ -251,17 +251,18 @@ const CANNABIS_CATALOG: {
 ];
 
 async function main() {
-  const ownerEmail = (process.env.BART_OWNER_EMAIL ?? 'owner@bartmarley.co.za').toLowerCase();
-  const ownerPassword = process.env.BART_OWNER_PASSWORD ?? 'BartMarley2026!';
-  const ownerName = process.env.BART_OWNER_NAME ?? 'Bart Marley';
+  const env = (a: string, b: string) => process.env[a]?.trim() || process.env[b]?.trim() || '';
+  const ownerEmail = (env('DR_MARLEY_OWNER_EMAIL', 'BART_OWNER_EMAIL') || 'owner@drmarley.co.za').toLowerCase();
+  const ownerPassword = env('DR_MARLEY_OWNER_PASSWORD', 'BART_OWNER_PASSWORD') || 'BartMarley2026!';
+  const ownerName = env('DR_MARLEY_OWNER_NAME', 'BART_OWNER_NAME') || 'Dr Marley';
   const bontleSlug = process.env.BONTLE_SLUG ?? 'bontle-entle';
   const twilioFrom = process.env.TWILIO_WHATSAPP_FROM?.trim() || null;
 
-  const driverPhones = (process.env.BART_DRIVER_PHONES ?? '')
+  const driverPhones = (env('DR_MARLEY_DRIVER_PHONES', 'BART_DRIVER_PHONES') ?? '')
     .split(/[,;\s]+/)
     .map((p) => p.trim())
     .filter(Boolean);
-  const driverNames = (process.env.BART_DRIVER_NAMES ?? '')
+  const driverNames = (env('DR_MARLEY_DRIVER_NAMES', 'BART_DRIVER_NAMES') ?? '')
     .split(/[,;]/)
     .map((n) => n.trim())
     .filter(Boolean);
@@ -278,58 +279,54 @@ async function main() {
     drivers,
   };
 
-  const bart = await prisma.salon.upsert({
-    where: { slug: 'bart-marley' },
-    create: {
-      slug: 'bart-marley',
-      name: 'Bart Marley Dispensary',
-      tradingName: 'Bart Marley',
-      legalName: 'Bart Marley Dispensary (Pty) Ltd',
-      industryTemplate: 'dispensary',
-      businessType: 'RETAIL',
-      status: 'ACTIVE',
-      tier: 'pro',
-      timezone: 'Africa/Johannesburg',
-      defaultCurrency: 'zar',
-      locale: 'en-ZA',
-      botName: 'Marley',
-      toneFormality: 35,
-      toneWarmth: 75,
-      tonePlayfulness: 55,
-      tonePace: 40,
-      toneSalesEnergy: 45,
-      addressLine: 'Johannesburg, South Africa',
-      phoneDisplay: '+27 10 000 0001',
-      openTime: '00:00',
-      closeTime: '23:59',
-      welcomeMessage: 'Welcome to Bart Marley Dispensary 🌿 Open 24/7 — reply with a number:',
-      botLoyaltyEnabled: false,
-      botAllowStaffPick: false,
-      botAskMarketingConsent: true,
-      botRequirePaymentStep: false,
-      metadata: {
-        retail: retailMeta,
-        currentSpecial: 'Free delivery over R400 this week',
-        theme: 'dispensary',
-      },
-    },
-    update: {
-      tradingName: 'Bart Marley',
-      industryTemplate: 'dispensary',
-      businessType: 'RETAIL',
-      status: 'ACTIVE',
-      botName: 'Marley',
-      welcomeMessage: 'Welcome to Bart Marley Dispensary 🌿 Open 24/7 — reply with a number:',
-      botLoyaltyEnabled: false,
-      openTime: '00:00',
-      closeTime: '23:59',
-      metadata: {
-        retail: retailMeta,
-        currentSpecial: 'Free delivery over R400 this week',
-        theme: 'dispensary',
-      },
-    },
+  const existingDispensary = await prisma.salon.findFirst({
+    where: { slug: { in: ['dr-marley', 'bart-marley'] } },
   });
+
+  const salonFields = {
+    slug: 'dr-marley',
+    name: 'Dr Marley Dispensary',
+    tradingName: 'Dr Marley',
+    legalName: 'Dr Marley Dispensary (Pty) Ltd',
+    industryTemplate: 'dispensary' as const,
+    businessType: 'RETAIL' as const,
+    status: 'ACTIVE' as const,
+    botName: 'Marley',
+    welcomeMessage: 'Welcome to Dr Marley Dispensary 🌿 Open 24/7 — reply with a number:',
+    botLoyaltyEnabled: false,
+    openTime: '00:00',
+    closeTime: '23:59',
+    metadata: {
+      retail: retailMeta,
+      currentSpecial: 'Free delivery over R400 this week',
+      theme: 'dispensary',
+    },
+  };
+
+  const bart = existingDispensary
+    ? await prisma.salon.update({
+        where: { id: existingDispensary.id },
+        data: salonFields,
+      })
+    : await prisma.salon.create({
+        data: {
+          ...salonFields,
+          tier: 'pro',
+          timezone: 'Africa/Johannesburg',
+          defaultCurrency: 'zar',
+          locale: 'en-ZA',
+          toneFormality: 35,
+          toneWarmth: 75,
+          tonePlayfulness: 55,
+          tonePace: 40,
+          toneSalesEnergy: 45,
+          addressLine: 'Johannesburg, South Africa',
+          phoneDisplay: '+27 10 000 0001',
+          botAllowStaffPick: false,
+          botAskMarketingConsent: true,
+          botRequirePaymentStep: false,
+        },
+      });
 
   // Hours — 24/7 (Uber Eats–style WhatsApp ordering)
   const hourRows = [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
@@ -447,12 +444,16 @@ async function main() {
   }
 
   const passwordHash = await bcrypt.hash(ownerPassword, 12);
-  const ownerPhone = process.env.BART_OWNER_PHONE?.trim() || null;
+  const ownerPhone = env('DR_MARLEY_OWNER_PHONE', 'BART_OWNER_PHONE') || null;
+  const legacyOwnerEmail = 'owner@bartmarley.co.za';
 
   // StaffUser.phone is globally unique — free it from another salon user if needed
   if (ownerPhone) {
     const phoneHolder = await prisma.staffUser.findFirst({
-      where: { phone: ownerPhone, NOT: { email: ownerEmail } },
+      where: {
+        phone: ownerPhone,
+        NOT: { email: { in: [ownerEmail, legacyOwnerEmail] } },
+      },
       select: { id: true, email: true, salonId: true },
     });
     if (phoneHolder) {
@@ -461,31 +462,41 @@ async function main() {
         data: { phone: null },
       });
       console.log(
-        `Note: moved phone ${ownerPhone} from ${phoneHolder.email} → Bart owner (StaffUser.phone is unique).`,
+        `Note: moved phone ${ownerPhone} from ${phoneHolder.email} → Dr Marley owner (StaffUser.phone is unique).`,
       );
     }
   }
 
-  await prisma.staffUser.upsert({
-    where: { email: ownerEmail },
-    create: {
-      salonId: bart.id,
-      email: ownerEmail,
-      name: ownerName,
-      passwordHash,
-      role: 'OWNER',
-      active: true,
-      ...(ownerPhone ? { phone: ownerPhone } : {}),
-    },
-    update: {
-      salonId: bart.id,
-      name: ownerName,
-      passwordHash,
-      role: 'OWNER',
-      active: true,
-      ...(ownerPhone ? { phone: ownerPhone } : {}),
-    },
-  });
+  const existingOwner =
+    (await prisma.staffUser.findUnique({ where: { email: ownerEmail } })) ??
+    (await prisma.staffUser.findUnique({ where: { email: legacyOwnerEmail } }));
+
+  if (existingOwner) {
+    await prisma.staffUser.update({
+      where: { id: existingOwner.id },
+      data: {
+        salonId: bart.id,
+        email: ownerEmail,
+        name: ownerName,
+        passwordHash,
+        role: 'OWNER',
+        active: true,
+        ...(ownerPhone ? { phone: ownerPhone } : {}),
+      },
+    });
+  } else {
+    await prisma.staffUser.create({
+      data: {
+        salonId: bart.id,
+        email: ownerEmail,
+        name: ownerName,
+        passwordHash,
+        role: 'OWNER',
+        active: true,
+        ...(ownerPhone ? { phone: ownerPhone } : {}),
+      },
+    });
+  }
 
   await prisma.faqItem.deleteMany({ where: { salonId: bart.id } });
   await prisma.faqItem.createMany({
@@ -536,7 +547,7 @@ async function main() {
       where: {
         deletedAt: null,
         twilioWhatsAppNumber: twilioFrom,
-        slug: { not: 'bart-marley' },
+        slug: { notIn: ['bart-marley', 'dr-marley'] },
         isBusinessRouter: false,
       },
     });
@@ -555,7 +566,7 @@ async function main() {
       : []),
     {
       salonId: bart.id,
-      label: 'Bart Marley - Dispensary',
+      label: 'Dr Marley - Dispensary',
       subtitle: 'Cannabis & wellness · delivery',
       industryTemplate: 'dispensary',
     },
@@ -617,16 +628,16 @@ async function main() {
     },
   });
 
-  console.log('── Bart Marley Dispensary ready ──');
+  console.log('── Dr Marley Dispensary ready ──');
   console.log(`Salon id:     ${bart.id}`);
   console.log(`Dashboard:    login with email ${ownerEmail}`);
   console.log(`Password:     ${ownerPassword}`);
-  console.log(`Owner phone:  ${ownerPhone ?? '(set BART_OWNER_PHONE for WhatsApp order alerts)'}`);
+  console.log(`Owner phone:  ${ownerPhone ?? '(set DR_MARLEY_OWNER_PHONE for WhatsApp order alerts)'}`);
   console.log(
     `Drivers:      ${
       drivers.length
         ? drivers.map((d) => `${d.name}<${d.phone}>`).join(', ')
-        : '(set BART_DRIVER_PHONES for Uber-style ACCEPT/DECLINE on shared number)'
+        : '(set DR_MARLEY_DRIVER_PHONES for Uber-style ACCEPT/DECLINE on shared number)'
     }`,
   );
   console.log(`Router id:    ${router.id}`);
@@ -634,7 +645,7 @@ async function main() {
   console.log(`Linked:       ${linkedBusinesses.map((b) => b.label).join(' | ')}`);
   console.log(`Menu SKUs:    ${CANNABIS_CATALOG.reduce((n, c) => n + c.items.length, 0)} products / ${CANNABIS_CATALOG.length} categories`);
   if (!bontle) {
-    console.log('Note: Bontle salon not found — router only lists Bart Marley. Set BONTLE_SLUG and re-run.');
+    console.log('Note: Bontle salon not found — router only lists Dr Marley. Set BONTLE_SLUG and re-run.');
   }
 }
 

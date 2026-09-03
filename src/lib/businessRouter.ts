@@ -1,6 +1,6 @@
 /**
  * Shared WhatsApp number → business picker gateway.
- * A router Salon owns the Twilio/Meta number; linked operating salons (Bontle, Bart Marley)
+ * A router Salon owns the Twilio/Meta number; linked operating salons (Bontle, Dr Marley)
  * keep isolated catalogs, customers, and dashboards.
  */
 

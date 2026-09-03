@@ -1182,7 +1182,7 @@ body::before {
   animation: pulse-marquee 40s linear infinite;
 }
 
-/* -- Dispensary / Bart Marley retail theme ----------------------------- */
+/* -- Dispensary / Dr Marley retail theme ----------------------------- */
 .theme-dispensary {
   --solupair-cyan: oklch(0.78 0.12 155);
   --solupair-violet: oklch(0.42 0.12 150);
