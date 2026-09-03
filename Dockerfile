@@ -30,4 +30,4 @@ COPY --from=base /app/package.json ./
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["sh", "-c", "sh scripts/migrate-deploy.sh && node dist/index.js"]
+CMD ["sh", "-c", "sh scripts/migrate-deploy.sh; node dist/index.js"]

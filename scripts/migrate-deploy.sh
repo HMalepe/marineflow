@@ -8,6 +8,7 @@ RECOVERABLE_FAILED_MIGRATIONS="
 20260612160000_power_features_automation
 20260612170000_add_review_incentive
 20260618120000_ensure_uploaded_file
+20260903180000_rename_bart_to_dr_marley
 "
 
 # Bootstrap UploadedFile if week19 never ran (newsletter media uploads)

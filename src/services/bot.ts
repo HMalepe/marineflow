@@ -1135,10 +1135,14 @@ export async function handleInboundWhatsApp(input: {
 
     // Registered delivery drivers: ACCEPT/DECLINE on the shared number (before business picker)
     {
-      const { tryHandleDriverWhatsApp } = await import('./retailDriverDispatch.js');
-      if (await tryHandleDriverWhatsApp({ waId, text })) {
-        inboundSalonId = tenant.id;
-        return;
+      try {
+        const { tryHandleDriverWhatsApp } = await import('./retailDriverDispatch.js');
+        if (await tryHandleDriverWhatsApp({ waId, text })) {
+          inboundSalonId = tenant.id;
+          return;
+        }
+      } catch (err) {
+        logger.warn({ err, waId }, 'retail_driver_inbound_intercept_failed');
       }
     }
 
