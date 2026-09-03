@@ -18,6 +18,7 @@ import {
   isRouterChoiceFresh,
   isSwitchBusinessCommand,
   parseBusinessPickerChoice,
+  pickerDisplayLabel,
   readRouterChoice,
   type LinkedBusinessOption,
 } from '../lib/businessRouter.js';
@@ -197,7 +198,7 @@ export async function resolveOperatingTenantViaRouter(input: {
         },
       });
       const handoff =
-        `✨ *${picked.label}*\n\n` +
+        `✨ *${pickerDisplayLabel(picked)}*\n\n` +
         (picked.subtitle ? `${picked.subtitle}\n\n` : '') +
         'Opening that menu for you…';
       await sendRouterWhatsApp(fullRouter.id, input.waId, handoff);

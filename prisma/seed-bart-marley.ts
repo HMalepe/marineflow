@@ -558,7 +558,7 @@ async function main() {
       ? [
           {
             salonId: bontle.id,
-            label: 'Bontle - Entle',
+            label: 'BontleEntle',
             subtitle: 'Hair & beauty salon',
             industryTemplate: bontle.industryTemplate || 'salon',
           },
@@ -566,7 +566,7 @@ async function main() {
       : []),
     {
       salonId: bart.id,
-      label: 'Dr Marley - Dispensary',
+      label: 'Dr Marley',
       subtitle: 'Cannabis & wellness · delivery',
       industryTemplate: 'dispensary',
     },

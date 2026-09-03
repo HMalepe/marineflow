@@ -61,18 +61,25 @@ export function getLinkedBusinesses(
     .filter((x): x is LinkedBusinessOption => x != null);
 }
 
+/** Customer-facing picker names (WhatsApp first screen). */
+export function pickerDisplayLabel(opt: LinkedBusinessOption): string {
+  const hay = `${opt.industryTemplate ?? ''} ${opt.label}`.toLowerCase();
+  if (hay.includes('dispensary') || hay.includes('marley') || hay.includes('retail')) {
+    return 'Dr Marley';
+  }
+  if (hay.includes('bontle')) return 'BontleEntle';
+  return opt.label;
+}
+
 export function buildBusinessPickerText(options: LinkedBusinessOption[]): string {
-  const lines = options.map((opt, i) => {
-    const sub = opt.subtitle ? ` — ${opt.subtitle}` : '';
-    return `${i + 1} — *${opt.label}*${sub}`;
-  });
+  const lines = options.map((opt, i) => `${i + 1}  *${pickerDisplayLabel(opt)}*`);
   return [
-    '🌿 *Welcome — which business can we help you with?*',
+    '*Welcome — which business can we help you with?*',
     '',
     ...lines,
     '',
     'Reply with a number to continue.',
-    'Reply *SWITCH* anytime to change business.',
+    'Reply *SWITCH* anytime to change businesses',
   ].join('\n');
 }
 
@@ -85,10 +92,12 @@ export function parseBusinessPickerChoice(
   if (Number.isFinite(n) && n >= 1 && n <= options.length) {
     return options[n - 1] ?? null;
   }
-  const lower = trimmed.toLowerCase();
+  const lower = trimmed.toLowerCase().replace(/[\s-]+/g, '');
   return (
-    options.find((o) => o.label.toLowerCase() === lower) ??
-    options.find((o) => lower.includes(o.label.toLowerCase().split(/\s+/)[0] ?? '')) ??
+    options.find((o) => pickerDisplayLabel(o).toLowerCase().replace(/[\s-]+/g, '') === lower) ??
+    options.find((o) => o.label.toLowerCase() === trimmed.toLowerCase()) ??
+    options.find((o) => lower.includes(pickerDisplayLabel(o).toLowerCase().replace(/[\s-]+/g, ''))) ??
+    options.find((o) => lower.includes((o.label.toLowerCase().split(/\s+/)[0] ?? '').replace(/-/g, ''))) ??
     null
   );
 }
