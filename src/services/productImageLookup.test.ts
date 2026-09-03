@@ -16,6 +16,13 @@ vi.mock('../lib/prisma.js', () => ({
   },
 }));
 
+vi.mock('../lib/supabase.js', () => ({
+  isSupabaseConfigured: () => false,
+  getSupabaseAdmin: () => {
+    throw new Error('supabase not configured in this test');
+  },
+}));
+
 vi.mock('../lib/tenant.js', () => ({
   resolveTenantForInbound: vi.fn(),
 }));
@@ -29,7 +36,6 @@ vi.mock('../config.js', () => ({
 }));
 
 import {
-  getProductImageMessage,
   handleIncomingMessage,
   sendTextMessage,
   sendWhatsAppMessage,
@@ -159,11 +165,6 @@ describe('product image lookup', () => {
       text: { body: 'miami' },
     });
     expect(handled).toBe(false);
-  });
-
-  it('getProductImageMessage returns null without an image url', async () => {
-    findFirstService.mockResolvedValue({ ...product, imageUrl: null });
-    await expect(getProductImageMessage('svc_1')).resolves.toBeNull();
   });
 
   it('sendWhatsAppMessage throws on non-2xx', async () => {

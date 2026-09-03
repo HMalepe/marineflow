@@ -305,7 +305,7 @@ async function runProductLookup(input: {
       return true;
     }
     if (matches.length > 1) {
-      const names = matches.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
+      const names = matches.map((p: { name: string }, i: number) => `${i + 1}. ${p.name}`).join('\n');
       await sendTextMessage(
         to,
         [
@@ -356,7 +356,7 @@ async function runProductLookup(input: {
   }
 
   if (matches.length > 1) {
-    const names = matches.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
+    const names = matches.map((p: ProductRow, i: number) => `${i + 1}. ${p.name}`).join('\n');
     await sendTextMessage(
       to,
       [

@@ -48,7 +48,7 @@ function extractInboundBody(msg: {
   interactive?: {
     type?: string;
     list_reply?: { id: string; title?: string };
-    button_reply?: { id: string; title?: string };
+    button_reply?: { id?: string; title?: string };
     nfm_reply?: { response_json: string; name: string; body: string };
   };
 }): string {
@@ -178,7 +178,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
               interactive?: {
                 type?: string;
                 list_reply?: { id: string };
-                button_reply?: { id: string };
+                button_reply?: { id?: string; title?: string };
                 nfm_reply?: { response_json: string; name: string; body: string };
               };
             }[];

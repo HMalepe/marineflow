@@ -21,6 +21,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:bart": "tsx prisma/seed-bart-marley.ts",
     "db:studio": "prisma studio",
+    "upload:product": "node uploadProduct.js",
     "worker": "tsx src/worker.ts",
     "lint:schema": "tsx scripts/lint-schema-tenant.ts"
   },
@@ -36,6 +37,7 @@
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^8.0.4",
     "@prisma/client": "^6.3.1",
+    "@supabase/supabase-js": "^2.115.0",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.79.0",
     "dotenv": "^16.4.7",

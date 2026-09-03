@@ -99,6 +99,15 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
   S3_PUBLIC_URL: z.string().optional(),
+  /** Supabase Storage + products catalog (WhatsApp product photos). */
+  SUPABASE_URL: z
+    .string()
+    .optional()
+    .transform((v) => {
+      const t = v?.trim();
+      return t || undefined;
+    }),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional().transform((v) => v?.trim() || undefined),
 });
 
 export type Env = z.infer<typeof envSchema>;
