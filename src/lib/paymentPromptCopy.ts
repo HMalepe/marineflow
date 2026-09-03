@@ -83,6 +83,31 @@ export function buildCashPaymentNudgeBody(amountCents: number): string {
   ].join('\n');
 }
 
+/** Dr Marley / retail — same PayFast merchant as BontleEntle, no cash option. */
+export function buildRetailPayfastPromptBody(input: {
+  amountCents: number;
+  orderRef: string;
+  fulfillment: 'DELIVERY' | 'COLLECTION';
+}): string {
+  const amount = formatCentsZar(input.amountCents);
+  const afterPay =
+    input.fulfillment === 'DELIVERY'
+      ? `_The moment payment clears, we ping every driver — first to reply ACCEPT takes your delivery._`
+      : `_The moment payment clears, the shop starts packing for collection._`;
+
+  return [
+    `💳 *Pay to confirm order ${input.orderRef}*`,
+    '',
+    `*Amount due: ${amount}*`,
+    '',
+    `Tap below for encrypted PayFast checkout — the same secure paygate as BontleEntle. Your card details never touch us.`,
+    '',
+    `_Android tip: if PayFast opens but payment options stay blank, choose Open in Chrome on the next screen._`,
+    '',
+    afterPay,
+  ].join('\n');
+}
+
 /** Dashboard / manual resend — service name in the prompt. */
 export function buildManualPaymentLinkBody(input: {
   salonName?: string;

@@ -214,21 +214,32 @@ export async function payCheckoutRoutes(app: FastifyInstance): Promise<void> {
   // mode, since this URL carries no signature and could otherwise be replayed.
   app.get('/pay/success', async (request, reply) => {
     const { ref } = request.query as { ref?: string };
-    const appointmentId = ref?.startsWith('appt_') ? ref.replace('appt_', '') : null;
+    const parsed = ref?.startsWith('appt_')
+      ? { kind: 'appointment' as const, id: ref.slice('appt_'.length) }
+      : ref?.startsWith('retail_')
+        ? { kind: 'retail' as const, id: ref.slice('retail_'.length) }
+        : null;
 
-    if (appointmentId && env.PAYFAST_IS_TEST) {
+    if (parsed && env.PAYFAST_IS_TEST) {
       try {
-        await confirmAppointmentPaid(appointmentId, null);
+        if (parsed.kind === 'appointment') {
+          await confirmAppointmentPaid(parsed.id, null);
+        } else {
+          const { confirmRetailOrderPaid } = await import('../services/payments.js');
+          await confirmRetailOrderPaid(parsed.id, null);
+        }
       } catch {
         /* webhook may have already confirmed it, or it'll retry — never block this page */
       }
     }
 
+    const successCopy =
+      parsed?.kind === 'retail'
+        ? '<h1>✅ Payment received!</h1><p>Your order is confirmed. You can close this page and head back to WhatsApp — drivers are being pinged now.</p>'
+        : '<h1>✅ Payment received!</h1><p>Your booking is confirmed. You can close this page and head back to WhatsApp.</p>';
+
     return reply.type('text/html').send(
-      paymentStatusPage(
-        'Payment received',
-        '<h1>✅ Payment received!</h1><p>Your booking is confirmed. You can close this page and head back to WhatsApp.</p>',
-      ),
+      paymentStatusPage('Payment received', successCopy),
     );
   });
 

@@ -103,14 +103,14 @@ export async function notifyShopOfNewOrder(order: RetailOrderWithItems): Promise
     order.fulfillment === 'COLLECTION' ? '🏪 Collection' : '🚚 Delivery';
   const addr = addressLine(order);
   const body = [
-    `🔔 *New order ${orderRef(order.id)}* — ${shopName}`,
+    `🔔 *Paid order ${orderRef(order.id)}* — ${shopName}`,
     '',
     `${sanitize(customerLabel(order))} · ${formatZarFromCents(order.totalCents)}`,
     fulfillment + (addr ? `\n📍 ${addr}` : ''),
     '',
     itemsSummary(order.items),
     '',
-    'Open *Orders* in the dashboard to prep & dispatch.',
+    'Open *Orders* in the dashboard to prep. Drivers are pinged once PayFast marks this paid.',
   ].join('\n');
 
   const phones = await shopNotifyPhones(order.salonId);

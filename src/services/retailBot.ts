@@ -22,7 +22,6 @@ import {
 } from '../lib/retailSettings.js';
 import { isProductSellable } from '../lib/inventory.js';
 import { salonDisplayName, buildMainMenuText } from '../lib/hierarchicalMenu.js';
-import { logger } from '../lib/logger.js';
 import type { InteractiveMessage } from '../lib/integrations/messaging/types.js';
 import { sendWithFallback } from './channelRouter.js';
 import {
@@ -36,11 +35,14 @@ import {
   buildUsualInteractive,
   RETAIL_LIST_PAGE_SIZE,
 } from './retailInteractive.js';
-import { notifyNewRetailOrderLater } from './retailOrderNotify.js';
 import {
   assertCartInStock,
-  decrementInventoryForOrder,
 } from './retailInventory.js';
+import { createRetailPaymentCheckoutSession } from './payments.js';
+import {
+  buildPaymentCheckoutCta,
+  buildRetailPayfastPromptBody,
+} from '../lib/paymentPromptCopy.js';
 
 type Conv = Conversation & { customer: Customer; salon: Salon };
 
@@ -60,6 +62,7 @@ type RetailCtx = {
   /** Waiting for Yes/No on "the usual" reorder. */
   retailUsualPending?: boolean;
   retailUsualCart?: CartLine[];
+  retailPendingCheckoutUrl?: string;
   /** Which numbered menu the customer is on — never infer from empty product ids. */
   retailCartMenu?: RetailCartMenu;
   retailCategoryPage?: number;
@@ -550,7 +553,7 @@ async function placeOrder(conv: Conv): Promise<Conv> {
     data: {
       salonId: conv.salonId,
       customerId: conv.customerId,
-      status: RetailOrderStatus.PAID, // COD / pay-on-delivery path for MVP
+      status: RetailOrderStatus.PENDING_PAYMENT,
       fulfillment,
       deliveryLine1: typeof raw.deliveryLine1 === 'string' ? raw.deliveryLine1 : null,
       deliverySuburb: typeof raw.deliverySuburb === 'string' ? raw.deliverySuburb : null,
@@ -584,44 +587,42 @@ async function placeOrder(conv: Conv): Promise<Conv> {
     },
   });
 
-  // Uber Eats–style: ping the shop (and drivers later) without blocking the customer reply
-  notifyNewRetailOrderLater(order);
-
-  await decrementInventoryForOrder({
+  const orderRef = `#${order.id.slice(-6).toUpperCase()}`;
+  const checkoutUrl = await createRetailPaymentCheckoutSession({
     salonId: conv.salonId,
-    items: cart.map((l) => ({ serviceId: l.serviceId, quantity: l.qty })),
-  }).catch((err) => {
-    logger.warn({ err, orderId: order.id }, 'retail_inventory_decrement_failed');
+    customerId: conv.customerId,
+    orderId: order.id,
+    amountCents: total,
+    description: `${conv.salon.tradingName?.trim() || conv.salon.name} ${orderRef}`,
   });
 
-  const eta =
-    fulfillment === RetailFulfillment.DELIVERY
-      ? `~${settings.deliveryEtaMinutes} min`
-      : `Ready for collection in ~${settings.collectionEtaMinutes} min`;
+  if (!checkoutUrl) {
+    await db.retailOrder.update({
+      where: { id: order.id },
+      data: { status: RetailOrderStatus.CANCELLED, cancelledAt: new Date() },
+    });
+    await reply(
+      conv,
+      'We couldn’t start PayFast checkout just now. Reply *1* on the summary to try again, or *MENU* to start over.',
+    );
+    return setStep(conv, ConversationStep.RETAIL_CONFIRM, {
+      retailCart: cart,
+      retailFulfillment: fulfillment,
+    });
+  }
 
-  const payHint =
-    fulfillment === RetailFulfillment.DELIVERY
-      ? 'Pay the driver on delivery (cash or card where available).'
-      : 'Pay in store when you collect.';
-
-  await reply(
-    conv,
-    [
-      `🎉 *Order #${order.id.slice(-6).toUpperCase()} confirmed*`,
-      `Total *${formatZarFromCents(total)}* · ${fulfillment === RetailFulfillment.DELIVERY ? 'Delivery' : 'Collection'}`,
-      `ETA: ${eta}`,
-      payHint,
-      '',
-      'We’ll WhatsApp you when it’s preparing / on the way / ready.',
-      '',
-      'Reply *MENU* for more, or *SWITCH* to change business.',
-    ].join('\n'),
-  );
+  const payBody = buildRetailPayfastPromptBody({
+    amountCents: total,
+    orderRef,
+    fulfillment: fulfillment === RetailFulfillment.COLLECTION ? 'COLLECTION' : 'DELIVERY',
+  });
+  await reply(conv, payBody, buildPaymentCheckoutCta(payBody, checkoutUrl));
 
   return setStep(conv, ConversationStep.MENU, {
     retailCart: [],
     retailOrderId: order.id,
     retailAgeOk: true,
+    retailPendingCheckoutUrl: checkoutUrl,
   });
 }
 

@@ -54,6 +54,7 @@ function customerLabel(o: RetailOrderRow) {
 
 function statusChip(status: string) {
   const map: Record<string, string> = {
+    PENDING_PAYMENT: 'bg-amber-500/15 text-amber-900 dark:text-amber-200 border-amber-500/30',
     PAID: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30',
     PREPARING: 'bg-amber-500/15 text-amber-900 dark:text-amber-200 border-amber-500/30',
     OUT_FOR_DELIVERY: 'bg-sky-500/15 text-sky-900 dark:text-sky-200 border-sky-500/30',
@@ -130,8 +131,9 @@ export function OrdersClient({
         </p>
         <h1 className="text-3xl font-semibold tracking-tight solupair-text-gradient">Orders</h1>
         <p className="text-sm text-muted-foreground mt-2 max-w-xl">
-          WhatsApp carts become live tickets here — prep, dispatch, and complete. Staff get a WhatsApp
-          ping on every new order{liveConnected ? ' · live updates on' : ''}.
+          WhatsApp carts go to PayFast (same gateway as BontleEntle). Once payment
+          clears, every registered driver is pinged — first ACCEPT wins the delivery
+          {liveConnected ? ' · live updates on' : ''}.
         </p>
       </div>
 
@@ -226,7 +228,9 @@ export function OrdersClient({
                 </ul>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {STATUS_FLOW.filter((s) => {
+                  {order.status !== 'PENDING_PAYMENT' &&
+                    order.status !== 'DRAFT' &&
+                    STATUS_FLOW.filter((s) => {
                     if (order.fulfillment === 'COLLECTION' && s === 'OUT_FOR_DELIVERY') return false;
                     if (order.fulfillment === 'DELIVERY' && s === 'READY_FOR_COLLECTION') return false;
                     return true;

@@ -27,6 +27,20 @@ function appointmentPaymentReference(appointmentId: string): string {
   return `appt_${appointmentId}`;
 }
 
+export function retailOrderPaymentReference(orderId: string): string {
+  return `retail_${orderId}`;
+}
+
+export function parsePayfastMerchantReference(
+  reference: string | undefined | null,
+): { kind: 'appointment'; id: string } | { kind: 'retail'; id: string } | null {
+  const ref = reference?.trim();
+  if (!ref) return null;
+  if (ref.startsWith('appt_')) return { kind: 'appointment', id: ref.slice('appt_'.length) };
+  if (ref.startsWith('retail_')) return { kind: 'retail', id: ref.slice('retail_'.length) };
+  return null;
+}
+
 /** Whether the salon has post-confirm online payment enabled (legacy column alias supported). */
 export function salonRequiresPostConfirmPayment(salon: {
   botRequirePaymentStep?: boolean | null;
@@ -107,6 +121,75 @@ export async function createPaymentCheckoutSession(input: {
     logger.error(
       { err, salonId: input.salonId, appointmentId: input.appointmentId },
       'payment_checkout_create_failed',
+    );
+    return null;
+  }
+}
+
+/** Same PayFast merchant + notify URL as salon bookings; reference is `retail_<orderId>`. */
+export async function createRetailPaymentCheckoutSession(input: {
+  salonId: string;
+  customerId: string;
+  orderId: string;
+  amountCents: number;
+  description: string;
+}): Promise<string | null> {
+  if (!isPayfastConfigured()) {
+    logger.warn({ salonId: input.salonId, orderId: input.orderId }, 'payfast_not_configured_retail');
+    return null;
+  }
+  if (input.amountCents <= 0) return null;
+
+  const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:3000';
+  const reference = retailOrderPaymentReference(input.orderId);
+
+  try {
+    const result = await payfastAdapter.createCheckout({
+      salonId: input.salonId,
+      customerId: input.customerId,
+      amountCents: input.amountCents,
+      currency: 'ZAR',
+      reference,
+      description: input.description.slice(0, 100),
+      returnUrl: `${baseUrl}/pay/success?ref=${reference}`,
+      cancelUrl: `${baseUrl}/pay/cancel?ref=${reference}`,
+      notifyUrl: `${baseUrl}${PAYFAST_NOTIFY_PATH}`,
+    });
+
+    if (!result.form) {
+      logger.error({ orderId: input.orderId }, 'payfast_retail_checkout_form_missing');
+      return null;
+    }
+
+    const payment = await getTenantDb().payment.create({
+      data: {
+        salonId: input.salonId,
+        customerId: input.customerId,
+        provider: 'PAYFAST',
+        status: 'PENDING',
+        amountCents: input.amountCents,
+        currency: 'ZAR',
+        externalReference: reference,
+        payfastMerchantRef: reference,
+        metadata: {
+          reference,
+          provider: 'payfast',
+          retailOrderId: input.orderId,
+          payfastForm: result.form,
+        },
+      },
+    });
+
+    await getTenantDb().retailOrder.update({
+      where: { id: input.orderId },
+      data: { paymentId: payment.id },
+    });
+
+    return `${baseUrl}/pay/checkout/${payment.id}`;
+  } catch (err) {
+    logger.error(
+      { err, salonId: input.salonId, orderId: input.orderId },
+      'retail_payment_checkout_create_failed',
     );
     return null;
   }
@@ -277,6 +360,105 @@ export async function confirmAppointmentPaid(
   return Boolean(ratingSchedule || paidAppt);
 }
 
+/**
+ * Marks a retail order paid, then pings shop + all drivers (first ACCEPT wins).
+ * Shared by verified ITN and sandbox /pay/success fallback.
+ */
+export async function confirmRetailOrderPaid(
+  orderId: string,
+  transactionId: string | null,
+): Promise<boolean> {
+  const order = await prisma.retailOrder.findUnique({
+    where: { id: orderId },
+    include: {
+      items: true,
+      customer: {
+        select: { waId: true, displayName: true, firstName: true, lastName: true },
+      },
+      salon: { select: { id: true, metadata: true, tradingName: true, name: true } },
+    },
+  });
+  if (!order || order.status === 'CANCELLED') return false;
+
+  const alreadyPaid = order.status !== 'DRAFT' && order.status !== 'PENDING_PAYMENT';
+  if (alreadyPaid) return true;
+
+  const reference = retailOrderPaymentReference(orderId);
+  await prisma.payment.updateMany({
+    where: {
+      status: 'PENDING',
+      OR: [{ payfastMerchantRef: reference }, { externalReference: reference }],
+    },
+    data: {
+      status: 'SUCCEEDED',
+      payfastPaymentId: transactionId,
+      paidAt: new Date(),
+    },
+  });
+
+  const updated = await prisma.retailOrder.update({
+    where: { id: orderId },
+    data: { status: 'PAID' },
+    include: {
+      items: true,
+      customer: {
+        select: { waId: true, displayName: true, firstName: true, lastName: true },
+      },
+    },
+  });
+
+  const { decrementInventoryForOrder } = await import('./retailInventory.js');
+  await decrementInventoryForOrder({
+    salonId: updated.salonId,
+    items: updated.items.map((it) => ({ serviceId: it.serviceId, quantity: it.quantity })),
+  }).catch((err) => {
+    logger.warn({ err, orderId }, 'retail_inventory_decrement_failed');
+  });
+
+  const { getRetailSettings, formatZarFromCents } = await import('../lib/retailSettings.js');
+  const settings = getRetailSettings(order.salon.metadata);
+  const ref = `#${orderId.slice(-6).toUpperCase()}`;
+  const waId = updated.customer?.waId;
+  if (waId) {
+    const body =
+      updated.fulfillment === 'DELIVERY'
+        ? [
+            `✅ *Payment received* for ${ref}`,
+            `Total *${formatZarFromCents(updated.totalCents)}*`,
+            '',
+            `We've pinged every driver on WhatsApp. The *first to reply ACCEPT* takes your delivery.`,
+            `ETA ~${settings.deliveryEtaMinutes} min once a rider is assigned.`,
+            '',
+            'Reply *MENU* anytime.',
+          ].join('\n')
+        : [
+            `✅ *Payment received* for ${ref}`,
+            `Total *${formatZarFromCents(updated.totalCents)}*`,
+            '',
+            `The shop is packing for collection — ready in ~${settings.collectionEtaMinutes} min.`,
+            '',
+            'Reply *MENU* anytime.',
+          ].join('\n');
+
+    try {
+      await sendWithFallback({ salonId: updated.salonId, to: waId, body });
+    } catch (err) {
+      logger.warn({ err, orderId }, 'retail_paid_customer_notify_failed');
+    }
+  }
+
+  const { notifyNewRetailOrderLater } = await import('./retailOrderNotify.js');
+  notifyNewRetailOrderLater(updated);
+
+  emitPlatformEvent({
+    type: 'PAYMENT_SUCCEEDED',
+    salonId: updated.salonId,
+    metadata: { retailOrderId: orderId, reference, transactionId },
+  });
+
+  return true;
+}
+
 export async function handlePayfastAppointmentWebhook(body: Record<string, string>): Promise<void> {
   const verified = payfastAdapter.verifyWebhook(body, {});
   if (!verified.valid) {
@@ -284,13 +466,20 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
     return;
   }
 
-  const reference = verified.reference;
-  if (!reference?.startsWith('appt_')) return;
-  const appointmentId = reference.replace('appt_', '');
+  const parsed = parsePayfastMerchantReference(verified.reference);
+  if (!parsed) return;
 
   if (verified.status !== 'success') {
     const payment = await prisma.payment.findFirst({
-      where: { appointmentId },
+      where:
+        parsed.kind === 'appointment'
+          ? { appointmentId: parsed.id }
+          : {
+              OR: [
+                { payfastMerchantRef: verified.reference },
+                { externalReference: verified.reference },
+              ],
+            },
       orderBy: { createdAt: 'desc' },
     });
     if (payment) {
@@ -301,13 +490,24 @@ export async function handlePayfastAppointmentWebhook(body: Record<string, strin
       emitPlatformEvent({
         type: 'PAYMENT_FAILED',
         salonId: payment.salonId,
-        metadata: { appointmentId, reference, status: verified.status },
+        metadata: {
+          ...(parsed.kind === 'appointment'
+            ? { appointmentId: parsed.id }
+            : { retailOrderId: parsed.id }),
+          reference: verified.reference,
+          status: verified.status,
+        },
       });
     }
     return;
   }
 
-  await confirmAppointmentPaid(appointmentId, verified.transactionId ?? null);
+  if (parsed.kind === 'retail') {
+    await confirmRetailOrderPaid(parsed.id, verified.transactionId ?? null);
+    return;
+  }
+
+  await confirmAppointmentPaid(parsed.id, verified.transactionId ?? null);
 }
 
 export async function refundPayfastPayment(input: {

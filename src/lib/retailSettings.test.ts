@@ -20,3 +20,4 @@ describe('retail always-open / notify settings', () => {
     expect(s.driverPhones).toEqual([]);
   });
 });
+

@@ -8,6 +8,7 @@ vi.mock('../lib/integrations/payments/index.js', () => ({
 import {
   resolvePostConfirmPayment,
   salonRequiresPostConfirmPayment,
+  parsePayfastMerchantReference,
 } from './payments.js';
 
 describe('salonRequiresPostConfirmPayment', () => {
@@ -53,5 +54,19 @@ describe('resolvePostConfirmPayment', () => {
         requirePaymentStep: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe('parsePayfastMerchantReference', () => {
+  it('parses appointment and retail PayFast merchant refs', () => {
+    expect(parsePayfastMerchantReference('appt_abc123')).toEqual({
+      kind: 'appointment',
+      id: 'abc123',
+    });
+    expect(parsePayfastMerchantReference('retail_ord99')).toEqual({
+      kind: 'retail',
+      id: 'ord99',
+    });
+    expect(parsePayfastMerchantReference('other')).toBeNull();
   });
 });

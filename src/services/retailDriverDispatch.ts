@@ -213,7 +213,7 @@ function buildOfferMessage(
     '',
     `Customer: ${sanitize(customerLabel(order))}`,
     `📍 ${addr}`,
-    `COD: *${formatZarFromCents(order.totalCents)}*`,
+    `Paid online: *${formatZarFromCents(order.totalCents)}*`,
     '',
     itemsSummary(order.items),
     '',
@@ -224,6 +224,10 @@ function buildOfferMessage(
   ].join('\n');
 }
 
+export function isRetailOrderReadyForDriverOffer(status: RetailOrderStatus): boolean {
+  return status === 'PAID' || status === 'PREPARING';
+}
+
 /**
  * Broadcast a delivery job to all registered drivers on the shared WhatsApp number.
  * Uses the operating salon id for send — outbound falls back to the router number.
@@ -232,6 +236,10 @@ export async function offerDeliveryToDrivers(
   order: RetailOrderWithItems,
 ): Promise<{ offered: number }> {
   if (order.fulfillment !== 'DELIVERY') return { offered: 0 };
+  if (!isRetailOrderReadyForDriverOffer(order.status)) {
+    logger.info({ orderId: order.id, status: order.status }, 'retail_driver_offer_skipped_unpaid');
+    return { offered: 0 };
+  }
 
   const salon = await getTenantDb().salon.findUnique({
     where: { id: order.salonId },
@@ -400,6 +408,19 @@ export async function tryHandleDriverWhatsApp(input: {
       return true;
     }
 
+    if (order.status === 'PENDING_PAYMENT' || order.status === 'DRAFT') {
+      await sendWithFallback({
+        salonId,
+        to: input.waId,
+        body: [
+          `${orderRef(order.id)} isn’t paid yet — wait for the PayFast confirmation ping.`,
+          '',
+          SHOP_FOR_YOURSELF,
+        ].join('\n'),
+      });
+      return true;
+    }
+
     const dispatch = readDispatchMeta(order.metadata) ?? {
       status: 'offered' as const,
       offeredAt: new Date().toISOString(),
@@ -491,7 +512,7 @@ export async function tryHandleDriverWhatsApp(input: {
         `✅ *You’re on ${orderRef(updated.id)}*`,
         `Customer: ${sanitize(customerLabel(updated))}`,
         `📍 ${addr}`,
-        `COD: *${formatZarFromCents(updated.totalCents)}*`,
+        `Paid: *${formatZarFromCents(updated.totalCents)}* (already collected via PayFast)`,
         '',
         'Pick up at the shop, then deliver. Reply when done if staff ask.',
       ].join('\n'),

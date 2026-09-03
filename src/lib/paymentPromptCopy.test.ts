@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPaymentCheckoutCta,
   buildPaymentMethodFallbackText,
+  buildRetailPayfastPromptBody,
   buildSecurePaymentPromptBody,
 } from './paymentPromptCopy.js';
 
@@ -21,6 +22,18 @@ describe('paymentPromptCopy', () => {
     const body = buildSecurePaymentPromptBody(12000, { serviceName: 'Cut & Style' });
     expect(body).toContain('Cut & Style');
     expect(body).toContain('R 120.00');
+  });
+
+  it('retail PayFast copy has no cash option and mentions drivers on delivery', () => {
+    const body = buildRetailPayfastPromptBody({
+      amountCents: 25000,
+      orderRef: '#AB12CD',
+      fulfillment: 'DELIVERY',
+    });
+    expect(body).toContain('#AB12CD');
+    expect(body).toContain('R 250.00');
+    expect(body).toContain('ACCEPT');
+    expect(body.toLowerCase()).not.toContain('cash');
   });
 
   it('fallback text still offers reply 1 and 2', () => {
