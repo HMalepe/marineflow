@@ -230,6 +230,15 @@ export async function buildApp() {
         if (recorded === 'duplicate') continue;
 
         try {
+          const { handleIncomingMessage } = await import('./services/productImageLookup.js');
+          const handledPhoto = await handleIncomingMessage({
+            from: inbound.fromPhoneE164,
+            text: { body: inbound.body },
+            type: inbound.inboundType ?? (inbound.body ? 'text' : 'unknown'),
+            metaPhoneNumberId: inbound.metaPhoneNumberId,
+          });
+          if (handledPhoto) continue;
+
           await handleInboundWhatsApp({
             from: inbound.fromPhoneE164,
             body: inbound.body,

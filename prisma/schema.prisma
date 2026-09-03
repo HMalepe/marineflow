@@ -493,6 +493,9 @@ model Service {
   trackInventory  Boolean          @default(false)
   stockQty        Int              @default(0)
   lowStockThreshold Int            @default(5)
+  /// Public HTTPS image for WhatsApp Cloud API product photos
+  imageUrl        String?          @db.Text
+  imageCaption    String?          @db.Text
 
   staffLinks   StaffService[]
   appointments Appointment[]

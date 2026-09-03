@@ -171,6 +171,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
               id: string;
               from: string;
               timestamp: string;
+              type?: string;
               text?: { body: string };
               interactive?: {
                 type?: string;
@@ -199,6 +200,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
           const ts = Number(msg.timestamp);
           const fromDigits = msg.from.replace(/\D/g, '');
           const profileName = nameByWaId.get(fromDigits);
+          const inboundType = msg.type ?? (msg.text?.body ? 'text' : msg.interactive ? 'interactive' : undefined);
           results.push({
             externalId: msg.id,
             fromPhoneE164: msg.from.startsWith('+') ? msg.from : `+${msg.from}`,
@@ -207,6 +209,7 @@ export const whatsappCloudMessaging: MessagingProvider = {
             receivedAt: isNaN(ts) ? new Date() : new Date(ts * 1000),
             metaPhoneNumberId: phoneId,
             ...(profileName ? { profileName } : {}),
+            ...(inboundType ? { inboundType } : {}),
           });
         }
       }

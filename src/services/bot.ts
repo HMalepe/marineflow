@@ -1190,6 +1190,23 @@ export async function handleInboundWhatsApp(input: {
     await touchBotSession(tenant.id, waId);
 
     try {
+      const { handleIncomingMessage } = await import('./productImageLookup.js');
+      if (
+        await handleIncomingMessage({
+          from: input.from,
+          text: { body: textForBot },
+          type: 'text',
+          salonId: tenant.id,
+          metaPhoneNumberId: input.metaPhoneNumberId,
+        })
+      ) {
+        return;
+      }
+    } catch (err) {
+      logger.warn({ err, waId }, 'product_image_inbound_failed');
+    }
+
+    try {
       assertTenantActive(tenant);
     } catch {
       logger.warn({ tenantId: tenant.id, status: tenant.status }, 'bot_tenant_inactive');

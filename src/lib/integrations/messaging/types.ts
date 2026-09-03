@@ -89,6 +89,8 @@ export interface NormalisedInboundMessage {
   metaPhoneNumberId?: string;
   /** WhatsApp profile display name when the provider sends it (Twilio ProfileName / Meta contacts). */
   profileName?: string;
+  /** Meta Cloud inbound type: text, image, audio, interactive, … */
+  inboundType?: string;
 }
 
 export interface MessagingProvider {
