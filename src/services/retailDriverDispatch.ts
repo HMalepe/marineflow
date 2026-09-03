@@ -7,7 +7,7 @@ import type { RetailOrder, RetailOrderItem, RetailOrderStatus } from '@prisma/cl
 import { getTenantDb, withTenantContext } from '../lib/db/tenantSession.js';
 import { prisma } from '../lib/prisma.js';
 import { normalizeWaId } from '../lib/phone.js';
-import { getLinkedBusinesses, isBusinessRouterSalon } from '../lib/businessRouter.js';
+import { getLinkedBusinesses, isBusinessRouterSalon, isSwitchBusinessCommand } from '../lib/businessRouter.js';
 import {
   formatZarFromCents,
   getRetailSettings,
@@ -16,6 +16,7 @@ import {
 } from '../lib/retailSettings.js';
 import { logger } from '../lib/logger.js';
 import { redis } from '../lib/redis.js';
+import { isConversationWakeMessage } from '../lib/conversationWake.js';
 import { sendWithFallback } from './channelRouter.js';
 import { emitRetailOrderUpdated } from './retailOrderNotify.js';
 
@@ -290,6 +291,15 @@ export async function offerDeliveryToDrivers(
   return { offered: drivers.length };
 }
 
+function wantsToShopAsCustomer(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (isConversationWakeMessage(text) || isSwitchBusinessCommand(text)) return true;
+  return /^(thanks|thank you|ok|okay|shop|order|buy|menu)$/i.test(t);
+}
+
+const SHOP_FOR_YOURSELF =
+  'Want to shop for yourself? Reply *HI* and pick BontleEntle or Dr Marley.';
+
 function parseDriverReply(text: string): 'accept' | 'decline' | null {
   const t = text.trim().toLowerCase();
   if (
@@ -321,8 +331,11 @@ export async function tryHandleDriverWhatsApp(input: {
 
   const intent = parseDriverReply(input.text);
   const remembered = await readRememberedOffer(input.waId);
-  // Only intercept when a live job is on this phone — never steal picker "1"/"2"
-  if (!remembered) return false;
+
+  // No live job, or they said hi/thanks/shop — send them into the customer picker
+  if (!remembered || (!intent && wantsToShopAsCustomer(input.text))) {
+    return false;
+  }
 
   // Prefer remembered offer salon, else first matching dispensary
   const salonId = remembered?.salonId ?? hits[0]!.salonId;
@@ -342,6 +355,8 @@ export async function tryHandleDriverWhatsApp(input: {
           remembered
             ? `You have an open offer for order ${orderRef(remembered.orderId)}.`
             : 'No open job on your phone right now.',
+          '',
+          SHOP_FOR_YOURSELF,
         ].join('\n'),
       });
       return true;
@@ -352,7 +367,11 @@ export async function tryHandleDriverWhatsApp(input: {
       await sendWithFallback({
         salonId,
         to: input.waId,
-        body: 'No open delivery offer right now. You’ll get a WhatsApp when the next job drops.',
+        body: [
+          'No open delivery offer right now. You’ll get a WhatsApp when the next job drops.',
+          '',
+          SHOP_FOR_YOURSELF,
+        ].join('\n'),
       });
       return true;
     }
@@ -372,7 +391,11 @@ export async function tryHandleDriverWhatsApp(input: {
       await sendWithFallback({
         salonId,
         to: input.waId,
-        body: 'That offer expired. Wait for the next ping.',
+        body: [
+          'That offer expired. Wait for the next ping.',
+          '',
+          SHOP_FOR_YOURSELF,
+        ].join('\n'),
       });
       return true;
     }
@@ -401,7 +424,11 @@ export async function tryHandleDriverWhatsApp(input: {
       await sendWithFallback({
         salonId,
         to: input.waId,
-        body: `👍 Noted — you declined ${orderRef(order.id)}. We’ll ping you on the next one.`,
+        body: [
+          `👍 Noted — you declined ${orderRef(order.id)}. We’ll ping you on the next one.`,
+          '',
+          SHOP_FOR_YOURSELF,
+        ].join('\n'),
       });
       return true;
     }
