@@ -54,7 +54,9 @@ function extractInboundBody(msg: {
 }): string {
   if (msg.text?.body) return msg.text.body.trim();
   if (msg.interactive?.list_reply?.id) return msg.interactive.list_reply.id.trim();
+  // Prefer button id; fall back to title when providers only echo the label.
   if (msg.interactive?.button_reply?.id) return msg.interactive.button_reply.id.trim();
+  if (msg.interactive?.button_reply?.title) return msg.interactive.button_reply.title.trim();
   // WhatsApp Flow completion — encode as __FLOW__:<json> for bot routing
   if (msg.interactive?.nfm_reply?.response_json) {
     return `__FLOW__:${msg.interactive.nfm_reply.response_json}`;

@@ -43,8 +43,10 @@ export const twilioMessaging: MessagingProvider = {
     const params = payload as Record<string, string>;
     const from = params['From'] ?? '';
     const to = params['To'] ?? '';
-    // List/button taps may arrive in Body or ButtonPayload depending on channel.
-    const body = (params['Body'] ?? '').trim() || (params['ButtonPayload'] ?? '').trim();
+    // Quick-reply taps: ButtonPayload is the action id ("yes"); Body is often the
+    // visible title ("Yes, I am 18+"). Prefer the id so bot matchers stay stable.
+    const buttonPayload = (params['ButtonPayload'] ?? '').trim();
+    const body = buttonPayload || (params['Body'] ?? '').trim();
     const sid = params['MessageSid'] ?? '';
     if (!from || !sid) return [];
     const profileName = (params['ProfileName'] ?? '').trim() || undefined;

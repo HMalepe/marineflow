@@ -100,6 +100,27 @@ function isClearCartText(text: string): boolean {
   return t === '3' || t === 'clear' || t.includes('clear cart') || t === 'empty';
 }
 
+/** Age-gate YES — accept id ("yes"), typed YES, or the button title WhatsApp shows. */
+export function isAgeGateYes(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[!?.]+$/g, '');
+  if (!t) return false;
+  if (t === 'yes' || t === 'y' || t === '1') return true;
+  if (/^(yeah|yep|yup|sure|ok|okay)$/i.test(t)) return true;
+  if (t.startsWith('yes')) return true; // "yes, i am 18+", "yes i am 18+"
+  if (t.includes('i am 18') || t.includes("i'm 18") || t.includes('im 18')) return true;
+  return false;
+}
+
+/** Age-gate NO / exit. */
+export function isAgeGateNo(text: string): boolean {
+  const t = text.trim().toLowerCase().replace(/[!?.]+$/g, '');
+  if (!t) return false;
+  if (t === 'no' || t === 'n' || t === '2') return true;
+  if (t === 'no / exit' || t.includes('exit')) return true;
+  if (/^no\b/.test(t)) return true;
+  return false;
+}
+
 function ctx(conv: Conv): RetailCtx {
   const raw = conv.context;
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
@@ -687,14 +708,18 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
     );
   }
 
-  // Age gate
-  if (conv.step === ConversationStep.RETAIL_BROWSE && c.retailAgeOk === false) {
-    if (lower === 'yes' || lower === 'y' || trimmed === '1') {
+  // Age gate — treat anything other than retailAgeOk === true as gated
+  if (
+    conv.step === ConversationStep.RETAIL_BROWSE &&
+    settings.ageGateEnabled &&
+    c.retailAgeOk !== true
+  ) {
+    if (isAgeGateYes(trimmed)) {
       return showProductCategories(
         await setStep(conv, ConversationStep.RETAIL_BROWSE, { retailAgeOk: true }),
       );
     }
-    if (lower === 'no' || lower === 'n' || trimmed === '2') {
+    if (isAgeGateNo(trimmed)) {
       await reply(conv, 'No problem — come back when you’re 18+. Reply *SWITCH* for other businesses.');
       return setStep(conv, ConversationStep.CLOSED, {});
     }
@@ -704,7 +729,12 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
 
   // "Want the usual?"
   if (conv.step === ConversationStep.RETAIL_BROWSE && c.retailUsualPending) {
-    if (trimmed === '1' || lower === 'yes' || lower.includes('usual')) {
+    if (
+      trimmed === '1' ||
+      isAgeGateYes(trimmed) ||
+      lower.includes('usual') ||
+      lower === 'the usual'
+    ) {
       const usual = c.retailUsualCart ?? [];
       if (usual.length === 0) {
         return showProductCategories(
@@ -716,7 +746,12 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       }
       return showPostAddCart(conv, usual);
     }
-    if (trimmed === '2' || lower.includes('browse') || lower === 'no') {
+    if (
+      trimmed === '2' ||
+      lower.includes('browse') ||
+      isAgeGateNo(trimmed) ||
+      lower === 'browse menu'
+    ) {
       return showProductCategories(
         await setStep(conv, ConversationStep.RETAIL_BROWSE, {
           retailUsualPending: false,
@@ -930,10 +965,21 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
   }
 
   if (conv.step === ConversationStep.RETAIL_CONFIRM) {
-    if (trimmed === '1' || lower === 'confirm' || lower === 'pay') {
+    if (
+      trimmed === '1' ||
+      lower === 'confirm' ||
+      lower === 'pay' ||
+      lower.includes('confirm order') ||
+      (lower.startsWith('confirm') && !lower.includes('cancel'))
+    ) {
       return placeOrder(conv);
     }
-    if (trimmed === '2' || lower.includes('edit') || isKeepShoppingText(trimmed)) {
+    if (
+      trimmed === '2' ||
+      lower.includes('edit') ||
+      lower === 'edit cart' ||
+      isKeepShoppingText(trimmed)
+    ) {
       const cart = c.retailCart ?? [];
       if (cart.length) return showPostAddCart(conv, cart);
       return showProductCategories(conv);
