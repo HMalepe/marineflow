@@ -92,6 +92,7 @@ import {
 import { sendWelcomeJourneyIfNeeded } from './welcomeJourney.js';
 import { resolveOperatingTenantViaRouter } from './businessRouterBot.js';
 import {
+  handleRetailBack,
   handleRetailStep,
   listRetailOrders,
   shouldUseRetailOrderFlow,
@@ -2611,6 +2612,19 @@ async function goBackOneStep(conv: Conversation & { customer: Customer; salon: S
 
     case ConversationStep.COLLECT_FIRST_NAME:
     case ConversationStep.BOOKING_POPIA_CONSENT:
+      await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
+      await replyMenu(conv);
+      return;
+
+    case ConversationStep.RETAIL_BROWSE:
+    case ConversationStep.RETAIL_CART:
+    case ConversationStep.RETAIL_FULFILLMENT:
+    case ConversationStep.RETAIL_ADDRESS:
+    case ConversationStep.RETAIL_CONFIRM:
+      await handleRetailBack(conv);
+      return;
+
     default:
       await saveCtx(conv.id, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
       syncConvContext(conv, PENDING_PROFILE_CLEAR, ConversationStep.MENU);
@@ -2657,7 +2671,15 @@ async function routeConversation(
     case ConversationStep.RETAIL_FULFILLMENT:
     case ConversationStep.RETAIL_ADDRESS:
     case ConversationStep.RETAIL_CONFIRM:
-      await handleRetailStep(conv, t);
+      try {
+        await handleRetailStep(conv, t);
+      } catch (err) {
+        logger.error({ err, convId: conv.id, step: conv.step }, 'retail_step_failed');
+        await reply(
+          conv,
+          "Something glitched on that step. Reply *1* to browse the menu, *MENU* for the main list, or *SWITCH* to change business.",
+        );
+      }
       break;
     case ConversationStep.MARKETING_CONSENT:
       await handleMarketingConsentFlow(conv, t);
@@ -3358,7 +3380,12 @@ async function menuActionShowTeam(
   conv: Conversation & { customer: Customer; salon: Salon },
 ): Promise<void> {
   const team = await getTenantDb().staff.findMany({
-    where: { salonId: conv.salonId, active: true, deletedAt: null, isBookable: true },
+    where: {
+      salonId: conv.salonId,
+      active: true,
+      deletedAt: null,
+      ...(shouldUseRetailOrderFlow(conv.salon) ? {} : { isBookable: true }),
+    },
     orderBy: { sortOrder: 'asc' },
     take: 12,
     select: { name: true, specialties: true },
@@ -3444,6 +3471,10 @@ async function handleSubMenuChoice(
 
   switch (category) {
     case 'my_appointments':
+      if (shouldUseRetailOrderFlow(conv.salon)) {
+        await listRetailOrders(conv);
+        return;
+      }
       if (choice === 1) return menuActionViewBookings(conv, 'view');
       if (choice === 2) return menuActionViewBookings(conv, 'reschedule');
       if (choice === 3) return menuActionViewBookings(conv, 'cancel');
@@ -3538,6 +3569,10 @@ async function handleMainMenuSelection(
       return;
     }
     if (selection.id === 'services') {
+      if (shouldUseRetailOrderFlow(conv.salon)) {
+        await startRetailOrderFlow(conv);
+        return;
+      }
       const { text, options } = await prepareServicesSubMenu(conv);
       await replyMaybeInteractive(conv, text, buildServicesSubMenuInteractive(options, conv.salon));
       return;
@@ -3622,6 +3657,10 @@ async function handleMenu(
   const activeCategory =
     rawCategory === 'appointments' ? 'appointments' : normalizeMenuCategoryId(rawCategory);
   if (activeCategory) {
+    if (activeCategory === 'services' && shouldUseRetailOrderFlow(conv.salon)) {
+      await startRetailOrderFlow(conv);
+      return;
+    }
     const subChoice = parseSubMenuChoice(trimmed);
     if (activeCategory === 'services') {
       const options = await loadServiceSubMenuOptions(conv.salonId);

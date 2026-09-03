@@ -21,7 +21,7 @@ import {
   isDispensarySalon,
 } from '../lib/retailSettings.js';
 import { isProductSellable } from '../lib/inventory.js';
-import { salonDisplayName } from '../lib/hierarchicalMenu.js';
+import { salonDisplayName, buildMainMenuText } from '../lib/hierarchicalMenu.js';
 import { logger } from '../lib/logger.js';
 import { sendWithFallback } from './channelRouter.js';
 import { notifyNewRetailOrderLater } from './retailOrderNotify.js';
@@ -33,6 +33,8 @@ import {
 type Conv = Conversation & { customer: Customer; salon: Salon };
 
 type CartLine = { serviceId: string; name: string; unitPriceCents: number; qty: number };
+
+type RetailCartMenu = 'categories' | 'products' | 'qty' | 'post_add';
 
 type RetailCtx = {
   retailAgeOk?: boolean;
@@ -46,7 +48,40 @@ type RetailCtx = {
   /** Waiting for Yes/No on "the usual" reorder. */
   retailUsualPending?: boolean;
   retailUsualCart?: CartLine[];
+  /** Which numbered menu the customer is on — never infer from empty product ids. */
+  retailCartMenu?: RetailCartMenu;
+  deliveryLine1?: string;
+  deliverySuburb?: string;
+  deliveryCity?: string;
+  deliveryNotes?: string;
 };
+
+function persistableCtx(c: RetailCtx): object {
+  return JSON.parse(JSON.stringify(c)) as object;
+}
+
+export function isKeepShoppingText(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return (
+    t === '1' ||
+    t === 'keep' ||
+    t === 'shop' ||
+    t === 'more' ||
+    t.includes('keep shopping') ||
+    t.includes('shop more') ||
+    t.includes('add more')
+  );
+}
+
+export function isCheckoutText(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t === '2' || t === 'checkout' || t === 'check out' || t === 'pay' || t.includes('checkout');
+}
+
+function isClearCartText(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  return t === '3' || t === 'clear' || t.includes('clear cart') || t === 'empty';
+}
 
 function ctx(conv: Conv): RetailCtx {
   const raw = conv.context;
@@ -69,12 +104,12 @@ async function reply(conv: Conv, body: string): Promise<void> {
 }
 
 async function setStep(conv: Conv, step: ConversationStep, patch: RetailCtx): Promise<Conv> {
-  const next = { ...ctx(conv), ...patch };
+  const next = persistableCtx({ ...ctx(conv), ...patch });
   return getTenantDb().conversation.update({
     where: { id: conv.id },
     data: {
       step,
-      context: next as object,
+      context: next,
       lastMessageAt: new Date(),
     },
     include: { customer: true, salon: true },
@@ -205,6 +240,11 @@ async function showProductCategories(conv: Conv): Promise<Conv> {
   return setStep(conv, ConversationStep.RETAIL_BROWSE, {
     retailCategoryIds: categories.map((c) => c.id),
     retailAgeOk: true,
+    retailUsualPending: false,
+    retailAwaitingQty: false,
+    retailPendingServiceId: undefined,
+    retailProductIds: [],
+    retailCartMenu: 'categories',
   });
 }
 
@@ -252,6 +292,34 @@ async function showProductsInCategory(conv: Conv, category: ServiceCategory): Pr
     retailProductIds: products.map((p) => p.id),
     retailAgeOk: true,
     retailUsualPending: false,
+    retailAwaitingQty: false,
+    retailPendingServiceId: undefined,
+    retailCartMenu: 'products',
+  });
+}
+
+function postAddMenuText(cart: CartLine[]): string {
+  return [
+    '*Your cart*',
+    formatCart(cart),
+    `Subtotal: *${formatZarFromCents(cartSubtotal(cart))}*`,
+    '',
+    '1 — Keep shopping',
+    '2 — Checkout',
+    '3 — Clear cart',
+  ].join('\n');
+}
+
+async function showPostAddCart(conv: Conv, cart: CartLine[]): Promise<Conv> {
+  await reply(conv, postAddMenuText(cart));
+  return setStep(conv, ConversationStep.RETAIL_CART, {
+    retailCart: cart,
+    retailAwaitingQty: false,
+    retailPendingServiceId: undefined,
+    retailProductIds: [],
+    retailUsualPending: false,
+    retailCartMenu: 'post_add',
+    retailAgeOk: true,
   });
 }
 
@@ -313,8 +381,9 @@ async function addToCart(conv: Conv, product: Service, qty: number): Promise<Con
     retailCart: cart,
     retailAwaitingQty: false,
     retailPendingServiceId: undefined,
-    retailProductIds: undefined,
+    retailProductIds: [],
     retailUsualPending: false,
+    retailCartMenu: 'post_add',
   });
 }
 
@@ -582,7 +651,7 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
   const settings = getRetailSettings(conv.salon.metadata);
 
   if (lower === 'back' || lower === 'menu') {
-    return setStep(conv, ConversationStep.MENU, c);
+    return handleRetailBack(conv);
   }
 
   if (lower === 'usual' || lower === 'the usual' || lower === 'history') {
@@ -596,12 +665,12 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
 
   // Age gate
   if (conv.step === ConversationStep.RETAIL_BROWSE && c.retailAgeOk === false) {
-    if (lower === 'yes' || lower === 'y') {
+    if (lower === 'yes' || lower === 'y' || trimmed === '1') {
       return showProductCategories(
         await setStep(conv, ConversationStep.RETAIL_BROWSE, { retailAgeOk: true }),
       );
     }
-    if (lower === 'no' || lower === 'n') {
+    if (lower === 'no' || lower === 'n' || trimmed === '2') {
       await reply(conv, 'No problem — come back when you’re 18+. Reply *SWITCH* for other businesses.');
       return setStep(conv, ConversationStep.CLOSED, {});
     }
@@ -639,6 +708,9 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
         retailUsualPending: false,
         retailUsualCart: undefined,
         retailAgeOk: true,
+        retailCartMenu: 'post_add',
+        retailProductIds: [],
+        retailAwaitingQty: false,
       });
     }
     if (trimmed === '2' || lower.includes('browse') || lower === 'no') {
@@ -662,11 +734,13 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       }
       await reply(
         conv,
-        ['*Your cart*', formatCart(cart), '', '1 — Keep shopping', '2 — Checkout', '3 — Clear cart'].join(
-          '\n',
-        ),
+        postAddMenuText(cart),
       );
-      return setStep(conv, ConversationStep.RETAIL_CART, { retailCart: cart });
+      return setStep(conv, ConversationStep.RETAIL_CART, {
+        retailCart: cart,
+        retailCartMenu: 'post_add',
+        retailProductIds: [],
+      });
     }
     const idx = Number.parseInt(trimmed, 10) - 1;
     const catId = c.retailCategoryIds?.[idx];
@@ -682,32 +756,60 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
   }
 
   if (conv.step === ConversationStep.RETAIL_CART) {
-    if (c.retailAwaitingQty && c.retailPendingServiceId) {
+    const cartMenu: RetailCartMenu =
+      c.retailCartMenu ??
+      (c.retailAwaitingQty
+        ? 'qty'
+        : c.retailProductIds && c.retailProductIds.length > 0
+          ? 'products'
+          : 'post_add');
+
+    if (cartMenu === 'qty' || (c.retailAwaitingQty && c.retailPendingServiceId)) {
+      if (trimmed === '0' || lower === 'back') {
+        const catId = c.retailCategoryIds?.[0];
+        if (catId) {
+          const category = await getTenantDb().serviceCategory.findFirst({
+            where: { id: catId, salonId: conv.salonId },
+          });
+          if (category) return showProductsInCategory(conv, category);
+        }
+        return showProductCategories(conv);
+      }
       const qty = parseQty(trimmed);
       if (!qty) {
-        await reply(conv, 'How many? Reply with a number from 1–20.');
+        await reply(conv, 'How many? Reply with a number from 1–20, or *0* to cancel.');
         return conv;
       }
       const product = await getTenantDb().service.findFirst({
         where: { id: c.retailPendingServiceId, salonId: conv.salonId, active: true },
       });
-      if (!product) return showProductCategories(conv);
+      if (!product) {
+        await reply(conv, 'That product is no longer available. Pick another category.');
+        return showProductCategories(conv);
+      }
       return addToCart(conv, product, qty);
     }
 
-    // Post-add menu
-    if (!c.retailProductIds?.length) {
-      if (trimmed === '1') return showProductCategories(conv);
-      if (trimmed === '2') return beginCheckout(conv);
-      if (trimmed === '3') {
-        await reply(conv, 'Cart cleared.');
+    if (cartMenu === 'post_add') {
+      if (isKeepShoppingText(trimmed)) return showProductCategories(conv);
+      if (isCheckoutText(trimmed)) return beginCheckout(conv);
+      if (isClearCartText(trimmed)) {
+        await reply(conv, 'Cart cleared. Pick a category to start again.');
         return showProductCategories(
-          await setStep(conv, ConversationStep.RETAIL_BROWSE, { retailCart: [] }),
+          await setStep(conv, ConversationStep.RETAIL_BROWSE, {
+            retailCart: [],
+            retailCartMenu: 'categories',
+          }),
         );
       }
+      await reply(
+        conv,
+        'Reply *1* to keep shopping, *2* to checkout, or *3* to clear the cart.',
+      );
+      return conv;
     }
 
-    if (trimmed === '0') return showProductCategories(conv);
+    if (trimmed === '0' || lower === 'back') return showProductCategories(conv);
 
     const pIdx = Number.parseInt(trimmed, 10) - 1;
     const productId = c.retailProductIds?.[pIdx];
@@ -715,15 +817,19 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       const product = await getTenantDb().service.findFirst({
         where: { id: productId, salonId: conv.salonId, active: true },
       });
-      if (!product) return showProductCategories(conv);
-      await reply(conv, `How many *${product.name}*? (1–20)`);
+      if (!product) {
+        await reply(conv, 'That product is no longer available. Pick another.');
+        return showProductCategories(conv);
+      }
+      await reply(conv, `How many *${product.name}*? (1–20)\n\nReply *0* to go back.`);
       return setStep(conv, ConversationStep.RETAIL_CART, {
         retailAwaitingQty: true,
         retailPendingServiceId: product.id,
+        retailCartMenu: 'qty',
       });
     }
 
-    await reply(conv, 'Reply with a product number, or 0 to go back.');
+    await reply(conv, 'Reply with a product number from the list, or *0* to go back to categories.');
     return conv;
   }
 
@@ -781,18 +887,60 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
     if (trimmed === '1' || lower === 'confirm' || lower === 'pay') {
       return placeOrder(conv);
     }
-    if (trimmed === '2' || lower.includes('edit')) {
+    if (trimmed === '2' || lower.includes('edit') || isKeepShoppingText(trimmed)) {
+      const cart = c.retailCart ?? [];
+      if (cart.length) return showPostAddCart(conv, cart);
       return showProductCategories(conv);
     }
     if (trimmed === '3' || lower.includes('cancel')) {
       await reply(conv, 'Order cancelled. Reply *MENU* anytime.');
       return setStep(conv, ConversationStep.MENU, { retailCart: [], retailAgeOk: true });
     }
-    await reply(conv, 'Reply *1* to confirm & pay, *2* to edit, or *3* to cancel.');
+    await reply(conv, 'Reply *1* to confirm, *2* to keep shopping, or *3* to cancel.');
     return conv;
   }
 
+  await reply(
+    conv,
+    [
+      "I didn't catch that. Here's how to continue:",
+      '',
+      '1 — Keep shopping / browse',
+      '2 — Checkout (if you have a cart)',
+      '*MENU* — main menu',
+      '*SWITCH* — other business',
+    ].join('\n'),
+  );
   return conv;
+}
+
+/** BACK from a retail step — always sends a screen (never silent). */
+export async function handleRetailBack(conv: Conv): Promise<Conv> {
+  const c = ctx(conv);
+  const cart = c.retailCart ?? [];
+
+  if (conv.step === ConversationStep.RETAIL_CONFIRM) {
+    return beginCheckout(conv);
+  }
+  if (conv.step === ConversationStep.RETAIL_ADDRESS) {
+    return beginCheckout(conv);
+  }
+  if (conv.step === ConversationStep.RETAIL_FULFILLMENT) {
+    if (cart.length) return showPostAddCart(conv, cart);
+    return showProductCategories(conv);
+  }
+  if (conv.step === ConversationStep.RETAIL_CART) {
+    if (c.retailCartMenu === 'qty' || c.retailAwaitingQty) {
+      return showProductCategories(conv);
+    }
+    if (c.retailCartMenu === 'products' || (c.retailProductIds && c.retailProductIds.length > 0)) {
+      return showProductCategories(conv);
+    }
+    await reply(conv, buildMainMenuText(conv.salon));
+    return setStep(conv, ConversationStep.MENU, { ...c, retailAgeOk: true });
+  }
+  await reply(conv, buildMainMenuText(conv.salon));
+  return setStep(conv, ConversationStep.MENU, { ...c, retailAgeOk: true });
 }
 
 /** Soft free-text product match for dispensary (adds first match to cart flow). */
