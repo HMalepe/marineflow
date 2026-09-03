@@ -54,12 +54,12 @@ describe('sendWithFallback — interactive list delivery', () => {
     findUniqueOrThrowMock.mockReset();
   });
 
-  it('sends interactive list via Twilio Content API (never Meta Cloud interactive)', async () => {
+  it('sends interactive list via Meta Cloud when the salon has a Cloud phone id', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: 'PHONE123',
       twilioWhatsAppNumber: 'whatsapp:+14155238886',
     });
-    twilioSendMock.mockResolvedValueOnce({ providerMessageId: 'SM.interactive' });
+    sendTextMock.mockResolvedValueOnce({ providerMessageId: 'wamid.interactive' });
 
     const result = await sendWithFallback({
       salonId: 'salon-1',
@@ -69,22 +69,22 @@ describe('sendWithFallback — interactive list delivery', () => {
     });
 
     expect(result.channel).toBe('whatsapp');
-    expect(result.result.providerMessageId).toBe('SM.interactive');
-    expect(sendTextMock).not.toHaveBeenCalled();
-    expect(twilioSendMock).toHaveBeenCalledTimes(1);
-    expect(twilioSendMock.mock.calls[0]![0]).toMatchObject({
-      to: 'whatsapp:+27820000000',
+    expect(result.result.providerMessageId).toBe('wamid.interactive');
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
+    expect(sendTextMock.mock.calls[0]![0]).toMatchObject({
+      to: '+27820000000',
       interactive: interactiveMenu,
-      body: 'Plain fallback body',
-      twilioFrom: 'whatsapp:+14155238886',
+      phoneNumberId: 'PHONE123',
     });
+    expect(twilioSendMock).not.toHaveBeenCalled();
   });
 
-  it('retries plain text on Twilio when interactive send throws', async () => {
+  it('retries Twilio when Meta Cloud interactive throws', async () => {
     findUniqueOrThrowMock.mockResolvedValue({
       whatsappPhoneId: 'PHONE123',
       twilioWhatsAppNumber: '+14155238886',
     });
+    sendTextMock.mockRejectedValueOnce(new Error('Meta interactive error'));
     twilioSendMock
       .mockRejectedValueOnce(new Error('Twilio Content API error'))
       .mockResolvedValueOnce({ providerMessageId: 'SM.plain' });
@@ -97,7 +97,7 @@ describe('sendWithFallback — interactive list delivery', () => {
     });
 
     expect(result.result.providerMessageId).toBe('SM.plain');
-    expect(sendTextMock).not.toHaveBeenCalled();
+    expect(sendTextMock).toHaveBeenCalledTimes(1);
     expect(twilioSendMock).toHaveBeenCalledTimes(2);
     expect(twilioSendMock.mock.calls[0]![0].interactive).toBeDefined();
     expect(twilioSendMock.mock.calls[1]![0].interactive).toBeUndefined();

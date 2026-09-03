@@ -6,6 +6,7 @@ describe('retail cart post-add replies', () => {
     expect(isKeepShoppingText('1')).toBe(true);
     expect(isKeepShoppingText('Keep shopping')).toBe(true);
     expect(isKeepShoppingText('shop more')).toBe(true);
+    expect(isKeepShoppingText('more')).toBe(false);
     expect(isKeepShoppingText('2')).toBe(false);
   });
 

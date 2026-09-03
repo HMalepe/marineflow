@@ -23,7 +23,19 @@ import {
 import { isProductSellable } from '../lib/inventory.js';
 import { salonDisplayName, buildMainMenuText } from '../lib/hierarchicalMenu.js';
 import { logger } from '../lib/logger.js';
+import type { InteractiveMessage } from '../lib/integrations/messaging/types.js';
 import { sendWithFallback } from './channelRouter.js';
+import {
+  buildAgeGateInteractive,
+  buildCategoryListInteractive,
+  buildConfirmInteractive,
+  buildFulfillmentInteractive,
+  buildPostAddCartInteractive,
+  buildProductListInteractive,
+  buildQtyInteractive,
+  buildUsualInteractive,
+  RETAIL_LIST_PAGE_SIZE,
+} from './retailInteractive.js';
 import { notifyNewRetailOrderLater } from './retailOrderNotify.js';
 import {
   assertCartInStock,
@@ -50,6 +62,9 @@ type RetailCtx = {
   retailUsualCart?: CartLine[];
   /** Which numbered menu the customer is on — never infer from empty product ids. */
   retailCartMenu?: RetailCartMenu;
+  retailCategoryPage?: number;
+  retailProductPage?: number;
+  retailActiveCategoryId?: string;
   deliveryLine1?: string;
   deliverySuburb?: string;
   deliveryCity?: string;
@@ -66,7 +81,6 @@ export function isKeepShoppingText(text: string): boolean {
     t === '1' ||
     t === 'keep' ||
     t === 'shop' ||
-    t === 'more' ||
     t.includes('keep shopping') ||
     t.includes('shop more') ||
     t.includes('add more')
@@ -91,8 +105,13 @@ function ctx(conv: Conv): RetailCtx {
   return {};
 }
 
-async function reply(conv: Conv, body: string): Promise<void> {
-  await sendWithFallback({ salonId: conv.salonId, to: conv.customer.waId, body });
+async function reply(conv: Conv, body: string, interactive?: InteractiveMessage | null): Promise<void> {
+  await sendWithFallback({
+    salonId: conv.salonId,
+    to: conv.customer.waId,
+    body,
+    ...(interactive ? { interactive } : {}),
+  });
   await getTenantDb().message.create({
     data: {
       conversationId: conv.id,
@@ -139,7 +158,7 @@ export async function startRetailOrderFlow(conv: Conv): Promise<Conv> {
   const c = ctx(conv);
 
   if (settings.ageGateEnabled && !c.retailAgeOk) {
-    await reply(conv, settings.ageGateCopy);
+    await reply(conv, settings.ageGateCopy, buildAgeGateInteractive(settings.ageGateCopy));
     return setStep(conv, ConversationStep.RETAIL_BROWSE, { retailAgeOk: false });
   }
 
@@ -148,9 +167,7 @@ export async function startRetailOrderFlow(conv: Conv): Promise<Conv> {
     const preview = usual
       .map((l) => `• ${l.name} ×${l.qty} — ${formatZarFromCents(l.unitPriceCents * l.qty)}`)
       .join('\n');
-    await reply(
-      conv,
-      [
+    const usualBody = [
         `✨ *Welcome back* — want the usual?`,
         '',
         preview,
@@ -160,8 +177,8 @@ export async function startRetailOrderFlow(conv: Conv): Promise<Conv> {
         '2 — Browse the full menu',
         '',
         'Reply *HISTORY* anytime for past orders.',
-      ].join('\n'),
-    );
+      ].join('\n');
+    await reply(conv, usualBody, buildUsualInteractive(usualBody));
     return setStep(conv, ConversationStep.RETAIL_BROWSE, {
       retailAgeOk: true,
       retailUsualPending: true,
@@ -214,7 +231,7 @@ async function showProductCategories(conv: Conv): Promise<Conv> {
       },
     },
     orderBy: { sortOrder: 'asc' },
-    take: 20,
+    take: 40,
   });
 
   if (categories.length === 0) {
@@ -225,6 +242,9 @@ async function showProductCategories(conv: Conv): Promise<Conv> {
     return setStep(conv, ConversationStep.MENU, {});
   }
 
+  const c = ctx(conv);
+  const maxPage = Math.max(0, Math.ceil(categories.length / RETAIL_LIST_PAGE_SIZE) - 1);
+  const page = Math.min(Math.max(c.retailCategoryPage ?? 0, 0), maxPage);
   const lines = categories.map((cat, i) => `${i + 1} — ${cat.name}`);
   const body = [
     `🛍️ *${salonDisplayName(conv.salon)} — Products*`,
@@ -233,18 +253,28 @@ async function showProductCategories(conv: Conv): Promise<Conv> {
     '',
     '0 — View cart / checkout',
     '',
-    'Reply with a number. Reply *BACK* for the main menu.',
+    'Tap *View options* to pick, or reply with a number. *BACK* for the main menu.',
   ].join('\n');
 
-  await reply(conv, body);
+  await reply(
+    conv,
+    body,
+    buildCategoryListInteractive({
+      shopName: salonDisplayName(conv.salon),
+      categories,
+      page,
+      hasCart: (c.retailCart ?? []).length > 0,
+    }),
+  );
   return setStep(conv, ConversationStep.RETAIL_BROWSE, {
-    retailCategoryIds: categories.map((c) => c.id),
+    retailCategoryIds: categories.map((cat) => cat.id),
     retailAgeOk: true,
     retailUsualPending: false,
     retailAwaitingQty: false,
     retailPendingServiceId: undefined,
     retailProductIds: [],
     retailCartMenu: 'categories',
+    retailCategoryPage: page,
   });
 }
 
@@ -278,16 +308,28 @@ async function showProductsInCategory(conv: Conv, category: ServiceCategory): Pr
         : '')
     );
   });
+  const page = ctx(conv).retailProductPage ?? 0;
   const body = [
     `🌿 *${category.name}*`,
     '',
     ...lines,
     '',
     '0 — Back to categories',
-    'Reply a number to add to cart.',
+    'Tap *View options* to add, or reply with a number.',
   ].join('\n');
 
-  await reply(conv, body);
+  await reply(
+    conv,
+    body,
+    buildProductListInteractive({
+      categoryName: category.name,
+      products: products.map((p) => ({
+        name: p.name,
+        priceLabel: formatZarFromCents(p.priceCents),
+      })),
+      page,
+    }),
+  );
   return setStep(conv, ConversationStep.RETAIL_CART, {
     retailProductIds: products.map((p) => p.id),
     retailAgeOk: true,
@@ -295,6 +337,8 @@ async function showProductsInCategory(conv: Conv, category: ServiceCategory): Pr
     retailAwaitingQty: false,
     retailPendingServiceId: undefined,
     retailCartMenu: 'products',
+    retailActiveCategoryId: category.id,
+    retailProductPage: page,
   });
 }
 
@@ -310,8 +354,9 @@ function postAddMenuText(cart: CartLine[]): string {
   ].join('\n');
 }
 
-async function showPostAddCart(conv: Conv, cart: CartLine[]): Promise<Conv> {
-  await reply(conv, postAddMenuText(cart));
+async function showPostAddCart(conv: Conv, cart: CartLine[], prefix?: string): Promise<Conv> {
+  const body = [prefix, postAddMenuText(cart)].filter(Boolean).join('\n');
+  await reply(conv, body, buildPostAddCartInteractive(body));
   return setStep(conv, ConversationStep.RETAIL_CART, {
     retailCart: cart,
     retailAwaitingQty: false,
@@ -362,29 +407,7 @@ async function addToCart(conv: Conv, product: Service, qty: number): Promise<Con
     });
   }
 
-  await reply(
-    conv,
-    [
-      `✅ Added *${product.name}* ×${qty}`,
-      '',
-      '*Your cart*',
-      formatCart(cart),
-      `Subtotal: *${formatZarFromCents(cartSubtotal(cart))}*`,
-      '',
-      '1 — Keep shopping',
-      '2 — Checkout',
-      '3 — Clear cart',
-    ].join('\n'),
-  );
-
-  return setStep(conv, ConversationStep.RETAIL_CART, {
-    retailCart: cart,
-    retailAwaitingQty: false,
-    retailPendingServiceId: undefined,
-    retailProductIds: [],
-    retailUsualPending: false,
-    retailCartMenu: 'post_add',
-  });
+  return showPostAddCart(conv, cart, `✅ Added *${product.name}* ×${qty}`);
 }
 
 async function beginCheckout(conv: Conv): Promise<Conv> {
@@ -415,9 +438,7 @@ async function beginCheckout(conv: Conv): Promise<Conv> {
   if (settings.deliveryEnabled) options.push('1 — 🚚 Delivery');
   if (settings.collectionEnabled) options.push(`${options.length + 1} — 🏪 Collection`);
 
-  await reply(
-    conv,
-    [
+  const fulfillBody = [
       '*How would you like to receive your order?*',
       '',
       formatCart(cart),
@@ -426,7 +447,11 @@ async function beginCheckout(conv: Conv): Promise<Conv> {
       ...options,
       '',
       settings.deliveryAreaNote,
-    ].join('\n'),
+    ].join('\n');
+  await reply(
+    conv,
+    fulfillBody,
+    buildFulfillmentInteractive(fulfillBody, settings.deliveryEnabled, settings.collectionEnabled),
   );
 
   return setStep(conv, ConversationStep.RETAIL_FULFILLMENT, { retailCart: cart });
@@ -478,9 +503,7 @@ async function showOrderSummary(conv: Conv): Promise<Conv> {
           .join(', ')
       : null;
 
-  await reply(
-    conv,
-    [
+  const summaryBody = [
       '🧾 *Order summary*',
       '',
       formatCart(cart),
@@ -493,8 +516,8 @@ async function showOrderSummary(conv: Conv): Promise<Conv> {
       '1 — Confirm order',
       '2 — Edit cart',
       '3 — Cancel order',
-    ].join('\n'),
-  );
+    ].join('\n');
+  await reply(conv, summaryBody, buildConfirmInteractive(summaryBody));
 
   return setStep(conv, ConversationStep.RETAIL_CONFIRM, {
     retailCart: cart,
@@ -674,7 +697,7 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       await reply(conv, 'No problem — come back when you’re 18+. Reply *SWITCH* for other businesses.');
       return setStep(conv, ConversationStep.CLOSED, {});
     }
-    await reply(conv, settings.ageGateCopy);
+    await reply(conv, settings.ageGateCopy, buildAgeGateInteractive(settings.ageGateCopy));
     return conv;
   }
 
@@ -690,28 +713,7 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
           }),
         );
       }
-      await reply(
-        conv,
-        [
-          '✅ Loaded your usual.',
-          '',
-          formatCart(usual),
-          `Subtotal: *${formatZarFromCents(cartSubtotal(usual))}*`,
-          '',
-          '1 — Keep shopping',
-          '2 — Checkout',
-          '3 — Clear cart',
-        ].join('\n'),
-      );
-      return setStep(conv, ConversationStep.RETAIL_CART, {
-        retailCart: usual,
-        retailUsualPending: false,
-        retailUsualCart: undefined,
-        retailAgeOk: true,
-        retailCartMenu: 'post_add',
-        retailProductIds: [],
-        retailAwaitingQty: false,
-      });
+      return showPostAddCart(conv, usual);
     }
     if (trimmed === '2' || lower.includes('browse') || lower === 'no') {
       return showProductCategories(
@@ -721,26 +723,36 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
         }),
       );
     }
-    await reply(conv, 'Reply *1* for the usual, or *2* to browse the menu.');
+    await reply(
+      conv,
+      'Reply *1* for the usual, or *2* to browse the menu.',
+      buildUsualInteractive('Reply *1* for the usual, or *2* to browse the menu.'),
+    );
     return conv;
   }
 
   if (conv.step === ConversationStep.RETAIL_BROWSE) {
+    if (lower === 'more') {
+      return showProductCategories(
+        await setStep(conv, ConversationStep.RETAIL_BROWSE, {
+          retailCategoryPage: (c.retailCategoryPage ?? 0) + 1,
+        }),
+      );
+    }
+    if (lower === 'prev') {
+      return showProductCategories(
+        await setStep(conv, ConversationStep.RETAIL_BROWSE, {
+          retailCategoryPage: Math.max(0, (c.retailCategoryPage ?? 0) - 1),
+        }),
+      );
+    }
     if (trimmed === '0') {
       const cart = c.retailCart ?? [];
       if (cart.length === 0) {
         await reply(conv, 'Cart is empty — pick a category first.');
         return conv;
       }
-      await reply(
-        conv,
-        postAddMenuText(cart),
-      );
-      return setStep(conv, ConversationStep.RETAIL_CART, {
-        retailCart: cart,
-        retailCartMenu: 'post_add',
-        retailProductIds: [],
-      });
+      return showPostAddCart(conv, cart);
     }
     const idx = Number.parseInt(trimmed, 10) - 1;
     const catId = c.retailCategoryIds?.[idx];
@@ -752,7 +764,10 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       where: { id: catId, salonId: conv.salonId },
     });
     if (!category) return showProductCategories(conv);
-    return showProductsInCategory(conv, category);
+    return showProductsInCategory(
+      await setStep(conv, ConversationStep.RETAIL_CART, { retailProductPage: 0, retailActiveCategoryId: category.id }),
+      category,
+    );
   }
 
   if (conv.step === ConversationStep.RETAIL_CART) {
@@ -805,8 +820,29 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       await reply(
         conv,
         'Reply *1* to keep shopping, *2* to checkout, or *3* to clear the cart.',
+        buildPostAddCartInteractive('Reply *1* to keep shopping, *2* to checkout, or *3* to clear the cart.'),
       );
       return conv;
+    }
+
+    if (lower === 'more' || lower === 'prev') {
+      const catId = c.retailActiveCategoryId;
+      if (catId) {
+        const category = await getTenantDb().serviceCategory.findFirst({
+          where: { id: catId, salonId: conv.salonId },
+        });
+        if (category) {
+          const nextPage =
+            lower === 'more'
+              ? (c.retailProductPage ?? 0) + 1
+              : Math.max(0, (c.retailProductPage ?? 0) - 1);
+          return showProductsInCategory(
+            await setStep(conv, ConversationStep.RETAIL_CART, { retailProductPage: nextPage }),
+            category,
+          );
+        }
+      }
+      return showProductCategories(conv);
     }
 
     if (trimmed === '0' || lower === 'back') return showProductCategories(conv);
@@ -821,7 +857,8 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
         await reply(conv, 'That product is no longer available. Pick another.');
         return showProductCategories(conv);
       }
-      await reply(conv, `How many *${product.name}*? (1–20)\n\nReply *0* to go back.`);
+      const qtyBody = `How many *${product.name}*? (1–20)\n\nReply *0* to go back.`;
+      await reply(conv, qtyBody, buildQtyInteractive(product.name));
       return setStep(conv, ConversationStep.RETAIL_CART, {
         retailAwaitingQty: true,
         retailPendingServiceId: product.id,
@@ -855,7 +892,15 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       });
       return showOrderSummary(updated);
     }
-    await reply(conv, 'Reply *1* for delivery or *2* for collection.');
+    await reply(
+      conv,
+      'Reply *1* for delivery or *2* for collection.',
+      buildFulfillmentInteractive(
+        'Reply *1* for delivery or *2* for collection.',
+        settings.deliveryEnabled,
+        settings.collectionEnabled,
+      ),
+    );
     return conv;
   }
 
@@ -896,7 +941,11 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
       await reply(conv, 'Order cancelled. Reply *MENU* anytime.');
       return setStep(conv, ConversationStep.MENU, { retailCart: [], retailAgeOk: true });
     }
-    await reply(conv, 'Reply *1* to confirm, *2* to keep shopping, or *3* to cancel.');
+    await reply(
+      conv,
+      'Reply *1* to confirm, *2* to keep shopping, or *3* to cancel.',
+      buildConfirmInteractive('Reply *1* to confirm, *2* to keep shopping, or *3* to cancel.'),
+    );
     return conv;
   }
 

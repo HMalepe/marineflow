@@ -78,7 +78,7 @@ export function buildBusinessPickerText(options: LinkedBusinessOption[]): string
     '',
     ...lines,
     '',
-    'Reply with a number to continue.',
+    'Tap *View options* below, or reply with a number.',
     'Reply *SWITCH* anytime to change businesses',
   ].join('\n');
 }

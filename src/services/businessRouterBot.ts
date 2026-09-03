@@ -24,13 +24,25 @@ import {
 } from '../lib/businessRouter.js';
 import { findSalonById, type ResolvedTenant } from '../lib/tenant.js';
 import { logger } from '../lib/logger.js';
+import type { InteractiveMessage } from '../lib/integrations/messaging/types.js';
 import { sendWithFallback } from './channelRouter.js';
+import { buildBusinessPickerInteractive } from './retailInteractive.js';
 
 type RouterConv = Conversation & { customer: Customer; salon: Salon };
 
-async function sendRouterWhatsApp(salonId: string, waId: string, body: string): Promise<void> {
+async function sendRouterWhatsApp(
+  salonId: string,
+  waId: string,
+  body: string,
+  interactive?: InteractiveMessage | null,
+): Promise<void> {
   try {
-    await sendWithFallback({ salonId, to: waId, body });
+    await sendWithFallback({
+      salonId,
+      to: waId,
+      body,
+      ...(interactive ? { interactive } : {}),
+    });
   } catch (err) {
     logger.error({ err, salonId, waId }, 'business_router_send_failed');
   }
@@ -108,7 +120,7 @@ async function clearRouterChoice(convId: string): Promise<void> {
 
 async function showPicker(conv: RouterConv, waId: string, options: LinkedBusinessOption[]) {
   const body = buildBusinessPickerText(options);
-  await sendRouterWhatsApp(conv.salonId, waId, body);
+  await sendRouterWhatsApp(conv.salonId, waId, body, buildBusinessPickerInteractive(options));
   await getTenantDb().conversation.update({
     where: { id: conv.id },
     data: {

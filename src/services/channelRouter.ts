@@ -103,8 +103,23 @@ export async function sendWithFallback(params: {
     return interactive.type === 'list';
   }
 
-  // Interactive lists/buttons — Twilio Content API only (no Meta Cloud interactive).
   if (params.interactive) {
+    if (cloudPhoneId) {
+      try {
+        const result = await whatsappCloudMessaging.sendText({
+          ...sendOpts,
+          phoneNumberId: cloudPhoneId,
+          interactive: params.interactive,
+        });
+        if (result.providerMessageId) {
+          logOutbound(params.salonId, true);
+          return { channel: 'whatsapp', result };
+        }
+      } catch (err) {
+        logCloudApiFallthrough(cloudPhoneId, err);
+      }
+    }
+
     if (twilioReady && twilioFrom) {
       try {
         const result = await twilioMessaging.sendText(
