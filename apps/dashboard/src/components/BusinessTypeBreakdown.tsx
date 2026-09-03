@@ -1,4 +1,5 @@
 import {
+  BUSINESS_TYPE_CHIP_CLASS,
   BUSINESS_TYPES,
   getBusinessTypeLabel,
   getBusinessTypeShortLabel,
@@ -16,15 +17,15 @@ export function BusinessTypeBadge({
   short?: boolean;
   className?: string;
 }) {
-  const chipClass: Record<BusinessType, string> = {
-    SALON: 'bg-violet-500/15 text-violet-800 dark:text-violet-300 border-violet-500/30',
-    RESTAURANT: 'bg-orange-500/15 text-orange-800 dark:text-orange-300 border-orange-500/30',
-    CAR_WASH: 'bg-sky-500/15 text-sky-800 dark:text-sky-300 border-sky-500/30',
-    OTHER: 'bg-muted text-muted-foreground border-border',
-  };
-
   return (
-    <Badge variant="outline" className={cn('text-[10px] font-medium border', chipClass[type], className)}>
+    <Badge
+      variant="outline"
+      className={cn(
+        'text-[10px] font-medium border',
+        BUSINESS_TYPE_CHIP_CLASS[type] ?? BUSINESS_TYPE_CHIP_CLASS.OTHER,
+        className,
+      )}
+    >
       {short ? getBusinessTypeShortLabel(type) : getBusinessTypeLabel(type)}
     </Badge>
   );
