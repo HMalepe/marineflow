@@ -54,12 +54,7 @@ export async function handleTwilioWhatsAppWebhook(
   if (to && !tenantForTo) {
     logger.error(
       { twilioTo: to, from: params['From'], messageSid: params['MessageSid'] ?? null },
-      'twilio_webhook_unmatched_to_number — no tenant has this twilioWhatsAppNumber; check admin assignment',
-    );
-    logMessageLog({ direction: 'INBOUND', status: 'FAILED' });
-    // 404 so ops/monitoring can alert; Twilio gets empty TwiML (no auto-reply to customer).
-    return reply.code(404).type('text/xml').send(
-      '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+      'twilio_webhook_unmatched_to_number — continuing so shared-router fallback can reply',
     );
   }
 

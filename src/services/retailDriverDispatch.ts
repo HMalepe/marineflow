@@ -321,6 +321,8 @@ export async function tryHandleDriverWhatsApp(input: {
 
   const intent = parseDriverReply(input.text);
   const remembered = await readRememberedOffer(input.waId);
+  // Only intercept when a live job is on this phone — never steal picker "1"/"2"
+  if (!remembered) return false;
 
   // Prefer remembered offer salon, else first matching dispensary
   const salonId = remembered?.salonId ?? hits[0]!.salonId;

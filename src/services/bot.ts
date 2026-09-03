@@ -1148,17 +1148,21 @@ export async function handleInboundWhatsApp(input: {
 
     // Shared WhatsApp number → business picker (Bontle / Dr Marley)
     if (tenant.isBusinessRouter) {
-      const routed = await resolveOperatingTenantViaRouter({
-        routerTenant: tenant,
-        waId,
-        text,
-      });
-      if (routed.handled) {
-        inboundSalonId = tenant.id;
-        return;
+      try {
+        const routed = await resolveOperatingTenantViaRouter({
+          routerTenant: tenant,
+          waId,
+          text,
+        });
+        if (routed.handled) {
+          inboundSalonId = tenant.id;
+          return;
+        }
+        tenant = routed.tenant;
+        if (routed.textOverride) textForBot = routed.textOverride;
+      } catch (err) {
+        logger.error({ err, waId, tenantId: tenant.id }, 'business_router_inbound_failed');
       }
-      tenant = routed.tenant;
-      if (routed.textOverride) textForBot = routed.textOverride;
     }
 
     // From an operating salon, SWITCH re-asks the shared picker via the router

@@ -204,6 +204,17 @@ export async function resolveOutboundWhatsAppChannel(salonId: string): Promise<{
       channelSalonId: router.id,
     };
   }
+
+  const { env } = await import('../config.js');
+  if (env.TWILIO_WHATSAPP_FROM?.trim() || env.META_PHONE_NUMBER_ID?.trim()) {
+    logger.warn({ salonId }, 'whatsapp_outbound_via_platform_env_fallback');
+    return {
+      twilioWhatsAppNumber: env.TWILIO_WHATSAPP_FROM?.trim() || null,
+      whatsappPhoneId: env.META_PHONE_NUMBER_ID?.trim() || null,
+      channelSalonId: salonId,
+    };
+  }
+
   return {
     twilioWhatsAppNumber: null,
     whatsappPhoneId: null,

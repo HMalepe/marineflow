@@ -58,6 +58,21 @@ export async function resolveTenantFromMetaPhoneId(
   });
 }
 
+function pickPreferredTenant(matches: ResolvedTenant[]): ResolvedTenant {
+  return matches.find((s) => s.isBusinessRouter) ?? matches[0]!;
+}
+
+/** Shared WhatsApp hub, then default salon — used when the number is not uniquely assigned. */
+export async function resolveSharedLineFallback(): Promise<ResolvedTenant | null> {
+  const router = await prisma.salon.findFirst({
+    where: { deletedAt: null, isBusinessRouter: true },
+    select: tenantSelect,
+    orderBy: { createdAt: 'asc' },
+  });
+  if (router) return router;
+  return findSalonBySlug(env.DEFAULT_SALON_SLUG);
+}
+
 /** Twilio: route inbound webhook by To (business number the customer messaged). */
 export async function resolveTenantFromTwilioAddress(
   address: string | undefined,
@@ -86,12 +101,33 @@ export async function resolveTenantFromTwilioAddress(
   );
   if (matches.length === 1) return matches[0]!;
   if (matches.length > 1) {
-    logger.error(
-      { inboundDigits, salonIds: matches.map((m) => m.id) },
-      'twilio_routing_ambiguous_digits — same number on multiple tenants; fix in Super Admin',
+    const preferred = pickPreferredTenant(matches);
+    logger.warn(
+      {
+        inboundDigits,
+        salonIds: matches.map((m) => m.id),
+        chosenSalonId: preferred.id,
+      },
+      'twilio_routing_ambiguous_digits — using business router if present',
     );
+    return preferred;
   }
-  return null;
+
+  const envDigits = env.TWILIO_WHATSAPP_FROM
+    ? normalizeWaId(env.TWILIO_WHATSAPP_FROM)
+    : '';
+  if (envDigits && envDigits === inboundDigits) {
+    const fallback = await resolveSharedLineFallback();
+    if (fallback) {
+      logger.warn(
+        { inboundDigits, fallbackSlug: fallback.slug },
+        'twilio_inbound_unassigned_using_shared_router',
+      );
+      return fallback;
+    }
+  }
+
+  return resolveSharedLineFallback();
 }
 
 /**
@@ -116,10 +152,14 @@ export async function resolveTenantForInbound(input: {
         { metaPhoneNumberId: input.metaPhoneNumberId },
         'meta_phone_id_env_match_but_no_tenant_in_db',
       );
+      const shared = await resolveSharedLineFallback();
+      if (shared) return shared;
     }
 
     const isSameAsMetaId = input.twilioTo === input.metaPhoneNumberId;
-    if (!input.twilioTo || isSameAsMetaId) return null;
+    if (!input.twilioTo || isSameAsMetaId) {
+      return resolveSharedLineFallback();
+    }
   }
 
   if (input.twilioTo) {
@@ -129,7 +169,7 @@ export async function resolveTenantForInbound(input: {
       { twilioTo: input.twilioTo },
       'twilio_inbound_no_tenant_for_to_number',
     );
-    return null;
+    return resolveSharedLineFallback();
   }
 
   logger.warn('inbound_whatsapp_no_routing_identifier');
