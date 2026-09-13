@@ -18,7 +18,8 @@ function connectionError(context: string, err: unknown): { error: string } {
 
 type LoginInput =
   | { method: 'email'; email: string; password: string }
-  | { method: 'phone'; phone: string; password: string };
+  | { method: 'phone'; phone: string; password: string }
+  | { method: 'username'; username: string; password: string };
 
 export async function checkPhone(
   phone: string,
@@ -108,7 +109,9 @@ export async function login(input: LoginInput): Promise<{ error?: string }> {
     const body =
       input.method === 'email'
         ? { email: input.email, password: input.password }
-        : { phone: input.phone, password: input.password };
+        : input.method === 'username'
+          ? { username: input.username, password: input.password }
+          : { phone: input.phone, password: input.password };
 
     const res = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
@@ -139,5 +142,104 @@ export async function login(input: LoginInput): Promise<{ error?: string }> {
     return {};
   } catch (err) {
     return connectionError('login', err);
+  }
+}
+
+export async function checkUsername(
+  username: string,
+): Promise<{ status: 'login' | 'setup'; salonName: string } | { error: string }> {
+  if (isApiMisconfiguredForProduction()) return { error: API_MISCONFIGURED_MESSAGE };
+  try {
+    const res = await fetch(`${API_URL}/api/auth/check-username`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data.error === 'username_not_found') return { error: 'Username not recognised. Try SALON or DISPENSARY.' };
+      if (data.error === 'salon_not_found') return { error: 'No salon linked to this username yet — contact support.' };
+      return { error: data.message ?? data.error ?? 'Could not verify username' };
+    }
+    return data as { status: 'login' | 'setup'; salonName: string };
+  } catch (err) {
+    return connectionError('checkUsername', err);
+  }
+}
+
+export async function setupUsernamePassword(
+  username: string,
+  password: string,
+  securityQuestion: string,
+  securityAnswer: string,
+): Promise<{ error?: string }> {
+  if (isApiMisconfiguredForProduction()) return { error: API_MISCONFIGURED_MESSAGE };
+  try {
+    const res = await fetch(`${API_URL}/api/auth/setup-username-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, securityQuestion, securityAnswer }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.error === 'weak_password') return { error: data.message ?? 'Password too weak' };
+      if (data.error === 'username_already_setup') return { error: 'This username already has a password — sign in instead' };
+      if (data.error === 'security_question_required') return { error: 'Please enter a security question' };
+      if (data.error === 'security_answer_required') return { error: 'Please enter an answer to your security question' };
+      return { error: data.message ?? data.error ?? 'Setup failed' };
+    }
+    const { token } = (await res.json()) as { token: string };
+    await setToken(token);
+    return {};
+  } catch (err) {
+    return connectionError('setupUsernamePassword', err);
+  }
+}
+
+export async function getForgotQuestion(
+  username: string,
+): Promise<{ securityQuestion: string } | { error: string }> {
+  if (isApiMisconfiguredForProduction()) return { error: API_MISCONFIGURED_MESSAGE };
+  try {
+    const res = await fetch(`${API_URL}/api/auth/forgot/question`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data.error === 'no_security_question') return { error: 'No security question set — contact support to reset your password.' };
+      return { error: data.message ?? data.error ?? 'Could not retrieve security question' };
+    }
+    return data as { securityQuestion: string };
+  } catch (err) {
+    return connectionError('getForgotQuestion', err);
+  }
+}
+
+export async function forgotResetPassword(
+  username: string,
+  securityAnswer: string,
+  newPassword: string,
+): Promise<{ error?: string }> {
+  if (isApiMisconfiguredForProduction()) return { error: API_MISCONFIGURED_MESSAGE };
+  try {
+    const res = await fetch(`${API_URL}/api/auth/forgot/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, securityAnswer, newPassword }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.error === 'wrong_answer') return { error: 'Incorrect answer — try again.' };
+      if (data.error === 'weak_password') return { error: data.message ?? 'Password too weak' };
+      if (data.error === 'no_security_question') return { error: 'No security question set — contact support.' };
+      return { error: data.message ?? data.error ?? 'Reset failed' };
+    }
+    const { token } = (await res.json()) as { token: string };
+    await setToken(token);
+    return {};
+  } catch (err) {
+    return connectionError('forgotResetPassword', err);
   }
 }
