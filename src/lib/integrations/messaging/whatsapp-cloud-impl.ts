@@ -25,20 +25,51 @@ function apiUrl(phoneNumberId: string): string {
   return `${API_BASE}/${env.META_API_VERSION}/${phoneNumberId}/messages`;
 }
 
-function buildMediaPayload(options: SendOptions): Record<string, unknown> | null {
+function buildMediaPayload(
+  options: SendOptions,
+  resolvedMediaId?: string,
+): Record<string, unknown> | null {
   const { mediaUrl, mediaType, body } = options;
   if (!mediaUrl || !mediaType) return null;
   const caption = body.trim() || undefined;
+  const ref = resolvedMediaId ? { id: resolvedMediaId } : { link: mediaUrl };
   if (mediaType === 'video') {
     return {
       type: 'video',
-      video: { link: mediaUrl, ...(caption ? { caption } : {}) },
+      video: { ...ref, ...(caption ? { caption } : {}) },
     };
   }
   return {
     type: 'image',
-    image: { link: mediaUrl, ...(caption ? { caption } : {}) },
+    image: { ...ref, ...(caption ? { caption } : {}) },
   };
+}
+
+async function uploadDataUriToWhatsApp(
+  dataUri: string,
+  phoneNumberId: string,
+): Promise<string> {
+  const match = dataUri.match(/^data:([^;]+);base64,(.+)$/s);
+  if (!match) throw new Error('Invalid data URI');
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  const ext = mimeType.split('/')[1] ?? 'jpg';
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('type', mimeType);
+  form.append('file', new Blob([buffer], { type: mimeType }), `upload.${ext}`);
+
+  const res = await fetch(
+    `${API_BASE}/${env.META_API_VERSION}/${phoneNumberId}/media`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.META_ACCESS_TOKEN}` },
+      body: form,
+    },
+  );
+  if (!res.ok) throw new Error(`WhatsApp media upload failed (${res.status}): ${await res.text()}`);
+  return ((await res.json()) as { id: string }).id;
 }
 
 export { buildCloudInteractivePayload } from './interactivePayload.js';
@@ -73,7 +104,11 @@ export const whatsappCloudMessaging: MessagingProvider = {
     if (!phoneNumberId) throw new Error('phoneNumberId required for Meta Cloud API');
     if (!env.META_ACCESS_TOKEN) throw new Error('META_ACCESS_TOKEN not configured');
 
-    const mediaPayload = !interactive ? buildMediaPayload(options) : null;
+    let resolvedMediaId: string | undefined;
+    if (!interactive && options.mediaUrl?.startsWith('data:') && options.mediaType) {
+      resolvedMediaId = await uploadDataUriToWhatsApp(options.mediaUrl, phoneNumberId);
+    }
+    const mediaPayload = !interactive ? buildMediaPayload(options, resolvedMediaId) : null;
     const payload =
       interactive != null
         ? buildCloudInteractivePayload(interactive)
