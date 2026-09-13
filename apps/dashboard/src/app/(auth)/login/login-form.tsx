@@ -150,7 +150,7 @@ export function LoginForm() {
       setError(result.error);
       setLoading(false);
     } else {
-      await promptSavePassword(usernameValue.toUpperCase(), password);
+      await promptSavePassword({ type: 'username', value: usernameValue.toUpperCase() }, password);
       router.push(afterLoginPath);
       router.refresh();
     }
@@ -168,7 +168,7 @@ export function LoginForm() {
       setError(result.error);
       setLoading(false);
     } else {
-      await promptSavePassword(usernameValue.toUpperCase(), password);
+      await promptSavePassword({ type: 'username', value: usernameValue.toUpperCase() }, password);
       setPasswordChangedBanner(false);
       router.push(afterLoginPath);
       router.refresh();
@@ -211,7 +211,7 @@ export function LoginForm() {
       setError(result.error);
       setLoading(false);
     } else {
-      await promptSavePassword(usernameValue.toUpperCase(), newPassword);
+      await promptSavePassword({ type: 'username', value: usernameValue.toUpperCase() }, newPassword);
       router.push(afterLoginPath);
       router.refresh();
     }

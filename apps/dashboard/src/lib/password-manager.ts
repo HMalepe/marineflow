@@ -4,7 +4,8 @@ import { sanitizePostLoginRedirect } from './post-login-redirect';
 
 export type PasswordManagerUsername =
   | { type: 'email'; value: string }
-  | { type: 'phone'; value: string };
+  | { type: 'phone'; value: string }
+  | { type: 'username'; value: string };
 
 export type LoginRedirectTab = 'email' | 'whatsapp';
 
@@ -94,9 +95,11 @@ export function loginUrlAfterPasswordChange(username: PasswordManagerUsername): 
   if (username.type === 'email') {
     params.set('email', username.value);
     params.set('tab', 'email');
-  } else {
+  } else if (username.type === 'phone') {
     params.set('phone', username.value);
     params.set('tab', 'whatsapp');
+  } else {
+    params.set('tab', 'username');
   }
   return `/login?${params.toString()}`;
 }
