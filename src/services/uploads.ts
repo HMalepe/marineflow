@@ -39,9 +39,9 @@ export function validateUploadPurpose(
   mimeType: string,
   sizeBytes: number,
 ): void {
-  if (purpose === 'staff') {
+  if (purpose === 'staff' || purpose === 'service') {
     if (!mimeType.startsWith('image/')) {
-      throw new UploadError('Staff photos must be JPEG, PNG, or WebP.');
+      throw new UploadError('Photos must be JPEG, PNG, or WebP.');
     }
     if (sizeBytes > IMAGE_MAX_BYTES) {
       throw new UploadError('Images must be under 5 MB.');
@@ -108,7 +108,7 @@ export async function uploadBuffer(
       throw new UploadError('Storage upload failed — check S3 configuration.');
     }
   } else if (
-    (purpose === 'campaign' || purpose === 'staff') &&
+    (purpose === 'campaign' || purpose === 'staff' || purpose === 'service') &&
     mimeType.startsWith('image/') &&
     buffer.length <= IMAGE_MAX_BYTES
   ) {
