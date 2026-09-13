@@ -893,6 +893,17 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
         await reply(conv, 'That product is no longer available. Pick another.');
         return showProductCategories(conv);
       }
+      const imageUrl = (product as Service & { imageUrl?: string | null }).imageUrl?.trim();
+      if (imageUrl) {
+        const caption = (product as Service & { imageCaption?: string | null }).imageCaption?.trim() || product.name;
+        await sendWithFallback({
+          salonId: conv.salonId,
+          to: conv.customer.waId,
+          body: caption,
+          mediaUrl: imageUrl,
+          mediaType: 'image',
+        });
+      }
       const qtyBody = `How many *${product.name}*? (1–20)\n\nReply *0* to go back.`;
       await reply(conv, qtyBody, buildQtyInteractive(product.name));
       return setStep(conv, ConversationStep.RETAIL_CART, {
