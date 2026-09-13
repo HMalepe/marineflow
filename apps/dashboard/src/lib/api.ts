@@ -88,5 +88,5 @@ export async function apiUploadFile(
     );
   }
 
-  return res.json() as Promise<{ publicUrl: string; fileKey: string }>;
+  return res.json() as Promise<{ publicUrl: string; fileKey: string; storageWarning: string | null }>;
 }

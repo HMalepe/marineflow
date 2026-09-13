@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
 import { isSupabaseConfigured, getSupabaseAdmin } from '../lib/supabase.js';
+import { logger } from '../lib/logger.js';
 
 const SUPABASE_UPLOADS_BUCKET = 'uploads';
 
@@ -89,7 +90,7 @@ export async function uploadBuffer(
   purpose: string,
   buffer: Buffer,
   uploadedBy?: string,
-): Promise<{ publicUrl: string; fileKey: string; file: Awaited<ReturnType<typeof confirmUpload>> }> {
+): Promise<{ publicUrl: string; fileKey: string; storageWarning?: string; file: Awaited<ReturnType<typeof confirmUpload>> }> {
   validateUploadPurpose(purpose, mimeType, buffer.length);
 
   const { uploadUrl, fileKey, publicUrl: defaultPublicUrl } = await generatePresignedUpload(
@@ -124,11 +125,12 @@ export async function uploadBuffer(
         .getPublicUrl(storagePath);
       publicUrl = urlData.publicUrl;
     } else if (mimeType.startsWith('image/') && buffer.length <= IMAGE_MAX_BYTES) {
-      // Supabase failed — fall back to data URI so dashboard preview still works.
-      // WhatsApp sending will upload the data URI to Meta's media API on demand.
+      logger.warn({ supabaseError: error.message, salonId, purpose }, 'supabase_upload_failed_using_data_uri');
       publicUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+      const file = await confirmUpload(salonId, fileKey, filename, mimeType, buffer.length, purpose, uploadedBy, publicUrl);
+      return { publicUrl, fileKey, storageWarning: `Supabase Storage unavailable: ${error.message}`, file };
     } else {
-      throw new UploadError(`Storage upload failed: ${error.message}`);
+      throw new UploadError(`Supabase Storage upload failed: ${error.message}`);
     }
   } else if (
     (purpose === 'campaign' || purpose === 'staff' || purpose === 'service') &&

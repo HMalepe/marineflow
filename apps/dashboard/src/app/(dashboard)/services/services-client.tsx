@@ -1150,8 +1150,9 @@ export function ServicesClient({ token }: Props) {
                           if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB', 'error'); return; }
                           setImageUploading(true);
                           try {
-                            const { publicUrl } = await apiUploadFile(file, 'service', token);
+                            const { publicUrl, storageWarning } = await apiUploadFile(file, 'service', token);
                             setForm((f: ServiceForm) => ({ ...f, imageUrl: publicUrl }));
+                            if (storageWarning) showToast(`Photo saved locally — ${storageWarning}`, 'error');
                           } catch (err) {
                             const msg = err instanceof Error ? err.message : 'Upload failed';
                             showToast(`Upload failed: ${msg}`, 'error');
