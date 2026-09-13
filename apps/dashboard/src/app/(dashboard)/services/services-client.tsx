@@ -1152,8 +1152,9 @@ export function ServicesClient({ token }: Props) {
                           try {
                             const { publicUrl } = await apiUploadFile(file, 'service', token);
                             setForm((f: ServiceForm) => ({ ...f, imageUrl: publicUrl }));
-                          } catch {
-                            showToast('Upload failed — try again', 'error');
+                          } catch (err) {
+                            const msg = err instanceof Error ? err.message : 'Upload failed';
+                            showToast(`Upload failed: ${msg}`, 'error');
                           } finally {
                             setImageUploading(false);
                             if (e.target) e.target.value = '';
