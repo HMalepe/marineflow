@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { getTenantDb } from '../lib/db/tenantSession.js';
+import { isSupabaseConfigured, getSupabaseAdmin } from '../lib/supabase.js';
+
+const SUPABASE_UPLOADS_BUCKET = 'uploads';
 
 const S3_ENDPOINT = process.env.S3_ENDPOINT ?? '';
 const S3_BUCKET = process.env.S3_BUCKET ?? 'marineflow-uploads';
@@ -107,6 +110,20 @@ export async function uploadBuffer(
     if (!putRes.ok) {
       throw new UploadError('Storage upload failed — check S3 configuration.');
     }
+  } else if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    // Ensure the bucket exists (no-ops if already there)
+    await supabase.storage.createBucket(SUPABASE_UPLOADS_BUCKET, { public: true }).catch(() => {});
+    const ext = filename.split('.').pop() ?? 'bin';
+    const storagePath = `${salonId}/${purpose}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    const { error } = await supabase.storage
+      .from(SUPABASE_UPLOADS_BUCKET)
+      .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
+    if (error) throw new UploadError(`Storage upload failed: ${error.message}`);
+    const { data: urlData } = supabase.storage
+      .from(SUPABASE_UPLOADS_BUCKET)
+      .getPublicUrl(storagePath);
+    publicUrl = urlData.publicUrl;
   } else if (
     (purpose === 'campaign' || purpose === 'staff' || purpose === 'service') &&
     mimeType.startsWith('image/') &&
