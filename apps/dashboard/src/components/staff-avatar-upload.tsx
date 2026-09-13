@@ -7,7 +7,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { StaffAvatar } from './staff-avatar';
 
-const MAX_BYTES = 5 * 1024 * 1024;
+const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 
 interface Props {
@@ -45,7 +45,7 @@ export function StaffAvatarUpload({
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError('Photo must be under 5 MB.');
+      setError('Photo must be under 10 MB.');
       return;
     }
 

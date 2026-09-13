@@ -22,7 +22,7 @@ export const CAMPAIGN_MEDIA_MIMES = [
   'video/quicktime',
 ] as const;
 
-const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const VIDEO_MAX_BYTES = 16 * 1024 * 1024;
 
 export class UploadError extends Error {
@@ -48,7 +48,7 @@ export function validateUploadPurpose(
       throw new UploadError('Photos must be JPEG, PNG, or WebP.');
     }
     if (sizeBytes > IMAGE_MAX_BYTES) {
-      throw new UploadError('Images must be under 5 MB.');
+      throw new UploadError('Images must be under 10 MB.');
     }
     return;
   }
@@ -60,7 +60,7 @@ export function validateUploadPurpose(
     const max = isVideo ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES;
     if (sizeBytes > max) {
       throw new UploadError(
-        isVideo ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.',
+        isVideo ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 10 MB.',
       );
     }
   }

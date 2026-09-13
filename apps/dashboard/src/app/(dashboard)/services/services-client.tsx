@@ -1136,7 +1136,7 @@ export function ServicesClient({ token }: Props) {
                         <>
                           <ImageIcon className="size-6 text-muted-foreground" />
                           <span className="text-sm font-medium">Upload a photo</span>
-                          <span className="text-xs text-muted-foreground">JPG, PNG or WebP · max 5 MB</span>
+                          <span className="text-xs text-muted-foreground">JPG, PNG or WebP · max 10 MB</span>
                         </>
                       )}
                       <input
@@ -1147,7 +1147,7 @@ export function ServicesClient({ token }: Props) {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) return;
-                          if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB', 'error'); return; }
+                          if (file.size > 10 * 1024 * 1024) { showToast('Image must be under 10 MB', 'error'); return; }
                           setImageUploading(true);
                           try {
                             const { publicUrl, storageWarning } = await apiUploadFile(file, 'service', token);
