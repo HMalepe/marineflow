@@ -48,7 +48,7 @@ export async function buildApp() {
     loggerInstance: logger,
     trustProxy: true,
     genReqId: () => crypto.randomUUID(),
-    bodyLimit: 8 * 1024 * 1024, // 8 MB — accommodates base64 data URIs from 5 MB image uploads
+    bodyLimit: 16 * 1024 * 1024, // 16 MB — accommodates base64 data URIs from 10 MB image uploads
   });
 
   registerRequestId(app);

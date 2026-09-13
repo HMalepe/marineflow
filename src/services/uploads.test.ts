@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { CAMPAIGN_MEDIA_MIMES, UploadError, validateUploadPurpose } from './uploads.js';
 
 describe('validateUploadPurpose', () => {
-  it('accepts campaign JPEG under 5 MB', () => {
+  it('accepts campaign JPEG under 10 MB', () => {
     expect(() =>
       validateUploadPurpose('campaign', 'image/jpeg', 4 * 1024 * 1024),
     ).not.toThrow();
   });
 
-  it('accepts campaign GIF under 5 MB', () => {
+  it('accepts campaign GIF under 10 MB', () => {
     expect(() =>
       validateUploadPurpose('campaign', 'image/gif', 1024),
     ).not.toThrow();
@@ -20,8 +20,8 @@ describe('validateUploadPurpose', () => {
 
   it('rejects oversized campaign images', () => {
     expect(() =>
-      validateUploadPurpose('campaign', 'image/png', 6 * 1024 * 1024),
-    ).toThrow(/5 MB/);
+      validateUploadPurpose('campaign', 'image/png', 11 * 1024 * 1024),
+    ).toThrow(/10 MB/);
   });
 
   it('rejects oversized campaign videos', () => {

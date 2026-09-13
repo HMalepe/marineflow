@@ -22,7 +22,7 @@ export const CAMPAIGN_MEDIA_MIMES = [
   'video/quicktime',
 ] as const;
 
-const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 const VIDEO_MAX_BYTES = 16 * 1024 * 1024;
 
 export class UploadError extends Error {
@@ -48,7 +48,7 @@ export function validateUploadPurpose(
       throw new UploadError('Photos must be JPEG, PNG, or WebP.');
     }
     if (sizeBytes > IMAGE_MAX_BYTES) {
-      throw new UploadError('Images must be under 5 MB.');
+      throw new UploadError('Images must be under 10 MB.');
     }
     return;
   }
@@ -60,7 +60,7 @@ export function validateUploadPurpose(
     const max = isVideo ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES;
     if (sizeBytes > max) {
       throw new UploadError(
-        isVideo ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 5 MB.',
+        isVideo ? 'Videos must be under 16 MB.' : 'Images and GIFs must be under 10 MB.',
       );
     }
   }
@@ -112,25 +112,35 @@ export async function uploadBuffer(
       throw new UploadError('Storage upload failed — check S3 configuration.');
     }
   } else if (isSupabaseConfigured()) {
-    const supabase = getSupabaseAdmin();
-    await supabase.storage.createBucket(SUPABASE_UPLOADS_BUCKET, { public: true }).catch(() => {});
-    const ext = filename.split('.').pop() ?? 'bin';
-    const storagePath = `${salonId}/${purpose}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
-    const { error } = await supabase.storage
-      .from(SUPABASE_UPLOADS_BUCKET)
-      .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
-    if (!error) {
-      const { data: urlData } = supabase.storage
+    let supabaseError: string | null = null;
+    try {
+      const supabase = getSupabaseAdmin();
+      await supabase.storage.createBucket(SUPABASE_UPLOADS_BUCKET, { public: true }).catch(() => {});
+      const ext = filename.split('.').pop() ?? 'bin';
+      const storagePath = `${salonId}/${purpose}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+      const { error } = await supabase.storage
         .from(SUPABASE_UPLOADS_BUCKET)
-        .getPublicUrl(storagePath);
-      publicUrl = urlData.publicUrl;
-    } else if (mimeType.startsWith('image/') && buffer.length <= IMAGE_MAX_BYTES) {
-      logger.warn({ supabaseError: error.message, salonId, purpose }, 'supabase_upload_failed_using_data_uri');
-      publicUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
-      const file = await confirmUpload(salonId, fileKey, filename, mimeType, buffer.length, purpose, uploadedBy, publicUrl);
-      return { publicUrl, fileKey, storageWarning: `Supabase Storage unavailable: ${error.message}`, file };
-    } else {
-      throw new UploadError(`Supabase Storage upload failed: ${error.message}`);
+        .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
+      if (!error) {
+        const { data: urlData } = supabase.storage
+          .from(SUPABASE_UPLOADS_BUCKET)
+          .getPublicUrl(storagePath);
+        publicUrl = urlData.publicUrl;
+      } else {
+        supabaseError = error.message;
+      }
+    } catch (ex) {
+      supabaseError = ex instanceof Error ? ex.message : String(ex);
+    }
+
+    if (supabaseError !== null) {
+      logger.warn({ supabaseError, salonId, purpose }, 'supabase_upload_failed_using_data_uri');
+      if (mimeType.startsWith('image/') && buffer.length <= IMAGE_MAX_BYTES) {
+        publicUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+        const file = await confirmUpload(salonId, fileKey, filename, mimeType, buffer.length, purpose, uploadedBy, publicUrl);
+        return { publicUrl, fileKey, storageWarning: `Supabase Storage unavailable: ${supabaseError}`, file };
+      }
+      throw new UploadError(`Supabase Storage upload failed: ${supabaseError}`);
     }
   } else if (
     (purpose === 'campaign' || purpose === 'staff' || purpose === 'service') &&
