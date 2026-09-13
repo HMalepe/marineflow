@@ -4462,7 +4462,7 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           buffer,
           user.sub,
         );
-        return { publicUrl: result.publicUrl, fileKey: result.fileKey, file: result.file };
+        return { publicUrl: result.publicUrl, fileKey: result.fileKey, storageWarning: result.storageWarning ?? null, file: result.file };
       } catch (err) {
         if (err instanceof UploadError) {
           reply.code(400);
