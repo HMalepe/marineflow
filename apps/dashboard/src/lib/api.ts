@@ -67,7 +67,7 @@ export async function apiUploadFile(
   file: File,
   purpose: string,
   token: string,
-): Promise<{ publicUrl: string; fileKey: string }> {
+): Promise<{ publicUrl: string; fileKey: string; storageWarning: string | null }> {
   const res = await fetch(resolveApiUrl('api', '/uploads/file'), {
     method: 'POST',
     headers: {
