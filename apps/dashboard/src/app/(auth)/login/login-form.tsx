@@ -407,7 +407,7 @@ export function LoginForm() {
             {/* ── USERNAME TAB — step: login ───────────────────────────── */}
             {tab === 'username' && usernameStep === 'login' && (
               <form onSubmit={(e) => void handleUsernameLogin(e)} className="space-y-4" autoComplete="on" method="post">
-                <PasswordManagerUsernameField username={usernameValue.toUpperCase()} />
+                <PasswordManagerUsernameField username={{ type: 'username', value: usernameValue.toUpperCase() }} />
                 {salonName && (
                   <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
                     Signing in to <span className="font-medium text-foreground">{salonName}</span>
@@ -444,7 +444,7 @@ export function LoginForm() {
             {/* ── USERNAME TAB — step: setup (first visit) ─────────────── */}
             {tab === 'username' && usernameStep === 'setup' && (
               <form onSubmit={(e) => void handleUsernameSetup(e)} className="space-y-4" autoComplete="on" method="post">
-                <PasswordManagerUsernameField username={usernameValue.toUpperCase()} />
+                <PasswordManagerUsernameField username={{ type: 'username', value: usernameValue.toUpperCase() }} />
                 <p className="text-sm text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
                   First visit — create a password for <span className="font-medium text-foreground">{salonName}</span>.
                   Your browser will offer to remember it.
