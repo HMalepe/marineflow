@@ -112,18 +112,24 @@ export async function uploadBuffer(
     }
   } else if (isSupabaseConfigured()) {
     const supabase = getSupabaseAdmin();
-    // Ensure the bucket exists (no-ops if already there)
     await supabase.storage.createBucket(SUPABASE_UPLOADS_BUCKET, { public: true }).catch(() => {});
     const ext = filename.split('.').pop() ?? 'bin';
     const storagePath = `${salonId}/${purpose}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
     const { error } = await supabase.storage
       .from(SUPABASE_UPLOADS_BUCKET)
       .upload(storagePath, buffer, { contentType: mimeType, upsert: false });
-    if (error) throw new UploadError(`Storage upload failed: ${error.message}`);
-    const { data: urlData } = supabase.storage
-      .from(SUPABASE_UPLOADS_BUCKET)
-      .getPublicUrl(storagePath);
-    publicUrl = urlData.publicUrl;
+    if (!error) {
+      const { data: urlData } = supabase.storage
+        .from(SUPABASE_UPLOADS_BUCKET)
+        .getPublicUrl(storagePath);
+      publicUrl = urlData.publicUrl;
+    } else if (mimeType.startsWith('image/') && buffer.length <= IMAGE_MAX_BYTES) {
+      // Supabase failed — fall back to data URI so dashboard preview still works.
+      // WhatsApp sending will upload the data URI to Meta's media API on demand.
+      publicUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+    } else {
+      throw new UploadError(`Storage upload failed: ${error.message}`);
+    }
   } else if (
     (purpose === 'campaign' || purpose === 'staff' || purpose === 'service') &&
     mimeType.startsWith('image/') &&
