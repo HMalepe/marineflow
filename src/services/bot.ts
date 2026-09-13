@@ -4086,6 +4086,16 @@ async function continueAfterServicePick(
 ) {
   const service = await getTenantDb().service.findUniqueOrThrow({ where: { id: serviceId } });
 
+  if (service.imageUrl?.trim()) {
+    void sendWithFallback({
+      salonId: conv.salonId,
+      to: conv.customer.waId,
+      body: service.imageCaption?.trim() || service.name,
+      mediaUrl: service.imageUrl.trim(),
+      mediaType: 'image',
+    }).catch(() => {});
+  }
+
   if (!conv.salon.botAllowStaffPick) {
     const { staffList: availableStaff } = await getStaffListWithPreference(conv, service.id);
     if (availableStaff.length === 0) {

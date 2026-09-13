@@ -3149,6 +3149,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       trackInventory?: boolean;
       stockQty?: number;
       lowStockThreshold?: number;
+      imageUrl?: string | null;
+      imageCaption?: string | null;
     };
   }>(
     '/services/:id',
@@ -3177,6 +3179,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
           trackInventory,
           stockQty,
           lowStockThreshold,
+          imageUrl,
+          imageCaption,
         } = request.body;
 
         if (removeFromCatalog) {
@@ -3247,6 +3251,8 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
             ...(lowStockThreshold !== undefined && {
               lowStockThreshold: Math.round(lowStockThreshold),
             }),
+            ...(imageUrl !== undefined && { imageUrl: imageUrl?.trim() || null }),
+            ...(imageCaption !== undefined && { imageCaption: imageCaption?.trim() || null }),
           },
         });
 

@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent } from 'react';
-import { ChevronRight, FolderOpen, Folder, Pencil, Plus } from 'lucide-react';
-import { apiFetch, ApiError } from '@/lib/api';
+import { ChevronRight, FolderOpen, Folder, ImageIcon, Loader2, Pencil, Plus, X } from 'lucide-react';
+import { apiFetch, apiUploadFile, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -61,6 +61,8 @@ interface ServiceForm {
   bufferMin: string;
   categoryId: string;
   aftercareNote: string;
+  imageUrl: string;
+  imageCaption: string;
 }
 
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -77,6 +79,8 @@ const emptyForm: ServiceForm = {
   bufferMin: '0',
   categoryId: '',
   aftercareNote: '',
+  imageUrl: '',
+  imageCaption: '',
 };
 
 function formatPrice(cents: number): string {
@@ -139,6 +143,8 @@ function serviceToForm(s: Service): ServiceForm {
     bufferMin: String(s.bufferMin),
     categoryId: s.category?.id ?? '',
     aftercareNote: s.aftercareNote ?? '',
+    imageUrl: (s as Service & { imageUrl?: string | null }).imageUrl ?? '',
+    imageCaption: (s as Service & { imageCaption?: string | null }).imageCaption ?? '',
   };
 }
 
@@ -169,6 +175,7 @@ export function ServicesClient({ token }: Props) {
   const [templateBizType, setTemplateBizType] = useState('');
   const [templateCategory, setTemplateCategory] = useState('');
   const [saving, setSaving] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Service | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -534,6 +541,8 @@ export function ServicesClient({ token }: Props) {
         bufferMin,
         categoryId: form.categoryId || null,
         aftercareNote: form.aftercareNote.trim() || null,
+        imageUrl: form.imageUrl.trim() || null,
+        imageCaption: form.imageCaption.trim() || null,
       };
 
       if (editingId) {
@@ -1095,6 +1104,72 @@ export function ServicesClient({ token }: Props) {
                     <option value="">— No category —</option>
                     {categories.map((c: ServiceCategory) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                </div>
+                <div className="space-y-2">
+                  <Label>WhatsApp menu photo</Label>
+                  {form.imageUrl ? (
+                    <div className="relative rounded-xl border overflow-hidden bg-muted/30">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={form.imageUrl} alt="Service photo" className="w-full max-h-48 object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setForm((f: ServiceForm) => ({ ...f, imageUrl: '', imageCaption: '' }))}
+                        className="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                        aria-label="Remove photo"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label
+                      className={cn(
+                        'flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-6 transition-colors',
+                        imageUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[#128c7e]/50 hover:bg-[#25d366]/5',
+                      )}
+                    >
+                      {imageUploading ? (
+                        <>
+                          <Loader2 className="size-7 text-[#128c7e] animate-spin" />
+                          <span className="text-sm text-muted-foreground">Uploading…</span>
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="size-6 text-muted-foreground" />
+                          <span className="text-sm font-medium">Upload a photo</span>
+                          <span className="text-xs text-muted-foreground">JPG, PNG or WebP · max 5 MB</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        disabled={imageUploading}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) { showToast('Image must be under 5 MB', 'error'); return; }
+                          setImageUploading(true);
+                          try {
+                            const { publicUrl } = await apiUploadFile(file, 'service', token);
+                            setForm((f: ServiceForm) => ({ ...f, imageUrl: publicUrl }));
+                          } catch {
+                            showToast('Upload failed — try again', 'error');
+                          } finally {
+                            setImageUploading(false);
+                            if (e.target) e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                  {form.imageUrl && (
+                    <Input
+                      value={form.imageCaption}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm((f: ServiceForm) => ({ ...f, imageCaption: e.target.value }))}
+                      placeholder="Caption sent with the photo (optional)"
+                    />
+                  )}
+                  <p className="text-xs text-muted-foreground">Sent automatically when a customer picks this service in WhatsApp.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
