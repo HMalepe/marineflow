@@ -29,6 +29,13 @@ const STAFF_SERVICE_COLUMN_GUARDS = [
   'ALTER TABLE "StaffService" ADD COLUMN IF NOT EXISTS "priceCentsOverride" INTEGER',
 ] as const;
 
+const STAFF_USER_COLUMN_GUARDS = [
+  'ALTER TABLE "StaffUser" ADD COLUMN IF NOT EXISTS "username" TEXT',
+  'ALTER TABLE "StaffUser" ADD COLUMN IF NOT EXISTS "securityQuestion" TEXT',
+  'ALTER TABLE "StaffUser" ADD COLUMN IF NOT EXISTS "securityAnswerHash" TEXT',
+  'CREATE UNIQUE INDEX IF NOT EXISTS "StaffUser_username_key" ON "StaffUser"("username")',
+] as const;
+
 const CUSTOMER_COLUMN_GUARDS = [
   `DO $$ BEGIN
     CREATE TYPE "MarketingConsentStatus" AS ENUM ('PENDING', 'ACCEPTED', 'DECLINED');
@@ -46,6 +53,7 @@ const SCHEMA_COLUMN_GUARDS = [
   ...LOYALTY_PROGRAM_COLUMN_GUARDS,
   ...STAFF_SERVICE_COLUMN_GUARDS,
   ...CUSTOMER_COLUMN_GUARDS,
+  ...STAFF_USER_COLUMN_GUARDS,
 ] as const;
 
 /** One statement per entry — PgBouncer/Prisma cannot run multi-command prepared statements. */
