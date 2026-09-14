@@ -4093,7 +4093,9 @@ async function continueAfterServicePick(
       body: service.imageCaption?.trim() || service.name,
       mediaUrl: service.imageUrl.trim(),
       mediaType: 'image',
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      logger.warn({ err, salonId: conv.salonId, serviceId: service.id }, 'service_image_send_failed');
+    });
   }
 
   if (!conv.salon.botAllowStaffPick) {
