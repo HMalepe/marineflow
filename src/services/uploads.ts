@@ -147,7 +147,10 @@ export async function uploadBuffer(
     mimeType.startsWith('image/') &&
     buffer.length <= IMAGE_MAX_BYTES
   ) {
+    logger.warn({ salonId, purpose }, 'supabase_not_configured_using_data_uri');
     publicUrl = `data:${mimeType};base64,${buffer.toString('base64')}`;
+    const file = await confirmUpload(salonId, fileKey, filename, mimeType, buffer.length, purpose, uploadedBy, publicUrl);
+    return { publicUrl, fileKey, storageWarning: 'No cloud storage configured — SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set (image will not work on WhatsApp)', file };
   } else {
     throw new UploadError('File storage is not configured on the server.');
   }
