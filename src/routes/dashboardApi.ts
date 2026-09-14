@@ -44,6 +44,7 @@ import {
   CAMPAIGN_MEDIA_MIMES,
   UploadError,
 } from '../services/uploads.js';
+import { isSupabaseConfigured, getSupabaseAdmin } from '../lib/supabase.js';
 import { exportCustomerData, eraseCustomerData } from '../services/compliance.js';
 import { generateWebhookSecret } from '../services/webhookDelivery.js';
 import { embedFaqItem } from '../services/knowledge.js';
@@ -4478,6 +4479,30 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const { purpose } = request.query as { purpose?: string };
       const files = await listUploads(user.salonId, purpose);
       return { files };
+    });
+  });
+
+  app.get('/uploads/storage-check', async (request, reply) => {
+    return withUserTenant(request, reply, async (user) => {
+      if (!isSupabaseConfigured()) {
+        return { configured: false, message: 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not set in environment' };
+      }
+      try {
+        const supabase = getSupabaseAdmin();
+        const testPath = `${user.salonId}/debug/storage-check-${Date.now()}.txt`;
+        const testBuffer = Buffer.from('storage-check');
+        const { error } = await supabase.storage
+          .from('uploads')
+          .upload(testPath, testBuffer, { contentType: 'text/plain', upsert: true });
+        if (error) {
+          return { configured: true, uploadOk: false, supabaseError: error.message };
+        }
+        const { data: urlData } = supabase.storage.from('uploads').getPublicUrl(testPath);
+        await supabase.storage.from('uploads').remove([testPath]);
+        return { configured: true, uploadOk: true, publicUrlPrefix: urlData.publicUrl.slice(0, 60) };
+      } catch (ex) {
+        return { configured: true, uploadOk: false, exception: ex instanceof Error ? ex.message : String(ex) };
+      }
     });
   });
 
