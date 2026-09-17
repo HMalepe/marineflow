@@ -13,6 +13,17 @@ vi.mock('../lib/db/tenantSession.js', () => ({
   }),
 }));
 
+vi.mock('../lib/businessRouter.js', () => ({
+  resolveOutboundWhatsAppChannel: async (salonId: string) => {
+    const creds = await findUniqueOrThrowMock();
+    return {
+      twilioWhatsAppNumber: (creds as { twilioWhatsAppNumber?: string | null }).twilioWhatsAppNumber ?? null,
+      whatsappPhoneId: (creds as { whatsappPhoneId?: string | null }).whatsappPhoneId ?? null,
+      channelSalonId: salonId,
+    };
+  },
+}));
+
 vi.mock('../lib/integrations/messaging/whatsapp-cloud-impl.js', () => ({
   whatsappCloudMessaging: { sendText: sendTextMock },
 }));
@@ -27,6 +38,10 @@ vi.mock('../lib/integrations/messaging/sms-impl.js', () => ({
 
 vi.mock('../lib/integrations/messaging/voice.js', () => ({
   callBookingConfirmation: vi.fn(),
+}));
+
+vi.mock('./messageLog.js', () => ({
+  logMessageLog: vi.fn(),
 }));
 
 vi.mock('../config.js', async (importOriginal) => {
