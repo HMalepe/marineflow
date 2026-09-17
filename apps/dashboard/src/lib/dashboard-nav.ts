@@ -152,7 +152,7 @@ export function isNavItemActive(pathname: string, href: string): boolean {
  * are built for scale a one-location pilot doesn't have. Drop an href here
  * to bring a page back.
  */
-const PILOT_HIDDEN_HREFS = new Set(['/pulse', '/tickets', '/branches', '/campaigns', '/team-performance']);
+const PILOT_HIDDEN_HREFS = new Set(['/pulse', '/tickets', '/branches', '/campaigns']);
 
 export function salonNavGroupsForIndustry(industry: DashboardIndustry | null | undefined): NavGroup[] {
   return industry === 'dispensary' ? DISPENSARY_NAV_GROUPS : SALON_NAV_GROUPS;
