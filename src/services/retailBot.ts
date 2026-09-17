@@ -903,6 +903,8 @@ export async function handleRetailStep(conv: Conv, text: string): Promise<Conv> 
           mediaUrl: imageUrl,
           mediaType: 'image',
         });
+        // Give WhatsApp time to deliver the image before the quantity prompt arrives.
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       }
       const qtyBody = `How many *${product.name}*? (1–20)\n\nReply *0* to go back.`;
       await reply(conv, qtyBody, buildQtyInteractive(product.name));
