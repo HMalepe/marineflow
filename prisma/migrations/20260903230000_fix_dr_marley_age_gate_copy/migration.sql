@@ -4,7 +4,7 @@ SET metadata = jsonb_set(
   COALESCE(metadata::jsonb, '{}'::jsonb),
   '{retail,ageGateCopy}',
   to_jsonb(
-    E'🌿 *Dr Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.'
+    E'🌿 *Dr Marley Dispensary*\n\nYou must be *18+* to order cannabis products.\n\nReply *YES* to confirm you are 18 or older, or *NO* to exit.'::text
   ),
   true
 )
