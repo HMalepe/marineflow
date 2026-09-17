@@ -50,6 +50,7 @@
     "prisma": "^6.3.1",
     "stripe": "^17.6.0",
     "twilio": "^5.4.3",
+    "ws": "^8.21.3",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -58,6 +59,7 @@
     "@types/luxon": "^3.7.1",
     "@types/node": "^22.10.7",
     "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "supertest": "^7.0.0",
