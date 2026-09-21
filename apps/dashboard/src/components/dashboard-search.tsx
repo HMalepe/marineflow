@@ -10,6 +10,7 @@ import {
   type DashboardSearchResult,
 } from '@/lib/dashboard-search';
 import { searchDashboardAction } from '@/lib/dashboard-search-action';
+import { useIndustry } from '@/components/industry-provider';
 
 interface Props {
   isAdmin: boolean;
@@ -20,6 +21,9 @@ interface Props {
 
 export function DashboardSearch({ isAdmin, isOwner, variant = 'default' }: Props) {
   const router = useRouter();
+  // Industry comes from context — DashboardSearch renders in the sidebar and
+  // the mobile header, both inside IndustryProvider, so no prop drilling.
+  const { industry, retail } = useIndustry();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -30,8 +34,8 @@ export function DashboardSearch({ isAdmin, isOwner, variant = 'default' }: Props
   const [pending, startTransition] = useTransition();
 
   const entries = useMemo(
-    () => visibleSearchEntries({ isAdmin, isOwner }),
-    [isAdmin, isOwner],
+    () => visibleSearchEntries({ isAdmin, isOwner, industry }),
+    [isAdmin, isOwner, industry],
   );
 
   const localResults = useMemo(
@@ -75,7 +79,7 @@ export function DashboardSearch({ isAdmin, isOwner, variant = 'default' }: Props
       }
 
       startTransition(async () => {
-        const res = await searchDashboardAction(trimmed, { isAdmin, isOwner });
+        const res = await searchDashboardAction(trimmed, { isAdmin, isOwner, industry });
         setResults(res.results.length ? res.results : localDashboardSearch(trimmed, entries, 8));
         setInterpretedAs(res.interpretedAs);
         setSuggestions(res.suggestions);
@@ -83,7 +87,7 @@ export function DashboardSearch({ isAdmin, isOwner, variant = 'default' }: Props
         setActiveIndex(0);
       });
     },
-    [entries],
+    [entries, isAdmin, isOwner, industry],
   );
 
   useEffect(() => {
@@ -160,7 +164,11 @@ export function DashboardSearch({ isAdmin, isOwner, variant = 'default' }: Props
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleInputKeyDown}
-                placeholder="Search roster, FAQ, newsletter, settings…"
+                placeholder={
+                  retail
+                    ? 'Search orders, stock, FAQ, settings…'
+                    : 'Search roster, FAQ, newsletter, settings…'
+                }
                 className="flex-1 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground"
                 autoComplete="off"
                 spellCheck={false}
@@ -180,7 +188,9 @@ export function DashboardSearch({ isAdmin, isOwner, variant = 'default' }: Props
 
               {results.length === 0 ? (
                 <p className="px-3 py-6 text-sm text-center text-muted-foreground">
-                  No matches — try “staff”, “faq”, “hours”, or “newsletter”
+                  {retail
+                    ? 'No matches — try “orders”, “stock”, “hours”, or “newsletter”'
+                    : 'No matches — try “staff”, “faq”, “hours”, or “newsletter”'}
                 </p>
               ) : (
                 <ul className="space-y-1">

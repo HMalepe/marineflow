@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { CollapsibleCard } from '@/components/collapsible-card';
-import { getToken } from '@/lib/auth';
+import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
+import { isRetailIndustry } from '@/lib/dashboard-nav';
 import { SettingsForm } from './settings-form';
 import { SalonSettingsForm, type SalonSettings } from './salon-settings-form';
 import { ChangePasswordForm } from './change-password-form';
@@ -22,6 +23,8 @@ interface MeResponse {
 
 export default async function SettingsPage() {
   const token = await getToken();
+  const sessionUser = await getUser();
+  const retail = isRetailIndustry(sessionUser?.industryTemplate ?? null);
   let user: MeResponse['user'] | null = null;
   let salonSettings: SalonSettings | null = null;
 
@@ -54,11 +57,13 @@ export default async function SettingsPage() {
     <div className="dashboard-page-flow space-y-6 max-w-3xl">
       <DashboardPageHeader
         id="settings-intro"
-        title="Settings"
+        title={retail ? 'Delivery & settings' : 'Settings'}
         variant="violet"
         subtitle={
           canEditSalon
-            ? 'Manage your account, salon hours, and WhatsApp bot'
+            ? retail
+              ? 'Manage your account, shop hours, delivery, and WhatsApp bot'
+              : 'Manage your account, salon hours, and WhatsApp bot'
             : 'Manage your profile and login password'
         }
       />
@@ -75,7 +80,11 @@ export default async function SettingsPage() {
         <CollapsibleCard
           id="settings-logo"
           title="Logo"
-          description="Your salon's brand mark — shown in the sidebar"
+          description={
+            retail
+              ? "Your shop's brand mark — shown in the sidebar"
+              : "Your salon's brand mark — shown in the sidebar"
+          }
         >
           <LogoUpload current={salonSettings.logoUrl} salonName={salonSettings.tradingName ?? salonSettings.name} />
         </CollapsibleCard>
@@ -90,7 +99,11 @@ export default async function SettingsPage() {
           {salonSettings ? (
             <SalonSettingsForm initialSettings={salonSettings} loyaltyProgram={loyaltyProgram} />
           ) : (
-            <p className="text-sm text-destructive">Could not load salon settings. Please refresh the page.</p>
+            <p className="text-sm text-destructive">
+              {retail
+                ? 'Could not load shop settings. Please refresh the page.'
+                : 'Could not load salon settings. Please refresh the page.'}
+            </p>
           )}
         </CollapsibleCard>
       )}

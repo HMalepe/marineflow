@@ -4,12 +4,13 @@ import { getToken } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 import {
   localDashboardSearchResponse,
+  type DashboardSearchContext,
   type DashboardSearchResponse,
 } from '@/lib/dashboard-search';
 
 export async function searchDashboardAction(
   query: string,
-  context: { isAdmin: boolean; isOwner: boolean },
+  context: DashboardSearchContext,
 ): Promise<DashboardSearchResponse> {
   const token = await getToken();
   const trimmed = query.trim();

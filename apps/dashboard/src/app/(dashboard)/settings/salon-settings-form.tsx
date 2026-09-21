@@ -13,6 +13,7 @@ import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
+import { useIndustry } from '@/components/industry-provider';
 import {
   saveDisplayName,
   saveMessages,
@@ -146,6 +147,7 @@ function CharCount({ value, limit = WHATSAPP_LIMIT }: { value: string; limit?: n
 
 export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   const router = useRouter();
+  const { retail } = useIndustry();
   const { getSection, reportSuccess, reportError } = useMultiSectionSaveFeedback();
   const [salon, setSalon] = useState<SalonSettings>(initialSettings);
   const [saved, setSaved] = useState<SalonSettings>(initialSettings);
@@ -577,7 +579,15 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
   return (
     <div className="space-y-8">
       {/* WhatsApp business name */}
-      <CollapsibleSection id="settings-business-name" title="Business name" subtitle="The name customers see in WhatsApp messages and greetings. Your booking assistant branding stays MarineFlow.">
+      <CollapsibleSection
+        id="settings-business-name"
+        title="Business name"
+        subtitle={
+          retail
+            ? 'The name buyers see in WhatsApp messages and greetings. Your ordering assistant branding stays MarineFlow.'
+            : 'The name customers see in WhatsApp messages and greetings. Your booking assistant branding stays MarineFlow.'
+        }
+      >
         <form onSubmit={(e) => void handleSaveBusinessName(e)} className="space-y-4 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="businessName">Business name</Label>
@@ -585,7 +595,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
               id="businessName"
               value={businessName}
               onChange={(e) => setBusinessName(e.target.value)}
-              placeholder="e.g. Solupair Hair Studio"
+              placeholder={retail ? 'e.g. Dr Marley Dispensary' : 'e.g. Solupair Hair Studio'}
               maxLength={120}
               required
             />
@@ -623,7 +633,15 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
       <Separator />
 
       {/* Booking link */}
-      <CollapsibleSection id="settings-booking-link" title="Booking link" subtitle="Share this link with customers to start a WhatsApp booking conversation.">
+      <CollapsibleSection
+        id="settings-booking-link"
+        title={retail ? 'Order link' : 'Booking link'}
+        subtitle={
+          retail
+            ? 'Share this link with buyers to start a WhatsApp order conversation.'
+            : 'Share this link with customers to start a WhatsApp booking conversation.'
+        }
+      >
         <BookingLinkCopy slug={salon.slug} phoneDisplay={salon.phoneDisplay ?? null} />
       </CollapsibleSection>
 
@@ -880,7 +898,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 type="email"
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
-                placeholder="hello@yoursalon.co.za"
+                placeholder={retail ? 'hello@yourshop.co.za' : 'hello@yoursalon.co.za'}
               />
             </div>
           </div>
@@ -956,7 +974,9 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {botActive
-                    ? 'Customers get automated booking, FAQs, and menu replies.'
+                    ? retail
+                      ? 'Buyers get automated ordering, FAQs, and menu replies.'
+                      : 'Customers get automated booking, FAQs, and menu replies.'
                     : 'Every inbound message goes straight to Conversations — no bot replies.'}
                 </p>
               </div>
@@ -982,9 +1002,17 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
 
       <Separator />
 
-      <CollapsibleSection id="settings-power-features" title="Power Features" subtitle="Reminders, win-back, review incentives, booking rules, and campaign templates live in one place — not here.">
+      <CollapsibleSection
+        id="settings-power-features"
+        title={retail ? 'Automations' : 'Power Features'}
+        subtitle={
+          retail
+            ? 'Reminders, win-back, review incentives, order rules, and campaign templates live in one place — not here.'
+            : 'Reminders, win-back, review incentives, booking rules, and campaign templates live in one place — not here.'
+        }
+      >
         <Link href="/automations" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          Open Power Features
+          {retail ? 'Open Automations' : 'Open Power Features'}
         </Link>
       </CollapsibleSection>
 
@@ -1135,7 +1163,11 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
           {/* Closing message */}
           <div className="space-y-3 rounded-lg border p-4">
             <p className="text-sm font-medium">Closing message</p>
-            <p className="text-xs text-muted-foreground">Sent when a booking is confirmed or the conversation wraps up. Leave blank to skip.</p>
+            <p className="text-xs text-muted-foreground">
+              {retail
+                ? 'Sent when an order is confirmed or the conversation wraps up. Leave blank to skip.'
+                : 'Sent when a booking is confirmed or the conversation wraps up. Leave blank to skip.'}
+            </p>
             <FollowUpTemplatePicker
               templates={CLOSING_MESSAGE_TEMPLATES}
               salonName={salonDisplayName}

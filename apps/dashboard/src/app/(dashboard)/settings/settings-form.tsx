@@ -11,6 +11,7 @@ import { SaveFormFooter } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
 import { updateName, updateEmail } from './actions';
+import { useIndustry } from '@/components/industry-provider';
 function formatRole(role: string): string {
   return role.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -27,6 +28,7 @@ interface Props {
 
 export function SettingsForm({ user }: Props) {
   const router = useRouter();
+  const { retail } = useIndustry();
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [saving, setSaving] = useState(false);
@@ -108,7 +110,7 @@ export function SettingsForm({ user }: Props) {
           </Badge>
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-medium">Salon ID</p>
+          <p className="text-sm font-medium">{retail ? 'Shop ID' : 'Salon ID'}</p>
           <code className="text-xs text-muted-foreground break-all">{user.salonId}</code>
         </div>
       </div>
