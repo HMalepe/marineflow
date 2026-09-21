@@ -13,7 +13,7 @@ import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
 import { cn } from '@/lib/utils';
 import { PLATFORM_BOT_NAME } from '@/lib/bot-branding';
-import { useIndustry } from '@/components/industry-provider';
+import { useIndustry, useVocab } from '@/components/industry-provider';
 import {
   saveDisplayName,
   saveMessages,
@@ -30,10 +30,8 @@ import {
 import { ConversationFlowSection } from './conversation-flow-section';
 import { BusinessHoursSection } from './business-hours-section';
 import {
-  FIRST_FOLLOW_UP_TEMPLATES,
-  SECOND_FOLLOW_UP_TEMPLATES,
-  CLOSING_MESSAGE_TEMPLATES,
-  FOLLOW_UP_MESSAGE_SETS,
+  followUpMessageSetsFor,
+  templatesForKind,
   type FollowUpMessageSet,
 } from './follow-up-message-templates';
 import { FollowUpTemplatePicker, FollowUpCharCount } from './follow-up-template-picker';
@@ -47,18 +45,25 @@ const WHATSAPP_LIMIT = 4096;
 
 function BookingLinkCopy({ slug, phoneDisplay }: { slug: string; phoneDisplay: string | null }) {
   const [copied, setCopied] = useState(false);
+  // Retail buyers order products; salon clients book appointments.
+  const prefill = useVocab(`Hi, I'd like to order`, `Hi, I'd like to book`);
+  const prefillWithSlug = useVocab(
+    `Hi, I'd like to order from ${slug}`,
+    `Hi, I'd like to book at ${slug}`,
+  );
+  const linkNoun = useVocab('order link', 'booking link');
   // Derive E.164 digits from phoneDisplay (strip non-digits, add country code if needed)
   const e164 = phoneDisplay
     ? phoneDisplay.replace(/\D/g, '').replace(/^0/, '27')
     : '';
   const url = e164
-    ? `https://wa.me/${e164}?text=${encodeURIComponent(`Hi, I'd like to book`)}`
-    : `https://wa.me/?text=${encodeURIComponent(`Hi, I'd like to book at ${slug}`)}`;
+    ? `https://wa.me/${e164}?text=${encodeURIComponent(prefill)}`
+    : `https://wa.me/?text=${encodeURIComponent(prefillWithSlug)}`;
   return (
     <div className="space-y-2 max-w-md">
       {!e164 && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Add your phone number in the Location section to generate a complete booking link.
+          Add your phone number in the Location section to generate a complete {linkNoun}.
         </p>
       )}
       <div className="flex items-center gap-2">
@@ -778,7 +783,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 )}
               />
               <p className="text-xs text-muted-foreground">
-                Sent when a customer chooses &quot;Talk to a human&quot; outside business hours. Appointments, Bot FAQs, and loyalty still work 24/7.
+                Sent when a customer chooses &quot;Talk to a human&quot; outside business hours. {retail ? 'Ordering' : 'Appointments'}, Bot FAQs, and loyalty still work 24/7.
               </p>
             </div>
             <div className="flex flex-col gap-2">
@@ -845,7 +850,11 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
               id="current-special"
               value={currentSpecial}
               onChange={(e) => setCurrentSpecial(e.target.value)}
-              placeholder="e.g. 20% off all colour services this week — reply 1 to book"
+              placeholder={
+                retail
+                  ? 'e.g. 20% off all edibles this week — reply 1 to order'
+                  : 'e.g. 20% off all colour services this week — reply 1 to book'
+              }
               maxLength={200}
             />
           </div>
@@ -1215,7 +1224,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                   value={loyaltyStampsPerReward}
                   onChange={(e) => setLoyaltyStampsPerReward(Number(e.target.value))}
                 />
-                <p className="text-xs text-muted-foreground">Default: 10. Customers earn one stamp per completed visit.</p>
+                <p className="text-xs text-muted-foreground">Default: 10. Customers earn one stamp per completed {retail ? 'order' : 'visit'}.</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">

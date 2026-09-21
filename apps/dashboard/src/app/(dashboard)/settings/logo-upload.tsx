@@ -4,6 +4,7 @@ import { useId, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { ImageCropModal } from '@/components/image-crop-modal';
+import { useIndustry } from '@/components/industry-provider';
 import { cn } from '@/lib/utils';
 import { SaveErrorFeedback, SaveSuccessFeedback } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
@@ -19,6 +20,7 @@ interface Props {
 
 export function LogoUpload({ current, salonName }: Props) {
   const router = useRouter();
+  const { retail } = useIndustry();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(current);
@@ -143,7 +145,7 @@ export function LogoUpload({ current, salonName }: Props) {
           </label>
 
           <div className="space-y-1.5">
-            <p className="text-sm font-medium">Salon logo</p>
+            <p className="text-sm font-medium">{retail ? 'Shop logo' : 'Salon logo'}</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               PNG, JPG, SVG or WebP · any size
               <br />
