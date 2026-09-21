@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Calendar, MessageSquare, TrendingUp, Wallet } from 'lucide-react';
-import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { Calendar, MessageSquare, ShoppingBag, TrendingUp, Wallet } from 'lucide-react';
+import { APPOINTMENTS_LABEL, ORDERS_LABEL } from '@/lib/dashboard-nav';
+import { useIndustry } from '@/components/industry-provider';
 import { cn } from '@/lib/utils';
 import { OverviewCollapsibleSection } from '@/components/overview/OverviewCollapsibleSection';
 import { overviewNeonBox, type OverviewNeonVariant } from '@/components/overview/overviewNeon';
@@ -70,6 +71,7 @@ function KpiTile({
 }
 
 export function KPIStrip({ data }: { data: OverviewKpiData }) {
+  const { retail } = useIndustry();
   const bookingsSub =
     data.bookingsDelta !== 0
       ? `${data.bookingsDelta > 0 ? '+' : ''}${data.bookingsDelta} vs yesterday`
@@ -79,11 +81,11 @@ export function KPIStrip({ data }: { data: OverviewKpiData }) {
     <OverviewCollapsibleSection id="overview-kpis" label="Snapshot">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiTile
-          label={`${APPOINTMENTS_LABEL} today`}
+          label={`${retail ? ORDERS_LABEL : APPOINTMENTS_LABEL} today`}
           value={String(data.bookingsToday)}
           sub={bookingsSub}
-          icon={Calendar}
-          href="/appointments"
+          icon={retail ? ShoppingBag : Calendar}
+          href={retail ? '/orders' : '/appointments'}
           neonVariant="violet"
           iconClassName="text-violet-700 dark:text-violet-300"
         />

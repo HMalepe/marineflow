@@ -1,7 +1,27 @@
 import { DateTime } from 'luxon';
 import type { PrismaTx } from '../../lib/db/tenantSession.js';
+import { isDispensarySalon } from '../../lib/retailSettings.js';
 
 const CONFIRMED_STATUSES = ['CONFIRMED', 'CONFIRMED_PAID'] as const;
+
+/** Retail orders that count as placed (a DRAFT cart was never submitted). */
+const RETAIL_PLACED_STATUSES = [
+  'PENDING_PAYMENT',
+  'PAID',
+  'PREPARING',
+  'OUT_FOR_DELIVERY',
+  'READY_FOR_COLLECTION',
+  'COMPLETED',
+] as const;
+
+/** Retail orders whose money has actually been collected. */
+const RETAIL_EARNED_STATUSES = [
+  'PAID',
+  'PREPARING',
+  'OUT_FOR_DELIVERY',
+  'READY_FOR_COLLECTION',
+  'COMPLETED',
+] as const;
 
 export type TenantOverviewKpis = {
   bookingsToday: number;
@@ -35,11 +55,111 @@ function buildLast7Days(
   return out;
 }
 
-export async function getTenantOverviewKpis(
+/**
+ * Dispensary tenants have no appointments — their day is RetailOrder rows.
+ * Field names stay booking-shaped so the dashboard contract is unchanged;
+ * the dashboard labels them as orders for retail.
+ */
+async function getRetailOverviewKpis(
   db: PrismaTx,
   salonId: string,
   timezone: string,
 ): Promise<TenantOverviewKpis> {
+  const now = DateTime.now().setZone(timezone);
+  const todayStart = now.startOf('day');
+  const todayEnd = todayStart.plus({ days: 1 });
+  const yesterdayStart = todayStart.minus({ days: 1 });
+  const monthStart = now.startOf('month');
+  const sevenDaysStart = todayStart.minus({ days: 6 });
+
+  const [
+    ordersToday,
+    ordersYesterday,
+    revenueTodayRows,
+    revenueMtdRows,
+    botConversationsToday,
+    pendingPayments,
+    openTickets,
+    revenueByDayRows,
+  ] = await Promise.all([
+    db.retailOrder.count({
+      where: {
+        salonId,
+        createdAt: { gte: todayStart.toJSDate(), lt: todayEnd.toJSDate() },
+        status: { in: [...RETAIL_PLACED_STATUSES] },
+      },
+    }),
+    db.retailOrder.count({
+      where: {
+        salonId,
+        createdAt: { gte: yesterdayStart.toJSDate(), lt: todayStart.toJSDate() },
+        status: { in: [...RETAIL_PLACED_STATUSES] },
+      },
+    }),
+    db.retailOrder.aggregate({
+      _sum: { totalCents: true },
+      where: {
+        salonId,
+        status: { in: [...RETAIL_EARNED_STATUSES] },
+        createdAt: { gte: todayStart.toJSDate(), lt: todayEnd.toJSDate() },
+      },
+    }),
+    db.retailOrder.aggregate({
+      _sum: { totalCents: true },
+      where: {
+        salonId,
+        status: { in: [...RETAIL_EARNED_STATUSES] },
+        createdAt: { gte: monthStart.toJSDate(), lt: todayEnd.toJSDate() },
+      },
+    }),
+    db.message.count({
+      where: {
+        createdAt: { gte: todayStart.toJSDate(), lt: todayEnd.toJSDate() },
+        conversation: { salonId },
+      },
+    }),
+    db.retailOrder.count({
+      where: { salonId, status: 'PENDING_PAYMENT' },
+    }),
+    db.ticket.count({
+      where: { salonId, status: { in: ['OPEN', 'WAITING_CUSTOMER'] } },
+    }),
+    db.$queryRaw<{ day: string; revenue_cents: number }[]>`
+      SELECT TO_CHAR((o."createdAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timezone}, 'YYYY-MM-DD') AS day,
+             COALESCE(SUM(o."totalCents"), 0)::int AS revenue_cents
+      FROM "RetailOrder" o
+      WHERE o."salonId" = ${salonId}
+        AND o.status IN ('PAID', 'PREPARING', 'OUT_FOR_DELIVERY', 'READY_FOR_COLLECTION', 'COMPLETED')
+        AND o."createdAt" >= ${sevenDaysStart.toJSDate()}
+        AND o."createdAt" < ${todayEnd.toJSDate()}
+      GROUP BY day
+      ORDER BY day
+    `,
+  ]);
+
+  return {
+    bookingsToday: ordersToday,
+    bookingsYesterday: ordersYesterday,
+    bookingsDelta: ordersToday - ordersYesterday,
+    revenueTodayCents: revenueTodayRows._sum.totalCents ?? 0,
+    revenueMtdCents: revenueMtdRows._sum.totalCents ?? 0,
+    botConversationsToday,
+    pendingPayments,
+    openTickets,
+    revenueLast7Days: buildLast7Days(timezone, revenueByDayRows),
+    currency: 'ZAR',
+  };
+}
+
+export async function getTenantOverviewKpis(
+  db: PrismaTx,
+  salonId: string,
+  timezone: string,
+  industryTemplate?: string | null,
+): Promise<TenantOverviewKpis> {
+  if (isDispensarySalon(industryTemplate)) {
+    return getRetailOverviewKpis(db, salonId, timezone);
+  }
   const now = DateTime.now().setZone(timezone);
   const todayStart = now.startOf('day');
   const todayEnd = todayStart.plus({ days: 1 });

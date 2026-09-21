@@ -4,7 +4,7 @@ import type { OverviewKpiData } from '@/components/KPIStrip';
 import { OverviewCollapsibleSection } from './OverviewCollapsibleSection';
 import { overviewNeonBox } from './overviewNeon';
 
-export function NeedsYouPanel({ data }: { data: OverviewKpiData }) {
+export function NeedsYouPanel({ data, retail = false }: { data: OverviewKpiData; retail?: boolean }) {
   const showPayments = data.pendingPayments > 0;
   const showTickets = data.openTickets > 0;
   if (!showPayments && !showTickets) return null;
@@ -22,7 +22,10 @@ export function NeedsYouPanel({ data }: { data: OverviewKpiData }) {
     >
       <div className="grid sm:grid-cols-2 gap-3 sm:gap-4">
         {showPayments && (
-          <Link href="/appointments?status=PENDING_PAYMENT" className="block group">
+          <Link
+            href={retail ? '/orders?status=PENDING_PAYMENT' : '/appointments?status=PENDING_PAYMENT'}
+            className="block group"
+          >
             <div
               className={overviewNeonBox(
                 'orange',

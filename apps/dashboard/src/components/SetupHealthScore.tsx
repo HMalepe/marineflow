@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { X } from 'lucide-react';
+import { useIndustry } from '@/components/industry-provider';
 import { cn } from '@/lib/utils';
 
 export type SetupHealthCheckId =
@@ -118,6 +119,7 @@ type PanelProps = {
 };
 
 export function SetupHealthScorePanel({ data, visibleChecks, onDismiss }: PanelProps) {
+  const { retail } = useIndustry();
   if (data.score >= 100 && data.checks.length === 0) {
     return null;
   }
@@ -154,7 +156,9 @@ export function SetupHealthScorePanel({ data, visibleChecks, onDismiss }: PanelP
         <div>
           <p className="text-sm font-semibold">Setup health</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Fix these to improve bookings and bot quality
+            {retail
+              ? 'Fix these to improve orders and bot quality'
+              : 'Fix these to improve bookings and bot quality'}
           </p>
         </div>
         <p className={cn('text-lg font-bold tabular-nums', scoreTextClass(data.score))}>

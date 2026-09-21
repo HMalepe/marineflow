@@ -5,18 +5,22 @@ import { ArrowUpRight, Brain, Sparkles, Wallet, LifeBuoy } from 'lucide-react';
 import type { OverviewKpiData } from '@/components/KPIStrip';
 import { cn } from '@/lib/utils';
 import { OverviewCollapsibleSection } from './OverviewCollapsibleSection';
+import { useIndustry } from '@/components/industry-provider';
 import { overviewDivider, overviewNeonBox } from './overviewNeon';
 
 export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
+  const { retail } = useIndustry();
   const nudges = [
     data.pendingPayments > 0
       ? {
           id: 'pending-payments',
           icon: Wallet,
-          headline: `${data.pendingPayments} booking${data.pendingPayments === 1 ? '' : 's'} awaiting payment`,
-          body: 'Payment links are still open — follow up before slots expire or customers drop off.',
-          href: '/appointments?status=PENDING_PAYMENT',
-          actionLabel: 'View bookings',
+          headline: `${data.pendingPayments} ${retail ? 'order' : 'booking'}${data.pendingPayments === 1 ? '' : 's'} awaiting payment`,
+          body: retail
+            ? 'Payment links are still open — follow up before customers drop off.'
+            : 'Payment links are still open — follow up before slots expire or customers drop off.',
+          href: retail ? '/orders?status=PENDING_PAYMENT' : '/appointments?status=PENDING_PAYMENT',
+          actionLabel: retail ? 'View orders' : 'View bookings',
           neon: 'orange' as const,
         }
       : null,
@@ -67,7 +71,9 @@ export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
               </span>
             </div>
             <p className="text-sm font-medium text-muted-foreground mt-1 leading-relaxed">
-              Action items from your live bookings and help queue — not another report.
+              {retail
+                ? 'Action items from your live orders and help queue — not another report.'
+                : 'Action items from your live bookings and help queue — not another report.'}
             </p>
           </div>
         </div>
@@ -78,7 +84,9 @@ export function OverviewCoachNudges({ data }: { data: OverviewKpiData }) {
               overviewNeonBox('violet', 'text-sm font-medium text-muted-foreground px-4 py-6 text-center mt-4'),
             )}
           >
-            Nothing urgent right now. Check back after more booking activity.
+            {retail
+              ? 'Nothing urgent right now. Check back after more order activity.'
+              : 'Nothing urgent right now. Check back after more booking activity.'}
           </p>
         ) : (
           <div className="space-y-3 mt-4">

@@ -919,9 +919,14 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const db = getTenantDb();
       const salon = await db.salon.findUniqueOrThrow({
         where: { id: user.salonId },
-        select: { timezone: true },
+        select: { timezone: true, industryTemplate: true },
       });
-      return getTenantOverviewKpis(db, user.salonId, salon.timezone || 'Africa/Johannesburg');
+      return getTenantOverviewKpis(
+        db,
+        user.salonId,
+        salon.timezone || 'Africa/Johannesburg',
+        salon.industryTemplate,
+      );
     });
   });
 

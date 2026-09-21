@@ -35,6 +35,11 @@ export type DashboardIndustry = 'salon' | 'dispensary' | string;
 
 export const SALON_OVERVIEW_ITEM: NavItem = { href: '/', label: OVERVIEW_LABEL };
 
+/** Retail tenants (dispensary) sell products and take orders — never bookings. */
+export function isRetailIndustry(industry?: DashboardIndustry | null): boolean {
+  return industry === 'dispensary';
+}
+
 /** Salon nav grouped by how owners use the product day to day. */
 export const SALON_NAV_GROUPS: NavGroup[] = [
   {
