@@ -304,7 +304,7 @@ export function LoginForm() {
               ? `Welcome to ${salonName ?? 'your salon'} — create your password`
               : tab === 'username' && usernameStep === 'forgot'
                 ? 'Reset your password'
-                : 'Sign in to your salon dashboard'}
+                : 'Login to your dashboard'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -533,7 +533,7 @@ function LoginPageSkeleton() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center pb-2">
           <CardTitle className="text-2xl font-bold tracking-tight solupair-text-gradient">Solupair</CardTitle>
-          <CardDescription>Sign in to your salon dashboard</CardDescription>
+          <CardDescription>Login to your dashboard</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-10 rounded-lg bg-muted/50 animate-pulse mb-6" />
