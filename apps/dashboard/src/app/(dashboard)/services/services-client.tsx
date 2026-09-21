@@ -26,6 +26,7 @@ import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
 import { ServiceRow, type ServiceRowData } from '@/components/ServiceRow';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
+import { useIndustry, useVocab } from '@/components/industry-provider';
 
 interface Service extends ServiceRowData {}
 
@@ -104,11 +105,11 @@ function parsePositiveInt(raw: string): number | null {
 
 type ServiceFieldErrors = Partial<Record<keyof ServiceForm, string>>;
 
-function validateServiceForm(form: ServiceForm): { ok: true; priceCents: number; durationMin: number; bufferMin: number } | { ok: false; errors: ServiceFieldErrors; firstMessage: string } {
+function validateServiceForm(form: ServiceForm, retail = false): { ok: true; priceCents: number; durationMin: number; bufferMin: number } | { ok: false; errors: ServiceFieldErrors; firstMessage: string } {
   const errors: ServiceFieldErrors = {};
 
   if (!form.name.trim()) {
-    errors.name = 'Service name is required';
+    errors.name = retail ? 'Product name is required' : 'Service name is required';
   }
 
   const priceCents = parsePriceRands(form.priceRands);
@@ -161,6 +162,16 @@ function Toast({
 }
 
 export function ServicesClient({ token }: Props) {
+  /**
+   * Retail tenants (dispensary) sell products and take orders. Salon copy is the
+   * default in every branch below — retail only ever adds an alternative.
+   */
+  const { retail } = useIndustry();
+  const itemNoun = useVocab('product', 'service');
+  const itemNounPlural = useVocab('products', 'services');
+  const ItemNoun = useVocab('Product', 'Service');
+  const ItemNounPlural = useVocab('Products', 'Services');
+
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -232,13 +243,13 @@ export function ServicesClient({ token }: Props) {
       const data = await apiFetch<{ services: Service[] }>('/services', {}, token);
       setServices(data.services ?? []);
     } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'Failed to load services', 'error');
+      showToast(e instanceof ApiError ? e.message : `Failed to load ${itemNounPlural}`, 'error');
       setServices([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token, showToast]);
+  }, [token, showToast, itemNounPlural]);
 
   const loadCategories = useCallback(async () => {
     if (!token) return;
@@ -446,7 +457,7 @@ export function ServicesClient({ token }: Props) {
         },
         token,
       );
-      showToast(`Assigned ${result.updated} service${result.updated === 1 ? '' : 's'} to category`, 'success');
+      showToast(`Assigned ${result.updated} ${result.updated === 1 ? itemNoun : itemNounPlural} to category`, 'success');
       setSelectedIds(new Set());
       setBulkCategoryId('');
       await loadServices(true);
@@ -520,7 +531,7 @@ export function ServicesClient({ token }: Props) {
     const submitter = (e.nativeEvent as SubmitEvent).submitter?.getAttribute('name');
     const shouldClose = andClose || submitter === 'addAndClose' || !!editingId;
 
-    const validated = validateServiceForm(form);
+    const validated = validateServiceForm(form, retail);
     if (!validated.ok) {
       setFieldErrors(validated.errors);
       reportError(validated.firstMessage);
@@ -600,7 +611,11 @@ export function ServicesClient({ token }: Props) {
         body: JSON.stringify({ active: nextActive }),
       }, token);
       showToast(
-        nextActive ? `${service.name} is now bookable` : `${service.name} hidden from booking`,
+        retail
+          ? (nextActive
+              ? `${service.name} is now in the WhatsApp menu`
+              : `${service.name} hidden from the WhatsApp menu`)
+          : (nextActive ? `${service.name} is now bookable` : `${service.name} hidden from booking`),
         'success',
       );
     } catch (err) {
@@ -630,7 +645,9 @@ export function ServicesClient({ token }: Props) {
       setServices((prev) => prev.filter((s) => s.id !== target.id));
       showToast(
         result.deactivated || result.hadAppointments
-          ? `${target.name} removed from bookings (past appointments kept on record)`
+          ? (retail
+              ? `${target.name} removed from the menu (past orders kept on record)`
+              : `${target.name} removed from bookings (past appointments kept on record)`)
           : `${target.name} removed`,
         'success',
       );
@@ -699,11 +716,13 @@ export function ServicesClient({ token }: Props) {
   return (
     <div className="dashboard-page-flow space-y-6">
       <DashboardPageHeader
-        title="Services"
+        title={ItemNounPlural}
         variant="violet"
         subtitle={
           <span className="flex items-center gap-2 flex-wrap">
-            Manage what customers can book via WhatsApp.
+            {retail
+              ? 'Manage what customers can order via WhatsApp.'
+              : 'Manage what customers can book via WhatsApp.'}
             {liveConnected && (
               <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600">
                 <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
@@ -717,29 +736,30 @@ export function ServicesClient({ token }: Props) {
             <Button variant="outline" size="sm" onClick={() => loadServices(true)} disabled={refreshing}>
               {refreshing ? 'Refreshing…' : 'Refresh'}
             </Button>
-            <Button onClick={() => openCreate()}>Add Service</Button>
+            <Button onClick={() => openCreate()}>Add {ItemNoun}</Button>
           </>
         }
       />
 
       <CollapsibleSection id="services-stats" title="Overview" defaultOpen>
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total services" value={services.length} />
-        <StatCard label="Active (bookable)" value={activeCount} highlight />
+        <StatCard label={retail ? 'Total products' : 'Total services'} value={services.length} />
+        <StatCard label={retail ? 'Active (in menu)' : 'Active (bookable)'} value={activeCount} highlight />
         <StatCard label="Inactive" value={inactiveCount} />
       </div>
       </CollapsibleSection>
 
       {showUncategorisedBanner && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
-          ⚠ {uncategorisedActiveCount} service{uncategorisedActiveCount === 1 ? '' : 's'} are uncategorised
-          — your bot may present them poorly to customers. Assign categories to improve booking flow.
+          ⚠ {uncategorisedActiveCount} {uncategorisedActiveCount === 1 ? itemNoun : itemNounPlural} are uncategorised
+          — your bot may present them poorly to customers. Assign categories to improve{' '}
+          {retail ? 'the ordering flow' : 'booking flow'}.
         </div>
       )}
 
       <CollapsibleSection
         id="services-catalog"
-        title="Service catalog"
+        title={retail ? 'Product catalog' : 'Service catalog'}
         count={filtered.length}
         defaultOpen
       >
@@ -759,7 +779,7 @@ export function ServicesClient({ token }: Props) {
             </div>
           </div>
           <Input
-            placeholder="Search services…"
+            placeholder={retail ? 'Search products…' : 'Search services…'}
             value={search}
             onChange={(e: { target: { value: string } }) => setSearch(e.target.value)}
             className="max-w-sm"
@@ -771,7 +791,9 @@ export function ServicesClient({ token }: Props) {
               variant={showIntelColumns ? 'default' : 'outline'}
               onClick={() => setShowIntelColumns((v) => !v)}
             >
-              {showIntelColumns ? 'Hide booking stats' : 'Show booking stats'}
+              {retail
+                ? (showIntelColumns ? 'Hide sales stats' : 'Show sales stats')
+                : (showIntelColumns ? 'Hide booking stats' : 'Show booking stats')}
             </Button>
             {selectedIds.size > 0 && (
               <div className="flex flex-wrap items-center gap-2 ml-auto">
@@ -811,18 +833,18 @@ export function ServicesClient({ token }: Props) {
         </div>
         <div className="space-y-3 pb-4">
           {loading && (
-            <p className="text-center text-muted-foreground py-10 text-sm">Loading services…</p>
+            <p className="text-center text-muted-foreground py-10 text-sm">Loading {itemNounPlural}…</p>
           )}
           {!loading && filtered.length === 0 && (
             <div className="text-center py-10">
               <p className="text-muted-foreground text-sm">
                 {search || statusFilter !== 'all'
-                  ? 'No services match your filters.'
-                  : 'No services yet.'}
+                  ? `No ${itemNounPlural} match your filters.`
+                  : `No ${itemNounPlural} yet.`}
               </p>
               {!search && statusFilter === 'all' && (
                 <Button size="sm" className="mt-3" onClick={() => openCreate()}>
-                  Add your first service
+                  Add your first {itemNoun}
                 </Button>
               )}
             </div>
@@ -922,7 +944,7 @@ export function ServicesClient({ token }: Props) {
                     type="button"
                     onClick={() => openCreate(isOther ? '' : (group.category?.id ?? ''))}
                     className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded hover:bg-muted transition-colors shrink-0 opacity-100 sm:opacity-0 sm:group-hover/header:opacity-100"
-                    title="Add service to this category"
+                    title={`Add ${itemNoun} to this category`}
                   >
                     <Plus className="size-3" />
                     Add
@@ -936,8 +958,10 @@ export function ServicesClient({ token }: Props) {
                       <div className="hidden md:flex items-center gap-3 px-3 py-1.5 bg-muted/20 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                         <span className="w-4 shrink-0" aria-hidden />
                         <span className="w-6 shrink-0" aria-hidden />
-                        <span className="flex-1">Service</span>
-                        <span className="w-16 text-right hidden md:block">Bookings (30d)</span>
+                        <span className="flex-1">{ItemNoun}</span>
+                        <span className="w-16 text-right hidden md:block">
+                          {retail ? 'Orders (30d)' : 'Bookings (30d)'}
+                        </span>
                         <span className="w-20 text-right hidden lg:block">Rev/hr</span>
                         <span className="w-16 text-right hidden sm:block">Price</span>
                         <span className="w-[52px] shrink-0" aria-hidden />
@@ -947,7 +971,7 @@ export function ServicesClient({ token }: Props) {
                     )}
                     {group.services.length === 0 && (
                       <p className="text-xs text-muted-foreground px-4 py-3 italic">
-                        No services in this category.
+                        No {itemNounPlural} in this category.
                       </p>
                     )}
                     {sortServicesByBookings(group.services, serviceStats).map((service: Service) => (
@@ -1031,11 +1055,15 @@ export function ServicesClient({ token }: Props) {
           ) : (
             <>
               <SheetHeader>
-                <SheetTitle>{editingId ? 'Edit service' : 'New service'}</SheetTitle>
+                <SheetTitle>{editingId ? `Edit ${itemNoun}` : `New ${itemNoun}`}</SheetTitle>
                 <SheetDescription>
-                  {editingId
-                    ? 'Changes apply to new bookings. Existing appointments keep their original details.'
-                    : 'Active services appear in the WhatsApp booking menu immediately.'}
+                  {retail
+                    ? (editingId
+                        ? 'Changes apply to new orders. Orders already placed keep their original details.'
+                        : 'Active products appear in the WhatsApp order menu immediately.')
+                    : (editingId
+                        ? 'Changes apply to new bookings. Existing appointments keep their original details.'
+                        : 'Active services appear in the WhatsApp booking menu immediately.')}
                 </SheetDescription>
               </SheetHeader>
               {!editingId && (
@@ -1064,7 +1092,7 @@ export function ServicesClient({ token }: Props) {
                       setFieldErrors((prev) => ({ ...prev, name: undefined }));
                       setForm((f: ServiceForm) => ({ ...f, name: e.target.value }));
                     }}
-                    placeholder="e.g. Haircut & Style"
+                    placeholder={retail ? 'e.g. Blue Dream 3.5g' : 'e.g. Haircut & Style'}
                     autoFocus
                     aria-invalid={!!fieldErrors.name}
                     className={cn(fieldErrors.name && 'border-destructive')}
@@ -1082,6 +1110,13 @@ export function ServicesClient({ token }: Props) {
                     className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
                   />
                 </div>
+                {/*
+                  Aftercare is driven by the `whatsapp/appointment.completed` job
+                  (src/lib/inngest/functions/appointmentAftercare.ts), which retail
+                  order flows never emit — so the field is hidden rather than
+                  relabelled for retail tenants. Existing values are preserved on save.
+                */}
+                {!retail && (
                 <div className="space-y-2">
                   <Label htmlFor="aftercareNote">Aftercare message</Label>
                   <textarea
@@ -1093,6 +1128,7 @@ export function ServicesClient({ token }: Props) {
                     className="flex min-h-[80px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 outline-none md:text-sm dark:bg-input/30"
                   />
                 </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="categoryId">Category</Label>
                   <select
@@ -1110,7 +1146,7 @@ export function ServicesClient({ token }: Props) {
                   {form.imageUrl ? (
                     <div className="relative rounded-xl border overflow-hidden bg-muted/30">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={form.imageUrl} alt="Service photo" className="w-full max-h-48 object-cover" />
+                      <img src={form.imageUrl} alt={`${ItemNoun} photo`} className="w-full max-h-48 object-cover" />
                       <button
                         type="button"
                         onClick={() => setForm((f: ServiceForm) => ({ ...f, imageUrl: '', imageCaption: '' }))}
@@ -1171,9 +1207,9 @@ export function ServicesClient({ token }: Props) {
                       placeholder="Caption sent with the photo (optional)"
                     />
                   )}
-                  <p className="text-xs text-muted-foreground">Sent automatically when a customer picks this service in WhatsApp.</p>
+                  <p className="text-xs text-muted-foreground">Sent automatically when a customer picks this {itemNoun} in WhatsApp.</p>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className={cn('grid gap-4', retail ? 'grid-cols-1' : 'grid-cols-2')}>
                   <div className="space-y-2">
                     <Label htmlFor="price">Price (R) *</Label>
                     <Input
@@ -1192,6 +1228,8 @@ export function ServicesClient({ token }: Props) {
                     />
                     {fieldErrors.priceRands && <p className="text-xs text-destructive">{fieldErrors.priceRands}</p>}
                   </div>
+                  {/* Duration is appointment-only — retail products are not time-slotted. */}
+                  {!retail && (
                   <div className="space-y-2">
                     <Label htmlFor="duration">Duration (min) *</Label>
                     <Input
@@ -1211,12 +1249,16 @@ export function ServicesClient({ token }: Props) {
                     />
                     {fieldErrors.durationMin && <p className="text-xs text-destructive">{fieldErrors.durationMin}</p>}
                   </div>
+                  )}
                 </div>
                 <div className="rounded-lg border border-border p-3 text-xs text-muted-foreground">
                   Online payment is configured under <strong>Settings → Conversation flow</strong>. When enabled, the
-                  WhatsApp bot sends a PayFast link for the <strong>full service price</strong> after the customer
-                  confirms their booking.
+                  WhatsApp bot sends a PayFast link for the{' '}
+                  {retail ? <strong>full order total</strong> : <strong>full service price</strong>} after the customer
+                  confirms their {retail ? 'order' : 'booking'}.
                 </div>
+                {/* Buffer padding only means something on a calendar — hidden for retail. */}
+                {!retail && (
                 <div className="space-y-2">
                   <Label htmlFor="buffer">Buffer after appointment (min)</Label>
                   <Input
@@ -1238,7 +1280,9 @@ export function ServicesClient({ token }: Props) {
                     </p>
                   )}
                 </div>
-                {editingId && allStaff.length > 0 && (
+                )}
+                {/* Retail products aren't performed by a staff member — hidden for retail. */}
+                {!retail && editingId && allStaff.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label>Who can perform this service</Label>
@@ -1293,7 +1337,7 @@ export function ServicesClient({ token }: Props) {
                         {saving ? 'Adding…' : 'Add & close'}
                       </Button>
                       <Button type="submit" name="addMore" size="sm" disabled={saving}>
-                        {saving ? 'Adding…' : 'Add service'}
+                        {saving ? 'Adding…' : `Add ${itemNoun}`}
                       </Button>
                     </>
                   )}

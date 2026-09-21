@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronRight, GitMerge, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useIndustry } from '@/components/industry-provider';
 
 export type LtvBadge = 'champion' | 'regular' | 'new' | 'at_risk';
 
@@ -55,8 +56,8 @@ function formatRands(cents: number): string {
   }).format(cents / 100);
 }
 
-function formatLastVisit(iso: string | null): string {
-  if (!iso) return 'No visits yet';
+function formatLastVisit(iso: string | null, retail = false): string {
+  if (!iso) return retail ? 'No orders yet' : 'No visits yet';
   return new Date(iso).toLocaleDateString('en-ZA', {
     day: 'numeric',
     month: 'short',
@@ -99,6 +100,7 @@ export function CustomerCard({
   duplicateCount = 0,
   duplicateRow,
 }: CustomerCardProps) {
+  const { retail } = useIndustry();
   return (
     <div
       className={cn(
@@ -167,13 +169,16 @@ export function CustomerCard({
               </span>
               <span>·</span>
               <span>
-                Last visit <strong className="text-foreground">{formatLastVisit(stats.lastVisitAt)}</strong>
+                {retail ? 'Last order' : 'Last visit'}{' '}
+                <strong className="text-foreground">{formatLastVisit(stats.lastVisitAt, retail)}</strong>
               </span>
               {stats.visitCount > 0 && (
                 <>
                   <span>·</span>
                   <span>
-                    {stats.visitCount} visit{stats.visitCount === 1 ? '' : 's'}
+                    {retail
+                      ? `${stats.visitCount} order${stats.visitCount === 1 ? '' : 's'}`
+                      : `${stats.visitCount} visit${stats.visitCount === 1 ? '' : 's'}`}
                   </span>
                 </>
               )}
@@ -210,6 +215,7 @@ export function CustomerDuplicateRow({
   merging,
   onMerge,
 }: CustomerDuplicateRowProps) {
+  const { retail } = useIndustry();
   return (
     <div className="mx-3 mb-3 mt-1 rounded-lg border border-dashed border-amber-500/35 bg-amber-500/[0.04] px-3 py-2.5">
       <div className="flex items-start gap-3">
@@ -222,7 +228,9 @@ export function CustomerDuplicateRow({
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
             {waId && <span className="font-mono">{formatPhone(waId)}</span>}
             <span>
-              {bookingCount} booking{bookingCount === 1 ? '' : 's'}
+              {retail
+                ? `${bookingCount} order${bookingCount === 1 ? '' : 's'}`
+                : `${bookingCount} booking${bookingCount === 1 ? '' : 's'}`}
             </span>
             <span>
               Added{' '}
@@ -235,7 +243,7 @@ export function CustomerDuplicateRow({
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
             Combine into <span className="font-medium text-foreground">{primaryName}</span> — chat
-            history, bookings, and loyalty move across.
+            history, {retail ? 'orders' : 'bookings'}, and loyalty move across.
           </p>
         </div>
         <Button

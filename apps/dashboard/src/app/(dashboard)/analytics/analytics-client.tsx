@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ANALYTICS_LABEL, APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { ANALYTICS_LABEL, APPOINTMENTS_LABEL, ORDERS_LABEL } from '@/lib/dashboard-nav';
+import { useIndustry } from '@/components/industry-provider';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { apiFetch, ApiError } from '@/lib/api';
@@ -187,6 +188,10 @@ const SHOW_EXTENDED_INSIGHTS = false;
 export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = '' }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  /** Retail (dispensary) has orders, not bookings — and no stylists, no-shows or staff rosters. */
+  const { retail } = useIndustry();
+  const activityLabel = retail ? ORDERS_LABEL : APPOINTMENTS_LABEL;
+  const activityWord = retail ? 'orders' : 'bookings';
   const [data, setData]       = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -396,7 +401,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KpiCard label="This month revenue" value="R0.00" />
-            <KpiCard label={`${APPOINTMENTS_LABEL} (30 days)`} value="0" />
+            <KpiCard label={`${activityLabel} (30 days)`} value="0" />
             <KpiCard label="Retention rate"     value="—" />
             <KpiCard label="Active customers"   value="0" />
           </div>
@@ -404,8 +409,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             <p className="text-sm font-medium">No activity yet</p>
             <p className="text-xs text-muted-foreground max-w-xs mx-auto">
               {isAdmin
-                ? 'Metrics appear here once businesses start taking bookings through WhatsApp.'
-                : 'Analytics populate automatically once your first bookings come through WhatsApp.'}
+                ? `Metrics appear here once businesses start taking ${activityWord} through WhatsApp.`
+                : `Analytics populate automatically once your first ${activityWord} come through WhatsApp.`}
             </p>
           </div>
         </div>
@@ -424,7 +429,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             <span className="text-rose-600 font-bold text-sm mt-0.5">⚠</span>
             <div className="text-sm">
               <span className="font-semibold text-rose-700 dark:text-rose-400">High cancellation rate: {cancelRate}%</span>
-              <span className="text-muted-foreground ml-2">({totals.cancelled} of {totals.bookings} bookings in the last 30 days). Consider reviewing your cancellation policy.</span>
+              <span className="text-muted-foreground ml-2">({totals.cancelled} of {totals.bookings} {activityWord} in the last 30 days). Consider reviewing your cancellation policy.</span>
             </div>
           </div>
         );
@@ -458,10 +463,11 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <KpiCard label={`Total ${APPOINTMENTS_LABEL.toLowerCase()}`} value={report.totalBookings} />
+            <KpiCard label={`Total ${activityLabel.toLowerCase()}`} value={report.totalBookings} />
             <KpiCard label="Revenue" value={formatCurrency(report.revenueCents)} />
-            <KpiCard label="Top service" value={report.topService ?? '—'} />
-            <KpiCard label="No-show rate" value={`${report.noShowPct}%`} />
+            <KpiCard label={retail ? 'Top product' : 'Top service'} value={report.topService ?? '—'} />
+            {/* No-shows are an appointment concept — retail orders have none. */}
+            {!retail && <KpiCard label="No-show rate" value={`${report.noShowPct}%`} />}
             <KpiCard
               label="New customers"
               value={`${report.newCustomerPct}% new · ${report.returningCustomerPct}% returning`}
@@ -482,7 +488,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
               trend={revenueTrend(data.revenue)}
             />
             <KpiCard
-              label={`${APPOINTMENTS_LABEL} (30 days)`}
+              label={`${activityLabel} (30 days)`}
               value={last30DaysBookings(data.dailyBookings)}
               trend={bookingsTrend(data.dailyBookings)}
             />
@@ -494,17 +500,17 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
           {/* Daily bar chart */}
           <CollapsibleSection
             id="analytics-daily-bookings"
-            title="Daily bookings — last 30 days"
+            title={retail ? 'Daily orders — last 30 days' : 'Daily bookings — last 30 days'}
             defaultOpen
             action={
               <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-emerald-500 inline-block" />Completed</span>
                 <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-rose-400 inline-block" />Cancelled</span>
-                <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-amber-400 inline-block" />No-show</span>
+                {!retail && <span className="flex items-center gap-1"><span className="size-2.5 rounded-sm bg-amber-400 inline-block" />No-show</span>}
               </div>
             }
           >
-            {data.dailyBookings.length === 0 ? <EmptySection label="No booking data yet." /> : (
+            {data.dailyBookings.length === 0 ? <EmptySection label={retail ? 'No order data yet.' : 'No booking data yet.'} /> : (
               <div className="border rounded-xl p-4 bg-card">
                 <div className="flex items-end gap-0.5 h-40">
                   {(() => {
@@ -529,7 +535,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
                               <span className="block font-medium">{d.booking_date}</span>
                               <span className="block text-emerald-600">✓ {d.completed} completed</span>
                               {d.cancelled > 0 && <span className="block text-rose-500">✕ {d.cancelled} cancelled</span>}
-                              {d.no_shows > 0 && <span className="block text-amber-600">◦ {d.no_shows} no-show</span>}
+                              {!retail && d.no_shows > 0 && <span className="block text-amber-600">◦ {d.no_shows} no-show</span>}
                             </span>
                           </span>
                         </div>
@@ -600,7 +606,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             )}
           </CollapsibleSection>
 
-          {/* Staff */}
+          {/* Staff — stylist rosters are salon-only; retail has no per-staff appointment book. */}
+          {!retail && (
           <CollapsibleSection id="analytics-staff-month" title="Staff performance — this month" defaultOpen>
             {data.staffPerformance.length === 0 ? <EmptySection label="No staff data yet this month." /> : (
               <div className="border rounded-lg overflow-x-auto">
@@ -629,10 +636,12 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
               </div>
             )}
           </CollapsibleSection>
+          )}
 
           {SHOW_EXTENDED_INSIGHTS && (
           <>
-          {/* Staff ratings */}
+          {/* Staff ratings — post-visit survey is salon-only. */}
+          {!retail && (
           <CollapsibleSection id="analytics-staff-ratings" title="Staff ratings — last 3 months" defaultOpen>
             {!data.staffRatings || data.staffRatings.length === 0 ? (
               <EmptySection label="No ratings yet — they'll appear after customers complete the post-visit survey." />
@@ -662,6 +671,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
               </div>
             )}
           </CollapsibleSection>
+          )}
 
           {/* Retention */}
           <CollapsibleSection id="analytics-retention" title="Customer retention" defaultOpen>
@@ -739,8 +749,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             </CollapsibleSection>
           )}
 
-          {/* No-show patterns */}
-          {(noShowByStaff.length > 0 || noShowByService.length > 0) && (
+          {/* No-show patterns — appointment-only concept, hidden for retail. */}
+          {!retail && (noShowByStaff.length > 0 || noShowByService.length > 0) && (
             <CollapsibleSection id="analytics-no-show" title="No-show patterns — last 90 days" defaultOpen>
               <p className="text-xs text-muted-foreground mb-3">Rows with ≥ 3 appointments only.</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -806,7 +816,7 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
 
           {/* Booking funnel */}
           {funnel.length > 0 && (
-            <CollapsibleSection id="analytics-funnel" title="Booking funnel — last 30 days" defaultOpen>
+            <CollapsibleSection id="analytics-funnel" title={retail ? 'Order funnel — last 30 days' : 'Booking funnel — last 30 days'} defaultOpen>
               <div className="border rounded-lg divide-y">
                 {funnel.map((step, i) => {
                   const prev = i > 0 ? funnel[i - 1]!.count : null;
@@ -864,8 +874,8 @@ export function AnalyticsClient({ token, isAdmin = false, initialBusinessId = ''
             </CollapsibleSection>
           )}
 
-          {/* Staff revenue — last 30 days */}
-          {staffRevenue.length > 0 && (
+          {/* Staff revenue — last 30 days. Salon-only (per-stylist book). */}
+          {!retail && staffRevenue.length > 0 && (
             <CollapsibleSection id="analytics-staff-30d" title="Staff performance — last 30 days" defaultOpen>
               <div className="overflow-x-auto rounded-lg border">
                 <table className="w-full text-sm">
