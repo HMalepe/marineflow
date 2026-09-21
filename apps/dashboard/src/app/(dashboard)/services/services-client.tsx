@@ -962,7 +962,7 @@ export function ServicesClient({ token }: Props) {
                         <span className="w-16 text-right hidden md:block">
                           {retail ? 'Orders (30d)' : 'Bookings (30d)'}
                         </span>
-                        <span className="w-20 text-right hidden lg:block">Rev/hr</span>
+                        {!retail && <span className="w-20 text-right hidden lg:block">Rev/hr</span>}
                         <span className="w-16 text-right hidden sm:block">Price</span>
                         <span className="w-[52px] shrink-0" aria-hidden />
                         <span className="w-12 shrink-0" aria-hidden />
@@ -1367,17 +1367,19 @@ export function ServicesClient({ token }: Props) {
             onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
           >
             <CardContent className="p-6 space-y-4">
-              <h2 id="delete-service-title" className="font-semibold">Remove service?</h2>
+              <h2 id="delete-service-title" className="font-semibold">Remove {itemNoun}?</h2>
               <p className="text-sm text-muted-foreground">
                 You&apos;re about to remove <strong>{deleteTarget.name}</strong> from WhatsApp and the dashboard.
-                Past bookings stay on record; customers won&apos;t see this service when booking.
+                {retail
+                  ? " Past orders stay on record; customers won't see this product in the menu."
+                  : " Past bookings stay on record; customers won't see this service when booking."}
               </p>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" disabled={deleting} onClick={() => setDeleteTarget(null)}>
                   Cancel
                 </Button>
                 <Button type="button" variant="destructive" disabled={deleting} onClick={() => void confirmDelete()}>
-                  {deleting ? 'Removing…' : 'Remove service'}
+                  {deleting ? 'Removing…' : `Remove ${itemNoun}`}
                 </Button>
               </div>
             </CardContent>

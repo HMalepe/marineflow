@@ -393,8 +393,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Star}
             checked={draft.googleReview.enabled}
             onChange={(v) => patch('googleReview', { enabled: v })}
-            label="Request review after visit"
-            description="Sends your Google review link after the appointment — 45 minutes after the booked time by default, or 15 minutes after you tap “Client paid & happy — gone” on the Appointments page. Not sent at booking or payment."
+            label={retail ? 'Request review after order' : 'Request review after visit'}
+            description={
+              retail
+                ? 'Sends your Google review link shortly after an order is completed. Not sent at checkout or payment.'
+                : 'Sends your Google review link after the appointment — 45 minutes after the booked time by default, or 15 minutes after you tap “Client paid & happy — gone” on the Appointments page. Not sent at booking or payment.'
+            }
           />
           <Toggle
             icon={Star}
@@ -420,7 +424,9 @@ export function AutomationsClient({ token }: Props) {
             </div>
           )}
           <p className="text-xs text-muted-foreground max-w-lg">
-            Timing is automatic: review goes out 45 minutes after the confirmed appointment time, or 15 minutes after you mark the client as departed on the Appointments page.
+            {retail
+              ? 'Timing is automatic: the review request goes out once the order is marked completed on the Orders page.'
+              : 'Timing is automatic: review goes out 45 minutes after the confirmed appointment time, or 15 minutes after you mark the client as departed on the Appointments page.'}
           </p>
         </div></CollapsibleFeatureCard>
 
@@ -429,8 +435,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Heart}
             checked={draft.welcomeJourney.enabled}
             onChange={(v) => patch('welcomeJourney', { enabled: v })}
-            label="Welcome first-time customers"
-            description="Business intro, popular services, and subtle POPIA/marketing consent context."
+            label={retail ? 'Welcome first-time buyers' : 'Welcome first-time customers'}
+            description={
+              retail
+                ? 'Business intro, popular products, and subtle POPIA/marketing consent context.'
+                : 'Business intro, popular services, and subtle POPIA/marketing consent context.'
+            }
           />
           <div className="space-y-1.5">
             <Label className="text-xs">Introduction message</Label>
@@ -446,8 +456,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Sparkles}
             checked={draft.welcomeJourney.showPopularServices}
             onChange={(v) => patch('welcomeJourney', { showPopularServices: v })}
-            label="Show popular services"
-            description="Lists top services with prices in the welcome message."
+            label={retail ? 'Show popular products' : 'Show popular services'}
+            description={
+              retail
+                ? 'Lists top products with prices in the welcome message.'
+                : 'Lists top services with prices in the welcome message.'
+            }
           />
         </div></CollapsibleFeatureCard>
 
@@ -456,8 +470,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Gift}
             checked={draft.referral.enabled}
             onChange={(v) => patch('referral', { enabled: v })}
-            label="Customer referrals"
-            description="Prompts after 1st visit and every 5th thereafter. Friend must be new; both get R50 off."
+            label={retail ? 'Buyer referrals' : 'Customer referrals'}
+            description={
+              retail
+                ? 'Prompts after the 1st order and every 5th thereafter. Friend must be new; both get R50 off.'
+                : 'Prompts after 1st visit and every 5th thereafter. Friend must be new; both get R50 off.'
+            }
           />
           <div className="space-y-1.5 max-w-xs">
             <Label className="text-xs">Reward amount (cents, e.g. 5000 = R50)</Label>
@@ -481,7 +499,11 @@ export function AutomationsClient({ token }: Props) {
               }
             }}
             label="Membership subscriptions"
-            description="Monthly VIP via PayFast (R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month."
+            description={
+              retail
+                ? 'Monthly VIP via PayFast. Buyers sign up once on WhatsApp — PayFast debits the same day each month.'
+                : 'Monthly VIP via PayFast (R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month.'
+            }
           />
         </div></CollapsibleFeatureCard>
 
@@ -510,7 +532,7 @@ export function AutomationsClient({ token }: Props) {
             icon={RefreshCw}
             checked={draft.reactivation.enabled}
             onChange={(v) => patch('reactivation', { enabled: v })}
-            label="Customer reactivation campaigns"
+            label={retail ? 'Buyer reactivation campaigns' : 'Customer reactivation campaigns'}
             description="Configurable win-back at 21, 45, 90, and 180 days inactive."
           />
           <div className="space-y-1.5">
@@ -554,6 +576,8 @@ export function AutomationsClient({ token }: Props) {
           </div>
         </div></CollapsibleFeatureCard>
 
+      {/* Stylist leaderboard and per-cut incentives are salon-only — a dispensary has no stylists. */}
+      {!retail && (
       <CollapsibleFeatureCard id="automations-stylist-performance" icon={Star} title="Stylist performance"><div className="space-y-4">
           <Toggle
             icon={Star}
@@ -584,7 +608,10 @@ export function AutomationsClient({ token }: Props) {
             />
           </div>
         </div></CollapsibleFeatureCard>
+      )}
 
+      {/* Slot granularity and unpaid slot holds only exist where there is a time picker. */}
+      {!retail && (
       <CollapsibleFeatureCard id="automations-booking-slot-interval" icon={Calendar} title="Booking slot interval" description="How granular the WhatsApp time picker is, and when unpaid holds expire."><div className="space-y-4">
           <div className="space-y-2">
             <Label className="text-xs">Slot interval</Label>
@@ -623,8 +650,18 @@ export function AutomationsClient({ token }: Props) {
             <p className="text-xs text-muted-foreground">0 = no auto-release for unpaid holds.</p>
           </div>
         </div></CollapsibleFeatureCard>
+      )}
 
-      <CollapsibleFeatureCard id="automations-campaign-message-templates" icon={MessageSquare} title="Campaign message templates" description="Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults."><div className="space-y-4">
+      <CollapsibleFeatureCard
+        id="automations-campaign-message-templates"
+        icon={MessageSquare}
+        title="Campaign message templates"
+        description={
+          retail
+            ? "Use {'{name}'} and {'{salon}'} placeholders — {'{salon}'} renders as your business name. Leave blank for smart defaults."
+            : "Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults."
+        }
+      ><div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Win-back message</Label>
             <textarea
@@ -635,7 +672,11 @@ export function AutomationsClient({ token }: Props) {
               onChange={(e) => patch('messaging', { winbackBody: e.target.value })}
               maxLength={1600}
               rows={3}
-              placeholder="Hey {name}! We miss you at {salon}…"
+              placeholder={
+                retail
+                  ? 'Hey {name}! We miss you at {salon} — fresh stock just landed…'
+                  : 'Hey {name}! We miss you at {salon}…'
+              }
             />
           </div>
           <div className="space-y-1.5">
@@ -661,7 +702,11 @@ export function AutomationsClient({ token }: Props) {
               onChange={(e) => patch('messaging', { cancellationPolicyText: e.target.value })}
               maxLength={2000}
               rows={4}
-              placeholder="Cancellations within 24 hours may incur a fee…"
+              placeholder={
+                retail
+                  ? 'Orders cancelled after dispatch may incur a fee…'
+                  : 'Cancellations within 24 hours may incur a fee…'
+              }
             />
           </div>
         </div></CollapsibleFeatureCard>

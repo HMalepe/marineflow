@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useIndustry } from '@/components/industry-provider';
 import { cn } from '@/lib/utils';
 import { ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 
@@ -60,6 +61,7 @@ export function ServiceRow({
   onEdit,
   onDelete,
 }: ServiceRowProps) {
+  const { retail } = useIndustry();
   return (
     <div
       className={cn(
@@ -105,27 +107,31 @@ export function ServiceRow({
           )}
           {showIntelColumns && bookings30d === 0 && (
             <Badge variant="secondary" className="text-[10px] text-muted-foreground">
-              0 bookings in 30d
+              {retail ? '0 orders in 30d' : '0 bookings in 30d'}
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">{formatDuration(service)}</p>
+        {!retail && (
+          <p className="text-xs text-muted-foreground mt-0.5">{formatDuration(service)}</p>
+        )}
       </div>
 
       {showIntelColumns && (
         <>
           <span
             className="text-xs tabular-nums text-muted-foreground shrink-0 hidden md:block w-16 text-right"
-            title="Bookings in the last 30 days"
+            title={retail ? 'Orders in the last 30 days' : 'Bookings in the last 30 days'}
           >
             {bookings30d}
           </span>
-          <span
-            className="text-xs font-mono text-muted-foreground shrink-0 hidden lg:block w-20 text-right"
-            title="Revenue per hour (price ÷ duration)"
-          >
-            {formatRevPerHour(service.priceCents, service.durationMin)}
-          </span>
+          {!retail && (
+            <span
+              className="text-xs font-mono text-muted-foreground shrink-0 hidden lg:block w-20 text-right"
+              title="Revenue per hour (price ÷ duration)"
+            >
+              {formatRevPerHour(service.priceCents, service.durationMin)}
+            </span>
+          )}
         </>
       )}
 
@@ -152,7 +158,7 @@ export function ServiceRow({
         type="button"
         onClick={() => onEdit(service)}
         className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-1.5 py-1 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100"
-        title="Edit service"
+        title={retail ? 'Edit product' : 'Edit service'}
       >
         <Pencil className="size-3" />
         Edit
@@ -162,7 +168,7 @@ export function ServiceRow({
         type="button"
         onClick={() => onDelete(service)}
         className="text-xs text-muted-foreground hover:text-destructive px-1.5 py-1 rounded hover:bg-muted transition-colors shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100"
-        title="Delete service"
+        title={retail ? 'Delete product' : 'Delete service'}
       >
         Delete
       </button>
