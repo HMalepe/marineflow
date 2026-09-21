@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { SectionSaveFeedback } from '@/components/save-feedback';
 import { useMultiSectionSaveFeedback } from '@/lib/use-save-feedback';
+import { useIndustry } from '@/components/industry-provider';
 import { cn } from '@/lib/utils';
 import { fetchBusinessHours, saveBusinessHours, type BusinessHoursSettings } from './actions';
 
@@ -51,6 +52,7 @@ interface Props {
 }
 
 export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }: Props) {
+  const { retail } = useIndustry();
   const router = useRouter();
   const { getSection, reportSuccess, reportError } = useMultiSectionSaveFeedback();
   const [saved, setSaved] = useState<BusinessHoursSettings | null>(null);
@@ -101,7 +103,10 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
       setForm(result.hours);
       onWeekdayHoursChange?.(result.hours.weekdayOpen, result.hours.weekdayClose);
     }
-    reportSuccess('hours', 'Business hours saved — roster shifts updated');
+    reportSuccess(
+      'hours',
+      retail ? 'Business hours saved' : 'Business hours saved — roster shifts updated',
+    );
     router.refresh();
   }
 
@@ -113,7 +118,11 @@ export function BusinessHoursSection({ fallbackTimezone, onWeekdayHoursChange }:
     <CollapsibleSection
       id="settings-hours"
       title="Business hours"
-      subtitle="Default business hours for WhatsApp, booking, and the staff roster. Saving updates all team shifts to match."
+      subtitle={
+        retail
+          ? 'Default business hours for WhatsApp and ordering.'
+          : 'Default business hours for WhatsApp, booking, and the staff roster. Saving updates all team shifts to match.'
+      }
     >
       <div className="rounded-lg bg-muted/40 border px-4 py-3 text-sm">
         <span className="text-muted-foreground">Mon–Fri </span>
