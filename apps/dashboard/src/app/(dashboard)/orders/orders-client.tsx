@@ -131,8 +131,8 @@ export function OrdersClient({
         </p>
         <h1 className="text-3xl font-semibold tracking-tight solupair-text-gradient">Orders</h1>
         <p className="text-sm text-muted-foreground mt-2 max-w-xl">
-          WhatsApp carts go to PayFast (same gateway as BontleEntle). Once payment
-          clears, every registered driver is pinged — first ACCEPT wins the delivery
+          Paid WhatsApp carts land here. Once payment clears, every registered driver
+          is pinged — the first to accept takes the delivery
           {liveConnected ? ' · live updates on' : ''}.
         </p>
       </div>

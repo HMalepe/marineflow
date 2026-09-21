@@ -301,7 +301,7 @@ export function LoginForm() {
           <CardTitle className="text-2xl font-bold tracking-tight solupair-text-gradient">Solupair</CardTitle>
           <CardDescription>
             {tab === 'username' && usernameStep === 'setup'
-              ? `Welcome to ${salonName ?? 'your salon'} — create your password`
+              ? `Welcome to ${salonName ?? 'your business'} — create your password`
               : tab === 'username' && usernameStep === 'forgot'
                 ? 'Reset your password'
                 : 'Login to your dashboard'}
@@ -352,7 +352,7 @@ export function LoginForm() {
                     id="email"
                     name="email"
                     type="email"
-                    placeholder="you@salon.com"
+                    placeholder="you@business.co.za"
                     required
                     autoComplete="email"
                     autoFocus
@@ -394,7 +394,7 @@ export function LoginForm() {
                     onChange={(e) => setUsernameValue(e.target.value.toUpperCase())}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Enter the username for your salon (e.g. <strong>SALON</strong> or <strong>DISPENSARY</strong>).
+                    Enter the username for your business (e.g. <strong>SALON</strong> or <strong>DISPENSARY</strong>).
                   </p>
                 </div>
                 {error && <p role="alert" className="text-sm text-destructive rounded-md bg-destructive/10 px-3 py-2">{error}</p>}
