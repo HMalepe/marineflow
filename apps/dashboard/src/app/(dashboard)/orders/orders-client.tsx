@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, useTransition } from 'react';
 import { apiFetch } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useSalonLiveUpdates } from '@/hooks/use-salon-live-updates';
+import { retailOrderStatusLabel } from '@/lib/retail-order-status';
 
 export type RetailOrderRow = {
   id: string;
@@ -169,7 +170,7 @@ export function OrdersClient({
 
       {visible.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border/70 p-10 text-center text-sm text-muted-foreground">
-          No orders yet. When customers order on WhatsApp, they appear here instantly.
+          No orders yet. When buyers order on WhatsApp, they appear here instantly.
         </div>
       ) : (
         <ul className="space-y-4">
@@ -197,11 +198,11 @@ export function OrdersClient({
                   <div className="flex flex-col items-end gap-2">
                     <span
                       className={cn(
-                        'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide',
+                        'inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide',
                         statusChip(order.status),
                       )}
                     >
-                      {order.status.replace(/_/g, ' ')}
+                      {retailOrderStatusLabel(order.status)}
                     </span>
                     <span className="text-sm font-bold tabular-nums">
                       {formatZar(order.totalCents)}
@@ -247,7 +248,7 @@ export function OrdersClient({
                           : 'bg-background/60 border-border/70 hover:border-primary/30',
                       )}
                     >
-                      {s.replace(/_/g, ' ')}
+                      {retailOrderStatusLabel(s)}
                     </button>
                   ))}
                   <button

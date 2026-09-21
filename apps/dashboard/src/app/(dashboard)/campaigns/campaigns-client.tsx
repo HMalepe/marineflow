@@ -1388,7 +1388,7 @@ export function CampaignsClient({ token }: Props) {
               {form.audienceType === 'inactive' && (
                 <div className="flex items-center gap-2">
                   <Label htmlFor="inactive-days" className="shrink-0 text-sm text-muted-foreground">
-                    Last visit over
+                    {retail ? 'Last order over' : 'Last visit over'}
                   </Label>
                   <Input
                     id="inactive-days"

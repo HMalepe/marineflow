@@ -177,6 +177,8 @@ function matchesSegment(
 export function CustomersClient({ token }: Props) {
   const router = useRouter();
   const { retail } = useIndustry();
+  // Retail tenants call these people buyers; salon tenants call them customers.
+  const personNoun = retail ? 'buyer' : 'customer';
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerStats, setCustomerStats] = useState<Record<string, CustomerStatsView>>({});
   const [segmentCounts, setSegmentCounts] = useState<SegmentCounts | null>(null);
@@ -360,7 +362,7 @@ export function CustomersClient({ token }: Props) {
             '—'
           ) : (
             <>
-              {`${groups.length} customer${groups.length === 1 ? '' : 's'}`}
+              {`${groups.length} ${personNoun}${groups.length === 1 ? '' : 's'}`}
               {!loading && duplicateCount > 0 && (
                 <span className="ml-2 text-amber-600 font-semibold">
                   · {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} found
@@ -400,13 +402,13 @@ export function CustomersClient({ token }: Props) {
                 // Append to DOM before clicking so iOS Safari honours the download
                 const a = document.createElement('a');
                 a.href = `/api/proxy/customers/export-csv`;
-                a.download = 'customers.csv';
+                a.download = retail ? 'buyers.csv' : 'customers.csv';
                 a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
               }}
-              title="Download all customers as CSV"
+              title={`Download all ${personNoun}s as CSV`}
             >
               Export CSV
             </Button>
@@ -484,7 +486,7 @@ export function CustomersClient({ token }: Props) {
 
       <CollapsibleSection
         id="customers-directory"
-        title="Customer directory"
+        title={retail ? 'Buyer directory' : 'Customer directory'}
         count={groups.length}
         subtitle={search ? `Showing results for “${search}”` : undefined}
         defaultOpen

@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { OverviewCollapsibleSection } from './OverviewCollapsibleSection';
 import { overviewNeonBox } from './overviewNeon';
+import { retailOrderStatusLabel } from '@/lib/retail-order-status';
 
 export interface TodayRetailOrder {
   id: string;
@@ -41,44 +42,38 @@ function itemSummary(items: TodayRetailOrder['items']): string {
   return items.map((i) => `${i.nameSnapshot} ×${i.quantity}`).join(', ');
 }
 
+/** Wording comes from the shared status map; only the colouring lives here. */
 function statusLabel(status: string): { label: string; className: string } {
-  const map: Record<string, { label: string; className: string }> = {
+  const map: Record<string, { className: string }> = {
     PENDING_PAYMENT: {
-      label: 'Awaiting payment',
       className:
         'bg-orange-500/15 text-orange-900 border-2 border-orange-500/45 dark:text-orange-200 font-semibold',
     },
     PAID: {
-      label: 'Paid',
       className:
         'bg-emerald-500/15 text-emerald-900 border-2 border-emerald-500/45 dark:text-emerald-200 font-semibold',
     },
     PREPARING: {
-      label: 'Preparing',
       className:
         'bg-amber-500/15 text-amber-900 border-2 border-amber-500/45 dark:text-amber-200 font-semibold',
     },
     OUT_FOR_DELIVERY: {
-      label: 'Out for delivery',
       className:
         'bg-sky-500/15 text-sky-900 border-2 border-sky-500/45 dark:text-sky-200 font-semibold',
     },
     READY_FOR_COLLECTION: {
-      label: 'Ready for collection',
       className:
         'bg-violet-500/15 text-violet-900 border-2 border-violet-500/45 dark:text-violet-200 font-semibold',
     },
     COMPLETED: {
-      label: 'Completed',
       className: 'bg-muted text-muted-foreground border-2 border-border font-semibold',
     },
   };
-  return (
-    map[status] ?? {
-      label: status.replace(/_/g, ' ').toLowerCase(),
-      className: 'bg-muted text-muted-foreground border-2 border-border font-semibold',
-    }
-  );
+  return {
+    label: retailOrderStatusLabel(status),
+    className:
+      map[status]?.className ?? 'bg-muted text-muted-foreground border-2 border-border font-semibold',
+  };
 }
 
 function formatTime(iso: string): string {

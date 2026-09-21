@@ -8,6 +8,7 @@ import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 import { resolveApiUrl } from '@/lib/api-config';
+import { useIndustry } from '@/components/industry-provider';
 
 interface WebhookSub {
   id: string;
@@ -29,6 +30,18 @@ const AVAILABLE_EVENTS = [
   'payment.completed',
 ];
 
+/**
+ * Retail (dispensary) tenants never receive appointment events. These are the event
+ * names the retail order flow actually publishes — see emitRetailOrderCreated /
+ * emitRetailOrderUpdated in src/services/retailOrderNotify.ts and emitMessageReceived
+ * in src/lib/eventBus.ts.
+ */
+const RETAIL_AVAILABLE_EVENTS = [
+  'retail.order.created',
+  'retail.order.updated',
+  'message.received',
+];
+
 interface Props {
   token: string;
 }
@@ -38,6 +51,8 @@ export function WebhooksClient({ token }: Props) {
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+  const { retail } = useIndustry();
+  const availableEvents = retail ? RETAIL_AVAILABLE_EVENTS : AVAILABLE_EVENTS;
 
   useEffect(() => {
     fetch(resolveApiUrl('api', '/webhooks', { forBrowser: true }), {
@@ -103,12 +118,15 @@ export function WebhooksClient({ token }: Props) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Description (optional)</Label>
-            <Input name="description" placeholder="e.g. Zapier booking sync" />
+            <Input
+              name="description"
+              placeholder={retail ? 'e.g. Zapier order sync' : 'e.g. Zapier booking sync'}
+            />
           </div>
           <div className="space-y-2">
             <Label className="text-xs">Events</Label>
             <div className="flex flex-wrap gap-2">
-              {AVAILABLE_EVENTS.map((evt) => (
+              {availableEvents.map((evt) => (
                 <label
                   key={evt}
                   className={`text-xs border rounded px-2 py-1 cursor-pointer transition-colors ${

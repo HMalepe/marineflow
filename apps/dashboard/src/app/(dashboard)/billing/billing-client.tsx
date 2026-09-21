@@ -73,7 +73,7 @@ const RETAIL_FEATURES = [
   'AI-powered FAQs and smart search',
 ];
 
-const STEPS = [
+const SALON_STEPS = [
   {
     icon: CreditCard,
     title: 'Pay subscription on PayFast',
@@ -88,6 +88,24 @@ const STEPS = [
     icon: Sparkles,
     title: 'Go live on WhatsApp',
     body: 'Customers book through your number. You manage everything from the dashboard.',
+  },
+];
+
+const RETAIL_STEPS = [
+  {
+    icon: CreditCard,
+    title: 'Pay subscription on PayFast',
+    body: 'Secure recurring billing — monthly or annual, your choice.',
+  },
+  {
+    icon: Wrench,
+    title: 'We invoice setup & onboarding',
+    body: 'One-off fee before go-live. We configure your bot, products, and pricing.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Go live on WhatsApp',
+    body: 'Buyers order through your number. You manage everything from the dashboard.',
   },
 ];
 
@@ -130,6 +148,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
   const router = useRouter();
   const { retail } = useIndustry();
   const features = retail ? RETAIL_FEATURES : SALON_FEATURES;
+  const steps = retail ? RETAIL_STEPS : SALON_STEPS;
   const plan = pickPaidPlan(plans);
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [loading, setLoading] = useState(false);
@@ -471,7 +490,9 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
                   <div>
                     <CardTitle className="text-xl">{selectedPlan.name}</CardTitle>
                     <CardDescription className="mt-1">
-                      Everything you need to run bookings on WhatsApp
+                      {retail
+                        ? 'Everything you need to run orders on WhatsApp'
+                        : 'Everything you need to run bookings on WhatsApp'}
                     </CardDescription>
                   </div>
                   {cycle === 'annual' && quote.annualSavingsCents > 0 && (
@@ -539,7 +560,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
                 </Button>
                 <p className="text-[11px] text-center text-muted-foreground leading-relaxed">
                   You&apos;ll complete payment on PayFast&apos;s secure site. Setup fee is invoiced
-                  separately ({formatZAR(quote.setupCents)}) before we onboard your salon.
+                  separately ({formatZAR(quote.setupCents)}) before we onboard your {retail ? 'shop' : 'salon'}.
                 </p>
               </CardFooter>
             </Card>
@@ -552,7 +573,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
                 <CardDescription>Simple, transparent pricing — no hidden tiers</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {STEPS.map((step, i) => (
+                {steps.map((step, i) => (
                   <div key={step.title} className="flex gap-3">
                     <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <step.icon className="size-4" />

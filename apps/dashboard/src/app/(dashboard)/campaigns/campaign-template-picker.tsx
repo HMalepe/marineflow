@@ -5,6 +5,7 @@ import { LayoutTemplate, PenLine, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { useIndustry } from '@/components/industry-provider';
 
 export type CampaignTemplateCategory =
   | 'seasonal'
@@ -40,8 +41,27 @@ export const TEMPLATE_CATEGORY_LABELS: { id: CampaignTemplateCategory | 'all'; l
   { id: 'thank-you', label: 'Thank you' },
 ];
 
-function categoryLabel(id: CampaignTemplateCategory): string {
-  return TEMPLATE_CATEGORY_LABELS.find((c) => c.id === id)?.label ?? id;
+/** Retail (dispensary) tenants sell products to buyers — never services to clients. */
+const RETAIL_CATEGORY_LABEL_OVERRIDES: Partial<Record<CampaignTemplateCategory | 'all', string>> = {
+  'new-client': 'New buyers',
+  services: 'By product',
+};
+
+export const RETAIL_TEMPLATE_CATEGORY_LABELS: typeof TEMPLATE_CATEGORY_LABELS =
+  TEMPLATE_CATEGORY_LABELS.map((c) => ({
+    ...c,
+    label: RETAIL_CATEGORY_LABEL_OVERRIDES[c.id] ?? c.label,
+  }));
+
+export function campaignCategoryLabels(retail: boolean): typeof TEMPLATE_CATEGORY_LABELS {
+  return retail ? RETAIL_TEMPLATE_CATEGORY_LABELS : TEMPLATE_CATEGORY_LABELS;
+}
+
+function categoryLabel(
+  id: CampaignTemplateCategory,
+  labels: typeof TEMPLATE_CATEGORY_LABELS = TEMPLATE_CATEGORY_LABELS,
+): string {
+  return labels.find((c) => c.id === id)?.label ?? id;
 }
 
 function previewSnippet(message: string): string {
@@ -66,6 +86,8 @@ export function CampaignTemplatePicker({
   contentTab: 'templates' | 'custom';
   onContentTabChange: (tab: 'templates' | 'custom') => void;
 }) {
+  const { retail } = useIndustry();
+  const categoryLabels = campaignCategoryLabels(retail);
   const [category, setCategory] = useState<CampaignTemplateCategory | 'all'>('all');
   const [query, setQuery] = useState('');
 
@@ -136,7 +158,7 @@ export function CampaignTemplatePicker({
           <LayoutTemplate className="size-4 shrink-0 text-[#128c7e] mt-0.5" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-medium truncate">Using template: {selected.name}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{categoryLabel(selected.category)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{categoryLabel(selected.category, categoryLabels)}</p>
           </div>
           <div className="flex shrink-0 gap-1">
             <Button
@@ -175,7 +197,7 @@ export function CampaignTemplatePicker({
           </div>
 
           <div className="dashboard-h-scroll gap-1.5 pb-1 -mx-1 px-1 snap-x snap-mandatory">
-            {TEMPLATE_CATEGORY_LABELS.map((cat) => (
+            {categoryLabels.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
@@ -219,7 +241,7 @@ export function CampaignTemplatePicker({
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-medium leading-snug">{t.name}</p>
                       <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {categoryLabel(t.category)}
+                        {categoryLabel(t.category, categoryLabels)}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{t.description}</p>

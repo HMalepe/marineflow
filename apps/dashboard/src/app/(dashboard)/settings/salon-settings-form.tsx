@@ -1069,7 +1069,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
               One tap fills every message — toggle individual presets below or edit before saving.
             </p>
             <div className="flex flex-wrap gap-2">
-              {FOLLOW_UP_MESSAGE_SETS.map((set) => (
+              {followUpMessageSetsFor(retail).map((set) => (
                 <Button
                   key={set.id}
                   type="button"
@@ -1093,7 +1093,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <p className="text-sm font-medium">First follow-up</p>
             <p className="text-xs text-muted-foreground">Sent when a customer stops replying. Leave blank to skip.</p>
             <FollowUpTemplatePicker
-              templates={FIRST_FOLLOW_UP_TEMPLATES}
+              templates={templatesForKind('firstFollowUp', retail)}
               salonName={salonDisplayName}
               value={inactivityMsg1}
               onChange={setInactivityMsg1}
@@ -1136,7 +1136,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
             <p className="text-sm font-medium">Second follow-up</p>
             <p className="text-xs text-muted-foreground">A final nudge before the conversation goes idle. Leave blank to skip.</p>
             <FollowUpTemplatePicker
-              templates={SECOND_FOLLOW_UP_TEMPLATES}
+              templates={templatesForKind('secondFollowUp', retail)}
               salonName={salonDisplayName}
               value={inactivityMsg2}
               onChange={setInactivityMsg2}
@@ -1178,7 +1178,7 @@ export function SalonSettingsForm({ initialSettings, loyaltyProgram }: Props) {
                 : 'Sent when a booking is confirmed or the conversation wraps up. Leave blank to skip.'}
             </p>
             <FollowUpTemplatePicker
-              templates={CLOSING_MESSAGE_TEMPLATES}
+              templates={templatesForKind('closing', retail)}
               salonName={salonDisplayName}
               value={closingMsg}
               onChange={setClosingMsg}

@@ -319,7 +319,7 @@ export function InventoryClient({
 
       {visible.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-10">
-          No products match this filter. Seed the Dr. Marley menu or clear search.
+          No products match this filter. Clear the search or add products on the Products page.
         </p>
       )}
     </div>
