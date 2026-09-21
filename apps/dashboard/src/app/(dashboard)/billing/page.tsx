@@ -16,6 +16,7 @@ import {
 import { getApiBaseUrl } from '@/lib/api-config';
 import type { BillingPlan } from '@/lib/billing';
 import { adminBillingIssueLabel } from '@/lib/billing';
+import { isRetailIndustry } from '@/lib/dashboard-nav';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 
 const API_URL = getApiBaseUrl();
@@ -312,6 +313,7 @@ export default async function BillingPage({
       : null;
 
   const [token, user] = await Promise.all([getToken(), getUser()]);
+  const retail = isRetailIndustry(user?.industryTemplate ?? null);
 
   if (user?.role === 'SUPER_ADMIN') {
     return <AdminBillingPage token={token ?? ''} />;
@@ -324,7 +326,7 @@ export default async function BillingPage({
   if (isApiMisconfiguredForProduction()) {
     return (
       <div className="space-y-8 max-w-3xl">
-        <BillingPageHeader />
+        <BillingPageHeader retail={retail} />
         <p className="text-sm text-destructive">{API_MISCONFIGURED_MESSAGE}</p>
       </div>
     );
@@ -348,7 +350,7 @@ export default async function BillingPage({
   if (loadError) {
     return (
       <div className="space-y-8 max-w-3xl">
-        <BillingPageHeader />
+        <BillingPageHeader retail={retail} />
         <Card>
           <CardContent className="py-8">
             <p className="text-sm text-destructive font-medium">{loadError}</p>
@@ -364,7 +366,7 @@ export default async function BillingPage({
 
   return (
     <div className="dashboard-page-flow space-y-8 max-w-5xl">
-      <BillingPageHeader />
+      <BillingPageHeader retail={retail} />
 
       <BillingClient
         plans={plans}
@@ -376,12 +378,16 @@ export default async function BillingPage({
   );
 }
 
-function BillingPageHeader() {
+function BillingPageHeader({ retail = false }: { retail?: boolean }) {
   return (
     <DashboardPageHeader
       title="Billing"
       variant="emerald"
-      subtitle="One simple plan — WhatsApp bookings, dashboard, and onboarding included."
+      subtitle={
+        retail
+          ? 'One simple plan — WhatsApp orders, dashboard, and onboarding included.'
+          : 'One simple plan — WhatsApp bookings, dashboard, and onboarding included.'
+      }
     />
   );
 }

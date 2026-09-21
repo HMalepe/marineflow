@@ -382,7 +382,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
         const isAdmin = user.role === 'SUPER_ADMIN';
         const isOwner = user.role === 'OWNER' || isAdmin;
-        return searchDashboard({ query, isAdmin, isOwner });
+        const salon = await getTenantDb().salon.findUniqueOrThrow({
+          where: { id: user.salonId },
+          select: { industryTemplate: true },
+        });
+        return searchDashboard({
+          query,
+          isAdmin,
+          isOwner,
+          industryTemplate: salon.industryTemplate,
+        });
       });
     },
   );

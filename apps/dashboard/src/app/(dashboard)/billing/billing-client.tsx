@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CollapsibleCard } from '@/components/collapsible-card';
+import { useIndustry } from '@/components/industry-provider';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import {
   Card,
@@ -58,9 +59,16 @@ interface Props {
   checkoutStatus?: 'success' | 'cancelled' | null;
 }
 
-const FEATURES = [
+const SALON_FEATURES = [
   'WhatsApp booking bot on your business number',
   'Owner dashboard, CRM & appointment calendar',
+  'Loyalty stamps, campaigns & customer insights',
+  'AI-powered FAQs and smart search',
+];
+
+const RETAIL_FEATURES = [
+  'WhatsApp ordering bot on your business number',
+  'Owner dashboard, CRM & order management',
   'Loyalty stamps, campaigns & customer insights',
   'AI-powered FAQs and smart search',
 ];
@@ -120,6 +128,8 @@ function StatusBanner({
 
 export function BillingClient({ plans, subscription, token, checkoutStatus }: Props) {
   const router = useRouter();
+  const { retail } = useIndustry();
+  const features = retail ? RETAIL_FEATURES : SALON_FEATURES;
   const plan = pickPaidPlan(plans);
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [loading, setLoading] = useState(false);
@@ -474,7 +484,7 @@ export function BillingClient({ plans, subscription, token, checkoutStatus }: Pr
 
               <CardContent className="space-y-4">
                 <ul className="space-y-2">
-                  {FEATURES.map((feature) => (
+                  {features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2 text-sm">
                       <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
                       <span>{feature}</span>
