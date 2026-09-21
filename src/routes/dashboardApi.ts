@@ -382,7 +382,16 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
         }
         const isAdmin = user.role === 'SUPER_ADMIN';
         const isOwner = user.role === 'OWNER' || isAdmin;
-        return searchDashboard({ query, isAdmin, isOwner });
+        const salon = await getTenantDb().salon.findUniqueOrThrow({
+          where: { id: user.salonId },
+          select: { industryTemplate: true },
+        });
+        return searchDashboard({
+          query,
+          isAdmin,
+          isOwner,
+          industryTemplate: salon.industryTemplate,
+        });
       });
     },
   );
@@ -919,16 +928,25 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       const db = getTenantDb();
       const salon = await db.salon.findUniqueOrThrow({
         where: { id: user.salonId },
-        select: { timezone: true },
+        select: { timezone: true, industryTemplate: true },
       });
-      return getTenantOverviewKpis(db, user.salonId, salon.timezone || 'Africa/Johannesburg');
+      return getTenantOverviewKpis(
+        db,
+        user.salonId,
+        salon.timezone || 'Africa/Johannesburg',
+        salon.industryTemplate,
+      );
     });
   });
 
   app.get('/tenant/setup-health', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
-      return getTenantSetupHealth(db, user.salonId);
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: { industryTemplate: true },
+      });
+      return getTenantSetupHealth(db, user.salonId, salon.industryTemplate);
     });
   });
 

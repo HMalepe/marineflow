@@ -19,6 +19,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { CollapsibleFeatureCard } from '@/components/collapsible-feature-card';
+import { useIndustry } from '@/components/industry-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -120,6 +121,8 @@ export function AutomationsClient({ token }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { getSection, reportSuccess, reportError } = useMultiSectionSaveFeedback();
+  /** Retail (dispensary) sells products: no stylists, slots, no-shows or reschedule window. */
+  const { retail } = useIndustry();
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -179,6 +182,12 @@ export function AutomationsClient({ token }: Props) {
     );
   }
 
+  const reminderWindowLabel = draft.reminders.hoursBefore.includes(24)
+    ? '1 day'
+    : draft.reminders.hoursBefore.includes(2)
+      ? '2 hours'
+      : `${[...draft.reminders.hoursBefore].sort((a, b) => a - b)[0] ?? 24} hours`;
+
   return (
     <div className="dashboard-page-flow space-y-8 max-w-4xl">
       <DashboardPageHeader
@@ -191,7 +200,9 @@ export function AutomationsClient({ token }: Props) {
         }
         subtitle={
           <>
-            Single place for reminders, win-back, reviews, booking rules, and campaign copy. Paste your{' '}
+            {retail
+              ? 'Single place for order reminders, win-back, reviews, and campaign copy. Paste your '
+              : 'Single place for reminders, win-back, reviews, booking rules, and campaign copy. Paste your '}
             <Link href="/settings" className="text-primary underline-offset-4 hover:underline">
               Google review URL in Settings
             </Link>
@@ -211,13 +222,27 @@ export function AutomationsClient({ token }: Props) {
         }
       />
 
-      <CollapsibleFeatureCard id="automations-appointment-reminders" icon={Bell} title="Appointment reminders" description="Automatic WhatsApp reminders 24 hours and 2 hours before — proven to cut no-shows." className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent"><div className="space-y-3">
+      <CollapsibleFeatureCard
+        id="automations-appointment-reminders"
+        icon={Bell}
+        title={retail ? 'Order reminders' : 'Appointment reminders'}
+        description={
+          retail
+            ? 'Automatic WhatsApp reminders before a scheduled collection or delivery.'
+            : 'Automatic WhatsApp reminders 24 hours and 2 hours before — proven to cut no-shows.'
+        }
+        className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent"
+      ><div className="space-y-3">
           <Toggle
             icon={Bell}
             checked={draft.reminders.enabled}
             onChange={(v) => patch('reminders', { enabled: v })}
-            label="Send appointment reminders"
-            description="Customers receive timed reminders with cancel/reschedule options."
+            label={retail ? 'Send order reminders' : 'Send appointment reminders'}
+            description={
+              retail
+                ? 'Buyers receive a timed reminder before their collection or delivery.'
+                : 'Customers receive timed reminders with cancel/reschedule options.'
+            }
           />
           {draft.reminders.enabled && (
             <div className="space-y-4 pl-1">
@@ -269,7 +294,7 @@ export function AutomationsClient({ token }: Props) {
                       ))}
                       <div className="flex flex-col items-center gap-1">
                         <div className="size-3 rounded-full bg-emerald-500 ring-2 ring-background" />
-                        <span className="text-[10px] text-muted-foreground font-medium">Appt</span>
+                        <span className="text-[10px] text-muted-foreground font-medium">{retail ? 'Order' : 'Appt'}</span>
                       </div>
                     </div>
                   </div>
@@ -281,13 +306,9 @@ export function AutomationsClient({ token }: Props) {
                 <div className="rounded-xl border bg-[#ece5dd] dark:bg-[#1a2128] p-4 space-y-2">
                   <div className="bg-[#dcf8c6] dark:bg-[#005c4b] rounded-2xl rounded-tr-sm px-3.5 py-2.5 max-w-[85%] ml-auto shadow-sm">
                     <p className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-                      {`Hi there! Reminder:\nYour service with your stylist\nFri, 14 Jun · 10:00 AM (in ${
-                        draft.reminders.hoursBefore.includes(24)
-                          ? '1 day'
-                          : draft.reminders.hoursBefore.includes(2)
-                            ? '2 hours'
-                            : `${[...draft.reminders.hoursBefore].sort((a, b) => a - b)[0] ?? 24} hours`
-                      })\n\nReply CANCEL or RESCHEDULE to manage your booking.`}
+                      {retail
+                        ? `Hi there! Reminder:\nYour order is ready for collection\nFri, 14 Jun · 10:00 AM (in ${reminderWindowLabel})\n\nReply CANCEL to manage your order.`
+                        : `Hi there! Reminder:\nYour service with your stylist\nFri, 14 Jun · 10:00 AM (in ${reminderWindowLabel})\n\nReply CANCEL or RESCHEDULE to manage your booking.`}
                     </p>
                     <p className="text-[10px] text-muted-foreground text-right mt-1">10:23 AM ✓✓</p>
                   </div>
@@ -298,6 +319,8 @@ export function AutomationsClient({ token }: Props) {
           )}
         </div></CollapsibleFeatureCard>
 
+      {/* Reschedule deadlines and late-cancel forfeits are appointment rules — retail has no booked slot. */}
+      {!retail && (
       <CollapsibleFeatureCard id="automations-cancellation-amp-reschedule-rules" icon={CalendarX} title="Cancellation &amp; reschedule rules" description="Self-service with clear deadlines. Use the emergency waive button on appointments when life happens."><div className="space-y-4">
           <Toggle
             icon={CalendarX}
@@ -350,7 +373,10 @@ export function AutomationsClient({ token }: Props) {
             description="If a customer cancels after the deadline above, their online payment is not refunded. Use the 'Waive penalty' button on the appointment if you want to make an exception."
           />
         </div></CollapsibleFeatureCard>
+      )}
 
+      {/* Waitlist backfills a freed appointment slot — retail has no slots to free. */}
+      {!retail && (
       <CollapsibleFeatureCard id="automations-waitlist-fill-empty-slots" icon={Users} title="Waitlist — fill empty slots"><div>
           <Toggle
             icon={Users}
@@ -360,14 +386,19 @@ export function AutomationsClient({ token }: Props) {
             description="When a slot opens, the next waitlisted customer gets: Reply YES to claim."
           />
         </div></CollapsibleFeatureCard>
+      )}
 
       <CollapsibleFeatureCard id="automations-google-review-requests" icon={Star} title="Google review requests"><div className="space-y-4">
           <Toggle
             icon={Star}
             checked={draft.googleReview.enabled}
             onChange={(v) => patch('googleReview', { enabled: v })}
-            label="Request review after visit"
-            description="Sends your Google review link after the appointment — 45 minutes after the booked time by default, or 15 minutes after you tap “Client paid & happy — gone” on the Appointments page. Not sent at booking or payment."
+            label={retail ? 'Request review after order' : 'Request review after visit'}
+            description={
+              retail
+                ? 'Sends your Google review link shortly after an order is completed. Not sent at checkout or payment.'
+                : 'Sends your Google review link after the appointment — 45 minutes after the booked time by default, or 15 minutes after you tap “Client paid & happy — gone” on the Appointments page. Not sent at booking or payment.'
+            }
           />
           <Toggle
             icon={Star}
@@ -393,7 +424,9 @@ export function AutomationsClient({ token }: Props) {
             </div>
           )}
           <p className="text-xs text-muted-foreground max-w-lg">
-            Timing is automatic: review goes out 45 minutes after the confirmed appointment time, or 15 minutes after you mark the client as departed on the Appointments page.
+            {retail
+              ? 'Timing is automatic: the review request goes out once the order is marked completed on the Orders page.'
+              : 'Timing is automatic: review goes out 45 minutes after the confirmed appointment time, or 15 minutes after you mark the client as departed on the Appointments page.'}
           </p>
         </div></CollapsibleFeatureCard>
 
@@ -402,8 +435,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Heart}
             checked={draft.welcomeJourney.enabled}
             onChange={(v) => patch('welcomeJourney', { enabled: v })}
-            label="Welcome first-time customers"
-            description="Business intro, popular services, and subtle POPIA/marketing consent context."
+            label={retail ? 'Welcome first-time buyers' : 'Welcome first-time customers'}
+            description={
+              retail
+                ? 'Business intro, popular products, and subtle POPIA/marketing consent context.'
+                : 'Business intro, popular services, and subtle POPIA/marketing consent context.'
+            }
           />
           <div className="space-y-1.5">
             <Label className="text-xs">Introduction message</Label>
@@ -419,8 +456,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Sparkles}
             checked={draft.welcomeJourney.showPopularServices}
             onChange={(v) => patch('welcomeJourney', { showPopularServices: v })}
-            label="Show popular services"
-            description="Lists top services with prices in the welcome message."
+            label={retail ? 'Show popular products' : 'Show popular services'}
+            description={
+              retail
+                ? 'Lists top products with prices in the welcome message.'
+                : 'Lists top services with prices in the welcome message.'
+            }
           />
         </div></CollapsibleFeatureCard>
 
@@ -429,8 +470,12 @@ export function AutomationsClient({ token }: Props) {
             icon={Gift}
             checked={draft.referral.enabled}
             onChange={(v) => patch('referral', { enabled: v })}
-            label="Customer referrals"
-            description="Prompts after 1st visit and every 5th thereafter. Friend must be new; both get R50 off."
+            label={retail ? 'Buyer referrals' : 'Customer referrals'}
+            description={
+              retail
+                ? 'Prompts after the 1st order and every 5th thereafter. Friend must be new; both get R50 off.'
+                : 'Prompts after 1st visit and every 5th thereafter. Friend must be new; both get R50 off.'
+            }
           />
           <div className="space-y-1.5 max-w-xs">
             <Label className="text-xs">Reward amount (cents, e.g. 5000 = R50)</Label>
@@ -454,7 +499,11 @@ export function AutomationsClient({ token }: Props) {
               }
             }}
             label="Membership subscriptions"
-            description="Monthly VIP via PayFast (R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month."
+            description={
+              retail
+                ? 'Monthly VIP via PayFast. Buyers sign up once on WhatsApp — PayFast debits the same day each month.'
+                : 'Monthly VIP via PayFast (R799/mo · 6 cuts max · ~R400 savings). Customers sign up once on WhatsApp — PayFast debits the same day each month.'
+            }
           />
         </div></CollapsibleFeatureCard>
 
@@ -483,7 +532,7 @@ export function AutomationsClient({ token }: Props) {
             icon={RefreshCw}
             checked={draft.reactivation.enabled}
             onChange={(v) => patch('reactivation', { enabled: v })}
-            label="Customer reactivation campaigns"
+            label={retail ? 'Buyer reactivation campaigns' : 'Customer reactivation campaigns'}
             description="Configurable win-back at 21, 45, 90, and 180 days inactive."
           />
           <div className="space-y-1.5">
@@ -527,6 +576,8 @@ export function AutomationsClient({ token }: Props) {
           </div>
         </div></CollapsibleFeatureCard>
 
+      {/* Stylist leaderboard and per-cut incentives are salon-only — a dispensary has no stylists. */}
+      {!retail && (
       <CollapsibleFeatureCard id="automations-stylist-performance" icon={Star} title="Stylist performance"><div className="space-y-4">
           <Toggle
             icon={Star}
@@ -557,7 +608,10 @@ export function AutomationsClient({ token }: Props) {
             />
           </div>
         </div></CollapsibleFeatureCard>
+      )}
 
+      {/* Slot granularity and unpaid slot holds only exist where there is a time picker. */}
+      {!retail && (
       <CollapsibleFeatureCard id="automations-booking-slot-interval" icon={Calendar} title="Booking slot interval" description="How granular the WhatsApp time picker is, and when unpaid holds expire."><div className="space-y-4">
           <div className="space-y-2">
             <Label className="text-xs">Slot interval</Label>
@@ -596,8 +650,18 @@ export function AutomationsClient({ token }: Props) {
             <p className="text-xs text-muted-foreground">0 = no auto-release for unpaid holds.</p>
           </div>
         </div></CollapsibleFeatureCard>
+      )}
 
-      <CollapsibleFeatureCard id="automations-campaign-message-templates" icon={MessageSquare} title="Campaign message templates" description="Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults."><div className="space-y-4">
+      <CollapsibleFeatureCard
+        id="automations-campaign-message-templates"
+        icon={MessageSquare}
+        title="Campaign message templates"
+        description={
+          retail
+            ? "Use {'{name}'} and {'{salon}'} placeholders — {'{salon}'} renders as your business name. Leave blank for smart defaults."
+            : "Use {'{name}'} and {'{salon}'} placeholders. Leave blank for smart defaults."
+        }
+      ><div className="space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs">Win-back message</Label>
             <textarea
@@ -608,7 +672,11 @@ export function AutomationsClient({ token }: Props) {
               onChange={(e) => patch('messaging', { winbackBody: e.target.value })}
               maxLength={1600}
               rows={3}
-              placeholder="Hey {name}! We miss you at {salon}…"
+              placeholder={
+                retail
+                  ? 'Hey {name}! We miss you at {salon} — fresh stock just landed…'
+                  : 'Hey {name}! We miss you at {salon}…'
+              }
             />
           </div>
           <div className="space-y-1.5">
@@ -634,7 +702,11 @@ export function AutomationsClient({ token }: Props) {
               onChange={(e) => patch('messaging', { cancellationPolicyText: e.target.value })}
               maxLength={2000}
               rows={4}
-              placeholder="Cancellations within 24 hours may incur a fee…"
+              placeholder={
+                retail
+                  ? 'Orders cancelled after dispatch may incur a fee…'
+                  : 'Cancellations within 24 hours may incur a fee…'
+              }
             />
           </div>
         </div></CollapsibleFeatureCard>

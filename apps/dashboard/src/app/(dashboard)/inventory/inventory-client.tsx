@@ -137,8 +137,7 @@ export function InventoryClient({
         <h1 className="text-3xl font-semibold tracking-tight solupair-text-gradient">Inventory</h1>
         <p className="text-sm text-muted-foreground mt-2 max-w-xl">
           Stock levels drive WhatsApp availability — out-of-stock SKUs stay off the menu until you
-          restock. Customer order history lives in the same database as every other MarineFlow
-          tenant.
+          restock.
         </p>
       </div>
 
@@ -320,7 +319,7 @@ export function InventoryClient({
 
       {visible.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-10">
-          No products match this filter. Seed the Dr. Marley menu or clear search.
+          No products match this filter. Clear the search or add products on the Products page.
         </p>
       )}
     </div>

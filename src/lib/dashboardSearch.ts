@@ -140,6 +140,7 @@ export async function searchDashboard(input: {
   query: string;
   isAdmin: boolean;
   isOwner: boolean;
+  industryTemplate?: string | null;
 }): Promise<DashboardSearchResponse> {
   const query = input.query.trim();
   const entries = visibleSearchEntries(input);

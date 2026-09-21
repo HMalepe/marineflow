@@ -16,6 +16,7 @@ import { DashboardStickyHeader } from '@/components/dashboard-sticky-header';
 import { ImpersonationBanner } from '@/components/impersonation-banner';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { DashboardDebugBanner } from '@/components/dashboard-debug-banner';
+import { IndustryProvider } from '@/components/industry-provider';
 
 function formatRole(role: string): string {
   return role
@@ -90,6 +91,7 @@ async function DashboardLayoutInner({
   }
 
   return (
+    <IndustryProvider industry={industryTemplate}>
     <div
       className={`min-h-dvh flex flex-col ${isDispensary ? 'theme-dispensary' : ''}`}
       data-industry={industryTemplate ?? 'salon'}
@@ -195,5 +197,6 @@ async function DashboardLayoutInner({
       </main>
       </div>
     </div>
+    </IndustryProvider>
   );
 }

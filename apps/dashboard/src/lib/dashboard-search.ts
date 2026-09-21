@@ -1,4 +1,5 @@
 import indexJson from './dashboard-search-index.json';
+import { isRetailIndustry, type DashboardIndustry } from './dashboard-nav';
 
 export type DashboardSearchEntry = {
   id: string;
@@ -10,17 +11,33 @@ export type DashboardSearchEntry = {
   aliases: string[];
   ownerOnly?: boolean;
   adminOnly?: boolean;
+  /**
+   * Industry this entry belongs to. Omitted = vocabulary-neutral, shown to
+   * everyone. 'salon' and 'dispensary' entries are shown only to that
+   * industry, so each tenant searches its own words and never the other's.
+   */
+  industry?: DashboardIndustry;
 };
 
 export const DASHBOARD_SEARCH_INDEX = indexJson as DashboardSearchEntry[];
 
-export function visibleSearchEntries(input: {
+/** Search context. `industry` omitted behaves exactly like a salon tenant. */
+export type DashboardSearchContext = {
   isAdmin: boolean;
   isOwner: boolean;
-}): DashboardSearchEntry[] {
+  industry?: DashboardIndustry | null;
+};
+
+function searchIndustry(industry: DashboardIndustry | null | undefined): DashboardIndustry {
+  return isRetailIndustry(industry) ? 'dispensary' : 'salon';
+}
+
+export function visibleSearchEntries(input: DashboardSearchContext): DashboardSearchEntry[] {
+  const industry = searchIndustry(input.industry);
   return DASHBOARD_SEARCH_INDEX.filter((entry) => {
     if (entry.adminOnly && !input.isAdmin) return false;
     if (entry.ownerOnly && !input.isOwner && !input.isAdmin) return false;
+    if (entry.industry && entry.industry !== industry) return false;
     return true;
   });
 }
@@ -151,27 +168,42 @@ export type DashboardSearchResponse = {
   aiUsed: boolean;
 };
 
-export function buildLocalSuggestions(query: string, results: DashboardSearchResult[]): string[] {
+export function buildLocalSuggestions(
+  query: string,
+  results: DashboardSearchResult[],
+  industry?: DashboardIndustry | null,
+): string[] {
+  const retail = isRetailIndustry(industry);
   if (!query.trim()) {
-    return ['Try “roster”, “FAQ”, or “newsletter”'];
+    return retail
+      ? ['Try “orders”, “stock”, or “newsletter”']
+      : ['Try “roster”, “FAQ”, or “newsletter”'];
   }
   if (results.length === 0) {
-    return ['Check spelling or try “settings”, “staff”, or “customers”'];
+    return retail
+      ? ['Check spelling or try “settings”, “stock”, or “buyers”']
+      : ['Check spelling or try “settings”, “staff”, or “customers”'];
   }
   const top = results[0];
-  return top ? [`Open ${top.label}`, 'Try a shorter keyword like “staff” or “hours”'] : [];
+  if (!top) return [];
+  return [
+    `Open ${top.label}`,
+    retail
+      ? 'Try a shorter keyword like “stock” or “hours”'
+      : 'Try a shorter keyword like “staff” or “hours”',
+  ];
 }
 
 export function localDashboardSearchResponse(
   query: string,
-  input: { isAdmin: boolean; isOwner: boolean },
+  input: DashboardSearchContext,
 ): DashboardSearchResponse {
   const entries = visibleSearchEntries(input);
   const results = localDashboardSearch(query, entries, 8);
   return {
     query: query.trim(),
     results,
-    suggestions: buildLocalSuggestions(query, results),
+    suggestions: buildLocalSuggestions(query, results, input.industry),
     aiUsed: false,
   };
 }

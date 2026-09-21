@@ -21,7 +21,8 @@ import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { CUSTOMERS_LABEL } from '@/lib/dashboard-nav';
+import { BUYERS_LABEL, CUSTOMERS_LABEL } from '@/lib/dashboard-nav';
+import { useIndustry } from '@/components/industry-provider';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { DashboardToast } from '@/components/dashboard-toast';
@@ -175,6 +176,9 @@ function matchesSegment(
 
 export function CustomersClient({ token }: Props) {
   const router = useRouter();
+  const { retail } = useIndustry();
+  // Retail tenants call these people buyers; salon tenants call them customers.
+  const personNoun = retail ? 'buyer' : 'customer';
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerStats, setCustomerStats] = useState<Record<string, CustomerStatsView>>({});
   const [segmentCounts, setSegmentCounts] = useState<SegmentCounts | null>(null);
@@ -313,9 +317,12 @@ export function CustomersClient({ token }: Props) {
         {
           method: 'POST',
           body: JSON.stringify({
-            name: 'Re-engagement — at-risk customers',
-            message:
-              'Hi! We miss you — it has been a while since your last visit. Reply BOOK to schedule your next appointment.',
+            name: retail
+              ? 'Re-engagement — at-risk buyers'
+              : 'Re-engagement — at-risk customers',
+            message: retail
+              ? 'Hi! We miss you — it has been a while since your last order. Reply MENU to see what is in stock and place your next order.'
+              : 'Hi! We miss you — it has been a while since your last visit. Reply BOOK to schedule your next appointment.',
             audienceFilter: { type: 'inactive', inactiveDays: 60 },
           }),
         },
@@ -348,14 +355,14 @@ export function CustomersClient({ token }: Props) {
   return (
     <div className="dashboard-page-flow space-y-6 max-w-4xl">
       <DashboardPageHeader
-        title={CUSTOMERS_LABEL}
+        title={retail ? BUYERS_LABEL : CUSTOMERS_LABEL}
         variant="fuchsia"
         subtitle={
           loading ? (
             '—'
           ) : (
             <>
-              {`${groups.length} customer${groups.length === 1 ? '' : 's'}`}
+              {`${groups.length} ${personNoun}${groups.length === 1 ? '' : 's'}`}
               {!loading && duplicateCount > 0 && (
                 <span className="ml-2 text-amber-600 font-semibold">
                   · {duplicateCount} duplicate{duplicateCount === 1 ? '' : 's'} found
@@ -395,13 +402,13 @@ export function CustomersClient({ token }: Props) {
                 // Append to DOM before clicking so iOS Safari honours the download
                 const a = document.createElement('a');
                 a.href = `/api/proxy/customers/export-csv`;
-                a.download = 'customers.csv';
+                a.download = retail ? 'buyers.csv' : 'customers.csv';
                 a.style.display = 'none';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
               }}
-              title="Download all customers as CSV"
+              title={`Download all ${personNoun}s as CSV`}
             >
               Export CSV
             </Button>
@@ -438,7 +445,9 @@ export function CustomersClient({ token }: Props) {
       {segmentFilter === 'at_risk' && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-orange-500/30 bg-orange-500/5 px-4 py-3">
           <p className="text-sm text-muted-foreground flex-1 min-w-[200px]">
-            Reach customers who haven&apos;t visited in 60+ days with a re-engagement newsletter.
+            {retail
+              ? "Reach buyers who haven't ordered in 60+ days with a re-engagement newsletter."
+              : "Reach customers who haven't visited in 60+ days with a re-engagement newsletter."}
           </p>
           <Button
             size="sm"
@@ -477,7 +486,7 @@ export function CustomersClient({ token }: Props) {
 
       <CollapsibleSection
         id="customers-directory"
-        title="Customer directory"
+        title={retail ? 'Buyer directory' : 'Customer directory'}
         count={groups.length}
         subtitle={search ? `Showing results for “${search}”` : undefined}
         defaultOpen
@@ -596,8 +605,12 @@ export function CustomersClient({ token }: Props) {
               <li>WhatsApp chat history is merged into one thread</li>
               <li>
                 {mergeConfirm.dupBookings > 0
-                  ? `${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} transfer to the kept profile`
-                  : 'Bookings and loyalty stay on the kept profile'}
+                  ? retail
+                    ? `${mergeConfirm.dupBookings} order${mergeConfirm.dupBookings === 1 ? '' : 's'} transfer to the kept profile`
+                    : `${mergeConfirm.dupBookings} booking${mergeConfirm.dupBookings === 1 ? '' : 's'} transfer to the kept profile`
+                  : retail
+                    ? 'Orders and loyalty stay on the kept profile'
+                    : 'Bookings and loyalty stay on the kept profile'}
               </li>
               <li>This cannot be undone</li>
             </ul>

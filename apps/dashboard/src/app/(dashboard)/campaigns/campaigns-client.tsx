@@ -23,6 +23,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { DashboardToast } from '@/components/dashboard-toast';
+import { useIndustry } from '@/components/industry-provider';
 import { SaveErrorFeedback } from '@/components/save-feedback';
 import { SAVE_MESSAGES } from '@/lib/save-messages';
 import { useSaveFeedback } from '@/lib/use-save-feedback';
@@ -445,6 +446,7 @@ function ConfirmPanel({
 }
 
 export function CampaignsClient({ token }: Props) {
+  const { retail } = useIndustry();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [optedInCount, setOptedInCount] = useState(0);
@@ -1312,8 +1314,20 @@ export function CampaignsClient({ token }: Props) {
               {(
                 [
                   ['all', 'Everyone who accepted', 'POPIA opt-in — replied ACCEPT on WhatsApp'],
-                  ['tags', 'By tag', 'VIP, colour clients, members — tags from customer profiles'],
-                  ['inactive', 'Win-back', 'Re-engage customers who haven\'t visited recently'],
+                  [
+                    'tags',
+                    'By tag',
+                    retail
+                      ? 'VIP, regulars, members — tags from buyer profiles'
+                      : 'VIP, colour clients, members — tags from customer profiles',
+                  ],
+                  [
+                    'inactive',
+                    'Win-back',
+                    retail
+                      ? 'Re-engage buyers who haven\'t ordered recently'
+                      : 'Re-engage customers who haven\'t visited recently',
+                  ],
                 ] as const
               ).map(([type, title, desc]) => (
                 <label
@@ -1374,7 +1388,7 @@ export function CampaignsClient({ token }: Props) {
               {form.audienceType === 'inactive' && (
                 <div className="flex items-center gap-2">
                   <Label htmlFor="inactive-days" className="shrink-0 text-sm text-muted-foreground">
-                    Last visit over
+                    {retail ? 'Last order over' : 'Last visit over'}
                   </Label>
                   <Input
                     id="inactive-days"

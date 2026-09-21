@@ -1,5 +1,6 @@
 import { Pin } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIndustry } from '@/components/industry-provider';
 
 export interface ConversationListCustomer {
   id: string;
@@ -21,7 +22,7 @@ export interface ConversationListItemData {
   } | null;
 }
 
-const STEP_LABELS: Record<string, string> = {
+const SALON_STEP_LABELS: Record<string, string> = {
   HANDOFF: 'Needs you',
   MENU: 'Main menu',
   IDLE: 'Idle',
@@ -41,6 +42,38 @@ const STEP_LABELS: Record<string, string> = {
   CLOSED: 'Closed',
 };
 
+/**
+ * Retail (dispensary) tenants. The retail bot drives RETAIL_BROWSE → RETAIL_CART →
+ * RETAIL_FULFILLMENT → (RETAIL_ADDRESS) → RETAIL_CONFIRM and shares MENU / CLOSED with the
+ * salon flow (see src/services/retailBot.ts); shared steps such as HANDOFF, FAQ, LOYALTY and
+ * CSAT are still reachable. Booking-only steps are kept with neutral wording so an unexpected
+ * value never renders a raw enum.
+ */
+const RETAIL_STEP_LABELS: Record<string, string> = {
+  HANDOFF: 'Needs you',
+  MENU: 'Main menu',
+  IDLE: 'Idle',
+  GREETING: 'Greeting',
+  PICK_BRANCH: 'Pick branch',
+  PICK_SERVICE: 'Pick product',
+  PICK_STAFF: 'Pick option',
+  PICK_DATE: 'Pick date',
+  PICK_SLOT: 'Pick time',
+  CONFIRM_BOOKING: 'Confirming',
+  MANAGE_BOOKING: 'Manage order',
+  RESCHEDULE: 'Change order',
+  COMPLAINT: 'Complaint',
+  FAQ: 'FAQ',
+  LOYALTY: 'Loyalty',
+  CSAT: 'Feedback',
+  CLOSED: 'Closed',
+  RETAIL_BROWSE: 'Browsing',
+  RETAIL_CART: 'Building order',
+  RETAIL_FULFILLMENT: 'Delivery or collection',
+  RETAIL_ADDRESS: 'Delivery address',
+  RETAIL_CONFIRM: 'Confirming order',
+};
+
 export function customerLabel(c: ConversationListCustomer): string {
   const name = c.displayName ?? [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
   return name || c.waId || 'Unknown';
@@ -53,8 +86,9 @@ export function customerInitials(c: ConversationListCustomer): string {
   return label.slice(0, 2).toUpperCase();
 }
 
-function stepLabel(step: string): string {
-  return STEP_LABELS[step] ?? step.replace(/_/g, ' ').toLowerCase();
+function stepLabel(step: string, retail = false): string {
+  const labels = retail ? RETAIL_STEP_LABELS : SALON_STEP_LABELS;
+  return labels[step] ?? step.replace(/_/g, ' ').toLowerCase();
 }
 
 export function formatConversationTime(iso: string | null): string {
@@ -143,10 +177,10 @@ export function WaitingTimeIndicator({ lastCustomerMessageAt }: { lastCustomerMe
   );
 }
 
-function stepHint(step: string): string | null {
+function stepHint(step: string, retail = false): string | null {
   if (step === 'HANDOFF') return 'Needs you';
   if (step === 'MENU' || step === 'IDLE') return null;
-  const label = stepLabel(step);
+  const label = stepLabel(step, retail);
   return label.length > 24 ? `${label.slice(0, 22)}…` : label;
 }
 
@@ -165,12 +199,13 @@ export function ConversationListItem({
   onSelect,
   onTogglePin,
 }: ConversationListItemProps) {
+  const { retail } = useIndustry();
   const preview =
     conv.lastMessage?.direction === 'OUTBOUND'
       ? `You: ${conv.lastMessage.body}`
       : conv.lastMessage?.body ?? 'No messages yet';
   const needsYou = conv.step === 'HANDOFF';
-  const hint = stepHint(conv.step);
+  const hint = stepHint(conv.step, retail);
 
   return (
     <div

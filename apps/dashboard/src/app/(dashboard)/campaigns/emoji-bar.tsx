@@ -1,12 +1,12 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { useIndustry } from '@/components/industry-provider';
 
-const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
-  {
-    label: 'Salon',
-    emojis: ['💇', '💅', '✨', '💆', '💄', '🪮', '🧴', '🌸'],
-  },
+type EmojiGroup = { label: string; emojis: string[] };
+
+/** Groups shared by every industry — only the first group is industry-specific. */
+const SHARED_EMOJI_GROUPS: EmojiGroup[] = [
   {
     label: 'Offers',
     emojis: ['🎉', '🔥', '⭐', '💝', '🎁', '💯', '🏷️', '✅'],
@@ -17,18 +17,36 @@ const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
   },
 ];
 
+const SALON_EMOJI_GROUPS: EmojiGroup[] = [
+  {
+    label: 'Salon',
+    emojis: ['💇', '💅', '✨', '💆', '💄', '🪮', '🧴', '🌸'],
+  },
+  ...SHARED_EMOJI_GROUPS,
+];
+
+const RETAIL_EMOJI_GROUPS: EmojiGroup[] = [
+  {
+    label: 'Shop',
+    emojis: ['🌿', '🍃', '🪴', '🍪', '🧃', '🫙', '📦', '✨'],
+  },
+  ...SHARED_EMOJI_GROUPS,
+];
+
 interface Props {
   onInsert: (emoji: string) => void;
   className?: string;
 }
 
 export function EmojiBar({ onInsert, className }: Props) {
+  const { retail } = useIndustry();
+  const groups = retail ? RETAIL_EMOJI_GROUPS : SALON_EMOJI_GROUPS;
   return (
     <div className={cn('rounded-lg border bg-muted/30 p-2 space-y-2', className)}>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
         Add emoji
       </p>
-      {EMOJI_GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.label}>
           <p className="text-[10px] text-muted-foreground/80 px-1 mb-1">{group.label}</p>
           <div className="flex flex-wrap gap-0.5">

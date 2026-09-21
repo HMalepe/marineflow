@@ -6,6 +6,7 @@ import { Brain, Loader2, RefreshCw, Sparkles, Zap } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useIndustry } from '@/components/industry-provider';
 import { cn } from '@/lib/utils';
 
 type CoachActionType =
@@ -45,6 +46,7 @@ const PRIORITY_STYLES = {
 };
 
 export function BusinessCoachCard({ token }: Props) {
+  const { retail } = useIndustry();
   const router = useRouter();
   const [data, setData] = useState<CoachResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,7 +143,9 @@ export function BusinessCoachCard({ token }: Props) {
                 )}
               </CardTitle>
               <CardDescription className="mt-0.5">
-                Proactive recommendations from your bookings, revenue, and customer data — not another report.
+                {retail
+                  ? 'Proactive recommendations from your orders, revenue, and customer data — not another report.'
+                  : 'Proactive recommendations from your bookings, revenue, and customer data — not another report.'}
               </CardDescription>
             </div>
           </div>
@@ -167,7 +171,11 @@ export function BusinessCoachCard({ token }: Props) {
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : !data?.insights.length ? (
-          <p className="text-sm text-muted-foreground">No insights right now — check back after more booking activity.</p>
+          <p className="text-sm text-muted-foreground">
+            {retail
+              ? 'No insights right now — check back after more order activity.'
+              : 'No insights right now — check back after more booking activity.'}
+          </p>
         ) : (
           data.insights.map((insight) => (
             <div

@@ -34,17 +34,12 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
-// Default helmet CSP (script-src 'self', form-action 'self') silently blocks both
-// this page's inline auto-submit script and the POST to PayFast's external domain —
-// override it here so the redirect actually fires instead of hanging.
+// Disable CSP for the checkout page only — the inline auto-submit script and the
+// cross-origin POST to PayFast both require relaxed CSP that is hard to get right
+// through helmet's per-route merge logic. All other helmet security headers
+// (X-Frame-Options, HSTS, etc.) still apply from the global registration.
 const CHECKOUT_CSP = {
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      formAction: ["'self'", 'https://www.payfast.co.za', 'https://sandbox.payfast.co.za'],
-    },
-  },
+  contentSecurityPolicy: false,
 };
 
 const CHECKOUT_PAGE_CSS = `

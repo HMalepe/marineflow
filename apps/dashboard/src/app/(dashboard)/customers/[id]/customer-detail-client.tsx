@@ -31,7 +31,8 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { apiFetch, ApiError } from '@/lib/api';
-import { APPOINTMENTS_LABEL } from '@/lib/dashboard-nav';
+import { APPOINTMENTS_LABEL, ORDERS_LABEL } from '@/lib/dashboard-nav';
+import { useIndustry } from '@/components/industry-provider';
 import { CollapsibleSection } from '@/components/collapsible-section';
 import { CollapsibleCard } from '@/components/collapsible-card';
 import { CustomerJourneyTimeline } from '@/components/CustomerJourneyTimeline';
@@ -203,6 +204,7 @@ interface ServiceBrief { id: string; name: string; priceCents: number; durationM
 interface StaffBrief { id: string; name: string; displayName: string | null }
 
 export function CustomerDetailClient({ customer, token }: { customer: CustomerDetail; token: string }) {
+  const { retail } = useIndustry();
   const [tab, setTab] = useState<Tab>('overview');
   const [tags, setTags] = useState<string[]>(customer.tags ?? []);
   const [tagInput, setTagInput] = useState('');
@@ -350,7 +352,11 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: 'overview', label: 'Overview' },
     { key: 'journey', label: 'Journey' },
-    { key: 'appointments', label: APPOINTMENTS_LABEL, count: customer.appointments.length },
+    {
+      key: 'appointments',
+      label: retail ? ORDERS_LABEL : APPOINTMENTS_LABEL,
+      count: customer.appointments.length,
+    },
     { key: 'messages', label: 'Messages', count: customer.messages.length },
   ];
 
@@ -384,12 +390,13 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
                 <Badge variant="outline" className={consentBadge.className}>
                   {consentBadge.text}
                 </Badge>
-                {customer.noShowRisk === 'HIGH' && (
+                {/* No-show risk is an appointment concept — retail has no no-shows. */}
+                {!retail && customer.noShowRisk === 'HIGH' && (
                   <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300">
                     High no-show risk
                   </Badge>
                 )}
-                {customer.noShowRisk === 'MEDIUM' && (
+                {!retail && customer.noShowRisk === 'MEDIUM' && (
                   <Badge variant="outline" className="bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950 dark:text-yellow-300">
                     Confirm before visit
                   </Badge>
@@ -426,11 +433,11 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
           {/* Quick actions */}
           <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
             <Link
-              href={`/appointments?customer=${customer.id}`}
+              href={retail ? `/orders?customer=${customer.id}` : `/appointments?customer=${customer.id}`}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium bg-card hover:bg-muted/60 transition-colors"
             >
               <Calendar className="size-3.5" />
-              View appointments
+              {retail ? 'View orders' : 'View appointments'}
             </Link>
             {customer.waId && (
               <Link
@@ -452,41 +459,55 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
                 WhatsApp
               </a>
             )}
-            <button
-              type="button"
-              onClick={() => setBookingOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
-            >
-              <Plus className="size-3.5" />
-              Book appointment
-            </button>
+            {/* Manual service booking has no retail equivalent — hidden for retail. */}
+            {!retail && (
+              <button
+                type="button"
+                onClick={() => setBookingOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 transition-colors"
+              >
+                <Plus className="size-3.5" />
+                Book appointment
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Stats row */}
-      <CollapsibleSection id="customer-stats" title="Client snapshot" defaultOpen>
+      <CollapsibleSection
+        id="customer-stats"
+        title={retail ? 'Buyer snapshot' : 'Client snapshot'}
+        defaultOpen
+      >
       <div className="flex flex-wrap gap-3">
-        <StatPill icon={CheckCircle2} label="Visits" value={completedVisits} />
+        <StatPill
+          icon={CheckCircle2}
+          label={retail ? 'Completed' : 'Visits'}
+          value={completedVisits}
+        />
         <StatPill
           icon={Calendar}
-          label={APPOINTMENTS_LABEL}
+          label={retail ? ORDERS_LABEL : APPOINTMENTS_LABEL}
           value={customer.bookingCount}
-          sub={customer.noShowCount > 0 ? `${customer.noShowCount} no-show` : undefined}
+          sub={!retail && customer.noShowCount > 0 ? `${customer.noShowCount} no-show` : undefined}
         />
         <StatPill icon={Star} label="Stamps" value={customer.loyaltyStamps} />
-        <StatPill
-          icon={TrendingUp}
-          label="No-show %"
-          value={
-            customer.bookingCount > 0
-              ? `${Math.round((customer.noShowCount / customer.bookingCount) * 100)}%`
-              : '0%'
-          }
-        />
+        {/* No-show rate is an appointment concept — retail has no no-shows. */}
+        {!retail && (
+          <StatPill
+            icon={TrendingUp}
+            label="No-show %"
+            value={
+              customer.bookingCount > 0
+                ? `${Math.round((customer.noShowCount / customer.bookingCount) * 100)}%`
+                : '0%'
+            }
+          />
+        )}
         <StatPill
           icon={Clock}
-          label="Last visit"
+          label={retail ? 'Last order' : 'Last visit'}
           value={
             lastCompleted
               ? new Date(lastCompleted.start).toLocaleDateString('en-ZA', {
@@ -575,7 +596,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
 
           <CollapsibleCard
             id="customer-recent-appointment"
-            title="Most recent appointment"
+            title={retail ? 'Most recent order' : 'Most recent appointment'}
             titleClassName="text-xs font-semibold uppercase tracking-wide"
             defaultOpen
           >
@@ -591,7 +612,9 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
                 </p>
               </>
             ) : (
-              <p className="text-sm text-muted-foreground">No appointments yet</p>
+              <p className="text-sm text-muted-foreground">
+                {retail ? 'No orders yet' : 'No appointments yet'}
+              </p>
             )}
           </CollapsibleCard>
 
@@ -668,14 +691,16 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       {tab === 'appointments' && (
         <CollapsibleSection
           id="customer-appointments-list"
-          title={APPOINTMENTS_LABEL}
+          title={retail ? ORDERS_LABEL : APPOINTMENTS_LABEL}
           count={customer.appointments.length || undefined}
           defaultOpen
         >
           {customer.appointments.length === 0 ? (
             <div className="py-12 text-center">
               <Calendar className="size-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">No appointments yet</p>
+              <p className="text-sm text-muted-foreground">
+                {retail ? 'No orders yet' : 'No appointments yet'}
+              </p>
             </div>
           ) : (
             <div className="rounded-xl border bg-card px-4 py-2">
@@ -691,8 +716,12 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       {tab === 'journey' && (
         <CollapsibleSection
           id="customer-journey"
-          title="Customer journey"
-          subtitle="Every WhatsApp touchpoint, booking, payment, and campaign — in one chronological thread."
+          title={retail ? 'Buyer journey' : 'Customer journey'}
+          subtitle={
+            retail
+              ? 'Every WhatsApp touchpoint, order, payment, and campaign — in one chronological thread.'
+              : 'Every WhatsApp touchpoint, booking, payment, and campaign — in one chronological thread.'
+          }
           defaultOpen
         >
           <CustomerJourneyTimeline token={token} customerId={customer.id} />
@@ -723,7 +752,8 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
       )}
       </CollapsibleSection>
 
-      {/* Manual booking sheet */}
+      {/* Manual booking sheet — service booking UX with no retail equivalent, so hidden for retail. */}
+      {!retail && (
       <Sheet open={bookingOpen} onOpenChange={setBookingOpen}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           <SheetHeader className="mb-4">
@@ -846,6 +876,7 @@ export function CustomerDetailClient({ customer, token }: { customer: CustomerDe
           )}
         </SheetContent>
       </Sheet>
+      )}
     </div>
   );
 }

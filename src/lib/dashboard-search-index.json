@@ -1,54 +1,87 @@
 [
   {
     "id": "overview",
-    "label": "Overview",
+    "label": "Today at a glance",
     "href": "/",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Dashboard home — today's snapshot and quick links",
     "keywords": ["home", "dashboard", "summary", "today"],
     "aliases": ["main", "start"]
   },
   {
     "id": "appointments",
-    "label": "Appointments",
+    "label": "Bookings",
     "href": "/appointments",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "View and manage bookings, check-ins, and cancellations",
     "keywords": ["bookings", "calendar", "schedule", "appointments", "clients"],
-    "aliases": ["booking", "apointment", "apointments"]
+    "aliases": ["booking", "apointment", "apointments"],
+    "industry": "salon"
+  },
+  {
+    "id": "orders",
+    "label": "Orders",
+    "href": "/orders",
+    "group": "Run the shop",
+    "description": "View and manage orders, payments, and collection or delivery status",
+    "keywords": ["orders", "order", "sales", "delivery", "collection", "buyers"],
+    "aliases": ["order list", "purchases", "sales list"],
+    "industry": "dispensary"
+  },
+  {
+    "id": "inventory",
+    "label": "Inventory",
+    "href": "/inventory",
+    "group": "Run the shop",
+    "description": "Stock levels, low-stock alerts, and restocking",
+    "keywords": ["inventory", "stock", "stock levels", "restock", "low stock", "quantity"],
+    "aliases": ["stock", "stock list", "inventory levels"],
+    "industry": "dispensary"
   },
   {
     "id": "pulse",
     "label": "Live Pulse",
     "href": "/pulse",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Real-time floor view — chairs, arrivals, payments, and active bot conversations",
     "keywords": ["live", "operations", "floor", "stations", "chairs", "real-time", "pulse", "air traffic"],
-    "aliases": ["live pulse", "live view", "operations"]
+    "aliases": ["live pulse", "live view", "operations"],
+    "industry": "salon"
   },
   {
     "id": "conversations",
-    "label": "Conversations",
+    "label": "Inbox",
     "href": "/conversations",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Live WhatsApp inbox — reply when the bot hands off to your team",
     "keywords": ["whatsapp", "chat", "inbox", "messages", "handoff", "live chat"],
     "aliases": ["conversation", "convos", "msgs"]
   },
   {
     "id": "customers",
-    "label": "Customers",
+    "label": "Clients",
     "href": "/customers",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Customer list, profiles, loyalty, and marketing consent",
     "keywords": ["clients", "crm", "contacts", "loyalty", "members"],
-    "aliases": ["customer", "client list"]
+    "aliases": ["customer", "client list"],
+    "industry": "salon"
+  },
+  {
+    "id": "buyers",
+    "label": "Buyers",
+    "href": "/customers",
+    "group": "Run the shop",
+    "description": "Buyer list, profiles, loyalty, and marketing consent",
+    "keywords": ["buyers", "customers", "crm", "contacts", "loyalty", "members"],
+    "aliases": ["buyer", "buyer list", "customer list"],
+    "industry": "dispensary"
   },
   {
     "id": "tickets",
-    "label": "Support tickets",
+    "label": "Help requests",
     "href": "/tickets",
-    "group": "Daily operations",
+    "group": "Run the day",
     "description": "Issues from complaints, report-a-problem, and low ratings",
     "keywords": ["support", "complaints", "issues", "problems", "help desk"],
     "aliases": ["ticket", "complaint", "support ticket"]
@@ -57,46 +90,71 @@
     "id": "services",
     "label": "Services",
     "href": "/services",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Services, prices, durations, categories, and add-ons",
     "keywords": ["menu", "pricing", "treatments", "offerings", "addons", "add-ons"],
-    "aliases": ["service", "price list", "catalog"]
+    "aliases": ["service", "price list", "catalog"],
+    "industry": "salon"
+  },
+  {
+    "id": "products",
+    "label": "Products",
+    "href": "/services",
+    "group": "Catalogue & ops",
+    "description": "Product catalogue — prices, categories, and add-ons",
+    "keywords": ["menu", "products", "pricing", "catalogue", "catalog", "offerings", "addons", "add-ons"],
+    "aliases": ["product", "price list", "product list"],
+    "industry": "dispensary"
   },
   {
     "id": "roster",
     "label": "Staff Roster",
     "href": "/roster",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Staff schedules, shifts, time off, and roster management",
     "keywords": ["staff", "roster", "schedule", "shifts", "stylists", "team", "working hours"],
-    "aliases": ["rota", "scheduling", "employees", "workers"]
+    "aliases": ["rota", "scheduling", "employees", "workers"],
+    "industry": "salon"
   },
   {
     "id": "add-staff",
     "label": "Add staff member",
     "href": "/roster?addStaff=1",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Create a new stylist or team member on the roster",
     "keywords": ["new staff", "hire", "add stylist", "create staff", "invite team"],
-    "aliases": ["add employee", "new team member"]
+    "aliases": ["add employee", "new team member"],
+    "industry": "salon"
   },
   {
     "id": "branches",
     "label": "Branches",
     "href": "/branches",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Multiple locations — branches, addresses, and per-branch settings",
     "keywords": ["locations", "stores", "sites", "multi-branch", "outlets"],
-    "aliases": ["branch", "location", "shop"]
+    "aliases": ["branch", "location", "shop"],
+    "industry": "salon"
   },
   {
     "id": "faqs",
     "label": "Bot FAQs",
     "href": "/faqs",
-    "group": "Business setup",
+    "group": "Set up your salon",
     "description": "Questions and answers your WhatsApp bot uses for customer support",
     "keywords": ["faq", "faqs", "questions", "answers", "bot knowledge", "help articles"],
-    "aliases": ["frequently asked", "q and a", "bot faq"]
+    "aliases": ["frequently asked", "q and a", "bot faq"],
+    "industry": "salon"
+  },
+  {
+    "id": "faqs-retail",
+    "label": "Bot FAQs",
+    "href": "/faqs",
+    "group": "Catalogue & ops",
+    "description": "Questions and answers your WhatsApp bot uses for customer support",
+    "keywords": ["faq", "faqs", "questions", "answers", "bot knowledge", "help articles"],
+    "aliases": ["frequently asked", "q and a", "bot faq"],
+    "industry": "dispensary"
   },
   {
     "id": "campaigns",
@@ -105,7 +163,18 @@
     "group": "Marketing & insights",
     "description": "WhatsApp newsletters and broadcast campaigns to customers",
     "keywords": ["newsletter", "campaign", "broadcast", "marketing message", "bulk send", "promo"],
-    "aliases": ["campaigns", "news letter", "mass message"]
+    "aliases": ["campaigns", "news letter", "mass message"],
+    "industry": "salon"
+  },
+  {
+    "id": "campaigns-retail",
+    "label": "Drops & newsletter",
+    "href": "/campaigns",
+    "group": "Growth",
+    "description": "WhatsApp drops, newsletters, and broadcast campaigns to buyers",
+    "keywords": ["newsletter", "drop", "drops", "campaign", "broadcast", "marketing message", "bulk send", "promo"],
+    "aliases": ["campaigns", "news letter", "mass message"],
+    "industry": "dispensary"
   },
   {
     "id": "automations",
@@ -114,7 +183,18 @@
     "group": "Marketing & insights",
     "description": "Win-back, birthday messages, deposits, and other automations",
     "keywords": ["automation", "winback", "win-back", "birthday", "deposits", "power features"],
-    "aliases": ["automations", "auto messages", "triggers"]
+    "aliases": ["automations", "auto messages", "triggers"],
+    "industry": "salon"
+  },
+  {
+    "id": "automations-retail",
+    "label": "Automations",
+    "href": "/automations",
+    "group": "Growth",
+    "description": "Win-back, birthday messages, reorder nudges, and other automations",
+    "keywords": ["automation", "winback", "win-back", "birthday", "reorder", "automations"],
+    "aliases": ["auto messages", "triggers", "power features"],
+    "industry": "dispensary"
   },
   {
     "id": "team-performance",
@@ -123,16 +203,28 @@
     "group": "Marketing & insights",
     "description": "Stylist leaderboard, ratings, and team metrics",
     "keywords": ["performance", "leaderboard", "ratings", "stats", "stylist scores"],
-    "aliases": ["team stats", "staff performance"]
+    "aliases": ["team stats", "staff performance"],
+    "industry": "salon"
   },
   {
     "id": "analytics",
-    "label": "Analytics",
+    "label": "Insights",
     "href": "/analytics",
     "group": "Marketing & insights",
     "description": "Reports, trends, and business insights",
     "keywords": ["reports", "stats", "metrics", "insights", "data", "charts"],
-    "aliases": ["report", "statistics", "analytics dashboard"]
+    "aliases": ["report", "statistics", "analytics dashboard"],
+    "industry": "salon"
+  },
+  {
+    "id": "analytics-retail",
+    "label": "Insights",
+    "href": "/analytics",
+    "group": "Growth",
+    "description": "Reports, trends, and business insights",
+    "keywords": ["reports", "stats", "metrics", "insights", "data", "charts"],
+    "aliases": ["report", "statistics", "analytics dashboard"],
+    "industry": "dispensary"
   },
   {
     "id": "billing",
@@ -151,7 +243,18 @@
     "group": "Account",
     "description": "Profile, password, salon settings, and WhatsApp bot configuration",
     "keywords": ["settings", "config", "configuration", "preferences", "account"],
-    "aliases": ["setting", "setup", "options"]
+    "aliases": ["setting", "setup", "options"],
+    "industry": "salon"
+  },
+  {
+    "id": "settings-retail",
+    "label": "Delivery & settings",
+    "href": "/settings",
+    "group": "Catalogue & ops",
+    "description": "Profile, password, shop and delivery settings, and WhatsApp bot configuration",
+    "keywords": ["settings", "delivery", "config", "configuration", "preferences", "account"],
+    "aliases": ["setting", "setup", "options", "delivery settings"],
+    "industry": "dispensary"
   },
   {
     "id": "settings-hours",
@@ -160,7 +263,18 @@
     "group": "Account",
     "description": "Opening and closing times for your salon and WhatsApp after-hours messages",
     "keywords": ["hours", "opening times", "closing time", "schedule", "after hours"],
-    "aliases": ["business hours", "open hours", "trading hours"]
+    "aliases": ["business hours", "open hours", "trading hours"],
+    "industry": "salon"
+  },
+  {
+    "id": "settings-hours-retail",
+    "label": "Business hours",
+    "href": "/settings",
+    "group": "Catalogue & ops",
+    "description": "Opening and closing times for your shop and WhatsApp after-hours messages",
+    "keywords": ["hours", "opening times", "closing time", "schedule", "after hours"],
+    "aliases": ["business hours", "open hours", "trading hours"],
+    "industry": "dispensary"
   },
   {
     "id": "settings-welcome",
@@ -178,7 +292,18 @@
     "group": "Account",
     "description": "The business name customers see in WhatsApp messages",
     "keywords": ["business name", "company name", "salon name", "display name"],
-    "aliases": ["trading name", "brand name"]
+    "aliases": ["trading name", "brand name"],
+    "industry": "salon"
+  },
+  {
+    "id": "settings-business-name-retail",
+    "label": "WhatsApp business name",
+    "href": "/settings",
+    "group": "Catalogue & ops",
+    "description": "The business name buyers see in WhatsApp messages",
+    "keywords": ["business name", "company name", "shop name", "display name"],
+    "aliases": ["trading name", "brand name"],
+    "industry": "dispensary"
   },
   {
     "id": "settings-bot",

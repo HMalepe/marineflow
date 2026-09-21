@@ -2,7 +2,16 @@ import type React from 'react';
 import Link from 'next/link';
 import { getToken, getUser } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
-import { APPOINTMENTS_LABEL, CUSTOMERS_LABEL, CONVERSATIONS_LABEL, OVERVIEW_LABEL, ANALYTICS_LABEL } from '@/lib/dashboard-nav';
+import {
+  APPOINTMENTS_LABEL,
+  BUYERS_LABEL,
+  CUSTOMERS_LABEL,
+  CONVERSATIONS_LABEL,
+  ORDERS_LABEL,
+  OVERVIEW_LABEL,
+  ANALYTICS_LABEL,
+  isRetailIndustry,
+} from '@/lib/dashboard-nav';
 import { KPIStrip, type OverviewKpiData } from '@/components/KPIStrip';
 import { MiniBarChart } from '@/components/MiniBarChart';
 import { StatCard } from '@/components/StatCard';
@@ -18,6 +27,7 @@ import { SalonLiveRouterRefresh } from '@/components/salon-live-router-refresh';
 import { AdminQuickAccess } from '@/components/admin-quick-access';
 import { NeedsYouPanel } from '@/components/overview/NeedsYouPanel';
 import { TodayBookingsPanel, type TodayAppointment } from '@/components/overview/TodayBookingsPanel';
+import { TodayOrdersPanel, type TodayRetailOrder } from '@/components/overview/TodayOrdersPanel';
 import { overviewNeonBox } from '@/components/overview/overviewNeon';
 import { DashboardPageHeader } from '@/components/dashboard-page-header';
 import { CollapsibleSection } from '@/components/collapsible-section';
@@ -86,7 +96,7 @@ async function OverviewPageInner() {
     return <SuperAdminView token={token} />;
   }
 
-  return <AppointmentView token={token} />;
+  return <AppointmentView token={token} industry={user?.industryTemplate ?? null} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,21 +284,47 @@ async function SuperAdminView({ token }: { token: string | null }) {
 // Default (non-admin) appointment view — unchanged
 // ---------------------------------------------------------------------------
 
-async function AppointmentView({ token }: { token: string | null }) {
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+async function AppointmentView({
+  token,
+  industry,
+}: {
+  token: string | null;
+  industry: string | null;
+}) {
+  const retail = isRetailIndustry(industry);
   let appointments: Appointment[] = [];
+  let todayOrders: TodayRetailOrder[] = [];
   let overviewKpis: OverviewKpiData | null = null;
   let setupHealth: SetupHealthData | null = null;
   let error: string | null = null;
   let onboardingDone = true;
 
   try {
-    const [apptData, settingsData, kpiData, healthData] = await Promise.all([
-      apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
+    const [todayData, settingsData, kpiData, healthData] = await Promise.all([
+      retail
+        ? apiFetch<{ orders: TodayRetailOrder[] }>('/retail-orders?limit=200', {}, token)
+        : apiFetch<{ appointments: Appointment[] }>('/appointments/today', {}, token),
       apiFetch<{ salon: { onboardingCompletedAt: string | null; whatsappPhoneId: string | null } }>('/settings', {}, token),
       apiFetch<OverviewKpiData>('/tenant/overview-kpis', {}, token).catch(() => null),
       apiFetch<SetupHealthData>('/tenant/setup-health', {}, token).catch(() => null),
     ]);
-    appointments = apptData.appointments ?? [];
+    if (retail) {
+      todayOrders = ((todayData as { orders?: TodayRetailOrder[] }).orders ?? []).filter((o) =>
+        isToday(o.createdAt),
+      );
+    } else {
+      appointments = (todayData as { appointments?: Appointment[] }).appointments ?? [];
+    }
     overviewKpis = kpiData;
     setupHealth = healthData;
     onboardingDone = !!(
@@ -314,23 +350,25 @@ async function AppointmentView({ token }: { token: string | null }) {
           <>
             <span className="block">{today}</span>
             <span className="block text-xs text-muted-foreground/80 mt-1 max-w-xl font-normal">
-              Bookings, revenue, and bot activity for today — plus what needs your attention.
+              {retail
+                ? 'Orders, revenue, and bot activity for today — plus what needs your attention.'
+                : 'Bookings, revenue, and bot activity for today — plus what needs your attention.'}
             </span>
           </>
         }
         actions={
           <Link
-            href="/appointments"
+            href={retail ? '/orders' : '/appointments'}
             className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline shrink-0"
           >
-            Open {APPOINTMENTS_LABEL.toLowerCase()} →
+            Open {(retail ? ORDERS_LABEL : APPOINTMENTS_LABEL).toLowerCase()} →
           </Link>
         }
       />
 
       {overviewKpis && (
         <>
-          <NeedsYouPanel data={overviewKpis} />
+          <NeedsYouPanel data={overviewKpis} retail={retail} />
           <KPIStrip data={overviewKpis} />
           {Array.isArray(overviewKpis.revenueLast7Days) && overviewKpis.revenueLast7Days.length > 0 && (
             <MiniBarChart data={overviewKpis.revenueLast7Days} />
@@ -338,7 +376,11 @@ async function AppointmentView({ token }: { token: string | null }) {
         </>
       )}
 
-      <TodayBookingsPanel appointments={appointments} error={error} />
+      {retail ? (
+        <TodayOrdersPanel orders={todayOrders} error={error} />
+      ) : (
+        <TodayBookingsPanel appointments={appointments} error={error} />
+      )}
 
       {/* Onboarding banner */}
       {!onboardingDone && (
@@ -352,7 +394,9 @@ async function AppointmentView({ token }: { token: string | null }) {
             <div className="flex-1">
               <p className="font-semibold text-sm">Finish setting up your account</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Connect WhatsApp, add services and staff to start taking bookings.
+                {retail
+                  ? 'Connect WhatsApp and add your products to start taking orders.'
+                  : 'Connect WhatsApp, add services and staff to start taking bookings.'}
               </p>
             </div>
             <Link
@@ -373,9 +417,9 @@ async function AppointmentView({ token }: { token: string | null }) {
       >
         <div className="grid grid-cols-3 gap-4">
         {[
-          { href: '/customers', icon: <Users className="w-5 h-5" />, label: CUSTOMERS_LABEL, desc: 'Profiles, loyalty & consent', neon: 'violet' as const },
+          { href: '/customers', icon: <Users className="w-5 h-5" />, label: retail ? BUYERS_LABEL : CUSTOMERS_LABEL, desc: 'Profiles, loyalty & consent', neon: 'violet' as const },
           { href: '/conversations', icon: <MessageSquare className="w-5 h-5" />, label: CONVERSATIONS_LABEL, desc: 'WhatsApp inbox & handoffs', neon: 'cyan' as const },
-          { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: ANALYTICS_LABEL, desc: 'Revenue, bookings & trends', neon: 'fuchsia' as const },
+          { href: '/analytics', icon: <BarChart2 className="w-5 h-5" />, label: ANALYTICS_LABEL, desc: retail ? 'Revenue, orders & trends' : 'Revenue, bookings & trends', neon: 'fuchsia' as const },
         ].map((item) => (
           <Link
             key={item.href}
