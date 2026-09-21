@@ -186,7 +186,7 @@ export function canApplyTemplate(
   if (!v.ok) {
     return {
       ok: false,
-      reason: `Too long with your salon name (${v.length}/${v.max} chars) — edit manually or shorten your display name.`,
+      reason: `Too long with your business name (${v.length}/${v.max} chars) — edit manually or shorten your display name.`,
       text,
     };
   }

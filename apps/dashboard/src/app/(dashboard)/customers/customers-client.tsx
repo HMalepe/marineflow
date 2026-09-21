@@ -503,14 +503,16 @@ export function CustomersClient({ token }: Props) {
             <Users className="size-7 text-muted-foreground" />
           </div>
           <p className="font-medium">
-            {search || segmentFilter !== 'all' ? 'No customers found' : 'No customers yet'}
+            {search || segmentFilter !== 'all'
+              ? `No ${personNoun}s found`
+              : `No ${personNoun}s yet`}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
             {search
               ? 'Try a different name, email, or phone number.'
               : segmentFilter !== 'all'
                 ? 'Try another segment filter.'
-                : 'Customers appear here once they message your WhatsApp number.'}
+                : `${retail ? 'Buyers' : 'Customers'} appear here once they message your WhatsApp number.`}
           </p>
         </div>
       ) : (

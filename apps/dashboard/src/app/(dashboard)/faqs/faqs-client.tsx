@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api';
+import { useIndustry } from '@/components/industry-provider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -227,7 +228,10 @@ export function FaqsClient({ token }: Props) {
   const [templateStep, setTemplateStep] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateCategory, setTemplateCategory] = useState<string>('All');
-  const [templateBizType, setTemplateBizType] = useState<string>('');
+  const { retail } = useIndustry();
+  /** Retail tenants have no relevant booking-shop template — default to their own, not the full salon-heavy list. */
+  const defaultTemplateBizType = retail ? 'Cannabis Dispensary' : '';
+  const [templateBizType, setTemplateBizType] = useState<string>(defaultTemplateBizType);
 
   type SmartResult = { id: string; question: string; decision: 'approve' | 'needs_edit'; reason: string };
   const [smartResults, setSmartResults] = useState<SmartResult[] | null>(null);
@@ -345,7 +349,7 @@ export function FaqsClient({ token }: Props) {
     setTemplateStep(true);
     setTemplateSearch('');
     setTemplateCategory('All');
-    setTemplateBizType('');
+    setTemplateBizType(defaultTemplateBizType);
     setSheetOpen(true);
   }
 

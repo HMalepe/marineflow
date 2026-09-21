@@ -1422,6 +1422,71 @@ const HOME_NURSING: FaqTemplate[] = [
   },
 ];
 
+// ── Cannabis & CBD Retail ──────────────────────────────────────────────────────
+
+const DISPENSARY: FaqTemplate[] = [
+  {
+    category: 'Age Verification',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'Do I need to verify my age to order?',
+    answer: `Yes — you must be 18 or older to purchase from us. You'll confirm your age when you start an order on WhatsApp, and our driver may ask to see valid ID (passport, driver's licence, or SA ID) on delivery or collection.\n\nWe cannot complete a sale without age verification.`,
+  },
+  {
+    category: 'Products',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'Are your products lab tested?',
+    answer: `Yes — our products are lab tested for [potency / purity / contaminants]. A Certificate of Analysis (COA) is available on request for [all products / flower and concentrates].\n\nMessage us with the product name and we'll send you the relevant COA.`,
+  },
+  {
+    category: 'Products',
+    businessTypes: ['Cannabis Dispensary'],
+    question: "What's currently in stock?",
+    answer: `Reply *HI* on WhatsApp to browse our full menu — it always reflects what's actually in stock, so you'll never order something we're out of.\n\nLooking for something specific? Just ask and we'll let you know if we have it or when it's expected back in.`,
+  },
+  {
+    category: 'Delivery & Collection',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'Do you deliver, and what are your delivery areas?',
+    answer: `Yes! We deliver to [AREAS / SUBURBS, e.g. within 15km of our store]. Delivery fee: R[AMOUNT] (waived on orders over R[AMOUNT]).\n\nPrefer to collect? Choose Collection at checkout on WhatsApp and we'll have your order ready in [X] minutes.`,
+  },
+  {
+    category: 'Delivery & Collection',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'How long does delivery take?',
+    answer: `Most orders arrive within [X–Y minutes/hours] of payment, depending on your location and how busy we are.\n\nYou'll get a WhatsApp update when your order is on its way, and your driver will confirm ID and payment (if applicable) on arrival.`,
+  },
+  {
+    category: 'Payment',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'What payment methods do you accept?',
+    answer: `We accept secure online payment via card or Instant EFT through PayFast, right inside your WhatsApp chat — no need to have cash on hand.\n\n[We also accept cash on delivery / collection, if you prefer.]`,
+  },
+  {
+    category: 'Policies',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'Can I return or exchange a product?',
+    answer: `For hygiene and safety reasons, we're unable to accept returns or exchanges on opened products.\n\nIf something arrives damaged, incorrect, or faulty, message us with a photo within [X hours] of delivery and we'll sort it out — a replacement or refund, your choice.`,
+  },
+  {
+    category: 'Policies',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'Can you advise me on dosage or which product is right for me?',
+    answer: `We're not able to give medical advice — if you have a health condition or take chronic medication, please check with a doctor or pharmacist before use.\n\nWhat we can help with: product info, strength/potency, and what other customers tend to reach for. Just ask!`,
+  },
+  {
+    category: 'Products',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'How should I store my products?',
+    answer: `Keep products in a cool, dry, dark place, sealed in their original packaging — this keeps flower fresh and edibles/concentrates stable for longer.\n\nAlways store out of reach of children and pets.`,
+  },
+  {
+    category: 'General',
+    businessTypes: ['Cannabis Dispensary'],
+    question: 'Is my order discreet?',
+    answer: `Yes — all deliveries are packaged discreetly with no branding that gives away the contents. Your driver won't discuss your order with anyone else at the door.`,
+  },
+];
+
 // ── All templates combined ────────────────────────────────────────────────────
 
 export const FAQ_TEMPLATES: FaqTemplate[] = [
@@ -1466,9 +1531,12 @@ export const FAQ_TEMPLATES: FaqTemplate[] = [
   ...INTERIOR_DESIGN,
   ...FUNERAL,
   ...HOME_NURSING,
+  ...DISPENSARY,
 ];
 
 export const FAQ_BUSINESS_TYPES: string[] = [
+  // Cannabis & CBD Retail
+  'Cannabis Dispensary',
   // Food & Beverage
   'Restaurant & Café',
   'Coffee Shop',
