@@ -1,4 +1,5 @@
 import type { PrismaTx } from '../../lib/db/tenantSession.js';
+import { isDispensarySalon } from '../../lib/retailSettings.js';
 
 export type SetupHealthCheckId =
   | 'staff_no_services'
@@ -26,11 +27,18 @@ function clampScore(score: number): number {
   return Math.max(0, Math.min(100, score));
 }
 
-/** Salon setup completeness — score out of 100 with actionable failing checks. */
+/**
+ * Setup completeness — score out of 100 with actionable failing checks.
+ * Retail tenants have no staff roster or branches in their dashboard, so
+ * those checks are skipped rather than silently docking their score for
+ * salon concepts and linking them to pages they cannot navigate to.
+ */
 export async function getTenantSetupHealth(
   db: PrismaTx,
   salonId: string,
+  industryTemplate?: string | null,
 ): Promise<TenantSetupHealth> {
+  const retail = isDispensarySalon(industryTemplate);
   const [
     staffNoServicesCount,
     uncategorizedServicesCount,
@@ -91,7 +99,7 @@ export async function getTenantSetupHealth(
   const checks: SetupHealthCheck[] = [];
   let score = 100;
 
-  if (staffNoServicesCount > 0) {
+  if (!retail && staffNoServicesCount > 0) {
     const penalty = Math.min(staffNoServicesCount * 15, 30);
     score -= penalty;
     checks.push({
@@ -108,9 +116,11 @@ export async function getTenantSetupHealth(
     score -= 20;
     checks.push({
       id: 'services_uncategorized',
-      label: `${uncategorizedServicesCount} service${uncategorizedServicesCount === 1 ? '' : 's'} missing a real category (uncategorised or "Other")`,
+      label: retail
+        ? `${uncategorizedServicesCount} product${uncategorizedServicesCount === 1 ? '' : 's'} missing a real category (uncategorised or "Other")`
+        : `${uncategorizedServicesCount} service${uncategorizedServicesCount === 1 ? '' : 's'} missing a real category (uncategorised or "Other")`,
       fixHref: '/services',
-      fixLabel: 'Fix in Services',
+      fixLabel: retail ? 'Fix in Products' : 'Fix in Services',
       penalty: 20,
       count: uncategorizedServicesCount,
     });
@@ -128,7 +138,7 @@ export async function getTenantSetupHealth(
     });
   }
 
-  if (emptyBranchCount > 0) {
+  if (!retail && emptyBranchCount > 0) {
     const penalty = Math.min(emptyBranchCount * 10, 20);
     score -= penalty;
     checks.push({
@@ -147,7 +157,7 @@ export async function getTenantSetupHealth(
       id: 'popia_optin_low',
       label: `POPIA marketing opt-in audience is ${popiaOptInCount} (need at least 5)`,
       fixHref: '/customers',
-      fixLabel: 'View customers',
+      fixLabel: retail ? 'View buyers' : 'View customers',
       penalty: 15,
       count: popiaOptInCount,
     });

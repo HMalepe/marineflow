@@ -49,13 +49,18 @@ async function gatherSignals(db: PrismaTx, salonId: string, timezone: string) {
   const ninetyDaysAgo = todayStart.minus({ days: 90 });
   const sixtyDaysAgo = todayStart.minus({ days: 60 });
 
+  const { industryTemplate } = await db.salon.findUniqueOrThrow({
+    where: { id: salonId },
+    select: { industryTemplate: true },
+  });
+
   const [salon, kpis, appointments90d, staffToday, lapsedCount, serviceStaffRows, recentCampaigns] =
     await Promise.all([
       db.salon.findUniqueOrThrow({
         where: { id: salonId },
         select: { name: true, metadata: true },
       }),
-      getTenantOverviewKpis(db, salonId, timezone),
+      getTenantOverviewKpis(db, salonId, timezone, industryTemplate),
       db.appointment.findMany({
         where: {
           salonId,

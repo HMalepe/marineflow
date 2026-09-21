@@ -942,7 +942,11 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
   app.get('/tenant/setup-health', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
       const db = getTenantDb();
-      return getTenantSetupHealth(db, user.salonId);
+      const salon = await db.salon.findUniqueOrThrow({
+        where: { id: user.salonId },
+        select: { industryTemplate: true },
+      });
+      return getTenantSetupHealth(db, user.salonId, salon.industryTemplate);
     });
   });
 
