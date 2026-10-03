@@ -124,7 +124,7 @@ import { getCustomerSegmentCounts } from '../api/customers/segments.js';
 import { getCustomerJourney } from '../api/customers/journey.js';
 import { getBusinessCoachInsights } from '../api/tenant/business-coach.js';
 import { getPulseSnapshot } from '../api/tenant/pulse.js';
-import { claudeJson, isAnthropicConfigured } from '../lib/integrations/ai/claude.js';
+import { claudeJson, isAnthropicConfigured, pingAnthropic } from '../lib/integrations/ai/claude.js';
 import { inngest } from '../lib/inngest/client.js';
 import {
   cancelGoogleReviewForAppointment,
@@ -4499,6 +4499,23 @@ export async function dashboardApiRoutes(app: FastifyInstance) {
       return { files };
     });
   });
+
+  app.get(
+    '/ai/status',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      return withUserTenant(request, reply, async () => {
+        if (!isAnthropicConfigured()) {
+          return { configured: false, message: 'ANTHROPIC_API_KEY not set in environment' };
+        }
+        const result = await pingAnthropic();
+        if (!result.ok) {
+          return { configured: true, working: false, error: result.error };
+        }
+        return { configured: true, working: true, model: result.model };
+      });
+    },
+  );
 
   app.get('/uploads/storage-check', async (request, reply) => {
     return withUserTenant(request, reply, async (user) => {
