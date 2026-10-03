@@ -10,7 +10,8 @@ export type IndustryTemplateId =
   | 'clinic'
   | 'petgrooming'
   | 'carwash'
-  | 'dispensary';
+  | 'dispensary'
+  | 'software';
 
 export const INDUSTRY_TEMPLATE_IDS: IndustryTemplateId[] = [
   'salon',
@@ -22,6 +23,7 @@ export const INDUSTRY_TEMPLATE_IDS: IndustryTemplateId[] = [
   'petgrooming',
   'carwash',
   'dispensary',
+  'software',
 ];
 
 export function isIndustryTemplateId(value: unknown): value is IndustryTemplateId {
@@ -186,6 +188,21 @@ export const INDUSTRY_TEMPLATES: Record<IndustryTemplateId, IndustryTemplate> = 
       concentrate: ['hash', 'rosin', 'diamond', 'badder', 'crumble', 'honeycomb', 'dab'],
       vape: ['vape', 'cart', 'cartridge', 'disposable', 'resin'],
       caps: ['cap', 'caps', 'capsule', 'capsules'],
+    },
+  },
+  software: {
+    id: 'software',
+    label: 'Software / Digital Services',
+    bookAction: 'Book a demo',
+    servicesLabel: 'Services',
+    providerNoun: 'consultant',
+    providerNounPlural: 'Consultants',
+    bookingExample: 'book a demo call',
+    nextBookingNoun: 'demo',
+    serviceCategoryAliases: {
+      demo: ['demo', 'demo call', 'walkthrough', 'intro call'],
+      consult: ['consult', 'consultation', 'strategy call', 'discovery call'],
+      support: ['support', 'onboarding', 'setup', 'training'],
     },
   },
 };

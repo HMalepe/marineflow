@@ -46,6 +46,12 @@ import { FAQ_TEMPLATES, FAQ_CATEGORIES, FAQ_BUSINESS_TYPES } from './faq-templat
 import { countUsedFaqTemplates, filterAvailableFaqTemplates } from '@/lib/faq-template-utils';
 import { FAQCard, faqCardClassName, type FaqCardData } from '@/components/FAQCard';
 
+/** Salon.industryTemplate -> matching FAQ_BUSINESS_TYPES entry, where one exists. */
+const INDUSTRY_TO_FAQ_BUSINESS_TYPE: Record<string, string> = {
+  dispensary: 'Cannabis Dispensary',
+  software: 'Software / Digital Services',
+};
+
 type FaqStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 type StatusFilter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -228,9 +234,14 @@ export function FaqsClient({ token }: Props) {
   const [templateStep, setTemplateStep] = useState(false);
   const [templateSearch, setTemplateSearch] = useState('');
   const [templateCategory, setTemplateCategory] = useState<string>('All');
-  const { retail } = useIndustry();
-  /** Retail tenants have no relevant booking-shop template — default to their own, not the full salon-heavy list. */
-  const defaultTemplateBizType = retail ? 'Cannabis Dispensary' : '';
+  const { industry } = useIndustry();
+  /**
+   * Verticals with a template set of their own default to it, instead of the
+   * picker's "no type selected" state — which matches every template from
+   * every business type at once and buries the relevant ones in noise.
+   */
+  const defaultTemplateBizType =
+    (industry && INDUSTRY_TO_FAQ_BUSINESS_TYPE[industry]) || '';
   const [templateBizType, setTemplateBizType] = useState<string>(defaultTemplateBizType);
 
   type SmartResult = { id: string; question: string; decision: 'approve' | 'needs_edit'; reason: string };
