@@ -3373,10 +3373,11 @@ async function menuActionShowAllPrices(
     return;
   }
   const lines = buildCategorizedPriceLines(services, sanitize);
-  await reply(
-    conv,
-    [`*Service prices*`, ...lines, '', 'Reply *Appointments › Book* from the main menu to schedule. Reply BACK.'].join('\n'),
-  );
+  const closingLine =
+    conv.salon.industryTemplate === 'software'
+      ? 'Ask me anything, or reply BACK for the menu.'
+      : 'Reply *Appointments › Book* from the main menu to schedule. Reply BACK.';
+  await reply(conv, [`*Service prices*`, ...lines, '', closingLine].join('\n'));
 }
 
 async function menuActionShowSpecials(
@@ -3573,6 +3574,12 @@ async function handleMainMenuSelection(
       await startRetailOrderFlow(conv);
       return;
     }
+    // No booking flow exists for this vertical — the menu item itself is already
+    // suppressed (getMainMenuItems), this is a defensive fallback only.
+    if (conv.salon.industryTemplate === 'software') {
+      await menuActionShowAllPrices(conv);
+      return;
+    }
     await menuActionStartBooking(conv);
     return;
   }
@@ -3588,6 +3595,11 @@ async function handleMainMenuSelection(
     if (selection.id === 'services') {
       if (shouldUseRetailOrderFlow(conv.salon)) {
         await startRetailOrderFlow(conv);
+        return;
+      }
+      // No booking flow for this vertical — just the read-only price list, no PICK_SERVICE transition.
+      if (conv.salon.industryTemplate === 'software') {
+        await menuActionShowAllPrices(conv);
         return;
       }
       const { text, options } = await prepareServicesSubMenu(conv);

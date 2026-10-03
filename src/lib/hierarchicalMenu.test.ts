@@ -93,6 +93,27 @@ describe('hierarchicalMenu', () => {
     expect(isMenuNavigationInput('services', 'REFERRAL')).toBe(true);
   });
 
+  it('drops booking entirely for the software vertical — no appointments, no orders', () => {
+    const softwareSalon = { ...salon, industryTemplate: 'software' };
+    const text = buildMainMenuText(softwareSalon);
+    expect(text).not.toContain('Book a demo');
+    expect(text).not.toMatch(/^\d — Book/m);
+    expect(text).not.toContain('My Bookings');
+    expect(text).toContain('Services');
+    expect(text).toContain('Support');
+    expect(text).not.toContain("I'll book it for you");
+
+    // Book was item 1 and My Bookings item 2 on the normal menu — both gone, so
+    // Services shifts up to take the first slot.
+    expect(parseMainMenuSelection('1', softwareSalon)).toEqual({ kind: 'category', id: 'services' });
+    expect(parseMainMenuSelection('99', softwareSalon)).toBeNull();
+  });
+
+  it('keeps the normal booking menu for every other vertical, including unknown ones', () => {
+    expect(buildMainMenuText({ ...salon, industryTemplate: 'barbershop' })).toContain('Book an appointment');
+    expect(buildMainMenuText({ ...salon, industryTemplate: undefined })).toContain('Book an appointment');
+  });
+
   it('routes natural-language support phrases to review or issue flows', () => {
     expect(parseFreeTextSupportIntent('i want to complain')).toBe('leave_review');
     expect(parseFreeTextSupportIntent('I want to leave a review')).toBe('leave_review');

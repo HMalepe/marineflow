@@ -445,7 +445,16 @@ export async function tryAiAssist(
 
     const services = filterBookableCatalogServices(await loadSalonServiceCatalog(conv.salonId));
 
-    switch (ai.intent) {
+    // No booking flow exists for this vertical, so a 'book'/'chat'/'unknown' intent
+    // classification has nothing useful to do — route it into the same knowledge-
+    // grounded FAQ synthesis as a real 'faq' intent instead of a generic dead end.
+    const isSoftwareTenant = conv.salon.industryTemplate === 'software';
+    const effectiveIntent =
+      isSoftwareTenant && (ai.intent === 'book' || ai.intent === 'chat' || ai.intent === 'unknown')
+        ? 'faq'
+        : ai.intent;
+
+    switch (effectiveIntent) {
       case 'spam':
       case 'menu':
         return {
