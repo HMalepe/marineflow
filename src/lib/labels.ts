@@ -44,6 +44,7 @@ export function businessTypeFromIndustryTemplate(template: string): BusinessType
       return 'RETAIL';
     case 'fitness':
     case 'clinic':
+    case 'software':
       return 'OTHER';
     default:
       return 'SALON';

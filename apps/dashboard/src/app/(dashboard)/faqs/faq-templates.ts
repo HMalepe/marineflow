@@ -1487,6 +1487,53 @@ const DISPENSARY: FaqTemplate[] = [
   },
 ];
 
+// ── Software & Digital Services ───────────────────────────────────────────────
+
+const SOFTWARE: FaqTemplate[] = [
+  {
+    category: 'General',
+    businessTypes: ['Software / Digital Services'],
+    question: 'What is [YOUR PLATFORM NAME]?',
+    answer: `[YOUR PLATFORM NAME] is a WhatsApp chatbot and dashboard for businesses — it answers customer questions, takes bookings or orders, collects payment, and gives your team a clean dashboard to manage it all, 24/7.\n\nWe currently support [service businesses taking bookings] and [retail businesses taking orders] — message us to find out if it fits yours.`,
+  },
+  {
+    category: 'Services',
+    businessTypes: ['Software / Digital Services'],
+    question: "What's included?",
+    answer: `🤖 A WhatsApp bot that answers FAQs instantly, 24/7\n📋 Your catalogue or services, browsable right inside WhatsApp\n🛒 Order or booking capture, with a clear summary before confirming\n🔔 Instant staff notifications for every new order or booking\n💳 Online payments, with status tracked automatically\n📊 An admin dashboard — orders/bookings, customers, insights, and settings`,
+  },
+  {
+    category: 'Pricing',
+    businessTypes: ['Software / Digital Services'],
+    question: 'How much does it cost?',
+    answer: `Once-off setup: R[AMOUNT] — covers onboarding, catalogue/service setup, and WhatsApp number registration.\n\nMonthly: R[AMOUNT]/month — covers hosting, monitoring, support, and small edits.\n\nThird-party costs are billed at cost: WhatsApp Business API fees, Meta's per-message charges, and payment gateway fees. Message us for a quote tailored to your business.`,
+  },
+  {
+    category: 'Process',
+    businessTypes: ['Software / Digital Services'],
+    question: 'How long does it take to go live?',
+    answer: `Most businesses are live within [1–2 weeks]. The main bottleneck is WhatsApp verifying your business number through Meta — that part is genuinely outside our control and can take a few days.\n\nWhile that's in progress, we get your catalogue, FAQs, and payment account set up so you're ready to switch on the moment the number is approved.`,
+  },
+  {
+    category: 'Process',
+    businessTypes: ['Software / Digital Services'],
+    question: 'What do I need to provide to get started?',
+    answer: `📋 Your product or service list, with prices (and photos if you have them)\n📋 Answers to your most common customer questions\n📋 A phone number that can be registered for WhatsApp's Business API\n📋 A payment provider account (we currently integrate [PayFast])\n\nWe'll guide you through each step — none of it needs to be perfect on day one.`,
+  },
+  {
+    category: 'Bookings',
+    businessTypes: ['Software / Digital Services'],
+    question: 'Can I book a demo?',
+    answer: `Yes! Reply *DEMO* and we'll get you booked in for a short call — we'll show you exactly how it works for a business like yours and answer any questions before you commit to anything.`,
+  },
+  {
+    category: 'Services',
+    businessTypes: ['Software / Digital Services'],
+    question: 'Is there support after I go live?',
+    answer: `Yes — your monthly plan includes hosting and monitoring, bug fixes and support during business hours, and a small amount of edits each month (catalogue updates, wording, FAQ changes).\n\nLarger changes or new features are quoted separately, and the plan runs month to month with [30] days' written notice to cancel.`,
+  },
+];
+
 // ── All templates combined ────────────────────────────────────────────────────
 
 export const FAQ_TEMPLATES: FaqTemplate[] = [
@@ -1532,11 +1579,14 @@ export const FAQ_TEMPLATES: FaqTemplate[] = [
   ...FUNERAL,
   ...HOME_NURSING,
   ...DISPENSARY,
+  ...SOFTWARE,
 ];
 
 export const FAQ_BUSINESS_TYPES: string[] = [
   // Cannabis & CBD Retail
   'Cannabis Dispensary',
+  // Software & Digital Services
+  'Software / Digital Services',
   // Food & Beverage
   'Restaurant & Café',
   'Coffee Shop',

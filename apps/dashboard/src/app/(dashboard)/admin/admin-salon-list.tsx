@@ -50,6 +50,7 @@ const INDUSTRY_TEMPLATE_OPTIONS = [
   { value: 'petgrooming', label: 'Pet Grooming' },
   { value: 'carwash', label: 'Car Wash & Detailing' },
   { value: 'dispensary', label: 'Cannabis Dispensary' },
+  { value: 'software', label: 'Software / Digital Services' },
 ];
 
 interface CreatedSalonCredentials {
