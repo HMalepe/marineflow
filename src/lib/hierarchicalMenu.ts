@@ -52,6 +52,8 @@ export function getMainMenuItems(
 ): MainMenuItem[] {
   const template = getIndustryTemplate(salon.industryTemplate);
   const isDispensary = salon.industryTemplate === 'dispensary';
+  /** No appointment or order flow for this vertical — just a service list, FAQs, and AI chat. */
+  const isSoftware = salon.industryTemplate === 'software';
   const items = MAIN_MENU_ITEMS.map((item) => {
     if (item.kind === 'direct' && item.action === 'book') {
       return { ...item, label: template.bookAction };
@@ -66,7 +68,9 @@ export function getMainMenuItems(
       return { ...item, label: 'Deals & Drops' };
     }
     return item;
-  });
+  })
+    .filter((item) => !(isSoftware && item.kind === 'direct' && item.action === 'book'))
+    .filter((item) => !(isSoftware && item.kind === 'category' && item.id === 'my_appointments'));
   if (salon.botLoyaltyEnabled === false) {
     return items.filter((item) => item.kind !== 'category' || item.id !== 'rewards');
   }
@@ -116,9 +120,12 @@ export function buildMainMenuText(salon: SalonMenuInput): string {
   const special = typeof meta.currentSpecial === 'string' ? meta.currentSpecial.trim() : '';
   const specialLine = special ? `\n🌟 *Special:* ${special}` : '';
   const isDispensary = salon.industryTemplate === 'dispensary';
+  const isSoftware = salon.industryTemplate === 'software';
   const freeTextHint = isDispensary
     ? '💬 Or tell me what you want — e.g. "2g indica" or "CBD oil delivery" — and I\'ll build your order.'
-    : '💬 Or just tell me what you need — e.g. "Monday 15:00 low fade" — and I\'ll book it for you.';
+    : isSoftware
+      ? '💬 Or just ask — pricing, what\'s included, how it works — I\'ll do my best to help.'
+      : '💬 Or just tell me what you need — e.g. "Monday 15:00 low fade" — and I\'ll book it for you.';
   return [
     welcome,
     ...lines,
